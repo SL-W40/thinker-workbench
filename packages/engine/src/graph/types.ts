@@ -36,4 +36,6 @@ export type GraphState = {
   pendingToolCalls: ChatToolCall[];
   /** 本图遍历中 agent 节点已执行次数。 */
   step: number;
+  /** 用户 `@` 选中的工作区相对路径（注入 context_files）。 */
+  contextPaths?: string[];
 };

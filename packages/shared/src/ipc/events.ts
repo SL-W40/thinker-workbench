@@ -3,6 +3,8 @@
  * utility → main → renderer 推送的时间线条目；与 `RunResult` 互补（流式过程 vs 同步收尾）。
  */
 
+import type { HitlKind, HitlRequest, HitlResponse } from "./hitl";
+
 /** 所有 AgentEvent 共有字段。 */
 export type AgentEventBase = {
   /** 所属线程。 */
@@ -56,6 +58,26 @@ export type AgentToolEvent = AgentEventBase & {
   restoreContent?: string;
   /** 缓存写入时间（Unix ms）；省略时由 renderer 在收到时打戳。 */
   restoreCachedAt?: number;
+  /** shell 等工具关联的终端会话 id。 */
+  sessionId?: string;
+  /** shell 原始命令（便于时间线展示与跳转）。 */
+  command?: string;
+  /** shell 退出码（end）。 */
+  exitCode?: number | null;
+  /** shell 因 block_until 超时挂起（end）；仅此类保留「打开终端」。 */
+  backgrounded?: boolean;
+};
+
+/** HITL 生命周期（请求用户介入或已解决）。 */
+export type AgentHitlEvent = AgentEventBase & {
+  type: "hitl";
+  phase: "request" | "resolved";
+  hitlId: string;
+  kind: HitlKind;
+  /** `request` 时为完整请求；`resolved` 时可省略。 */
+  request?: HitlRequest;
+  /** `resolved` 时的用户答复。 */
+  response?: HitlResponse;
 };
 
 /** 运行成功结束。 */
@@ -100,6 +122,7 @@ export type AgentEvent =
   | AgentTokenEvent
   | AgentStatusEvent
   | AgentToolEvent
+  | AgentHitlEvent
   | AgentDoneEvent
   | AgentErrorEvent
   | AgentUsageEvent;

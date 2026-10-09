@@ -476,7 +476,46 @@ function FileStartIcon() {
   );
 }
 
+function TerminalStartIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect
+        x="2.5"
+        y="3"
+        width="11"
+        height="10"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <path
+        d="M5 6.5 7 8.5 5 10.5M8.5 10.5h2.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+
+function BrowserStartIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M2.5 8h11M8 2.5c1.5 1.8 2.2 3.6 2.2 5.5S9.5 11.7 8 13.5C6.5 11.7 5.8 9.9 5.8 8S6.5 4.3 8 2.5z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export {
+  BrowserStartIcon,
   FileGlyph,
   FileStartIcon,
   GitIcon,
@@ -484,4 +523,5 @@ export {
   IconFolder,
   IconPanelHide,
   MI,
+  TerminalStartIcon,
 };

@@ -3,8 +3,14 @@
  * 侧栏由 SQLite 权威数据驱动；`ThreadMeta` 经 `agent:listThreads` 下发。
  */
 
-/** 会话运行状态（侧栏圆点 / Resume）。 */
-export type SessionRunStatus = "idle" | "running" | "interrupted" | "failed";
+/**
+ * 会话运行状态（侧栏圆点 / Resume）。
+ * - `cancelled`：用户手动停止（可有 checkpoint → Resume）
+ * - `crashed`：进程/utility 异常退出（可有 checkpoint → Resume）
+ * - `failed`：业务错误且不可按 checkpoint 续跑
+ * HITL 等人期间保持 `running`，不占用本枚举。
+ */
+export type SessionRunStatus = "idle" | "running" | "cancelled" | "crashed" | "failed";
 
 /** 工作空间行（侧栏文件夹）。 */
 export type WorkspaceRecord = {
@@ -47,6 +53,10 @@ export type ChatSessionRecord = {
   sortOrder: number;
   runStatus: SessionRunStatus;
   activeRunId: string | null;
+  /**
+   * 停跑原因说明（取消文案 / 崩溃信息等）。
+   * 列名历史为 interrupt_reason，语义已变为 stopReason。
+   */
   interruptReason: string | null;
   createdAt: number;
   updatedAt: number;

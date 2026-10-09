@@ -11,6 +11,8 @@ export const IpcChannels = {
   agentCancel: "agent:cancel",
   /** 从中断点恢复运行。 */
   agentResume: "agent:resume",
+  /** 用户答复 HITL。 */
+  agentHitlRespond: "agent:hitlRespond",
   /** 估算当前会话上下文占用（与 assembleContext 同源）。 */
   contextUsage: "agent:contextUsage",
   /** 列出已知线程。 */
@@ -144,6 +146,60 @@ export const IpcChannels = {
   workspaceGitDiff: "workspaceGit:diff",
   /** `git init`。 */
   workspaceGitInit: "workspaceGit:init",
+
+  /** 列出终端会话。 */
+  terminalList: "terminal:list",
+  /** 列出本机 shell profiles。 */
+  terminalListShellProfiles: "terminal:listShellProfiles",
+  /** 新建交互式终端会话。 */
+  terminalCreate: "terminal:create",
+  /** 向 PTY 写入。 */
+  terminalWrite: "terminal:write",
+  /** 调整 PTY 尺寸。 */
+  terminalResize: "terminal:resize",
+  /** 杀掉终端会话。 */
+  terminalKill: "terminal:kill",
+  /** 读取会话已缓冲的输出（打开终端时回放）。 */
+  terminalGetOutput: "terminal:getOutput",
+  /** 主进程推送终端事件。 */
+  terminalEvent: "terminal:event",
+
+  /** 读取内置浏览器状态。 */
+  browserGetState: "browser:getState",
+  /** 导航到 URL。 */
+  browserNavigate: "browser:navigate",
+  /** 后退。 */
+  browserGoBack: "browser:goBack",
+  /** 前进。 */
+  browserGoForward: "browser:goForward",
+  /** 刷新。 */
+  browserReload: "browser:reload",
+  /** 同步 WebContentsView 视口 bounds。 */
+  browserSetBounds: "browser:setBounds",
+  /** 显示 / 隐藏内置浏览器视图。 */
+  browserSetVisible: "browser:setVisible",
+  /** 用户接管（解除 AI 锁定）。 */
+  browserTakeControl: "browser:takeControl",
+  /** 主进程推送浏览器事件。 */
+  browserEvent: "browser:event",
+
+  /** 列出 skills 摘要（Composer `/`）。 */
+  skillsList: "skills:list",
+
+  /** 列出 MCP server 配置与状态。 */
+  mcpList: "mcp:list",
+  /** 新建 / 更新 MCP server。 */
+  mcpUpsert: "mcp:upsert",
+  /** 删除 MCP server。 */
+  mcpRemove: "mcp:remove",
+  /** 启用 / 禁用 MCP server。 */
+  mcpSetEnabled: "mcp:setEnabled",
+  /** 临时测试连接。 */
+  mcpTest: "mcp:test",
+  /** 从 Cursor mcp.json 导入。 */
+  mcpImportCursorFile: "mcp:importCursorFile",
+  /** 主进程推送 MCP 运行时状态。 */
+  mcpStatus: "mcp:status",
 } as const;
 
 /** `IpcChannels` 中任一通道字符串字面量类型。 */

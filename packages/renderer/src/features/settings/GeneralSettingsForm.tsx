@@ -22,6 +22,7 @@ import {
   APP_TYPE_STYLE_IDS,
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
   LOG_RETENTION_DAY_OPTIONS,
+  SHELL_APPROVAL_MODES,
   WORKSPACE_ACCESS_OPTIONS,
   type AiLocale,
   type AppLocale,
@@ -31,9 +32,12 @@ import {
   type DataDirMigrateProgress,
   DEFAULT_GENERAL_SETTINGS,
   type GeneralSettings,
+  type ShellApprovalMode,
+  type ShellProfile,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
 import { useEffect, useId, useMemo, useState } from "react";
+import { listShellProfiles } from "../../bridge/terminal";
 import {
   applyDataDirChange,
   GENERAL_SETTINGS_CHANGED,
@@ -125,6 +129,12 @@ function workspaceAccessLabel(access: WorkspaceAccess, t: (key: MessageKey) => s
   return t("settings.general.workspaceAccess.full");
 }
 
+function shellApprovalLabel(mode: ShellApprovalMode, t: (key: MessageKey) => string): string {
+  if (mode === "ai_review") return t("settings.general.shellApprovalMode.ai_review");
+  if (mode === "allowlist") return t("settings.general.shellApprovalMode.allowlist");
+  return t("settings.general.shellApprovalMode.unrestricted");
+}
+
 function deleteRestoreTtlLabel(days: number, t: (key: MessageKey) => string): string {
   if (days <= 0) return t("settings.general.deleteFileRestoreTtl.never");
   return t("settings.general.deleteFileRestoreTtl.days").replace("{n}", String(days));
@@ -153,6 +163,8 @@ export function GeneralSettingsForm({ active = true }: Props) {
   const [dataDirBusy, setDataDirBusy] = useState(false);
   const [migratePreview, setMigratePreview] = useState<DataDirChangePreview | null>(null);
   const [migrateProgress, setMigrateProgress] = useState<DataDirMigrateProgress | null>(null);
+  const [shellProfiles, setShellProfiles] = useState<ShellProfile[]>([]);
+  const [allowlistDraft, setAllowlistDraft] = useState("");
   const available = Boolean(window.thinker?.settings?.getGeneral);
   const dataDirId = useId();
   const canBrowse = Boolean(window.thinker?.settings?.pickDirectory);
@@ -186,6 +198,31 @@ export function GeneralSettingsForm({ active = true }: Props) {
       })),
     [t],
   );
+
+  const shellApprovalOptions = useMemo(
+    () =>
+      SHELL_APPROVAL_MODES.map((mode) => ({
+        value: mode,
+        label: shellApprovalLabel(mode, t),
+      })),
+    [t],
+  );
+
+  const shellProfileOptions = useMemo(() => {
+    const opts = [
+      { value: "default", label: t("settings.general.shellProfile.default") },
+      ...shellProfiles.map((p) => ({ value: p.id, label: p.name })),
+    ];
+    // 已选 id 不在列表时仍保留，避免 Select 空白
+    if (
+      general.shellProfileId &&
+      general.shellProfileId !== "default" &&
+      !opts.some((o) => o.value === general.shellProfileId)
+    ) {
+      opts.push({ value: general.shellProfileId, label: general.shellProfileId });
+    }
+    return opts;
+  }, [general.shellProfileId, shellProfiles, t]);
 
   const typeStyleOptions = useMemo(
     () =>
@@ -241,6 +278,9 @@ export function GeneralSettingsForm({ active = true }: Props) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
     })();
+    void listShellProfiles().then((profiles) => {
+      if (!cancelled) setShellProfiles(profiles);
+    });
     return () => {
       cancelled = true;
     };
@@ -493,6 +533,122 @@ export function GeneralSettingsForm({ active = true }: Props) {
             aria-label={t("settings.general.allowAiDeleteFiles.title")}
             onChange={(allowAiDeleteFiles) => void patchGeneral({ allowAiDeleteFiles })}
           />
+        </li>
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.allowAiShell.title")}</strong>
+            <span>{t("settings.general.allowAiShell.description")}</span>
+          </div>
+          <Switch
+            checked={general.allowAiShell}
+            aria-label={t("settings.general.allowAiShell.title")}
+            onChange={(allowAiShell) => void patchGeneral({ allowAiShell })}
+          />
+        </li>
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.allowAiBrowser.title")}</strong>
+            <span>{t("settings.general.allowAiBrowser.description")}</span>
+          </div>
+          <Switch
+            checked={general.allowAiBrowser}
+            aria-label={t("settings.general.allowAiBrowser.title")}
+            onChange={(allowAiBrowser) => void patchGeneral({ allowAiBrowser })}
+          />
+        </li>
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.shellProfile.title")}</strong>
+            <span>{t("settings.general.shellProfile.description")}</span>
+          </div>
+          <Select
+            className="settings-locale-select"
+            value={general.shellProfileId}
+            options={shellProfileOptions}
+            aria-label={t("settings.general.shellProfile.title")}
+            onChange={(shellProfileId) => void patchGeneral({ shellProfileId })}
+          />
+        </li>
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.shellApprovalMode.title")}</strong>
+            <span>{t("settings.general.shellApprovalMode.description")}</span>
+          </div>
+          <Select
+            className="settings-locale-select"
+            value={general.shellApprovalMode}
+            options={shellApprovalOptions}
+            aria-label={t("settings.general.shellApprovalMode.title")}
+            onChange={(shellApprovalMode) =>
+              void patchGeneral({ shellApprovalMode: shellApprovalMode as ShellApprovalMode })
+            }
+          />
+        </li>
+        <li className="settings-toggle-row settings-toggle-row--stack">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.shellAllowlist.title")}</strong>
+            <span>{t("settings.general.shellAllowlist.description")}</span>
+          </div>
+          <div className="settings-allowlist">
+            <div className="settings-allowlist__add">
+              <Input
+                value={allowlistDraft}
+                placeholder={t("settings.general.shellAllowlist.placeholder")}
+                onChange={(e) => setAllowlistDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const token = allowlistDraft.trim().toLowerCase();
+                  if (!token) return;
+                  if (general.shellAllowlist.includes(token)) {
+                    setAllowlistDraft("");
+                    return;
+                  }
+                  void patchGeneral({
+                    shellAllowlist: [...general.shellAllowlist, token],
+                  });
+                  setAllowlistDraft("");
+                }}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const token = allowlistDraft.trim().toLowerCase();
+                  if (!token) return;
+                  if (general.shellAllowlist.includes(token)) {
+                    setAllowlistDraft("");
+                    return;
+                  }
+                  void patchGeneral({
+                    shellAllowlist: [...general.shellAllowlist, token],
+                  });
+                  setAllowlistDraft("");
+                }}
+              >
+                {t("settings.general.shellAllowlist.add")}
+              </Button>
+            </div>
+            <ul className="settings-allowlist__chips">
+              {general.shellAllowlist.map((token) => (
+                <li key={token}>
+                  <button
+                    type="button"
+                    className="settings-allowlist__chip"
+                    title={t("settings.general.shellAllowlist.remove")}
+                    onClick={() =>
+                      void patchGeneral({
+                        shellAllowlist: general.shellAllowlist.filter((x) => x !== token),
+                      })
+                    }
+                  >
+                    {token}
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </li>
         <li className="settings-toggle-row">
           <div className="settings-toggle-copy">

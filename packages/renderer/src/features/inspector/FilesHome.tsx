@@ -1,5 +1,6 @@
 /**
- * Files 首页：搜索 + 最近打开 + 新建文件入口。
+ * Files 首页：搜索 + 新建文件 + 最近 / 搜索结果。
+ * 不含文件树；变更 / 终端由 Tab「+」菜单打开。
  */
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/I18nProvider";
@@ -10,7 +11,6 @@ type Props = {
   fileCandidates?: string[];
   onOpenFile: (path: string) => void;
   onNewFile?: () => void;
-  onQuickOpen?: () => void;
 };
 
 function baseName(path: string) {
@@ -56,7 +56,6 @@ export function FilesHome({
   fileCandidates = [],
   onOpenFile,
   onNewFile,
-  onQuickOpen,
 }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -68,13 +67,13 @@ export function FilesHome({
     const seen = new Set(fromRecents);
     const extras = fileCandidates
       .filter((path) => !seen.has(path) && fuzzyMatch(q, path))
-      .slice(0, 24);
+      .slice(0, 40);
     return [...fromRecents, ...extras];
   }, [q, recents, fileCandidates]);
 
   return (
     <div className="files-home">
-      <div className="files-home__inner">
+      <div className="files-home__toolbar">
         <div className="files-home__search">
           <span className="files-home__search-ico" aria-hidden>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -98,14 +97,12 @@ export function FilesHome({
                 e.preventDefault();
                 onOpenFile(rows[0]);
               }
-              if (e.key === "Escape") {
-                if (query) setQuery("");
-                else onQuickOpen?.();
+              if (e.key === "Escape" && query) {
+                setQuery("");
               }
             }}
           />
         </div>
-
         {onNewFile ? (
           <button type="button" className="files-home__new" onClick={onNewFile}>
             <span className="files-home__new-ico" aria-hidden>
@@ -127,43 +124,42 @@ export function FilesHome({
             {t("inspector.files.newFile")}
           </button>
         ) : null}
-
-        <div className="files-home__section">
-          {q ? t("inspector.files.results") : t("inspector.files.recents")}
-        </div>
-        {rows.length === 0 ? (
-          <div className="files-home__empty">
-            {q ? t("inspector.files.noMatch") : t("inspector.files.noRecents")}
-          </div>
-        ) : (
-          <ul className="files-home__list">
-            {rows.map((path) => {
-              const badge = fileBadge(path);
-              const folder = dirName(path);
-              return (
-                <li key={path}>
-                  <button
-                    type="button"
-                    className="files-home__row"
-                    onClick={() => onOpenFile(path)}
-                    title={path}
-                  >
-                    <span
-                      className="files-home__badge"
-                      style={{ color: badge.color }}
-                      aria-hidden
-                    >
-                      {badge.label}
-                    </span>
-                    <span className="files-home__name">{baseName(path)}</span>
-                    {folder ? <span className="files-home__path">{folder}</span> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </div>
+
+      <div className="files-home__section">
+        {q ? t("inspector.files.results") : t("inspector.files.recents")}
+      </div>
+      {rows.length === 0 ? (
+        <div className="files-home__empty">
+          {q ? t("inspector.files.noMatch") : t("inspector.files.noRecents")}
+        </div>
+      ) : (
+        <ul className="files-home__list">
+          {rows.map((path) => {
+            const badge = fileBadge(path);
+            const folder = dirName(path);
+            return (
+              <li key={path}>
+                <button
+                  type="button"
+                  className="files-home__row"
+                  onClick={() => onOpenFile(path)}
+                >
+                  <span
+                    className="files-home__badge"
+                    style={{ color: badge.color }}
+                    aria-hidden
+                  >
+                    {badge.label}
+                  </span>
+                  <span className="files-home__name">{baseName(path)}</span>
+                  {folder ? <span className="files-home__path">{folder}</span> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

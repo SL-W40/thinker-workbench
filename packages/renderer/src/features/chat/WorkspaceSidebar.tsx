@@ -445,7 +445,7 @@ export function WorkspaceSidebar({
                         >
                           <span
                             className={`ws-session__dot${
-                              th.runStatus === "interrupted"
+                              th.runStatus === "cancelled" || th.runStatus === "crashed"
                                 ? " is-interrupted"
                                 : th.runStatus === "running"
                                   ? " is-running"

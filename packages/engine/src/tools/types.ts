@@ -10,6 +10,12 @@ export type ToolUiPayload = {
   diff?: string;
   /** `delete_file` 删前缓存的正文，供 UI 恢复（不进模型 output）。 */
   restoreContent?: string;
+  /** shell 会话 id。 */
+  sessionId?: string;
+  /** shell 命令。 */
+  command?: string;
+  exitCode?: number | null;
+  backgrounded?: boolean;
 };
 
 /** 工具执行结果：ok 表示业务成功，output 始终是给模型看的文本。 */
@@ -19,8 +25,10 @@ export type ToolResult = {
   ui?: ToolUiPayload;
 };
 
-/** execute 可只返回字符串，或附带 UI 载荷。 */
-export type ToolExecuteResult = string | { output: string; ui?: ToolUiPayload };
+/** execute 可只返回字符串，或附带 UI 载荷；`ok: false` 表示业务失败（仍可带 ui）。 */
+export type ToolExecuteResult =
+  | string
+  | { output: string; ui?: ToolUiPayload; ok?: boolean };
 
 /** 执行时注入的上下文（工作区根 + 取消信号）。 */
 export type ToolContext = {

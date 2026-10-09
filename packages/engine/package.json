@@ -22,6 +22,7 @@
     "dev": "npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:esbuild\""
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@thinker-workbench/logger": "workspace:*",
     "@thinker-workbench/shared": "workspace:*"
   },

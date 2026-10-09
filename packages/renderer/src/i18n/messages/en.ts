@@ -190,7 +190,15 @@ export const en = {
     toggleDevTools: "Console",
   },
   chat: {
-    placeholder: "Write a message, press Enter to send…",
+    placeholder: "Message… / for skills, @ for files",
+    mention: {
+      skills: "Skills",
+      recent: "Recent",
+      files: "Files",
+      empty: "No matches",
+      needWorkspace: "Open a workspace first",
+      showMore: "Show {n} more",
+    },
     send: "Send",
     sendHint: "Send  ·  ⏎",
     stop: "Stop",
@@ -219,6 +227,8 @@ export const en = {
     thinkingExpand: "Expand thinking",
     thinkingCollapse: "Collapse thinking",
     stopped: "Stopped.",
+    /** Process / utility exited unexpectedly (same inline Resume as Stopped). */
+    abnormalExit: "Exited unexpectedly.",
     timelineLabel: "Run timeline",
     /** 时间线错误行标题（固定格式）。 */
     errorLabel: "Error",
@@ -253,14 +263,28 @@ export const en = {
     rightPanel: "Inspector",
     leftPanelEmpty: "No workspaces",
     rightPanelEmpty: "Inspector",
-    panelEmptyHint: "Changes, files, and the editor live here.",
+    panelEmptyHint: "Changes, files, terminal, and the editor live here.",
+    openTerminal: "Open terminal",
+    /** shell card: waiting for HITL approval. */
+    shellAwaitingApproval: "Awaiting approval",
+    /** shell timed out into background; terminal still open. */
+    shellBackgrounded: "Background",
+    shellExpand: "Show more output",
+    shellCollapse: "Show less output",
+    backgroundTasks: {
+      label: "Background tasks",
+      title: "Background · {n}",
+      expand: "Show all (+{n})",
+      expandAll: "Expand background tasks",
+      collapse: "Collapse",
+    },
     busySwitchBlocked: "Finish or stop the current run before switching chats.",
     noWorkspace: "No workspace open. Open a workspace in the sidebar first.",
     noWorkspaceLabel: "No workspace",
     needWorkspaceChat: "Select or start a chat in a workspace before sending.",
     openWorkspace: "Open",
     resume: "Resume",
-    resumeHint: "The previous run was interrupted. Resume to continue from the last checkpoint.",
+    resumeHint: "The previous run stopped. Resume to continue from the last checkpoint.",
     usage: {
       tokens: "Tokens",
       elapsed: "Time",
@@ -290,6 +314,7 @@ export const en = {
       tools: "Tool definitions",
       rules: "Rules",
       skills: "Skills",
+      contextFiles: "@ files",
       conversation: "Conversation",
       approxHint: "Estimates use ~chars/4; may differ from the model tokenizer.",
     },
@@ -311,10 +336,40 @@ export const en = {
         title: "Model",
         description: "API connection and reply preferences for the agent.",
       },
+      mcp: {
+        title: "MCP",
+        description: "stdio Model Context Protocol servers exposed as chat tools.",
+      },
       shortcuts: {
         title: "Shortcuts",
         description: "Keyboard shortcuts for chat, panels, and navigation.",
       },
+    },
+    mcp: {
+      unavailable: "MCP settings require the Electron shell. Run {cmd}.",
+      lead: "Enable stdio MCP servers. Tools appear as mcp__serverId__toolName for the agent. On Windows, use npx.cmd when the command is npx.",
+      add: "Add server",
+      addTitle: "Add MCP server",
+      editTitle: "Edit MCP server",
+      edit: "Edit",
+      remove: "Remove",
+      enabled: "Enabled",
+      emptyTitle: "No MCP servers",
+      emptyBody: "Add a stdio server, or import from a Cursor mcp.json.",
+      importCursor: "Import Cursor mcp.json",
+      importResult: "Imported {imported}, skipped {skipped}.",
+      fieldId: "Id",
+      fieldName: "Display name",
+      fieldCommand: "Command",
+      fieldArgs: "Args",
+      fieldEnv: "Environment",
+      fieldCwd: "Working directory",
+      commandHint: "Executable (e.g. npx or npx.cmd on Windows).",
+      argsHint: "One argument per line.",
+      envHint: "KEY=value per line. Merged with the process environment.",
+      test: "Test connection",
+      testOk: "Connected — {n} tools.",
+      save: "Save",
     },
     general: {
       unavailable: "General settings require the Electron shell. Run {cmd}.",
@@ -413,6 +468,36 @@ export const en = {
         title: "Allow AI to delete files",
         description:
           "When on, the agent can use the delete-file tool. When off, that tool is not offered to the model.",
+      },
+      allowAiShell: {
+        title: "Allow AI shell",
+        description:
+          "When on, the agent can run shell / shell_await. When off, those tools are not offered to the model.",
+      },
+      allowAiBrowser: {
+        title: "Allow AI browser",
+        description:
+          "When on, the agent can use browser_* tools in the right Browser panel. When off, those tools are not offered to the model.",
+      },
+      shellProfile: {
+        title: "Default shell",
+        description: "Shell used for agent commands and new Terminal sessions.",
+        default: "Platform default",
+      },
+      shellApprovalMode: {
+        title: "Shell approval",
+        description: "How commands are approved before running.",
+        ai_review: "AI review",
+        allowlist: "Allowlist",
+        unrestricted: "Allow all",
+      },
+      shellAllowlist: {
+        title: "Shell allowlist",
+        description:
+          "Command first tokens that skip approval. Empty list stays empty (defaults are not restored).",
+        placeholder: "Add token (e.g. git)",
+        add: "Add",
+        remove: "Remove",
       },
       deleteFileRestoreTtl: {
         title: "Delete restore cache",
@@ -567,11 +652,44 @@ export const en = {
     finish: "Get started",
     saving: "Saving…",
   },
+  hitl: {
+    shellApproval: {
+      title: "Allow shell command?",
+    },
+    actions: {
+      allow: "Allow",
+      deny: "Deny",
+      allowAndWhitelist: "Allow & whitelist",
+    },
+  },
+  terminal: {
+    new: "New terminal",
+    newMenu: "Select shell",
+    kill: "Kill",
+    sessions: "Sessions",
+    emptyTitle: "No terminals yet",
+    emptyBody: "Create a shell, or open one from the chat timeline.",
+    fromAgent: "AI",
+    fromUser: "User",
+  },
+  browser: {
+    back: "Back",
+    forward: "Forward",
+    reload: "Reload",
+    urlPlaceholder: "Enter a URL and press Enter",
+    emptyHint: "Type a URL above, or click a link in chat to open it here.",
+    aiBadge: "AI",
+    loading: "Loading",
+  },
   inspector: {
     sectionsLabel: "Inspector sections",
+    /** Tab bar “+”: open or switch to Changes / Files / Terminal / Browser. */
+    addPanel: "Open panel",
     section: {
       changes: "Changes",
       files: "Files",
+      terminal: "Terminal",
+      browser: "Browser",
     },
     refresh: "Refresh",
     noWorkspaceTitle: "No workspace",
@@ -601,6 +719,8 @@ export const en = {
       unmodifiedLines: "{n} unmodified lines",
       expandDiff: "Expand diff",
       collapseDiff: "Collapse diff",
+      /** Context menu for the changes file tree. */
+      fileMenu: "File actions",
       copyPath: "Copy path",
       searchFiles: "Search files",
       uncommitted: "Uncommitted",
@@ -645,11 +765,13 @@ export const en = {
       hideList: "Hide file list",
       showList: "Show file list",
       resizeTree: "Resize file list",
+      /** Context menu for the file tree side panel. */
+      fileMenu: "File actions",
       untitled: "untitled",
       recents: "Recents",
       results: "Results",
       noMatch: "No matching files",
-      noRecents: "No recent files yet — open one from the tree.",
+      noRecents: "No recent files yet — search above to open one.",
     },
   },
 } as const;

@@ -3,10 +3,11 @@
  * 交互与 className 对齐 v1 ChangesPane。
  */
 import type { GitChangedFile, GitStatus } from "@thinker-workbench/shared";
-import { EmptyState } from "@thinker-workbench/design/react";
+import { ContextMenu, EmptyState } from "@thinker-workbench/design/react";
 import { highlightCode } from "@thinker-workbench/markdown";
 import {
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
@@ -533,7 +534,6 @@ function ChangedFileRow({
           type="button"
           className="changes-pane__file-name"
           onClick={() => onOpenFile(path)}
-          title={`Open ${path}`}
         >
           {path}
         </button>
@@ -579,6 +579,7 @@ function ChangesFileList({
   files,
   selectedPath,
   onSelect,
+  onOpenFile,
   width,
   dragging,
   onResizePointerDown,
@@ -586,6 +587,8 @@ function ChangesFileList({
   files: GitChangedFile[];
   selectedPath: string | null;
   onSelect: (path: string) => void;
+  /** 右键「在编辑器中打开」。 */
+  onOpenFile: (path: string) => void;
   width: number;
   dragging: boolean;
   onResizePointerDown: (e: ReactPointerEvent) => void;
@@ -595,6 +598,22 @@ function ChangesFileList({
   const tree = useMemo(() => buildChangeTree(files), [files]);
   const { nodes, expandPaths } = useMemo(() => filterChangeTree(tree, query), [tree, query]);
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    path: string;
+    kind: "file" | "dir";
+  } | null>(null);
+
+  function openCtxMenu(
+    e: ReactMouseEvent,
+    path: string,
+    kind: "file" | "dir",
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY, path, kind });
+  }
 
   useEffect(() => {
     if (!expandPaths.size) return;
@@ -638,6 +657,7 @@ function ChangesFileList({
               className="changes-filelist__dir-row"
               style={{ paddingLeft: 6 + depth * 12 }}
               onClick={() => toggleDir(node.path)}
+              onContextMenu={(e) => openCtxMenu(e, node.path, "dir")}
               aria-expanded={open}
             >
               <span className="changes-filelist__chev" aria-hidden>
@@ -657,7 +677,7 @@ function ChangesFileList({
           className={`changes-filelist__file${selected ? " is-selected" : ""}`}
           style={{ paddingLeft: 6 + depth * 12 }}
           onClick={() => onSelect(node.path)}
-          title={node.path}
+          onContextMenu={(e) => openCtxMenu(e, node.path, "file")}
         >
           <span className="changes-filelist__file-ico" aria-hidden>
             <FileGlyph name={node.name} />
@@ -703,6 +723,45 @@ function ChangesFileList({
         />
       </label>
       <div className="changes-filelist__tree">{renderNodes(nodes, 0)}</div>
+      <ContextMenu
+        open={Boolean(ctxMenu)}
+        anchor={ctxMenu ? { x: ctxMenu.x, y: ctxMenu.y } : null}
+        onClose={() => setCtxMenu(null)}
+        aria-label={t("inspector.changes.fileMenu")}
+        items={
+          ctxMenu?.kind === "file"
+            ? [
+                {
+                  label: t("inspector.changes.openFile"),
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    setCtxMenu(null);
+                    onOpenFile(path);
+                  },
+                },
+                {
+                  label: t("inspector.changes.copyPath"),
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    setCtxMenu(null);
+                    void copyRelativePath(path);
+                  },
+                },
+              ]
+            : ctxMenu
+              ? [
+                  {
+                    label: t("inspector.changes.copyPath"),
+                    onSelect: () => {
+                      const path = ctxMenu.path;
+                      setCtxMenu(null);
+                      void copyRelativePath(path);
+                    },
+                  },
+                ]
+              : []
+        }
+      />
     </aside>
   );
 }
@@ -1106,7 +1165,6 @@ export function ChangesPane({
                         type="button"
                         className="changes-pane__file-name"
                         onClick={() => onOpenFile(f.path)}
-                        title={`Open ${f.path}`}
                       >
                         {f.path}
                       </button>
@@ -1127,6 +1185,7 @@ export function ChangesPane({
               files={files}
               selectedPath={focusPath}
               onSelect={focusFromSidebar}
+              onOpenFile={onOpenFile}
               width={listWidth}
               dragging={listDragging}
               onResizePointerDown={onResizePointerDown}

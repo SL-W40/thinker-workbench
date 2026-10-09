@@ -4,7 +4,7 @@
  */
 import type { MessageKey } from "../../i18n/translate";
 
-export type SettingsSectionId = "general" | "model" | "shortcuts";
+export type SettingsSectionId = "general" | "model" | "mcp" | "shortcuts";
 
 export type SettingsSection = {
   id: SettingsSectionId;
@@ -28,6 +28,11 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     descriptionKey: "settings.sections.model.description",
   },
   {
+    id: "mcp",
+    titleKey: "settings.sections.mcp.title",
+    descriptionKey: "settings.sections.mcp.description",
+  },
+  {
     id: "shortcuts",
     titleKey: "settings.sections.shortcuts.title",
     descriptionKey: "settings.sections.shortcuts.description",
@@ -36,5 +41,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 /** 类型守卫：字符串是否为合法设置分区 id。 */
 export function isSettingsSection(value: string | undefined): value is SettingsSectionId {
-  return value === "general" || value === "model" || value === "shortcuts";
+  return (
+    value === "general" || value === "model" || value === "mcp" || value === "shortcuts"
+  );
 }

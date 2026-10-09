@@ -3,7 +3,7 @@ export type Locale = "en" | "zh";
 const copy = {
   en: {
     title: "Logs",
-    lead: "Cross-process traces in the configured log directory — same traceId links app → desktop → agent",
+    lead: "Cross-process traces (SQLite) — same traceId links app → desktop → agent (model / tools / graph)",
     file: "File",
     fileAll: "All (merged)",
     query: "Search",
@@ -33,7 +33,7 @@ const copy = {
   },
   zh: {
     title: "日志",
-    lead: "检索已配置的日志目录；同一 traceId 串联 app → desktop → agent",
+    lead: "跨进程链路（SQLite）；同一 traceId 串联 app → desktop → agent（含 model / tools / graph）",
     file: "文件",
     fileAll: "全部（合并）",
     query: "搜索",

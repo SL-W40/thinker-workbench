@@ -26,6 +26,22 @@ import { waitForRenderer } from "./waitForRenderer";
 import { closeAllAuxWindows, syncAuxWindowBackgrounds } from "./auxWindows";
 import { registerMainWindow, unregisterContents } from "./windowRoles";
 
+/** 主窗是否允许导航到该 URL（应用自身 / 错误页）。 */
+function isAppNavigationUrl(url: string): boolean {
+  if (!url || url === "about:blank") return true;
+  if (url.startsWith("data:text/html")) return true;
+  if (url.startsWith("file://")) return true;
+  if (url.startsWith(`${DEV_RENDERER_URL}/`) || url === DEV_RENDERER_URL) return true;
+  if (url.startsWith(`${DEV_RENDERER_URL}#`)) return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "devtools:") return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 /** 主窗口类型别名。 */
 export type MainWindow = BrowserWindow;
 
@@ -169,6 +185,20 @@ export function createWindow(): BrowserWindow {
     if (hash) updateSessionHash(hash);
   });
 
+  // 阻止 Markdown 外链把整个主窗顶掉；改由内置 Browser 打开
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isAppNavigationUrl(url)) return;
+    event.preventDefault();
+    const { browserSessionManager } = require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
+    void browserSessionManager.navigate(url, { reveal: true });
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAppNavigationUrl(url)) return { action: "allow" };
+    const { browserSessionManager } = require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
+    void browserSessionManager.navigate(url, { reveal: true });
+    return { action: "deny" };
+  });
+
   win.on("close", (event) => {
     // 主窗关闭（含托盘隐藏）时一并关掉辅助窗
     closeAllAuxWindows();
@@ -187,6 +217,8 @@ export function createWindow(): BrowserWindow {
   });
 
   win.on("closed", () => {
+    const { browserSessionManager } = require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
+    browserSessionManager.dispose();
     unregisterContents(contentsId);
     win = null;
   });

@@ -1,6 +1,6 @@
 /**
- * 文件变更卡片：图标 + 文件名 + +/- 统计；默认折叠 4 行，整段一次展示。
- * 点文件名在右侧打开文件；点标题行其它区域展开 / 折叠。
+ * 文件变更卡片：图标 + 文件名 + +/- 统计；默认折叠 8 行，
+ * 超出时底部渐隐 + 居中下箭头展开。点文件名在右侧打开文件。
  */
 
 import { highlightCode } from "@thinker-workbench/markdown";
@@ -21,7 +21,7 @@ type DiffRow = {
 };
 
 /** 折叠时默认可见行数。 */
-const COLLAPSED_LINES = 4;
+const COLLAPSED_LINES = 8;
 
 /** 扩展名 → highlight.js 语言 id。 */
 function langFromPath(path?: string): string | undefined {
@@ -149,18 +149,9 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
   const collapsed = canCollapse && !expanded;
   const canOpen = Boolean(path && onOpenFile);
 
-  function toggleExpanded() {
-    if (!canCollapse) return;
-    setExpanded((v) => !v);
-  }
-
   return (
     <div className={`run-diff${collapsed ? " is-collapsed" : ""}${expanded ? " is-expanded" : ""}`}>
-      {/* 点文件名打开；点标题行其它区域展开 / 折叠 */}
-      <div
-        className={`run-diff-head${canCollapse ? " is-toggleable" : ""}`}
-        onClick={toggleExpanded}
-      >
+      <div className="run-diff-head">
         <span className={`run-diff-icon run-diff-icon--${ext || "file"}`} aria-hidden="true">
           {fileBadge(ext)}
         </span>
@@ -168,10 +159,7 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
           <button
             type="button"
             className="run-diff-name is-link"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenFile?.(path!);
-            }}
+            onClick={() => onOpenFile?.(path!)}
             aria-label={t("inspector.changes.openFile")}
           >
             {name}
@@ -185,27 +173,14 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
         {stats.del > 0 ? (
           <span className="run-diff-stat run-diff-stat--del">-{stats.del}</span>
         ) : null}
-        {canCollapse ? (
-          <button
-            type="button"
-            className="run-diff-toggle"
-            aria-expanded={expanded}
-            aria-label={expanded ? t("chat.diffCollapse") : t("chat.diffExpand")}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleExpanded();
-            }}
-          >
-            <span
-              className={`run-timeline-chevron${expanded ? " is-open" : ""}`}
-              aria-hidden="true"
-            />
-          </button>
-        ) : null}
       </div>
 
       <div className="run-diff-body-wrap">
-        <pre className="run-diff-body" tabIndex={0}>
+        <pre
+          className="run-diff-body"
+          tabIndex={0}
+          style={{ ["--diff-collapsed-lines" as string]: String(COLLAPSED_LINES) }}
+        >
           {visibleRows.map((row, i) => (
             <span
               key={`${i}:${row.kind}:${row.code.slice(0, 24)}`}
@@ -222,6 +197,20 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
             </span>
           ))}
         </pre>
+        {canCollapse ? (
+          <button
+            type="button"
+            className={`run-diff-fade${expanded ? " is-expanded" : ""}`}
+            aria-expanded={expanded}
+            aria-label={expanded ? t("chat.diffCollapse") : t("chat.diffExpand")}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <span
+              className={`run-diff-arrow${expanded ? " is-up" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+        ) : null}
       </div>
     </div>
   );

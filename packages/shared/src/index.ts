@@ -23,12 +23,27 @@ export type {
   AgentErrorEvent,
   AgentEvent,
   AgentEventBase,
+  AgentHitlEvent,
   AgentStatusEvent,
   AgentTokenEvent,
   AgentToolEvent,
   AgentUsageEvent,
   ModelUsage,
 } from "./ipc/events";
+export type { HitlAction, HitlKind, HitlRequest, HitlResponse } from "./ipc/hitl";
+export type {
+  ShellProfile,
+  TerminalEvent,
+  TerminalSession,
+  TerminalSessionStatus,
+  ThinkerTerminalApi,
+} from "./ipc/terminal";
+export type {
+  BrowserBounds,
+  BrowserEvent,
+  BrowserState,
+  ThinkerBrowserApi,
+} from "./ipc/browser";
 export type {
   ContextUsageRequest,
   ContextUsageSegment,
@@ -72,6 +87,7 @@ export type {
   AttentionPreviewKind,
   BuiltinAppThemeId,
   GeneralSettings,
+  ShellApprovalMode,
   ThinkerGeneralApi,
   WorkspaceAccess,
 } from "./ipc/general";
@@ -84,9 +100,12 @@ export {
   DEFAULT_APP_TYPE_STYLE,
   DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
   DEFAULT_GENERAL_SETTINGS,
+  DEFAULT_SHELL_ALLOWLIST,
+  DEFAULT_SHELL_APPROVAL_MODE,
   DEFAULT_WORKSPACE_ACCESS,
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
   LOG_RETENTION_DAY_OPTIONS,
+  SHELL_APPROVAL_MODES,
   THEME_CATALOG_VERSION,
   WORKSPACE_ACCESS_OPTIONS,
   isBuiltinAppTheme,
@@ -96,6 +115,10 @@ export {
   normalizeDeleteFileRestoreTtlDays,
   normalizeGeneral,
   normalizeOptionalPath,
+  normalizeShellAllowlist,
+  normalizeShellApprovalMode,
+  normalizeShellProfileId,
+  shellCommandBaseToken,
   normalizeUiTheme,
   normalizeWorkspaceAccess,
   resolveVisualThemeId,
@@ -152,13 +175,34 @@ export type {
   TraceSummary,
 } from "./ipc/tools";
 export type {
+  McpListResult,
+  McpServerConfig,
+  McpServerRuntimeState,
+  McpServerRuntimeStatus,
+  McpServerUpsertInput,
+  McpToolSummary,
+  McpTransport,
+  ThinkerMcpApi,
+} from "./ipc/mcp";
+export type { SkillListItem, ThinkerSkillsApi } from "./ipc/skills";
+export type {
+  BrowserRequestAction,
+  PtyRequestAction,
+  UtilityBrowserEvent,
+  UtilityBrowserRequest,
   UtilityCancel,
   UtilityContextUsage,
   UtilityContextUsageResult,
   UtilityCrashNotice,
   UtilityEventMessage,
   UtilityHello,
+  UtilityHitlRequestMessage,
+  UtilityHitlResult,
   UtilityLogMessage,
+  UtilityMcpReload,
+  UtilityMcpStatus,
+  UtilityPtyEvent,
+  UtilityPtyRequest,
   UtilityReady,
   UtilityResume,
   UtilityRun,
@@ -202,9 +246,14 @@ export type { RunResult } from "./protocol/result";
 import type { AgentResumeCommand, AgentRunCommand } from "./ipc/commands";
 import type { ContextUsageRequest, ContextUsageSnapshot } from "./ipc/contextUsage";
 import type { AgentEvent } from "./ipc/events";
+import type { HitlResponse } from "./ipc/hitl";
 import type { LogRecord } from "./ipc/log";
 import type { ThinkerSessionApi } from "./ipc/session";
 import type { ThinkerSettingsApi } from "./ipc/settings";
+import type { ThinkerBrowserApi } from "./ipc/browser";
+import type { ThinkerMcpApi } from "./ipc/mcp";
+import type { ThinkerSkillsApi } from "./ipc/skills";
+import type { ThinkerTerminalApi } from "./ipc/terminal";
 import type { ThinkerToolsApi } from "./ipc/tools";
 import type { ThinkerWindowApi } from "./ipc/window";
 import type { ThinkerWorkspacesApi, ThreadMeta } from "./ipc/workspaces";
@@ -253,4 +302,14 @@ export type ThinkerApi = {
   workspaces?: ThinkerWorkspacesApi;
   /** 工作空间文件树 / 读写 / Git（右侧栏）。 */
   workspaceFs?: ThinkerWorkspaceFsApi;
+  /** 终端 PTY（右侧栏 Terminal）。 */
+  terminal?: ThinkerTerminalApi;
+  /** 内置浏览器（右侧栏 Browser）。 */
+  browser?: ThinkerBrowserApi;
+  /** Skills 目录列表（Composer `/`）。 */
+  skills?: ThinkerSkillsApi;
+  /** MCP 服务端管理。 */
+  mcp?: ThinkerMcpApi;
+  /** 答复 HITL（审批 / 澄清等）。 */
+  respondHitl?(response: HitlResponse): Promise<void>;
 };

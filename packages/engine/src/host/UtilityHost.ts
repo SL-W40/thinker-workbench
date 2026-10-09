@@ -11,6 +11,7 @@ import {
 import {
   emptyContextUsageSnapshot,
   type AiLocale,
+  type McpServerConfig,
   type ModelSettings,
   type UtilityCancel,
   type UtilityContextUsage,
@@ -22,7 +23,9 @@ import {
 } from "@thinker-workbench/shared";
 import { setDataDir } from "../config/dataDir";
 import { assembleContext } from "../context/assembleContext";
+import { rejectAllHitl, resolveHitl } from "../hitl/requestHitl";
 import { agentLog, configureAgentLog } from "../log/setup";
+import { getMcpManager } from "../mcp/McpManager";
 import {
   configureAiLocale,
   configureChatModel,
@@ -33,7 +36,10 @@ import {
 import type { ChatMessage } from "../model/types";
 import { createAgentRuntime, type AgentRuntime } from "../runtime/AgentRuntime";
 import { setAllowAiDeleteFiles, setWorkspaceAccess, setWorkspaceRoot } from "../workspace";
+import { handleBrowserEvent } from "./browserClient";
+import { handlePtyEvent } from "./ptyClient";
 import { getParentPort, postToParent } from "./port";
+import { applyShellConfig } from "./shellConfig";
 
 export class UtilityHost {
   private runtime: AgentRuntime | null = null;
@@ -46,8 +52,16 @@ export class UtilityHost {
       throw new Error("Agent entry must run inside Electron utilityProcess.");
     }
 
+    getMcpManager().setStatusListener((status) => {
+      postToParent({ channel: "utility", kind: "mcpStatus", status });
+    });
+
     port.on("message", (event) => {
       void this.onMessage(event.data as UtilityToChild);
+    });
+
+    process.once("exit", () => {
+      void getMcpManager().stopAll();
     });
 
     postToParent({ channel: "utility", kind: "ready" });
@@ -124,12 +138,28 @@ export class UtilityHost {
         return this.onResume(message);
       case "contextUsage":
         return this.onContextUsage(message);
+      case "ptyEvent":
+        handlePtyEvent(message);
+        return;
+      case "browserEvent":
+        handleBrowserEvent(message);
+        return;
+      case "hitlResult":
+        resolveHitl(message.response);
+        return;
+      case "mcpReload":
+        return this.applyMcpServers(message.mcpServers);
       default: {
         const _exhaustive: never = message;
         void _exhaustive;
         return;
       }
     }
+  }
+
+  /** 热更新 MCP 配置快照。 */
+  private async applyMcpServers(servers?: McpServerConfig[]): Promise<void> {
+    await getMcpManager().reload(servers ?? []);
   }
 
   /** 应用数据根（rules / skills）。 */
@@ -159,7 +189,9 @@ export class UtilityHost {
     this.applyConfig(message.model, message.aiLocale);
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
+    applyShellConfig(message);
     this.applyDataDir(message.dataDir);
+    void this.applyMcpServers(message.mcpServers);
     if (message.workspaceRoot) {
       try {
         setWorkspaceRoot(message.workspaceRoot);
@@ -191,6 +223,7 @@ export class UtilityHost {
     this.applyConfig(message.model, message.aiLocale);
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
+    applyShellConfig(message);
     this.applyDataDir(message.dataDir);
     if (!workspaceRoot?.trim()) {
       postToParent({
@@ -236,20 +269,27 @@ export class UtilityHost {
 
   private onCancel(message: UtilityCancel): void {
     agentLog("host").info("cancel", { runId: message.command.runId });
+    rejectAllHitl("Run cancelled.");
     this.runtime?.cancel(message.command.runId);
   }
 
   private async onResume(message: UtilityResume): Promise<void> {
-    this.ensureLog();
+    this.ensureLog(message.loggingEnabled);
+    this.applyLogPolicy({
+      truncateLongContent: message.logTruncateLongContent,
+      loggingEnabled: message.loggingEnabled,
+    });
     const { runId } = message;
     const { threadId } = message.command;
-    agentLog("host").info("resume", { runId, threadId });
+    const traceId = message.command.traceId;
+    agentLog("host").info("resume", { runId, threadId, traceId });
     try {
       if (message.model || message.aiLocale) {
         this.applyConfig(message.model, message.aiLocale);
       }
       this.applyWorkspaceAccess(message.workspaceAccess);
       this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
+      applyShellConfig(message);
       this.applyDataDir(message.dataDir);
       if (message.workspaceRoot) {
         setWorkspaceRoot(message.workspaceRoot, { name: message.command.workspaceName });
@@ -297,6 +337,7 @@ export class UtilityHost {
         contextWindow: message.model?.contextWindow ?? getContextWindow(),
         dataDir: message.dataDir,
         workspaceRoot: workspaceRoot ?? undefined,
+        contextPaths: message.request.contextPaths,
       });
       postToParent({
         channel: "utility",

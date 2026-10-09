@@ -36,6 +36,7 @@ export async function agent(state: GraphState, signal: AbortSignal): Promise<Par
     aiLocale: getAiLocale(),
     allowEmoji: getAllowEmoji(),
     contextWindow: getContextWindow(),
+    contextPaths: state.contextPaths,
   });
 
   const log = agentLog("graph.agent");

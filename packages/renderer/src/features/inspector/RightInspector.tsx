@@ -6,6 +6,7 @@
 import type { GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
 import {
   Button,
+  ContextMenu,
   EmptyState,
   Field,
   Input,
@@ -39,7 +40,16 @@ import { FileTree } from "./FileTree";
 import { FilesHome } from "./FilesHome";
 import { MediaPreview, type MediaPreviewInfo } from "./MediaPreview";
 import { loadFileRecents, pushFileRecent } from "./fileRecents";
-import { FileStartIcon, GitIcon, IconPanelHide } from "./icons";
+import {
+  OPEN_BROWSER_EVENT,
+  consumePendingOpenBrowser,
+  onBrowserEvent,
+  type OpenBrowserDetail,
+} from "../../bridge/browser";
+import { OPEN_TERMINAL_EVENT, type OpenTerminalDetail } from "../../bridge/terminal";
+import { BrowserPane } from "../browser/BrowserPane";
+import { TerminalPane } from "../terminal/TerminalPane";
+import { BrowserStartIcon, FileStartIcon, GitIcon, TerminalStartIcon } from "./icons";
 import {
   hydrateTabs,
   loadInspectorUi,
@@ -55,8 +65,10 @@ import {
   type TreeSelectGesture,
 } from "./treeSelection";
 import {
+  BROWSER_TAB_KEY,
   CHANGES_TAB_KEY,
   FILES_TAB_KEY,
+  TERMINAL_TAB_KEY,
   type StageTab,
 } from "./types";
 import {
@@ -74,9 +86,12 @@ type Props = {
   /** 外部请求打开的工作空间相对路径（如聊天 diff 点文件名）；消费后回调清空。 */
   pendingOpenPath?: string | null;
   onPendingOpenPathConsumed?: () => void;
+  /** 外部请求打开 Terminal 并可选聚焦会话。 */
+  pendingOpenTerminalSessionId?: string | null;
+  onPendingOpenTerminalConsumed?: () => void;
 };
 
-/** 从树收集全部文件相对路径（供 FilesHome 搜索）。 */
+/** 从树收集全部文件相对路径（供 Files 搜索）。 */
 function collectFilePaths(node: WorkspaceNode | null): string[] {
   if (!node) return [];
   if (node.type === "file") return [node.path === "." ? "" : node.path].filter(Boolean);
@@ -181,6 +196,8 @@ export function RightInspector({
   onSendPrompt,
   pendingOpenPath,
   onPendingOpenPathConsumed,
+  pendingOpenTerminalSessionId,
+  onPendingOpenTerminalConsumed,
 }: Props) {
   const t = useT();
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -192,6 +209,9 @@ export function RightInspector({
 
   const [tabs, setTabs] = useState<StageTab[]>([]);
   const [activeTab, setActiveTab] = useState<string>("");
+  /** TerminalPane 聚焦会话（打开面板后消费）。 */
+  const [terminalFocusId, setTerminalFocusId] = useState<string | null>(null);
+  const [browserPendingUrl, setBrowserPendingUrl] = useState<string | null>(null);
   /** 未命名缓冲首次保存：填写相对路径。 */
   const [saveAs, setSaveAs] = useState<{ key: string; draft: string } | null>(null);
 
@@ -216,7 +236,6 @@ export function RightInspector({
   const {
     open: filesListOpen,
     forced: filesListForced,
-    toggle: toggleFilesList,
     setOpen: setFilesListOpen,
     paneRef: filesPaneRef,
   } = useFileListOpen(
@@ -233,6 +252,24 @@ export function RightInspector({
   const currentTab = tabs.find((tab) => tab.key === activeTab);
   const inspectorEmpty = tabs.length === 0;
   const fileCandidates = useMemo(() => collectFilePaths(tree), [tree]);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [addMenuAnchor, setAddMenuAnchor] = useState<DOMRect | null>(null);
+  const addTabBtnRef = useRef<HTMLButtonElement>(null);
+  /** 侧栏文件树右键。 */
+  const [treeCtxMenu, setTreeCtxMenu] = useState<{
+    x: number;
+    y: number;
+    path: string;
+    kind: "file" | "dir";
+  } | null>(null);
+
+  async function copyPathText(path: string) {
+    try {
+      await navigator.clipboard.writeText(path);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const refreshTree = useCallback(async () => {
     if (!workspaceId) return;
@@ -262,6 +299,8 @@ export function RightInspector({
     const nextTabs = hydrateTabs(restoredUi.tabs, {
       changes: t("inspector.section.changes"),
       files: t("inspector.section.files"),
+      terminal: t("inspector.section.terminal"),
+      browser: t("inspector.section.browser"),
     });
     const nextActive = resolveActiveKey(nextTabs, restoredUi.activeKey);
     setTabs(nextTabs);
@@ -351,6 +390,44 @@ export function RightInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenPath]);
 
+  // 外部 / 时间线：打开 Terminal 标签（细节由 TerminalPane 消费）
+  useEffect(() => {
+    function onOpen(e: Event) {
+      const detail = (e as CustomEvent<OpenTerminalDetail>).detail;
+      openTerminal(detail?.sessionId);
+    }
+    window.addEventListener(OPEN_TERMINAL_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_TERMINAL_EVENT, onOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Markdown 链接 / agent / 主进程：打开 Browser 标签
+  useEffect(() => {
+    function onOpen(e: Event) {
+      const detail = (e as CustomEvent<OpenBrowserDetail>).detail;
+      openBrowser(detail?.url);
+    }
+    window.addEventListener(OPEN_BROWSER_EVENT, onOpen);
+    const off = onBrowserEvent((event) => {
+      if (event.type === "reveal") openBrowser(event.url);
+    });
+    const pending = consumePendingOpenBrowser();
+    if (pending) openBrowser(pending.url);
+    return () => {
+      window.removeEventListener(OPEN_BROWSER_EVENT, onOpen);
+      off();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (pendingOpenTerminalSessionId == null) return;
+    const id = pendingOpenTerminalSessionId;
+    onPendingOpenTerminalConsumed?.();
+    openTerminal(id || undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenTerminalSessionId]);
+
   // Tab 条：纵向滚轮 → 横向滚动
   useEffect(() => {
     const strip = tabsRef.current;
@@ -389,13 +466,22 @@ export function RightInspector({
     });
   }
 
-  /** Tab 条上的文件树开关；打开时若当前不在 Files 壳层则切到 Files。 */
-  function onToggleFilesList() {
-    if (!filesListOpen) {
-      const kind = tabs.find((tab) => tab.key === activeTab)?.kind;
-      if (kind !== "files" && kind !== "file") openFilesPane();
-    }
-    toggleFilesList();
+  function openTerminal(sessionId?: string) {
+    ensureTab({
+      key: TERMINAL_TAB_KEY,
+      kind: "terminal",
+      title: t("inspector.section.terminal"),
+    });
+    if (sessionId?.trim()) setTerminalFocusId(sessionId.trim());
+  }
+
+  function openBrowser(url?: string) {
+    ensureTab({
+      key: BROWSER_TAB_KEY,
+      kind: "browser",
+      title: t("inspector.section.browser"),
+    });
+    if (url?.trim()) setBrowserPendingUrl(url.trim());
   }
 
   async function openFile(path: string) {
@@ -671,6 +757,18 @@ export function RightInspector({
             </span>
             <span className="agent-start__label">{t("inspector.section.files")}</span>
           </button>
+          <button type="button" className="agent-start__item" onClick={() => openTerminal()}>
+            <span className="agent-start__ico">
+              <TerminalStartIcon />
+            </span>
+            <span className="agent-start__label">{t("inspector.section.terminal")}</span>
+          </button>
+          <button type="button" className="agent-start__item" onClick={() => openBrowser()}>
+            <span className="agent-start__ico">
+              <BrowserStartIcon />
+            </span>
+            <span className="agent-start__label">{t("inspector.section.browser")}</span>
+          </button>
         </div>
       ) : (
         <>
@@ -695,6 +793,14 @@ export function RightInspector({
                   <span className="agent-inspector__tab-ico">
                     <GitIcon />
                   </span>
+                ) : tab.kind === "terminal" ? (
+                  <span className="agent-inspector__tab-ico">
+                    <TerminalStartIcon />
+                  </span>
+                ) : tab.kind === "browser" ? (
+                  <span className="agent-inspector__tab-ico">
+                    <BrowserStartIcon />
+                  </span>
                 ) : (
                   <span className="agent-inspector__tab-ico">
                     <FileStartIcon />
@@ -716,28 +822,61 @@ export function RightInspector({
               </button>
             ))}
             <button
+              ref={addTabBtnRef}
               type="button"
-              className="agent-inspector__tab-add"
-              title={t("inspector.files.openSearch")}
-              aria-label={t("inspector.files.openSearch")}
-              onClick={openFilesPane}
+              className={`agent-inspector__tab-add${addMenuOpen ? " is-on" : ""}`}
+              title={t("inspector.addPanel")}
+              aria-label={t("inspector.addPanel")}
+              aria-expanded={addMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => {
+                const rect = addTabBtnRef.current?.getBoundingClientRect() ?? null;
+                setAddMenuAnchor(rect);
+                setAddMenuOpen((v) => !v);
+              }}
             >
               +
             </button>
-            <button
-              type="button"
-              className={`agent-inspector__tab-add${filesListOpen ? " is-on" : ""}`}
-              title={
-                filesListOpen ? t("inspector.files.hideTree") : t("inspector.files.showTree")
-              }
-              aria-label={
-                filesListOpen ? t("inspector.files.hideTree") : t("inspector.files.showTree")
-              }
-              aria-pressed={filesListOpen}
-              onClick={onToggleFilesList}
-            >
-              <IconPanelHide />
-            </button>
+            <ContextMenu
+              open={addMenuOpen}
+              anchor={addMenuAnchor}
+              onClose={() => setAddMenuOpen(false)}
+              aria-label={t("inspector.addPanel")}
+              items={[
+                {
+                  label: t("inspector.section.changes"),
+                  icon: <GitIcon />,
+                  onSelect: () => {
+                    setAddMenuOpen(false);
+                    openChanges();
+                  },
+                },
+                {
+                  label: t("inspector.section.files"),
+                  icon: <FileStartIcon />,
+                  onSelect: () => {
+                    setAddMenuOpen(false);
+                    openFilesPane();
+                  },
+                },
+                {
+                  label: t("inspector.section.terminal"),
+                  icon: <TerminalStartIcon />,
+                  onSelect: () => {
+                    setAddMenuOpen(false);
+                    openTerminal();
+                  },
+                },
+                {
+                  label: t("inspector.section.browser"),
+                  icon: <BrowserStartIcon />,
+                  onSelect: () => {
+                    setAddMenuOpen(false);
+                    openBrowser();
+                  },
+                },
+              ]}
+            />
           </div>
 
           <div className="agent-inspector__body">
@@ -754,10 +893,28 @@ export function RightInspector({
               />
             ) : null}
 
+            {currentTab?.kind === "terminal" ? (
+              <TerminalPane
+                active={activeTab === TERMINAL_TAB_KEY}
+                focusSessionId={terminalFocusId}
+                onFocusSessionConsumed={() => setTerminalFocusId(null)}
+              />
+            ) : null}
+
+            {currentTab?.kind === "browser" ? (
+              <BrowserPane
+                active={activeTab === BROWSER_TAB_KEY}
+                pendingUrl={browserPendingUrl}
+                onPendingUrlConsumed={() => setBrowserPendingUrl(null)}
+              />
+            ) : null}
+
             {showFileShell ? (
               <div
                 ref={filesPaneRef}
-                className={`agent-files${filesListOpen ? " has-side" : ""}`}
+                className={`agent-files${
+                  !showFilesHome && filesListOpen ? " has-side" : ""
+                }`}
               >
                 <div className="agent-files__main">
                   {showFilesHome ? (
@@ -766,7 +923,6 @@ export function RightInspector({
                       fileCandidates={fileCandidates}
                       onOpenFile={(path) => void openFile(path)}
                       onNewFile={onNewFile}
-                      onQuickOpen={openFilesPane}
                     />
                   ) : currentTab?.kind === "file" ? (
                     <div className="agent-files__editor">
@@ -792,7 +948,7 @@ export function RightInspector({
                   ) : null}
                 </div>
 
-                {filesListOpen ? (
+                {!showFilesHome && filesListOpen ? (
                   <aside className="agent-files__side" style={{ width: filesListWidth }}>
                     <div
                       className={`filelist-splitter${filesListDragging ? " is-dragging" : ""}`}
@@ -820,8 +976,8 @@ export function RightInspector({
                         type="text"
                         value={treeQuery}
                         onChange={(e) => setTreeQuery(e.target.value)}
-                        placeholder={t("inspector.changes.searchFiles")}
-                        aria-label={t("inspector.changes.searchFiles")}
+                        placeholder={t("inspector.files.searchPlaceholder")}
+                        aria-label={t("inspector.files.searchPlaceholder")}
                         autoComplete="off"
                         spellCheck={false}
                       />
@@ -839,13 +995,78 @@ export function RightInspector({
                           onSelect={onTreeSelect}
                           onContextMenu={(e, node) => {
                             e.preventDefault();
-                            if (node.type === "file") void openFile(node.path);
+                            e.stopPropagation();
+                            setTreeCtxMenu({
+                              x: e.clientX,
+                              y: e.clientY,
+                              path: node.path,
+                              kind: node.type === "dir" ? "dir" : "file",
+                            });
                           }}
                         />
                       ) : (
                         <div className="ws-empty">{t("inspector.files.emptyTree")}</div>
                       )}
                     </div>
+                    <ContextMenu
+                      open={Boolean(treeCtxMenu)}
+                      anchor={
+                        treeCtxMenu
+                          ? { x: treeCtxMenu.x, y: treeCtxMenu.y }
+                          : null
+                      }
+                      onClose={() => setTreeCtxMenu(null)}
+                      aria-label={t("inspector.files.fileMenu")}
+                      items={
+                        treeCtxMenu?.kind === "file"
+                          ? [
+                              {
+                                label: t("inspector.changes.openFile"),
+                                onSelect: () => {
+                                  const path = treeCtxMenu.path;
+                                  setTreeCtxMenu(null);
+                                  void openFile(path);
+                                },
+                              },
+                              {
+                                label: t("inspector.changes.copyPath"),
+                                onSelect: () => {
+                                  const path = treeCtxMenu.path;
+                                  setTreeCtxMenu(null);
+                                  void copyPathText(path);
+                                },
+                              },
+                              {
+                                label: t("inspector.files.newFile"),
+                                separatorBefore: true,
+                                onSelect: () => {
+                                  setTreeCtxMenu(null);
+                                  onNewFile();
+                                },
+                              },
+                            ]
+                          : treeCtxMenu
+                            ? [
+                                {
+                                  label: t("inspector.changes.copyPath"),
+                                  onSelect: () => {
+                                    const path = treeCtxMenu.path;
+                                    setTreeCtxMenu(null);
+                                    void copyPathText(path);
+                                  },
+                                },
+                                {
+                                  label: t("inspector.files.newFile"),
+                                  separatorBefore: true,
+                                  onSelect: () => {
+                                    setTreeCtxMenu(null);
+                                    onNewFile();
+                                  },
+                                },
+                              ]
+                            : []
+                      }
+                    />
                   </aside>
                 ) : null}
               </div>

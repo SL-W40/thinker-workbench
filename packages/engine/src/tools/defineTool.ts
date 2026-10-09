@@ -19,8 +19,8 @@ export function defineTool(input: DefineToolInput): ToolSpec {
     parameters,
     async run(args, ctx) {
       try {
-        const { output, ui } = normalizeExecuteResult(await execute(args, ctx));
-        return { ok: true, output, ...(ui ? { ui } : {}) };
+        const { output, ui, ok } = normalizeExecuteResult(await execute(args, ctx));
+        return { ok: ok !== false, output, ...(ui ? { ui } : {}) };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return { ok: false, output: message };

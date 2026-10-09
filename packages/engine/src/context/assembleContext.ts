@@ -21,6 +21,7 @@ import { loadSkills } from "../skills/loadSkills";
 import { listChatTools } from "../tools/schema";
 import type { ChatMessage, ChatToolDefinition } from "../model/types";
 import { getWorkspaceRootOrNull } from "../workspace";
+import { loadContextFilesBlock } from "./loadContextFiles";
 import { estimateTokens } from "./tokens";
 
 export type AssembleContextInput = {
@@ -32,6 +33,8 @@ export type AssembleContextInput = {
   workspaceRoot?: string | null;
   /** 用于 skill slash / paths；默认取最后一条 user。 */
   latestUserText?: string;
+  /** 用户 `@` 选中的工作区相对路径。 */
+  contextPaths?: string[];
 };
 
 export type AssembledContext = {
@@ -93,6 +96,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const latestUser =
     input.latestUserText ?? latestUserFromMessages(input.messages);
   const skills = loadSkills(dataDir, workspaceRoot, latestUser);
+  const contextFiles = loadContextFilesBlock(workspaceRoot, input.contextPaths);
   const tools = listChatTools();
   const toolsJson = JSON.stringify(tools);
   const conversation = conversationText(input.messages);
@@ -100,6 +104,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const systemParts = [base, environment];
   if (rules.text) systemParts.push(rules.text);
   if (skills.text) systemParts.push(skills.text);
+  if (contextFiles.text) systemParts.push(contextFiles.text);
   const system = systemParts.join("\n\n");
 
   const segmentDefs: Array<{ id: ContextUsageSegment["id"]; text: string }> = [
@@ -107,6 +112,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     { id: "tools", text: toolsJson },
     { id: "rules", text: rules.text },
     { id: "skills", text: skills.text },
+    { id: "contextFiles", text: contextFiles.plain },
     { id: "conversation", text: conversation },
   ];
   const segments: ContextUsageSegment[] = segmentDefs.map((s) => ({

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 本地构建 node-pty 时关闭 Spectre 缓解，避免 MSB8040（未安装 Spectre 库时）。 -->
+<Project>
+  <PropertyGroup>
+    <SpectreMitigation>false</SpectreMitigation>
+  </PropertyGroup>
+</Project>

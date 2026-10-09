@@ -9,6 +9,7 @@ export type ContextUsageSegmentId =
   | "tools"
   | "rules"
   | "skills"
+  | "contextFiles"
   | "conversation";
 
 /** 单个分段的估算用量。 */
@@ -42,6 +43,8 @@ export type ContextUsageRequest = {
   }>;
   /** 工作区根；省略则用 agent 当前已配置根。 */
   workspaceRoot?: string;
+  /** `@` 选中的工作区相对路径（与 AgentRunCommand.contextPaths 同源）。 */
+  contextPaths?: string[];
 };
 
 /** 空快照（utility 未就绪等）。 */
@@ -56,6 +59,7 @@ export function emptyContextUsageSnapshot(
       { id: "tools", tokens: 0 },
       { id: "rules", tokens: 0 },
       { id: "skills", tokens: 0 },
+      { id: "contextFiles", tokens: 0 },
       { id: "conversation", tokens: 0 },
     ],
   };

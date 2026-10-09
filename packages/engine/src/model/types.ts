@@ -32,7 +32,8 @@ export type ChatToolDefinition = {
   function: {
     name: string;
     description: string;
-    parameters: ToolParameters;
+    /** 内置工具用轻量 ToolParameters；MCP 可透传完整 JSON Schema object。 */
+    parameters: ToolParameters | Record<string, unknown>;
   };
 };
 

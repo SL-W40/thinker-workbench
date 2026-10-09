@@ -683,6 +683,54 @@ code {
   &:last-child {
     border-bottom: 0;
   }
+
+  &--stack {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+.settings-allowlist {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.settings-allowlist__add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 28rem;
+}
+
+.settings-allowlist__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-allowlist__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev, transparent);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  span {
+    opacity: 0.55;
+  }
+
+  &:hover {
+    border-color: var(--ink);
+  }
 }
 
 .settings-toggle-copy {
@@ -1305,6 +1353,17 @@ kbd {
   line-height: 1.35;
 }
 
+/* Planning ↔ Thinking ↔ Thought：标签切换淡入上浮（外壳，避免盖掉扫光 animation） */
+.run-timeline-label-enter {
+  display: inline-block;
+  animation: run-timeline-label-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 临时 Planning 行挂载 */
+.run-timeline-item--status-enter {
+  animation: run-timeline-status-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* 活动 Thinking / Planning：文字扫光 */
 .run-timeline-label--shimmer {
   color: transparent;
@@ -1404,6 +1463,28 @@ kbd {
   }
 }
 
+@keyframes run-timeline-label-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes run-timeline-status-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .run-timeline-tool {
   min-width: 0;
   display: grid;
@@ -1418,6 +1499,195 @@ kbd {
   flex-wrap: nowrap;
   max-width: 100%;
   text-align: left;
+}
+
+.run-timeline-jump-term {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* shell 执行 / HITL 审批卡片 */
+.run-shell-card {
+  --run-shell-surface: var(
+    --md-pre-bg,
+    var(--bg-elev, var(--tw-bg-elev, #f7efe3))
+  );
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  border: 1px solid
+    var(--md-border, var(--line, var(--tw-border, rgba(90, 70, 50, 0.18))));
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--run-shell-surface);
+
+  &.is-failed {
+    border-color: color-mix(
+      in srgb,
+      var(--danger, #9b3b2e) 42%,
+      var(--line, transparent)
+    );
+  }
+
+  &.is-awaiting {
+    border-color: color-mix(
+      in srgb,
+      var(--tw-accent, var(--accent, #111)) 36%,
+      var(--line, transparent)
+    );
+  }
+}
+
+.run-shell-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 8px;
+}
+
+.run-shell-card__tool {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-muted, var(--muted));
+}
+
+.run-shell-card__cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.run-shell-card__badge {
+  flex: 0 0 auto;
+}
+
+.run-shell-card__status {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--muted, var(--tw-fg-muted)) 88%, transparent);
+
+  &.is-err {
+    color: var(--danger, #9b3b2e);
+  }
+}
+
+.run-shell-card__term.tw-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.run-shell-card__hitl {
+  padding: 0 12px 10px;
+}
+
+.run-shell-card__note {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--ink-muted, var(--muted));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.run-shell-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.run-shell-card__body {
+  --run-shell-body-bg: color-mix(in srgb, var(--ink) 3%, var(--run-shell-surface));
+  position: relative;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  background: var(--run-shell-body-bg);
+}
+
+.run-shell-card__output {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+  overflow: auto;
+}
+
+.run-shell-card__body.is-collapsed .run-shell-card__output {
+  max-height: calc(1.4em * var(--shell-collapsed-lines, 4));
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.run-shell-card__body.is-expanded .run-shell-card__output {
+  max-height: 16rem;
+  padding-bottom: 1.6rem;
+}
+
+/* 整块渐隐可点：无底色/边框，箭头叠在渐隐上 */
+.run-shell-card__fade {
+  appearance: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: 3.4em;
+  margin: 0;
+  padding: 0 0 5px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--run-shell-body-bg) 55%, transparent) 40%,
+    var(--run-shell-body-bg) 100%
+  );
+  cursor: pointer;
+  display: grid;
+  place-items: end center;
+  color: color-mix(in srgb, var(--ink-muted, var(--muted)) 90%, var(--ink));
+}
+
+.run-shell-card__fade.is-expanded {
+  height: 1.75em;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--run-shell-body-bg) 100%
+  );
+}
+
+.run-shell-card__fade:hover {
+  color: var(--ink);
+}
+
+.run-shell-card__arrow {
+  display: block;
+  box-sizing: border-box;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-bottom: 1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  filter: drop-shadow(0 0 1px var(--run-shell-body-bg));
+}
+
+.run-shell-card__arrow.is-up {
+  margin-bottom: 2px;
+  transform: rotate(-135deg);
 }
 
 /* delete_file 结果卡片（与 .run-diff 同量级） */
@@ -1573,7 +1843,6 @@ kbd {
 .run-timeline-status-toggle.is-expandable:hover .run-timeline-chevron,
 .run-timeline-tool-toggle:hover .run-timeline-chevron,
 .run-timeline-explore-toggle:hover .run-timeline-chevron,
-.run-diff-head:hover .run-timeline-chevron,
 .run-timeline-chevron.is-open {
   opacity: 1;
 }
@@ -1596,18 +1865,17 @@ kbd {
   margin-top: 2px;
 }
 
-/* 手动停止：单行文案 + 右侧「继续」，不用 error 样式 */
+/* 手动停止：文案与「继续」紧挨，不用 error 样式 */
 .run-timeline-stopped {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
 }
 
 .run-timeline-stopped .run-timeline-label {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -1692,10 +1960,6 @@ kbd {
   padding: 8px 10px;
   background: var(--run-diff-surface);
   border-bottom: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.18)));
-
-  &.is-toggleable {
-    cursor: pointer;
-  }
 }
 
 .run-diff-icon {
@@ -1777,19 +2041,6 @@ kbd {
 
 .run-diff-stat--del {
   color: var(--run-diff-del);
-}
-
-.run-diff-toggle {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 2px 4px;
-  margin: 0;
-  cursor: pointer;
-  display: inline-grid;
-  place-items: center;
-  color: inherit;
-  flex: 0 0 auto;
 }
 
 .run-diff-body-wrap {
@@ -1885,21 +2136,72 @@ kbd {
   }
 }
 
+.run-diff.is-collapsed .run-diff-body {
+  max-height: calc(1.5em * var(--diff-collapsed-lines, 8));
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
 .run-diff.is-expanded .run-diff-body,
 .run-diff.is-streaming .run-diff-body {
   max-height: 22rem;
   overflow: auto;
+  padding-bottom: 1.6rem;
 }
 
-.run-diff.is-collapsed .run-diff-body-wrap::after {
-  content: "";
-  pointer-events: none;
+/* 整块渐隐可点：无底色/边框，箭头叠在渐隐上 */
+.run-diff-fade {
+  appearance: none;
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 1.4rem;
-  background: linear-gradient(to bottom, transparent, var(--run-diff-surface));
+  z-index: 1;
+  height: 3.4em;
+  margin: 0;
+  padding: 0 0 5px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--run-diff-surface) 55%, transparent) 40%,
+    var(--run-diff-surface) 100%
+  );
+  cursor: pointer;
+  display: grid;
+  place-items: end center;
+  color: color-mix(in srgb, var(--ink-muted, var(--muted)) 90%, var(--ink));
+}
+
+.run-diff-fade.is-expanded {
+  height: 1.75em;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--run-diff-surface) 100%
+  );
+}
+
+.run-diff-fade:hover {
+  color: var(--ink);
+}
+
+.run-diff-arrow {
+  display: block;
+  box-sizing: border-box;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-bottom: 1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  filter: drop-shadow(0 0 1px var(--run-diff-surface));
+}
+
+.run-diff-arrow.is-up {
+  margin-bottom: 2px;
+  transform: rotate(-135deg);
 }
 
 .run-diff-line {
@@ -2379,6 +2681,18 @@ kbd {
   .chat-welcome,
   .bubble {
     animation: none;
+  }
+
+  .run-timeline-label--shimmer,
+  .run-timeline-label-enter,
+  .run-timeline-item--status-enter {
+    animation: none;
+  }
+
+  .run-timeline-label--shimmer {
+    color: var(--ink);
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
   }
 
   .composer-send,

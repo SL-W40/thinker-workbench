@@ -1,0 +1,146 @@
+/* Composer 上方：background shell 任务条（贴在输入壳上沿） */
+
+.bg-tasks {
+  /* 比输入壳略窄，居中贴在上沿 */
+  width: calc(100% - 28px);
+  max-width: calc(var(--composer-max-width, 40rem) - 28px);
+  margin: 0 auto;
+  padding: 2px;
+  box-sizing: border-box;
+  border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.18)));
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: color-mix(
+    in srgb,
+    var(--bg-elev, var(--tw-bg-elev, #f7f7f7)) 88%,
+    var(--tw-accent, var(--accent, #111)) 4%
+  );
+}
+
+.bg-tasks__head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bg-tasks__head:hover,
+.bg-tasks__head:focus-visible {
+  background: color-mix(in srgb, var(--ink, #000) 5%, transparent);
+  outline: none;
+}
+
+.bg-tasks.is-expanded .bg-tasks__head {
+  margin-bottom: 0;
+}
+
+.bg-tasks__icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted, var(--muted, var(--tw-fg-muted)));
+}
+
+.bg-tasks__head:hover .bg-tasks__icon,
+.bg-tasks__head:focus-visible .bg-tasks__icon,
+.bg-tasks.is-expanded .bg-tasks__icon {
+  color: var(--ink, var(--tw-fg));
+}
+
+.bg-tasks__ico {
+  grid-area: 1 / 1;
+}
+
+/* 默认显示 console；整行悬停 / 展开时换成箭头 */
+.bg-tasks__ico--arrow {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bg-tasks__head:hover .bg-tasks__ico--console,
+.bg-tasks__head:focus-visible .bg-tasks__ico--console,
+.bg-tasks.is-expanded .bg-tasks__ico--console {
+  opacity: 0;
+}
+
+.bg-tasks__head:hover .bg-tasks__ico--arrow,
+.bg-tasks__head:focus-visible .bg-tasks__ico--arrow,
+.bg-tasks.is-expanded .bg-tasks__ico--arrow {
+  opacity: 1;
+}
+
+.bg-tasks__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink, var(--tw-fg));
+}
+
+.bg-tasks__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bg-tasks__chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.16)));
+  border-radius: 999px;
+  background: var(--bg, var(--tw-bg, #fff));
+  color: var(--ink, var(--tw-fg));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bg-tasks__chip:hover {
+  border-color: color-mix(in srgb, var(--tw-accent, var(--accent, #111)) 35%, var(--line, transparent));
+  background: color-mix(
+    in srgb,
+    var(--tw-accent, var(--accent, #111)) 6%,
+    var(--bg, var(--tw-bg, #fff))
+  );
+}
+
+.bg-tasks__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3ecf8e;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #3ecf8e 22%, transparent);
+}
+
+.bg-tasks__cmd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

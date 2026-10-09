@@ -1,4 +1,4 @@
-﻿/**
+/**
  * utilityProcess 消息类型守卫与透传辅助。
  *
  * 仅识别 shared 约定的 `channel: "utility"` 信封；用于过滤子进程杂讯。
@@ -16,7 +16,11 @@ export function isUtilityToParent(value: unknown): value is UtilityToParent {
     (msg.kind === "ready" ||
       msg.kind === "event" ||
       msg.kind === "log" ||
-      msg.kind === "contextUsageResult")
+      msg.kind === "contextUsageResult" ||
+      msg.kind === "ptyRequest" ||
+      msg.kind === "browserRequest" ||
+      msg.kind === "hitl" ||
+      msg.kind === "mcpStatus")
   );
 }
 

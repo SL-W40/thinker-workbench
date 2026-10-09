@@ -7,6 +7,7 @@ import {
   type AgentResumeCommand,
   type AgentRunCommand,
   type ContextUsageRequest,
+  type HitlResponse,
   IpcChannels,
   type LogRecord,
 } from "@thinker-workbench/shared";
@@ -23,8 +24,9 @@ import {
   setSessionRunStatus,
   upsertSessionForRun,
 } from "../db/workspacesStore";
-import { setDesktopLogBroadcast, writeAppLogRecord } from "../log/setup";
+import { setDesktopLogBroadcast, writeAgentLogRecord, writeAppLogRecord } from "../log/setup";
 import { handleAgentAttention } from "../notify/agentAttention";
+import { handleHitlAgentEvent, respondHitl } from "../notify/hitlNotify";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { broadcastThreadsChanged } from "./workspacesHandlers";
 
@@ -62,9 +64,10 @@ function resolveWorkspaceName(): string | undefined {
  */
 export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): void {
   setDesktopLogBroadcast(broadcastLog);
-  bridge.onLog(broadcastLog);
+  // agent 经 bridge 上来：落库 + 广播（勿只 broadcast，Traces 读的是 SQLite）
+  bridge.onLog(writeAgentLogRecord);
 
-  // 启动时把残留 running 标为 interrupted
+  // 启动时把残留 running 标为 crashed / 愈合旧 interrupted
   try {
     if (healRunningSessions() > 0) broadcastThreadsChanged();
   } catch {
@@ -77,6 +80,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
 
   bridge.onEvent((event) => {
     handleAgentAttention(event);
+    handleHitlAgentEvent(event, bridge);
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IpcChannels.agentEvent, event);
     }
@@ -91,12 +95,24 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
         broadcastThreadsChanged();
       } else if (event.type === "error") {
         const cancelled = /cancel/i.test(event.error);
-        // 手动取消 → interrupted（保留 checkpoint，可继续）；其它失败 → failed
-        setSessionRunStatus(event.threadId, cancelled ? "interrupted" : "failed", {
-          byThread: true,
-          activeRunId: null,
-          interruptReason: cancelled ? "cancelled" : event.error,
-        });
+        const crashed =
+          /utilityProcess exited|ready timeout|Process exited|EPIPE|\bcrash\b/i.test(
+            event.error,
+          );
+        // 手动取消 → cancelled；进程异常 → crashed（可 Resume）；其它 → failed
+        setSessionRunStatus(
+          event.threadId,
+          cancelled ? "cancelled" : crashed ? "crashed" : "failed",
+          {
+            byThread: true,
+            activeRunId: null,
+            interruptReason: cancelled
+              ? "cancelled"
+              : crashed
+                ? "crash"
+                : event.error,
+          },
+        );
         broadcastThreadsChanged();
       }
     } catch {
@@ -152,16 +168,20 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   ipcMain.handle(IpcChannels.agentCancel, async (_evt, payload?: AgentCancelCommand | string) => {
     const runId = typeof payload === "string" ? payload : payload?.runId;
     bridge.cancel(runId?.trim() ? runId : undefined);
-    // 取消保留 checkpoint，标 interrupted，供时间线「继续」
+    // 取消保留 checkpoint，标 cancelled，供时间线「继续」
     const activeId = getActiveSessionId();
     const session = activeId ? getSession(activeId) : null;
     if (session) {
-      setSessionRunStatus(session.id, "interrupted", {
+      setSessionRunStatus(session.id, "cancelled", {
         activeRunId: null,
         interruptReason: "cancelled",
       });
       broadcastThreadsChanged();
     }
+  });
+
+  ipcMain.handle(IpcChannels.agentHitlRespond, async (_evt, response: HitlResponse) => {
+    respondHitl(response, bridge);
   });
 
   ipcMain.handle(IpcChannels.agentListThreads, async () => {
@@ -197,7 +217,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   });
 }
 
-/** utility 退出时：把 running 标 interrupted。 */
+/** utility 退出时：把 running 标 crashed（有 checkpoint 可 Resume）。 */
 export function onAgentUtilityExited(): void {
   try {
     if (healRunningSessions() > 0) broadcastThreadsChanged();

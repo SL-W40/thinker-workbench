@@ -7,6 +7,8 @@ import path from "node:path";
 import type { AiLocale, WorkspaceAccess } from "@thinker-workbench/shared";
 import {
   getAllowAiDeleteFiles,
+  getAllowAiShell,
+  getShellProfile,
   getWorkspaceAccess,
   getWorkspaceName,
   getWorkspaceRootOrNull,
@@ -84,6 +86,22 @@ export function buildEnvironmentFacts(locale: AiLocale): Record<string, unknown>
       homedir: os.homedir(),
       hostname: os.hostname(),
     },
+    shell: (() => {
+      const sh = getShellProfile();
+      return sh
+        ? {
+            profile_id: sh.id,
+            name: sh.name,
+            path: sh.path,
+            available: getAllowAiShell(),
+          }
+        : {
+            profile_id: null,
+            name: null,
+            path: null,
+            available: getAllowAiShell(),
+          };
+    })(),
     locale: {
       ai: locale,
     },

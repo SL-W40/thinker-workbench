@@ -10,6 +10,7 @@ import {
 } from "@thinker-workbench/shared";
 import { useEffect, useId, useRef, useState } from "react";
 import { getContextUsage } from "../../bridge/thinker";
+import { extractContextPaths } from "./composerMentions";
 import { useT } from "../../i18n/I18nProvider";
 import type { MessageKey } from "../../i18n/translate";
 import { formatCompactTokens } from "./usageStats";
@@ -21,6 +22,7 @@ const SEGMENT_ORDER: ContextUsageSegmentId[] = [
   "tools",
   "rules",
   "skills",
+  "contextFiles",
   "conversation",
 ];
 
@@ -29,6 +31,7 @@ const SEGMENT_KEYS: Record<ContextUsageSegmentId, MessageKey> = {
   tools: "chat.contextUsage.tools",
   rules: "chat.contextUsage.rules",
   skills: "chat.contextUsage.skills",
+  contextFiles: "chat.contextUsage.contextFiles",
   conversation: "chat.contextUsage.conversation",
 };
 
@@ -67,9 +70,11 @@ export function ContextUsageControl({ messages, draft, workspaceRoot }: Props) {
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
+      const contextPaths = extractContextPaths(draft);
       void getContextUsage({
         messages: toUsageMessages(messages, draft),
         workspaceRoot: workspaceRoot ?? undefined,
+        ...(contextPaths.length ? { contextPaths } : {}),
       }).then((snap) => {
         if (!cancelled) setUsage(snap);
       });

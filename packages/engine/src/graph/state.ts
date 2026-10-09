@@ -20,12 +20,17 @@ function normalizeHistory(history: ChatMessage[] | undefined): ChatMessage[] {
   return out;
 }
 
-export function initialState(message: string, history?: ChatMessage[]): GraphState {
+export function initialState(
+  message: string,
+  history?: ChatMessage[],
+  contextPaths?: string[],
+): GraphState {
   return {
     message,
     messages: [...normalizeHistory(history), { role: "user", content: message }],
     reply: "",
     pendingToolCalls: [],
     step: 0,
+    ...(contextPaths?.length ? { contextPaths } : {}),
   };
 }

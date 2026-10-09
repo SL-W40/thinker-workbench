@@ -25,7 +25,10 @@ import { OnboardingGate } from "./features/onboarding/OnboardingGate";
 import { isSettingsSection, type SettingsSectionId } from "./features/settings/sections";
 import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
 import { ToolsPane, type ToolTabId } from "./features/tools/ToolsPane";
+import { HitlHost } from "./features/hitl/HitlHost";
 import { TitleBar } from "./features/window/TitleBar";
+import { OPEN_BROWSER_EVENT, onBrowserEvent } from "./bridge/browser";
+import { requestOpenTerminal } from "./bridge/terminal";
 import { useT } from "./i18n/I18nProvider";
 import { bootstrapAppLog } from "./log/sessionLog";
 
@@ -130,6 +133,30 @@ export function App() {
     panels.setRightOpen(true);
     setPendingOpenPath(path);
   }
+
+  function openTerminal(detail?: {
+    sessionId?: string;
+    previewOutput?: string;
+    title?: string;
+  }) {
+    panels.setRightOpen(true);
+    requestOpenTerminal(detail);
+  }
+
+  // Markdown / 主进程导航 / agent：打开右侧栏（Browser tab 由 RightInspector 处理）
+  useEffect(() => {
+    function onOpen() {
+      panels.setRightOpen(true);
+    }
+    window.addEventListener(OPEN_BROWSER_EVENT, onOpen);
+    const off = onBrowserEvent((event) => {
+      if (event.type === "reveal") panels.setRightOpen(true);
+    });
+    return () => {
+      window.removeEventListener(OPEN_BROWSER_EVENT, onOpen);
+      off();
+    };
+  }, [panels]);
 
   /** 压入新页面（前进栈截断）。 */
   function go(page: PageId) {
@@ -312,6 +339,7 @@ export function App() {
                 onOpenModelSettings={() => openConsole("settings", "model")}
                 onOpenTrace={openTrace}
                 onOpenFile={openWorkspaceFile}
+                onOpenTerminal={openTerminal}
                 onRestoreDeletedFile={(messageId, stepId) =>
                   void session.restoreDeletedFile(messageId, stepId)
                 }
@@ -336,6 +364,7 @@ export function App() {
                 onCancel={() => session.cancel()}
                 workspaceName={session.workspaceName}
                 workspaceRoot={session.workspaceRoot}
+                workspaceId={session.workspaceId}
                 messages={session.messages}
                 gateMessage={session.workspaceGate?.message ?? null}
                 onOpenWorkspace={
@@ -343,8 +372,9 @@ export function App() {
                     ? () => void session.openWorkspaceFromGate()
                     : undefined
                 }
-                canResume={session.canResume}
+                canResume={session.composerResume}
                 onResume={() => void session.resume()}
+                onOpenTerminal={openTerminal}
               />
             </div>
             <ChatSidePanel
@@ -380,6 +410,7 @@ export function App() {
         ) : null}
       </main>
       {!hideChrome ? <OnboardingGate /> : null}
+      {!hideChrome ? <HitlHost /> : null}
     </div>
   );
 }

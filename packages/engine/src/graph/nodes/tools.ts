@@ -71,6 +71,8 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
   const hints = parsed.ok ? toolUiHints(name, parsed.args) : {};
 
   const log = agentLog("graph.tools");
+  const commandHint =
+    parsed.ok && typeof parsed.args.command === "string" ? parsed.args.command : undefined;
   emit?.({
     type: "tool",
     phase: "start",
@@ -78,6 +80,7 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
     callId,
     path: hints.path,
     summary: hints.summary,
+    command: commandHint,
   });
   log.info("tool start", {
     spanId: call.id,
@@ -119,6 +122,10 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
       detail: result.ok ? "ok" : "error",
       ok: result.ok,
       diff,
+      sessionId: result.ui?.sessionId,
+      command: result.ui?.command ?? commandHint,
+      exitCode: result.ui?.exitCode,
+      backgrounded: result.ui?.backgrounded,
       ...(typeof result.ui?.restoreContent === "string"
         ? { restoreContent: result.ui.restoreContent }
         : {}),

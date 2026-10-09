@@ -1,0 +1,316 @@
+.terminal-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.terminal-pane--empty {
+  background: var(--tw-bg, var(--bg));
+}
+
+.terminal-pane__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 主区标题与右侧「会话」头同行等高 */
+.terminal-pane__toolbar,
+.terminal-pane__list-head {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 28px;
+  min-height: 28px;
+  gap: 6px;
+  border-bottom: 1px solid var(--tw-border-subtle, rgba(127, 127, 127, 0.2));
+}
+
+.terminal-pane__toolbar {
+  padding: 0 10px;
+  min-width: 0;
+}
+
+.terminal-pane__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--tw-fg-muted, var(--muted, var(--ink)));
+}
+
+.terminal-pane__origin {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  color: var(--tw-fg-muted, var(--muted));
+  background: var(--tw-surface-2, rgba(127, 127, 127, 0.14));
+}
+
+.terminal-pane__origin.is-ai {
+  color: color-mix(in srgb, var(--tw-accent, #3b82f6) 85%, var(--tw-fg, #111));
+  background: color-mix(in srgb, var(--tw-accent, #3b82f6) 14%, transparent);
+}
+
+.terminal-pane__xterm {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+  background: var(
+    --tw-code-bg,
+    var(--md-pre-bg, var(--tw-bg-elev, var(--bg-elev, var(--tw-bg, var(--bg)))) )
+  );
+  color: var(--tw-fg, var(--ink));
+  font-family: var(
+    --tw-font-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
+}
+
+.terminal-pane__xterm .xterm,
+.terminal-pane__xterm .xterm-viewport {
+  height: 100%;
+}
+
+.terminal-pane__xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+
+/* xterm 6 自绘条：圆角对齐全局胶囊；颜色由 ITheme.scrollbarSlider* 注入 */
+.terminal-pane__xterm .xterm-scrollable-element > .scrollbar > .slider {
+  border-radius: 999px !important;
+}
+
+.terminal-pane__xterm .xterm-screen {
+  background-color: transparent;
+}
+
+.terminal-pane__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  background:
+    radial-gradient(
+      120% 80% at 50% 0%,
+      color-mix(in srgb, var(--tw-accent, var(--accent, #111)) 6%, transparent),
+      transparent 55%
+    ),
+    var(--tw-bg, var(--bg));
+}
+
+.terminal-pane__empty-state.tw-empty {
+  justify-items: center;
+  text-align: center;
+  padding: 8px 12px;
+  max-width: 22rem;
+}
+
+.terminal-pane__empty-state .tw-empty__desc {
+  text-align: center;
+}
+
+.terminal-pane__empty-state .tw-empty__action {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.terminal-pane__empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 12px;
+  color: var(--tw-fg, var(--ink));
+  background: color-mix(
+    in srgb,
+    var(--tw-fg, var(--ink)) 6%,
+    var(--tw-bg-elev, var(--bg-elev, #f7f7f7))
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--tw-border, rgba(0, 0, 0, 0.12)) 80%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--tw-fg, #000) 4%, transparent);
+
+  .tw-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}
+
+.terminal-pane__list {
+  display: flex;
+  flex-direction: column;
+  width: 168px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--tw-border-subtle, rgba(127, 127, 127, 0.2));
+  min-height: 0;
+}
+
+.terminal-pane__list-head {
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tw-fg-muted);
+}
+
+.terminal-pane__list-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/** 默认壳短名 + 新建（+ / ▾）。 */
+.terminal-pane__new-split {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0;
+  border-radius: 6px;
+}
+
+.terminal-pane__new-split.is-open {
+  background: var(--tw-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+.terminal-pane__default-shell {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--tw-fg-muted, var(--muted));
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.2;
+  padding: 2px 4px;
+  margin: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  max-width: 4.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-pane__default-shell:hover:not(:disabled) {
+  color: var(--tw-fg, var(--ink));
+  background: var(--tw-surface-hover, rgba(127, 127, 127, 0.1));
+}
+
+.terminal-pane__default-shell:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.terminal-pane__new-split .tw-icon-btn {
+  min-width: 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.terminal-pane__new-split .tw-icon-btn:last-child {
+  width: 16px;
+  min-width: 16px;
+  margin-left: -2px;
+}
+
+.terminal-pane__new-chev {
+  transform: rotate(90deg);
+}
+
+.terminal-pane__sessions {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  flex: 1;
+}
+
+.terminal-pane__sessions > li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.terminal-pane__session {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tw-fg);
+  text-align: left;
+  padding: 6px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.terminal-pane__session:hover {
+  background: var(--tw-surface-hover, rgba(127, 127, 127, 0.1));
+}
+
+.terminal-pane__session.is-active {
+  background: var(--tw-surface-2, rgba(127, 127, 127, 0.14));
+}
+
+.terminal-pane__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--tw-fg-muted);
+}
+
+.terminal-pane__dot.is-running {
+  background: #3ecf8e;
+}
+
+.terminal-pane__session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.terminal-pane__badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--tw-surface-2, rgba(127, 127, 127, 0.18));
+  color: var(--tw-fg-muted);
+}

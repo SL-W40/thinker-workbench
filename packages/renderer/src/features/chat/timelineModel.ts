@@ -6,6 +6,7 @@ import {
   type AgentEvent,
   type ChatMessage,
   type ChatTimelineStep,
+  type HitlRequest,
   createId,
   DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
 } from "@thinker-workbench/shared";
@@ -68,22 +69,37 @@ function dropTrailingEphemeralThoughts(steps: ChatTimelineStep[]): ChatTimelineS
   return end === base.length ? base : base.slice(0, end);
 }
 
-/** 结束一条仍在活动的 status；thinking 必定带上 durationMs。 */
+type FinalizeOpts = {
+  /**
+   * 为 true（默认）时，缺 durationMs 可用 startedAt 按当前墙钟结算（仅实时收束）。
+   * hydrate / 读历史必须为 false，否则每次刷新都会把「已思考」拉长。
+   */
+  wallClock?: boolean;
+};
+
+/** 结束一条仍在活动的 status；thinking 带上 durationMs，并清掉 startedAt 防重算。 */
 function finalizeStatusStep(
   step: Extract<ChatTimelineStep, { kind: "status" }>,
+  opts: FinalizeOpts = {},
 ): Extract<ChatTimelineStep, { kind: "status" }> {
-  if (!step.active) {
-    if (step.status === "thinking" && step.durationMs == null) {
-      const ms = step.startedAt != null ? Math.max(0, Date.now() - step.startedAt) : 0;
-      return { ...step, durationMs: ms };
-    }
-    return step;
-  }
+  const wallClock = opts.wallClock !== false;
   if (step.status === "thinking") {
-    const ms =
-      step.durationMs ?? (step.startedAt != null ? Math.max(0, Date.now() - step.startedAt) : 0);
-    return { ...step, active: false, durationMs: ms };
+    // 已冻结过：只保证 inactive，清掉 startedAt
+    if (!step.active && step.durationMs != null) {
+      return step.startedAt != null ? { ...step, startedAt: undefined } : step;
+    }
+    let ms = step.durationMs;
+    if (ms == null && wallClock && step.startedAt != null) {
+      ms = Math.max(0, Date.now() - step.startedAt);
+    }
+    return {
+      ...step,
+      active: false,
+      ...(ms != null ? { durationMs: ms } : {}),
+      startedAt: undefined,
+    };
   }
+  if (!step.active) return step;
   return { ...step, active: false };
 }
 
@@ -92,15 +108,47 @@ export function deactivateStatuses(steps: ChatTimelineStep[]): ChatTimelineStep[
   return steps.map((s) => (s.kind === "status" ? finalizeStatusStep(s) : s));
 }
 
-/** 将所有活动行标为非活动。 */
+/** 将所有活动行标为非活动（实时收束，可用墙钟结算思考耗时）。 */
 export function deactivateAll(steps: ChatTimelineStep[]): ChatTimelineStep[] {
   return dropTrailingEphemeralThoughts(
     steps.map((s) => {
-      if (s.kind === "status") return finalizeStatusStep(s);
+      if (s.kind === "status") return finalizeStatusStep(s, { wallClock: true });
       if (s.kind === "tool") return { ...s, active: false };
       return s;
     }),
   );
+}
+
+/**
+ * 读盘 / hydrate：冻结时间线耗时，禁止用墙钟重算。
+ * - 已有 durationMs：保留并去掉 startedAt
+ * - 无 durationMs：去掉 startedAt（勿 Date.now()-startedAt），可选用 messageDurationMs 回填
+ */
+export function freezeTimelineHistory(
+  steps: ChatTimelineStep[],
+  messageDurationMs?: number,
+): ChatTimelineStep[] {
+  const fallback =
+    messageDurationMs != null && messageDurationMs > 0 ? messageDurationMs : undefined;
+  let usedFallback = false;
+  const next = steps.map((s) => {
+    if (s.kind === "tool" && s.active) return { ...s, active: false };
+    if (s.kind !== "status" || s.status !== "thinking") return s;
+    if (s.durationMs != null) {
+      return { ...s, active: false, startedAt: undefined };
+    }
+    if (fallback != null && !usedFallback) {
+      usedFallback = true;
+      return {
+        ...s,
+        active: false,
+        durationMs: fallback,
+        startedAt: undefined,
+      };
+    }
+    return { ...s, active: false, startedAt: undefined };
+  });
+  return dropTrailingEphemeralThoughts(next);
 }
 
 /**
@@ -234,11 +282,30 @@ export function applyToolEvent(
 ): ChatTimelineStep[] {
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
 
-  const matchIndex = next.findIndex((s) => {
-    if (s.kind !== "tool") return false;
-    if (event.callId && s.callId) return s.callId === event.callId;
-    return s.name === event.name && s.phase === "start" && s.active;
-  });
+  const isShellTool = event.name === "shell" || event.name === "shell_await";
+  let matchIndex = -1;
+  if (event.callId) {
+    matchIndex = next.findIndex(
+      (s) => s.kind === "tool" && Boolean(s.callId) && s.callId === event.callId,
+    );
+  }
+  // HITL 预插入的 shell 卡片优先合并，避免再开一张卡
+  if (matchIndex < 0 && isShellTool) {
+    matchIndex = next.findIndex(
+      (s) =>
+        s.kind === "tool" &&
+        Boolean(s.hitl) &&
+        (s.name === "shell" || s.name === "shell_await") &&
+        s.phase === "start" &&
+        s.active,
+    );
+  }
+  if (matchIndex < 0) {
+    matchIndex = next.findIndex(
+      (s) =>
+        s.kind === "tool" && s.name === event.name && s.phase === "start" && s.active,
+    );
+  }
 
   if (event.phase === "start") {
     if (matchIndex >= 0) {
@@ -247,10 +314,15 @@ export function applyToolEvent(
       const copy = [...next];
       copy[matchIndex] = {
         ...prev,
+        callId: event.callId ?? prev.callId,
         path: event.path ?? prev.path,
         summary: event.summary ?? prev.summary,
         diff: event.diff ?? prev.diff,
+        sessionId: event.sessionId ?? prev.sessionId,
+        command: event.command ?? prev.command,
         ...mergeRestoreCache(prev, event),
+        // 真实 tool start：清掉审批挂载
+        hitl: undefined,
         phase: "start",
         active: true,
       };
@@ -266,6 +338,8 @@ export function applyToolEvent(
         path: event.path,
         summary: event.summary,
         diff: event.diff,
+        sessionId: event.sessionId,
+        command: event.command,
         ...mergeRestoreCache(undefined, event),
         phase: "start",
         active: true,
@@ -273,7 +347,7 @@ export function applyToolEvent(
     ];
   }
 
-  // end：带上 diff / restoreContent（即使此前 start 行没有）
+  // end：带上 diff / restoreContent / shell 会话（即使此前 start 行没有）
   if (matchIndex >= 0) {
     const prev = next[matchIndex];
     if (prev.kind !== "tool") return next;
@@ -286,6 +360,10 @@ export function applyToolEvent(
       summary: event.summary ?? prev.summary,
       ok: event.ok,
       diff: event.diff ?? prev.diff,
+      sessionId: event.sessionId ?? prev.sessionId,
+      command: event.command ?? prev.command,
+      exitCode: event.exitCode ?? prev.exitCode,
+      backgrounded: event.backgrounded ?? prev.backgrounded,
       ...mergeRestoreCache(prev, event),
     };
     return copy;
@@ -303,10 +381,163 @@ export function applyToolEvent(
       phase: "end",
       ok: event.ok,
       diff: event.diff,
+      sessionId: event.sessionId,
+      command: event.command,
+      exitCode: event.exitCode,
+      backgrounded: event.backgrounded,
       ...mergeRestoreCache(undefined, event),
       active: false,
     },
   ];
+}
+
+const LIVE_OUTPUT_CAP = 12_000;
+
+/**
+ * 把终端输出追加到匹配 sessionId 的 shell 工具步（无 sessionId 时挂到当前活动 shell）。
+ * 仅保留尾部 LIVE_OUTPUT_CAP 字符。
+ */
+export function appendShellLiveOutput(
+  steps: ChatTimelineStep[],
+  chunk: string,
+  sessionId?: string,
+): ChatTimelineStep[] {
+  if (!chunk) return steps;
+  let idx = -1;
+  if (sessionId) {
+    idx = steps.findIndex((s) => s.kind === "tool" && s.sessionId === sessionId);
+  }
+  if (idx < 0) {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const s = steps[i];
+      if (
+        s.kind === "tool" &&
+        (s.name === "shell" || s.name === "shell_await") &&
+        s.phase === "start" &&
+        s.active
+      ) {
+        idx = i;
+        break;
+      }
+    }
+  }
+  if (idx < 0) return steps;
+  const prev = steps[idx];
+  if (prev.kind !== "tool") return steps;
+  const merged = `${prev.liveOutput ?? ""}${chunk}`;
+  const liveOutput =
+    merged.length > LIVE_OUTPUT_CAP
+      ? merged.slice(merged.length - LIVE_OUTPUT_CAP)
+      : merged;
+  const copy = [...steps];
+  copy[idx] = {
+    ...prev,
+    sessionId: sessionId ?? prev.sessionId,
+    liveOutput,
+  };
+  return copy;
+}
+
+/**
+ * HITL 请求：shell_approval 预插入活动 shell 卡片；其它 kind 忽略（走 Modal）。
+ */
+export function applyHitlRequest(
+  steps: ChatTimelineStep[],
+  request: HitlRequest,
+): ChatTimelineStep[] {
+  if (request.kind !== "shell_approval") return steps;
+  const command =
+    typeof request.payload?.command === "string" ? request.payload.command.trim() : "";
+  const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
+  // 已有同 hitlId 则刷新
+  const existing = next.findIndex(
+    (s) => s.kind === "tool" && s.hitl?.hitlId === request.hitlId,
+  );
+  const hitl = {
+    hitlId: request.hitlId,
+    title: request.title,
+    body: request.body,
+    actions: request.actions.map((a) => ({
+      id: a.id,
+      label: a.label,
+      style: a.style,
+    })),
+  };
+  if (existing >= 0) {
+    const prev = next[existing];
+    if (prev.kind !== "tool") return next;
+    const copy = [...next];
+    copy[existing] = {
+      ...prev,
+      command: command || prev.command,
+      hitl,
+      phase: "start",
+      active: true,
+    };
+    return copy;
+  }
+  return [
+    ...next,
+    {
+      id: createId("tl"),
+      kind: "tool",
+      name: "shell",
+      command: command || undefined,
+      summary: command || undefined,
+      hitl,
+      phase: "start",
+      active: true,
+    },
+  ];
+}
+
+/**
+ * HITL 已解决：允许则清 hitl 等 tool；拒绝则卡片失败结束。
+ */
+export function applyHitlResolved(
+  steps: ChatTimelineStep[],
+  hitlId: string,
+  actionId?: string,
+): ChatTimelineStep[] {
+  const idx = steps.findIndex((s) => s.kind === "tool" && s.hitl?.hitlId === hitlId);
+  if (idx < 0) return steps;
+  const prev = steps[idx];
+  if (prev.kind !== "tool") return steps;
+  const denied = actionId === "deny";
+  const copy = [...steps];
+  copy[idx] = {
+    ...prev,
+    hitl: undefined,
+    phase: denied ? "end" : "start",
+    active: !denied,
+    ok: denied ? false : prev.ok,
+  };
+  return copy;
+}
+
+/** 终端会话创建时，把 sessionId 绑到当前活动 shell 工具步。 */
+export function bindShellSessionId(
+  steps: ChatTimelineStep[],
+  sessionId: string,
+  options?: { runId?: string; command?: string },
+): ChatTimelineStep[] {
+  if (!sessionId) return steps;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    if (s.kind !== "tool") continue;
+    if (s.name !== "shell" && s.name !== "shell_await") continue;
+    if (s.sessionId && s.sessionId !== sessionId) continue;
+    if (s.phase === "start" && s.active) {
+      const copy = [...steps];
+      copy[i] = {
+        ...s,
+        sessionId,
+        command: options?.command ?? s.command,
+      };
+      return copy;
+    }
+  }
+  return steps;
 }
 
 /** 合并删除恢复缓存；新带上 restoreContent 时打戳。 */

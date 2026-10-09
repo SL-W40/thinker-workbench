@@ -236,7 +236,7 @@ export class AgentRuntime {
                 historyTurns: history.length,
               },
             });
-            const state = initialState(message, history);
+            const state = initialState(message, history, command.contextPaths);
             return this.runLoop(state, this.graph.start, {
               threadId,
               runId,

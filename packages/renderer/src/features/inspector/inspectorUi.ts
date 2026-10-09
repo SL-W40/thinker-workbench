@@ -3,8 +3,10 @@
  * 不含未命名草稿与编辑器正文。
  */
 import {
+  BROWSER_TAB_KEY,
   CHANGES_TAB_KEY,
   FILES_TAB_KEY,
+  TERMINAL_TAB_KEY,
   type StageTab,
 } from "./types";
 import { clampFileListWidth, FILE_LIST_WIDTH } from "./useFileListPanel";
@@ -14,6 +16,8 @@ const STORAGE_KEY = "thinker.inspector.ui.v1";
 export type StoredInspectorTab =
   | { kind: "changes" }
   | { kind: "files" }
+  | { kind: "terminal" }
+  | { kind: "browser" }
   | { kind: "file"; path: string };
 
 export type StoredInspectorUi = {
@@ -44,7 +48,14 @@ function storageKey(workspaceId: string): string {
 function isStoredTab(value: unknown): value is StoredInspectorTab {
   if (!value || typeof value !== "object") return false;
   const v = value as { kind?: unknown; path?: unknown };
-  if (v.kind === "changes" || v.kind === "files") return true;
+  if (
+    v.kind === "changes" ||
+    v.kind === "files" ||
+    v.kind === "terminal" ||
+    v.kind === "browser"
+  ) {
+    return true;
+  }
   return v.kind === "file" && typeof v.path === "string" && v.path.length > 0;
 }
 
@@ -115,6 +126,8 @@ export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
   for (const tab of tabs) {
     if (tab.kind === "changes") out.push({ kind: "changes" });
     else if (tab.kind === "files") out.push({ kind: "files" });
+    else if (tab.kind === "terminal") out.push({ kind: "terminal" });
+    else if (tab.kind === "browser") out.push({ kind: "browser" });
     else if (tab.kind === "file" && tab.path && !tab.key.startsWith("draft:")) {
       out.push({ kind: "file", path: tab.path });
     }
@@ -125,7 +138,7 @@ export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
 /** 序列化片段 → StageTab（标题由调用方按 i18n 填）。 */
 export function hydrateTabs(
   stored: StoredInspectorTab[],
-  titles: { changes: string; files: string },
+  titles: { changes: string; files: string; terminal: string; browser: string },
 ): StageTab[] {
   const out: StageTab[] = [];
   const seen = new Set<string>();
@@ -138,6 +151,14 @@ export function hydrateTabs(
       if (seen.has(FILES_TAB_KEY)) continue;
       seen.add(FILES_TAB_KEY);
       out.push({ key: FILES_TAB_KEY, kind: "files", title: titles.files });
+    } else if (item.kind === "terminal") {
+      if (seen.has(TERMINAL_TAB_KEY)) continue;
+      seen.add(TERMINAL_TAB_KEY);
+      out.push({ key: TERMINAL_TAB_KEY, kind: "terminal", title: titles.terminal });
+    } else if (item.kind === "browser") {
+      if (seen.has(BROWSER_TAB_KEY)) continue;
+      seen.add(BROWSER_TAB_KEY);
+      out.push({ key: BROWSER_TAB_KEY, kind: "browser", title: titles.browser });
     } else {
       const key = `file:${item.path}`;
       if (seen.has(key)) continue;

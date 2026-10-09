@@ -6,20 +6,21 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit && pnpm run bundle",
     "bundle": "pnpm run bundle:main && pnpm run bundle:preload && pnpm run copy:resources",
-    "bundle:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --outfile=artifacts/main.js",
+    "bundle:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --external:node-pty --external:node-pty/* --outfile=artifacts/main.js",
     "bundle:preload": "esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=artifacts/preload.js",
     "copy:resources": "node ../../scripts/copy-desktop-resources.mjs",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3 --build-from-source",
+    "rebuild:native": "node ./scripts/rebuild-native.mjs",
     "postinstall": "pnpm run rebuild:native",
     "dev:tsc": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --noEmit --watch --preserveWatchOutput",
-    "dev:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --outfile=artifacts/main.js --watch --log-level=warning",
+    "dev:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --external:node-pty --external:node-pty/* --outfile=artifacts/main.js --watch --log-level=warning",
     "dev:preload": "esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=artifacts/preload.js --watch --log-level=warning",
     "dev": "node ../../scripts/copy-desktop-resources.mjs && npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:main\" \"pnpm:dev:preload\""
   },
   "dependencies": {
     "@thinker-workbench/logger": "workspace:*",
     "@thinker-workbench/shared": "workspace:*",
-    "better-sqlite3": "12.11.1"
+    "better-sqlite3": "12.11.1",
+    "node-pty": "1.1.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.1",

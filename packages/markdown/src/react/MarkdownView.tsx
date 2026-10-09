@@ -1,13 +1,24 @@
 /**
  * Markdown React 渲染入口：解析 AST 并输出 `.tw-md` 文章树。
  */
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useMemo,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { parseMarkdownDocument } from "../parse/blocks";
 import { parseMarkdownStreaming } from "../stream";
 import { resolveTheme } from "../themes";
 import type { MarkdownThemeInput } from "../themes/types";
 import type { BlockNode, FootnoteDef, InlineNode, ListItem } from "../types";
 import { CodeBlock } from "./CodeBlock";
+import {
+  MarkdownLinkClickContext,
+  useMarkdownLinkClick,
+  type MarkdownLinkClickHandler,
+} from "./LinkClickContext";
 import { MathView } from "./MathView";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { MarkdownThemeProvider } from "./ThemeContext";
@@ -24,9 +35,27 @@ export type MarkdownViewProps = {
    * 未闭合围栏 / 表格不抛错；mermaid 在可解析时软预览。
    */
   streaming?: boolean;
+  /**
+   * 链接点击；返回 true 表示已处理（preventDefault）。
+   * 未提供时保持默认导航。
+   */
+  onLinkClick?: MarkdownLinkClickHandler;
 };
 
+function useLinkClickHandler() {
+  const onLinkClick = useMarkdownLinkClick();
+  return (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!onLinkClick) return;
+    const handled = onLinkClick(href);
+    if (handled) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+}
+
 function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
+  const onAnchorClick = useLinkClickHandler();
   return nodes.map((node, index) => {
     switch (node.type) {
       case "text":
@@ -79,13 +108,18 @@ function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
         );
       case "link":
         return (
-          <a key={index} href={node.href} title={node.title}>
+          <a
+            key={index}
+            href={node.href}
+            title={node.title}
+            onClick={onAnchorClick(node.href)}
+          >
             <InlineView nodes={node.children} />
           </a>
         );
       case "autolink":
         return (
-          <a key={index} href={node.href}>
+          <a key={index} href={node.href} onClick={onAnchorClick(node.href)}>
             {node.text}
           </a>
         );
@@ -346,7 +380,13 @@ function BlockView({ node }: { node: BlockNode }): ReactNode {
 }
 
 /** 将 markdown 渲染为带主题的文章 DOM。 */
-export function MarkdownView({ markdown, theme, className, streaming = false }: MarkdownViewProps) {
+export function MarkdownView({
+  markdown,
+  theme,
+  className,
+  streaming = false,
+  onLinkClick,
+}: MarkdownViewProps) {
   const resolved = resolveTheme(theme);
   const doc = useMemo(() => {
     if (streaming) {
@@ -359,22 +399,24 @@ export function MarkdownView({ markdown, theme, className, streaming = false }: 
 
   return (
     <MarkdownThemeProvider theme={resolved}>
-      <article
-        className={[
-          "tw-md",
-          `tw-md--${resolved.id}`,
-          streaming ? "tw-md--streaming" : "",
-          className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        data-theme={resolved.id}
-        data-streaming={streaming ? "true" : "false"}
-        style={style}
-      >
-        <Blocks nodes={doc.blocks} />
-        <Footnotes footnotes={doc.footnotes} />
-      </article>
+      <MarkdownLinkClickContext.Provider value={onLinkClick ?? null}>
+        <article
+          className={[
+            "tw-md",
+            `tw-md--${resolved.id}`,
+            streaming ? "tw-md--streaming" : "",
+            className,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          data-theme={resolved.id}
+          data-streaming={streaming ? "true" : "false"}
+          style={style}
+        >
+          <Blocks nodes={doc.blocks} />
+          <Footnotes footnotes={doc.footnotes} />
+        </article>
+      </MarkdownLinkClickContext.Provider>
     </MarkdownThemeProvider>
   );
 }

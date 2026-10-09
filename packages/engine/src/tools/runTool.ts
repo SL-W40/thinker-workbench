@@ -4,6 +4,8 @@
  */
 import { withJsonPreview, withTextPreview } from "@thinker-workbench/logger";
 import { agentLog } from "../log/setup";
+import { getMcpManager } from "../mcp/McpManager";
+import { isMcpToolName } from "../mcp/names";
 import { getWorkspaceRoot } from "../workspace";
 import { getTool } from "./registry";
 import type { ToolArgs, ToolResult } from "./types";
@@ -14,6 +16,10 @@ export async function runTool(
   signal: AbortSignal,
 ): Promise<ToolResult> {
   const log = agentLog("tools.run");
+  if (isMcpToolName(name)) {
+    const mcpResult = await getMcpManager().callTool(name, args, signal);
+    if (mcpResult) return mcpResult;
+  }
   const tool = getTool(name);
   if (!tool) {
     log.warn("unknown tool", { meta: { name } });

@@ -33,9 +33,14 @@ export function isMutationTool(name: string): boolean {
   return name === "edit_file" || name === "write_file";
 }
 
-/** 单独展示、不收进 Explored（改文件 / 删除）。 */
+/** 单独展示、不收进 Explored（改文件 / 删除 / shell）。 */
 export function isStandaloneTool(name: string): boolean {
-  return isMutationTool(name) || name === "delete_file";
+  return (
+    isMutationTool(name) ||
+    name === "delete_file" ||
+    name === "shell" ||
+    name === "shell_await"
+  );
 }
 
 function isCompletedThought(step: ChatTimelineStep): boolean {

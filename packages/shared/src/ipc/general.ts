@@ -224,7 +224,109 @@ export type GeneralSettings = {
    * 关闭后各进程不再写入新日志。
    */
   loggingEnabled: boolean;
+  /**
+   * 是否允许 AI 调用 shell / shell_await。
+   * 关闭后不向模型暴露这些工具。
+   */
+  allowAiShell: boolean;
+  /**
+   * 是否允许 AI 调用内置浏览器工具（navigate / snapshot / click 等）。
+   * 关闭后不向模型暴露这些工具。
+   */
+  allowAiBrowser: boolean;
+  /**
+   * 默认 shell profile id；`default` 表示平台默认（Win PowerShell / Unix $SHELL）。
+   */
+  shellProfileId: string;
+  /** 命令行审批策略。 */
+  shellApprovalMode: ShellApprovalMode;
+  /**
+   * 免审命令首 token 白名单。
+   * 磁盘缺字段时用 `DEFAULT_SHELL_ALLOWLIST`；已存空数组 `[]` 保留为空。
+   */
+  shellAllowlist: string[];
 };
+
+/** 命令行审批三模式。 */
+export const SHELL_APPROVAL_MODES = ["ai_review", "allowlist", "unrestricted"] as const;
+/** 命令行审批模式联合类型。 */
+export type ShellApprovalMode = (typeof SHELL_APPROVAL_MODES)[number];
+/** 默认：AI 研判。 */
+export const DEFAULT_SHELL_APPROVAL_MODE: ShellApprovalMode = "ai_review";
+
+/** 出厂白名单（用户可删；删空后不得回填）。 */
+export const DEFAULT_SHELL_ALLOWLIST = [
+  "git",
+  "pnpm",
+  "npm",
+  "yarn",
+  "npx",
+  "node",
+  "python",
+  "python3",
+  "rg",
+  "grep",
+  "ls",
+  "dir",
+  "pwd",
+  "echo",
+  "which",
+  "where",
+  "type",
+  "cat",
+  "head",
+  "tail",
+] as const;
+
+/** 将未知值规范为合法审批模式。 */
+export function normalizeShellApprovalMode(
+  value: unknown,
+  fallback: ShellApprovalMode = DEFAULT_SHELL_APPROVAL_MODE,
+): ShellApprovalMode {
+  return typeof value === "string" &&
+    (SHELL_APPROVAL_MODES as readonly string[]).includes(value)
+    ? (value as ShellApprovalMode)
+    : fallback;
+}
+
+/**
+ * 规范化白名单。
+ * `raw` 为 `undefined` 时用默认列表；传入数组（含空）则去空白、去重、小写化。
+ */
+export function normalizeShellAllowlist(raw: unknown): string[] {
+  if (raw === undefined) return [...DEFAULT_SHELL_ALLOWLIST];
+  if (!Array.isArray(raw)) return [...DEFAULT_SHELL_ALLOWLIST];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const token = item.trim().toLowerCase();
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+  }
+  return out;
+}
+
+/** 规范化 shell profile id。 */
+export function normalizeShellProfileId(value: unknown, fallback = "default"): string {
+  if (typeof value !== "string") return fallback;
+  const id = value.trim();
+  return id || fallback;
+}
+
+/**
+ * 取命令行首 token（剥路径与 Windows 扩展名），供白名单匹配。
+ * 与 engine `commandBaseToken` 语义一致。
+ */
+export function shellCommandBaseToken(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+  const first = trimmed.split(/\s+/)[0] ?? "";
+  const base = first.replace(/^["']|["']$/g, "");
+  const name = base.split(/[/\\]/).pop() ?? base;
+  return name.replace(/\.(exe|cmd|bat|ps1)$/i, "").toLowerCase();
+}
 
 /** 设置页可选的日志保留天数（含「永不」= 0）。 */
 export const LOG_RETENTION_DAY_OPTIONS = [0, 7, 14, 30, 90] as const;
@@ -262,6 +364,11 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   logRetentionDays: 0,
   logTruncateLongContent: true,
   loggingEnabled: true,
+  allowAiShell: true,
+  allowAiBrowser: true,
+  shellProfileId: "default",
+  shellApprovalMode: DEFAULT_SHELL_APPROVAL_MODE,
+  shellAllowlist: [...DEFAULT_SHELL_ALLOWLIST],
 };
 
 /** 规范化可选路径字段：仅保留 trim 后的字符串，非法类型视为空。 */
@@ -359,6 +466,23 @@ export function normalizeGeneral(
   }
   if (typeof obj.loggingEnabled === "boolean") {
     base.loggingEnabled = obj.loggingEnabled;
+  }
+  if (typeof obj.allowAiShell === "boolean") {
+    base.allowAiShell = obj.allowAiShell;
+  }
+  if (typeof obj.allowAiBrowser === "boolean") {
+    base.allowAiBrowser = obj.allowAiBrowser;
+  }
+  base.shellProfileId = normalizeShellProfileId(obj.shellProfileId, "default");
+  base.shellApprovalMode = normalizeShellApprovalMode(
+    obj.shellApprovalMode,
+    DEFAULT_SHELL_APPROVAL_MODE,
+  );
+  // 缺字段填默认；显式 [] 保留为空（Object.hasOwn 区分）
+  if (Object.hasOwn(obj, "shellAllowlist")) {
+    base.shellAllowlist = normalizeShellAllowlist(obj.shellAllowlist);
+  } else {
+    base.shellAllowlist = [...DEFAULT_SHELL_ALLOWLIST];
   }
   return base;
 }

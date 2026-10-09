@@ -3,6 +3,8 @@ packages:
   - "packages/logger/web"
 
 allowBuilds:
+  '@homebridge/node-pty-prebuilt-multiarch': set this to true or false
   better-sqlite3: true
   electron: true
   esbuild: true
+  node-pty: set this to true or false

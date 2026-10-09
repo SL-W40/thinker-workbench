@@ -5,8 +5,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  DEFAULT_SHELL_ALLOWLIST,
+  DEFAULT_SHELL_APPROVAL_MODE,
   DEFAULT_WORKSPACE_ACCESS,
+  normalizeShellAllowlist,
+  normalizeShellApprovalMode,
   normalizeWorkspaceAccess,
+  type ShellApprovalMode,
+  type ShellProfile,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
 
@@ -17,6 +23,14 @@ let currentName: string | null = null;
 let currentAccess: WorkspaceAccess = DEFAULT_WORKSPACE_ACCESS;
 /** 是否允许 AI 调用 delete_file；与设置默认一致。 */
 let allowAiDeleteFiles = true;
+/** 是否允许 AI shell 工具。 */
+let allowAiShell = true;
+/** 是否允许 AI 内置浏览器工具。 */
+let allowAiBrowser = true;
+let shellApprovalMode: ShellApprovalMode = DEFAULT_SHELL_APPROVAL_MODE;
+let shellAllowlist: string[] = [...DEFAULT_SHELL_ALLOWLIST];
+/** 当前 shell 事实（供 environment_context）。 */
+let currentShell: ShellProfile | null = null;
 
 export type SetWorkspaceRootOptions = {
   /** 工作区显示名；省略则用文件夹名。 */
@@ -81,6 +95,62 @@ export function setAllowAiDeleteFiles(value: boolean | undefined | null): boolea
 /** 当前是否允许 AI 删除文件。 */
 export function getAllowAiDeleteFiles(): boolean {
   return allowAiDeleteFiles;
+}
+
+/** 设置是否允许 AI shell。 */
+export function setAllowAiShell(value: boolean | undefined | null): boolean {
+  if (typeof value === "boolean") allowAiShell = value;
+  return allowAiShell;
+}
+
+export function getAllowAiShell(): boolean {
+  return allowAiShell;
+}
+
+/** 设置是否允许 AI 内置浏览器工具。 */
+export function setAllowAiBrowser(value: boolean | undefined | null): boolean {
+  if (typeof value === "boolean") allowAiBrowser = value;
+  return allowAiBrowser;
+}
+
+export function getAllowAiBrowser(): boolean {
+  return allowAiBrowser;
+}
+
+/** 设置命令行审批模式。 */
+export function setShellApprovalMode(mode: ShellApprovalMode | undefined | null): ShellApprovalMode {
+  if (mode) shellApprovalMode = normalizeShellApprovalMode(mode);
+  return shellApprovalMode;
+}
+
+export function getShellApprovalMode(): ShellApprovalMode {
+  return shellApprovalMode;
+}
+
+/** 设置白名单（完整替换）。 */
+export function setShellAllowlist(list: string[] | undefined | null): string[] {
+  if (list) shellAllowlist = normalizeShellAllowlist(list);
+  return shellAllowlist;
+}
+
+export function getShellAllowlist(): string[] {
+  return shellAllowlist;
+}
+
+/** HITL「加入白名单」时进程内即时追加。 */
+export function addShellAllowlistToken(token: string): void {
+  const t = token.trim().toLowerCase();
+  if (!t || shellAllowlist.includes(t)) return;
+  shellAllowlist = [...shellAllowlist, t];
+}
+
+/** 设置当前 shell profile 事实。 */
+export function setShellProfile(profile: ShellProfile | undefined | null): void {
+  currentShell = profile ?? null;
+}
+
+export function getShellProfile(): ShellProfile | null {
+  return currentShell;
 }
 
 /** @deprecated 兼容旧引用；请用 getWorkspaceRoot()。 */

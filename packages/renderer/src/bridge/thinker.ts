@@ -17,10 +17,16 @@ import type {
   DataDirChangeResult,
   DataDirMigrateProgress,
   GeneralSettings,
+  HitlResponse,
   LogRecord,
+  McpListResult,
+  McpServerConfig,
+  McpServerRuntimeStatus,
+  McpServerUpsertInput,
   ModelSettingsPatch,
   ModelSettingsPublic,
   ShortcutsMap,
+  SkillListItem,
   ThinkerApi,
   ThreadMeta,
   RunResult,
@@ -220,4 +226,58 @@ export function onDataDirMigrateProgress(
   const settings = api()?.settings;
   if (!settings?.onDataDirMigrateProgress) return () => {};
   return settings.onDataDirMigrateProgress(cb);
+}
+
+/** 答复 HITL（审批 / 澄清等）；无 bridge 时为 no-op。 */
+export function respondHitl(response: HitlResponse): Promise<void> {
+  return api()?.respondHitl?.(response) ?? Promise.resolve();
+}
+
+/** 列出 skills 摘要（Composer `/`）。 */
+export async function listSkills(workspaceRoot?: string | null): Promise<SkillListItem[]> {
+  return api()?.skills?.list(workspaceRoot) ?? [];
+}
+
+/** MCP 列表。 */
+export async function mcpList(): Promise<McpListResult> {
+  return api()?.mcp?.list() ?? { servers: [], statuses: [] };
+}
+
+/** 新建 / 更新 MCP。 */
+export async function mcpUpsert(input: McpServerUpsertInput): Promise<McpServerConfig> {
+  const mcp = api()?.mcp;
+  if (!mcp) throw new Error("MCP API unavailable.");
+  return mcp.upsert(input);
+}
+
+/** 删除 MCP。 */
+export async function mcpRemove(id: string): Promise<void> {
+  await api()?.mcp?.remove(id);
+}
+
+/** 启用 / 禁用 MCP。 */
+export async function mcpSetEnabled(id: string, enabled: boolean): Promise<McpServerConfig> {
+  const mcp = api()?.mcp;
+  if (!mcp) throw new Error("MCP API unavailable.");
+  return mcp.setEnabled(id, enabled);
+}
+
+/** 测试 MCP 连接。 */
+export async function mcpTest(input: McpServerUpsertInput): Promise<McpServerRuntimeStatus> {
+  const mcp = api()?.mcp;
+  if (!mcp) throw new Error("MCP API unavailable.");
+  return mcp.test(input);
+}
+
+/** 导入 Cursor mcp.json。 */
+export async function mcpImportCursorFile(): Promise<{
+  imported: string[];
+  skipped: string[];
+}> {
+  return api()?.mcp?.importCursorFile() ?? { imported: [], skipped: [] };
+}
+
+/** 订阅 MCP 状态。 */
+export function onMcpStatus(cb: (status: McpServerRuntimeStatus) => void): () => void {
+  return api()?.mcp?.onStatus(cb) ?? (() => undefined);
 }

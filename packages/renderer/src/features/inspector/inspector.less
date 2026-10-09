@@ -742,12 +742,12 @@
   background: var(--panel);
 }
 
-/* Files 起始页：搜索 + 新建 + 最近 */
+/* Files 起始页：搜索 + 新建 + 最近 / 搜索结果（无文件树） */
 .files-home {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 16px 14px 28px;
+  padding: 14px 12px 24px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -755,24 +755,25 @@
   background: var(--panel);
 }
 
-.files-home__inner {
-  width: 100%;
-  max-width: 440px;
-  margin: 0;
+.files-home__toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin: 0 0 10px;
+  min-width: 0;
 }
 
 .files-home__search {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  margin: 0 0 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--ink-12);
-  border-radius: 999px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--ink-12, var(--line));
+  border-radius: 8px;
   background: var(--bg);
   box-sizing: border-box;
   transition:
@@ -818,10 +819,11 @@
 .files-home__new {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin: 0 0 12px;
-  padding: 7px 10px;
+  gap: 6px;
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 6px 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -831,6 +833,7 @@
   text-align: left;
   cursor: pointer;
   box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .files-home__new:hover {
@@ -844,9 +847,10 @@
 }
 
 .files-home__section {
+  flex: 0 0 auto;
   width: 100%;
   margin: 0 0 4px;
-  padding: 0 8px;
+  padding: 0 6px;
   font-size: var(--tk-font-sm);
   font-weight: 600;
   color: var(--muted);
@@ -858,6 +862,8 @@
   margin: 0;
   padding: 0;
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -881,7 +887,12 @@
 }
 
 .files-home__row:hover {
-  background: var(--ink-04);
+  background: var(--ink-04, var(--tw-hover, rgba(0, 0, 0, 0.05)));
+}
+
+/* 最近列表：悬停文件名下划线，表示可点开 */
+.files-home__row:hover .files-home__name {
+  box-shadow: inset 0 -1px 0 0 currentColor;
 }
 
 .files-home__badge {
@@ -1585,11 +1596,6 @@
   color: inherit;
   cursor: pointer;
   text-align: left;
-}
-
-.changes-pane__file-name:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .changes-pane__file-stats {

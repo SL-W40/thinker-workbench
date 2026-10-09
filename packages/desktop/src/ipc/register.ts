@@ -7,8 +7,12 @@ import type { GeneralSettings } from "@thinker-workbench/shared";
 import type { IpcMain } from "electron";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { registerAgentHandlers } from "./agentHandlers";
+import { registerBrowserHandlers } from "./browserHandlers";
+import { registerMcpHandlers } from "./mcpHandlers";
 import { registerSessionHandlers } from "./sessionHandlers";
 import { registerSettingsHandlers } from "./settingsHandlers";
+import { registerSkillsHandlers } from "./skillsHandlers";
+import { registerTerminalHandlers } from "./terminalHandlers";
 import { registerToolsHandlers } from "./toolsHandlers";
 import { registerWindowHandlers } from "./windowHandlers";
 import { registerWorkspaceFsHandlers } from "./workspaceFsHandlers";
@@ -33,6 +37,10 @@ export function registerIpc(
   registerWorkspacesHandlers(ipcMain);
   registerWorkspaceFsHandlers(ipcMain);
   registerAgentHandlers(ipcMain, bridge);
+  registerTerminalHandlers(ipcMain);
+  registerBrowserHandlers(ipcMain);
+  registerSkillsHandlers(ipcMain);
+  registerMcpHandlers(ipcMain, bridge);
   registerSettingsHandlers(ipcMain, {
     onGeneralSaved: options?.onGeneralSaved,
     onDataDirApplied: options?.onDataDirApplied,

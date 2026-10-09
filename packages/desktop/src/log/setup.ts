@@ -74,8 +74,11 @@ export function writeAppLogRecord(record: LogRecord): void {
 export function writeAgentLogRecord(record: LogRecord): void {
   if (!isLoggingEnabled()) return;
   if (!record || typeof record !== "object") return;
-  sqliteSinkWrite({ ...record, source: "agent" });
-  broadcast?.({ ...record, source: "agent" });
+  if (typeof record.message !== "string" || typeof record.scope !== "string") return;
+  if (typeof record.ts !== "number") return;
+  const next: LogRecord = { ...record, source: "agent" };
+  sqliteSinkWrite(next);
+  broadcast?.(next);
 }
 
 export function desktopLog(scope: string) {

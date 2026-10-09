@@ -1,0 +1,47 @@
+.hitl-host {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: min(420px, 86vw);
+  max-width: 520px;
+  padding: 4px 2px 2px;
+}
+
+.hitl-host__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tw-fg);
+}
+
+.hitl-host__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tw-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hitl-host__command {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--tw-surface-2, rgba(127, 127, 127, 0.12));
+  font-family: var(--tw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 160px;
+  overflow: auto;
+  color: var(--tw-fg);
+}
+
+.hitl-host__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

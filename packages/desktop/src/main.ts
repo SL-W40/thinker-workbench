@@ -85,6 +85,12 @@ app.whenReady().then(() => {
       configureDesktopLog();
       pruneExpiredLogs(getGeneralSettings().logRetentionDays);
       try {
+        const { browserSessionManager } = require("./browser/BrowserSessionManager") as typeof import("./browser/BrowserSessionManager");
+        void browserSessionManager.refreshOverlayTheme();
+      } catch {
+        /* ignore */
+      }
+      try {
         pushAgentHello(bridge);
       } catch {
         /* agent 未在跑时忽略 */

@@ -51,6 +51,30 @@ export type ChatTimelineToolStep = {
   /** 已通过时间线「恢复」写回（与 restoreContent 互斥）。 */
   restored?: boolean;
   active: boolean;
+  /** shell 关联终端会话。 */
+  sessionId?: string;
+  /** shell 命令原文。 */
+  command?: string;
+  /** 时间线实时输出（UI 截断保留尾部）。 */
+  liveOutput?: string;
+  /** 退出码（tool end 后）。 */
+  exitCode?: number | null;
+  /** 是否因 block_until 超时而转后台。 */
+  backgrounded?: boolean;
+  /**
+   * 等待 HITL 审批时挂在 shell 步骤上（如 shell_approval）。
+   * 用户选择后清除；拒绝时步骤以失败结束。
+   */
+  hitl?: {
+    hitlId: string;
+    title: string;
+    body?: string;
+    actions: Array<{
+      id: string;
+      label: string;
+      style?: "primary" | "danger" | "ghost";
+    }>;
+  };
 };
 
 /**

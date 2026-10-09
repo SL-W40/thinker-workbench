@@ -8,9 +8,12 @@ import { Button, Kbd, useDesignTheme } from "@thinker-workbench/design/react";
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
 import type { ChatTimelineStep } from "@thinker-workbench/shared";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
 import { useT } from "../../i18n/I18nProvider";
 import { DeleteFileCard } from "./DeleteFileCard";
 import { FileDiffView } from "./FileDiffView";
+import { ShellCard } from "./ShellCard";
+import { classifyRunError, isSoftStopCode } from "./runErrors";
 import { isMissingApiKeyError } from "./systemErrors";
 import { type ExploreGroup, groupTimelineForDisplay, isMutationTool } from "./timelineExplore";
 import { isDeleteRestoreExpired, readDeleteFileRestoreTtlDays } from "./timelineModel";
@@ -23,6 +26,12 @@ type Props = {
   onOpenModelSettings?: () => void;
   /** 在右侧 Files 面板打开工作空间文件。 */
   onOpenFile?: (path: string) => void;
+  /** 打开右侧 Terminal，可选聚焦会话并带上时间线输出预览。 */
+  onOpenTerminal?: (detail?: {
+    sessionId?: string;
+    previewOutput?: string;
+    title?: string;
+  }) => void;
   /** 时间线 delete_file「恢复」：写回删前正文。 */
   onRestoreDeletedFile?: (stepId: string) => void | Promise<void>;
   /** 手动停止后「继续」：从 checkpoint 续跑。 */
@@ -64,6 +73,7 @@ export function RunTimeline({
   live = false,
   onOpenModelSettings,
   onOpenFile,
+  onOpenTerminal,
   onRestoreDeletedFile,
   onResume,
   canResume = false,
@@ -82,7 +92,9 @@ export function RunTimeline({
             <ExploreGroupRow
               key={item.id}
               group={item}
+              live={live}
               onOpenFile={onOpenFile}
+              onOpenTerminal={onOpenTerminal}
               onRestoreDeletedFile={onRestoreDeletedFile}
               onResume={onResume}
               canResume={canResume}
@@ -94,7 +106,7 @@ export function RunTimeline({
           return <StatusStepRow key={step.id} step={step} live={live} />;
         }
         if (step.kind === "text") {
-          return <TextStepRow key={step.id} step={step} />;
+          return <TextStepRow key={step.id} step={step} live={live} />;
         }
         if (step.kind === "error") {
           return (
@@ -112,6 +124,7 @@ export function RunTimeline({
             key={step.id}
             step={step}
             onOpenFile={onOpenFile}
+            onOpenTerminal={onOpenTerminal}
             onRestoreDeletedFile={onRestoreDeletedFile}
           />
         );
@@ -124,13 +137,21 @@ export function RunTimeline({
 /** Explored / Exploring 汇总行：默认折叠，展开见 Thought / 叙述 / 工具。 */
 function ExploreGroupRow({
   group,
+  live = false,
   onOpenFile,
+  onOpenTerminal,
   onRestoreDeletedFile,
   onResume,
   canResume = false,
 }: {
   group: ExploreGroup;
+  live?: boolean;
   onOpenFile?: (path: string) => void;
+  onOpenTerminal?: (detail?: {
+    sessionId?: string;
+    previewOutput?: string;
+    title?: string;
+  }) => void;
   onRestoreDeletedFile?: (stepId: string) => void | Promise<void>;
   onResume?: () => void;
   canResume?: boolean;
@@ -166,7 +187,7 @@ function ExploreGroupRow({
                 return <StatusStepRow key={step.id} step={step} />;
               }
               if (step.kind === "text") {
-                return <TextStepRow key={step.id} step={step} />;
+                return <TextStepRow key={step.id} step={step} live={live} />;
               }
               if (step.kind === "error") {
                 return (
@@ -183,6 +204,7 @@ function ExploreGroupRow({
                   key={step.id}
                   step={step}
                   onOpenFile={onOpenFile}
+                  onOpenTerminal={onOpenTerminal}
                   onRestoreDeletedFile={onRestoreDeletedFile}
                 />
               );
@@ -224,7 +246,7 @@ function formatExploreLabel(t: Translate, group: ExploreGroup): string {
 function PlanningRow() {
   const t = useT();
   return (
-    <li className="run-timeline-item run-timeline-item--status is-active">
+    <li className="run-timeline-item run-timeline-item--status is-active run-timeline-item--status-enter">
       <div className="run-timeline-status">
         <button
           type="button"
@@ -232,8 +254,10 @@ function PlanningRow() {
           disabled
           aria-label={t("chat.planning")}
         >
-          <span className="run-timeline-label run-timeline-label--shimmer">
-            {t("chat.planning")}
+          <span className="run-timeline-label-enter" key="planning">
+            <span className="run-timeline-label run-timeline-label--shimmer">
+              {t("chat.planning")}
+            </span>
           </span>
         </button>
       </div>
@@ -242,13 +266,29 @@ function PlanningRow() {
 }
 
 /** 对用户可见的叙述，按事件顺序插在工具前后。 */
-function TextStepRow({ step }: { step: Extract<ChatTimelineStep, { kind: "text" }> }) {
+function TextStepRow({
+  step,
+  live = false,
+}: {
+  step: Extract<ChatTimelineStep, { kind: "text" }>;
+  /** 仍在流式时才显示 caret；已停止则收束未闭合代码块。 */
+  live?: boolean;
+}) {
   const { markdownTheme } = useDesignTheme();
   if (!step.text.trim()) return null;
   return (
     <li className="run-timeline-item run-timeline-item--text">
       <div className="run-timeline-reply">
-        <StreamingMarkdownView markdown={step.text} theme={markdownTheme} />
+        <StreamingMarkdownView
+          markdown={step.text}
+          theme={markdownTheme}
+          streaming={live}
+          onLinkClick={(href) => {
+            if (!isBrowserableUrl(href)) return false;
+            requestOpenBrowser(href);
+            return true;
+          }}
+        />
       </div>
     </li>
   );
@@ -331,9 +371,13 @@ function StatusStepRow({
   const hasBody = Boolean(body);
   const [collapsed, setCollapsed] = useState(true);
   const open = hasBody && !collapsed;
+  // 本轮已不在跑时，即使 step.active 残留也按「已结束」展示，避免已思考秒数跟着墙钟涨
   const active = Boolean(live && step.active);
   const asPlanning = active && !hasBody;
+  /** planning / thinking / thought：切换时 remount 触发标签过渡 */
+  const labelMode = asPlanning ? "planning" : active ? "thinking" : "thought";
 
+  // 历史展示只用已结算的 durationMs；禁止用 startedAt+墙钟（刷新会越刷越大）
   let label: string;
   if (asPlanning) {
     label = t("chat.planning");
@@ -342,6 +386,14 @@ function StatusStepRow({
   } else {
     label = formatThoughtLabel(t, step.durationMs);
   }
+
+  const labelNode = (
+    <span className="run-timeline-label-enter" key={labelMode}>
+      <span className={`run-timeline-label${active ? " run-timeline-label--shimmer" : ""}`}>
+        {label}
+      </span>
+    </span>
+  );
 
   return (
     <li
@@ -356,11 +408,7 @@ function StatusStepRow({
             aria-label={open ? t("chat.thinkingCollapse") : t("chat.thinkingExpand")}
             onClick={() => setCollapsed((v) => !v)}
           >
-            <span
-              className={`run-timeline-label${active ? " run-timeline-label--shimmer" : ""}`}
-            >
-              {label}
-            </span>
+            {labelNode}
             <TimelineChevron open={open} />
           </button>
         ) : (
@@ -368,11 +416,7 @@ function StatusStepRow({
             className="run-timeline-status-toggle"
             aria-label={asPlanning ? t("chat.planning") : label}
           >
-            <span
-              className={`run-timeline-label${active ? " run-timeline-label--shimmer" : ""}`}
-            >
-              {label}
-            </span>
+            {labelNode}
           </div>
         )}
         {open ? <ThinkingBody text={step.text || step.summary || ""} /> : null}
@@ -397,15 +441,22 @@ function ErrorStepRow({
   canResume?: boolean;
 }) {
   const t = useT();
-  const cancelled = step.code === "CANCELLED";
+  const softCode =
+    step.code && isSoftStopCode(step.code)
+      ? step.code
+      : classifyRunError(step.message);
+  const softStop = isSoftStopCode(softCode);
   const missingKey =
     step.code === "MODEL_API_KEY_MISSING" || isMissingApiKeyError(step.message);
 
-  if (cancelled) {
+  if (softStop) {
+    // 软中断文案跟 code 走 i18n，避免英文 bridge 原文盖住中文界面
+    const label =
+      softCode === "PROCESS_EXIT" ? t("chat.abnormalExit") : t("chat.stopped");
     return (
       <li className="run-timeline-item run-timeline-item--stopped">
         <div className="run-timeline-stopped">
-          <span className="run-timeline-label">{step.message || t("chat.stopped")}</span>
+          <span className="run-timeline-label">{label}</span>
           {onResume ? (
             <Button
               variant="text"
@@ -459,10 +510,16 @@ function ErrorStepRow({
 function ToolStepRow({
   step,
   onOpenFile,
+  onOpenTerminal,
   onRestoreDeletedFile,
 }: {
   step: Extract<ChatTimelineStep, { kind: "tool" }>;
   onOpenFile?: (path: string) => void;
+  onOpenTerminal?: (detail?: {
+    sessionId?: string;
+    previewOutput?: string;
+    title?: string;
+  }) => void;
   onRestoreDeletedFile?: (stepId: string) => void | Promise<void>;
 }) {
   const t = useT();
@@ -473,6 +530,7 @@ function ToolStepRow({
   const hasDiff = Boolean(step.diff?.trim());
   const mutation = isMutationTool(step.name);
   const isDelete = step.name === "delete_file";
+  const isShell = step.name === "shell" || step.name === "shell_await";
   const ttlDays = readDeleteFileRestoreTtlDays();
   const canRestore =
     isDelete &&
@@ -522,6 +580,17 @@ function ToolStepRow({
           }
           onOpenFile={onOpenFile}
         />
+      </li>
+    );
+  }
+
+  if (isShell) {
+    const awaiting = Boolean(step.hitl);
+    return (
+      <li
+        className={`run-timeline-item run-timeline-item--tool run-timeline-item--shell${running || awaiting ? " is-active" : ""}${failed ? " is-error" : ""}`}
+      >
+        <ShellCard step={step} onOpenTerminal={onOpenTerminal} />
       </li>
     );
   }

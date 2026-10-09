@@ -15,13 +15,19 @@ import {
   type DataDirChangeRequest,
   type DataDirMigrateProgress,
   type GeneralSettings,
+  type HitlResponse,
   type LogRecord,
+  type McpServerRuntimeStatus,
+  type McpServerUpsertInput,
   type ModelSettingsPatch,
   type MoveSessionInput,
   type ReorderInput,
   type ShortcutsMap,
   type AuxPageId,
   type LogsQuery,
+  type BrowserBounds,
+  type BrowserEvent,
+  type TerminalEvent,
   type ThinkerApi,
   type UiSessionSnapshot,
   type WindowRole,
@@ -192,6 +198,62 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.workspaceGitDiff, { workspaceId, path, full }),
     gitInit: (workspaceId: string) =>
       ipcRenderer.invoke(IpcChannels.workspaceGitInit, workspaceId),
+  },
+  terminal: {
+    listSessions: () => ipcRenderer.invoke(IpcChannels.terminalList),
+    listShellProfiles: () => ipcRenderer.invoke(IpcChannels.terminalListShellProfiles),
+    create: (options?) => ipcRenderer.invoke(IpcChannels.terminalCreate, options),
+    write: (sessionId, data) =>
+      ipcRenderer.invoke(IpcChannels.terminalWrite, { sessionId, data }),
+    resize: (sessionId, cols, rows) =>
+      ipcRenderer.invoke(IpcChannels.terminalResize, { sessionId, cols, rows }),
+    kill: (sessionId) => ipcRenderer.invoke(IpcChannels.terminalKill, sessionId),
+    getOutput: (sessionId) => ipcRenderer.invoke(IpcChannels.terminalGetOutput, sessionId),
+    onEvent(cb: (event: TerminalEvent) => void) {
+      const handler = (_evt: unknown, event: TerminalEvent) => cb(event);
+      ipcRenderer.on(IpcChannels.terminalEvent, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.terminalEvent, handler);
+    },
+  },
+  browser: {
+    getState: () => ipcRenderer.invoke(IpcChannels.browserGetState),
+    navigate: (url: string) => ipcRenderer.invoke(IpcChannels.browserNavigate, url),
+    goBack: () => ipcRenderer.invoke(IpcChannels.browserGoBack),
+    goForward: () => ipcRenderer.invoke(IpcChannels.browserGoForward),
+    reload: () => ipcRenderer.invoke(IpcChannels.browserReload),
+    setBounds: (bounds: BrowserBounds) =>
+      ipcRenderer.invoke(IpcChannels.browserSetBounds, bounds),
+    setVisible: (visible: boolean) =>
+      ipcRenderer.invoke(IpcChannels.browserSetVisible, visible),
+    takeControl: () => ipcRenderer.invoke(IpcChannels.browserTakeControl),
+    onEvent(cb: (event: BrowserEvent) => void) {
+      const handler = (_evt: unknown, event: BrowserEvent) => cb(event);
+      ipcRenderer.on(IpcChannels.browserEvent, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.browserEvent, handler);
+    },
+  },
+  skills: {
+    list: (workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(IpcChannels.skillsList, workspaceRoot ?? null),
+  },
+  mcp: {
+    list: () => ipcRenderer.invoke(IpcChannels.mcpList),
+    upsert: (input: McpServerUpsertInput) =>
+      ipcRenderer.invoke(IpcChannels.mcpUpsert, input),
+    remove: (id: string) => ipcRenderer.invoke(IpcChannels.mcpRemove, id),
+    setEnabled: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke(IpcChannels.mcpSetEnabled, id, enabled),
+    test: (input: McpServerUpsertInput) =>
+      ipcRenderer.invoke(IpcChannels.mcpTest, input),
+    importCursorFile: () => ipcRenderer.invoke(IpcChannels.mcpImportCursorFile),
+    onStatus(cb: (status: McpServerRuntimeStatus) => void) {
+      const handler = (_evt: unknown, status: McpServerRuntimeStatus) => cb(status);
+      ipcRenderer.on(IpcChannels.mcpStatus, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.mcpStatus, handler);
+    },
+  },
+  respondHitl(response: HitlResponse) {
+    return ipcRenderer.invoke(IpcChannels.agentHitlRespond, response);
   },
 };
 

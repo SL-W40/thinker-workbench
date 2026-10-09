@@ -1,5 +1,5 @@
 /**
- * 渲染进程会话日志：本地 memory sink + 经 IPC 落盘到 app.log。
+ * 渲染进程会话日志：本地 memory sink + 经 IPC 由主进程写入 SQLite。
  * 同一 traceId 把前端发送与后端图遍历串在一条时间线上。
  */
 import {
@@ -13,7 +13,7 @@ import {
   type MemorySink,
 } from "@thinker-workbench/logger";
 import { DEFAULT_GENERAL_SETTINGS, type GeneralSettings } from "@thinker-workbench/shared";
-import { GENERAL_SETTINGS_CHANGED } from "../bridge/thinker";
+import { GENERAL_SETTINGS_CHANGED, onLog } from "../bridge/thinker";
 
 const memory = createMemorySink(800);
 let bootstrapped = false;
@@ -50,6 +50,9 @@ export function bootstrapAppLog(): void {
   });
   configureLogPreview({ truncateLongContent: general.logTruncateLongContent });
   createLogger({ scope: "app", source: "app" }).info("log ready");
+
+  // 并入 desktop / agent 广播，便于内存时间线与同进程调试
+  onLog(ingestRemoteLog);
 
   window.addEventListener(GENERAL_SETTINGS_CHANGED, ((event: CustomEvent<GeneralSettings>) => {
     applyAppLogPolicy(event.detail);

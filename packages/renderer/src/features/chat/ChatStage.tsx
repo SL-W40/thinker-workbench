@@ -24,6 +24,12 @@ type Props = {
   onOpenTrace?: (traceId: string) => void;
   /** 在右侧 Files 面板打开工作空间文件。 */
   onOpenFile?: (path: string) => void;
+  /** 打开右侧 Terminal。 */
+  onOpenTerminal?: (detail?: {
+    sessionId?: string;
+    previewOutput?: string;
+    title?: string;
+  }) => void;
   /** 时间线 delete_file「恢复」。 */
   onRestoreDeletedFile?: (messageId: string, stepId: string) => void | Promise<void>;
   /** 手动停止后「继续」。 */
@@ -65,6 +71,7 @@ export function ChatStage({
   onOpenModelSettings,
   onOpenTrace,
   onOpenFile,
+  onOpenTerminal,
   onRestoreDeletedFile,
   onResume,
   canResume = false,
@@ -116,6 +123,7 @@ export function ChatStage({
               onOpenModelSettings={onOpenModelSettings}
               onOpenTrace={onOpenTrace}
               onOpenFile={onOpenFile}
+              onOpenTerminal={onOpenTerminal}
               onRestoreDeletedFile={
                 onRestoreDeletedFile
                   ? (stepId) => onRestoreDeletedFile(m.id, stepId)

@@ -29,6 +29,11 @@ export type AgentRunCommand = {
   workspaceRoot?: string;
   /** 工作区显示名（别名或文件夹名），写入环境上下文。 */
   workspaceName?: string;
+  /**
+   * 用户通过 `@` 选中的工作区相对路径（已校验在 workspace 内）。
+   * engine 组装上下文时限大小读入并注入 `<context_files>`。
+   */
+  contextPaths?: string[];
 };
 
 /** 取消正在进行的运行。 */

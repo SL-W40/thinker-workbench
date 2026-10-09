@@ -10,6 +10,8 @@ import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths
 import { getGeneralSettings, getModelSettings } from "../config/settingsStore";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
 import { onAgentUtilityExited } from "../ipc/agentHandlers";
+import { listEnabledMcpConfigs } from "../mcp/mcpStore";
+import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { AgentBridge } from "./AgentBridge";
 import { attachLifecycle } from "./processLifecycle";
 
@@ -30,10 +32,16 @@ export function buildAgentHello(): UtilityHello {
     aiLocale: general.aiLocale,
     workspaceAccess: general.workspaceAccess,
     allowAiDeleteFiles: general.allowAiDeleteFiles,
+    allowAiShell: general.allowAiShell,
+    allowAiBrowser: general.allowAiBrowser,
+    shellApprovalMode: general.shellApprovalMode,
+    shellAllowlist: general.shellAllowlist,
+    shell: shellFactsForAgent(general.shellProfileId),
     logTruncateLongContent: general.logTruncateLongContent,
     loggingEnabled: general.loggingEnabled,
     workspaceRoot: getActiveWorkspaceRoot() ?? undefined,
     dataDir: getDataDir(),
+    mcpServers: listEnabledMcpConfigs(),
   };
 }
 

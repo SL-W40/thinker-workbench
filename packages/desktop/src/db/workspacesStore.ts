@@ -112,7 +112,7 @@ function mapSession(row: SessionRow): ChatSessionRecord {
     title: row.title,
     pinned: row.pinned === 1,
     sortOrder: row.sort_order,
-    runStatus: normalizeRunStatus(row.run_status),
+    runStatus: normalizeRunStatus(row.run_status, row.interrupt_reason),
     activeRunId: row.active_run_id,
     interruptReason: row.interrupt_reason,
     createdAt: row.created_at,
@@ -120,9 +120,17 @@ function mapSession(row: SessionRow): ChatSessionRecord {
   };
 }
 
-function normalizeRunStatus(value: string): SessionRunStatus {
-  if (value === "idle" || value === "running" || value === "interrupted" || value === "failed") {
+/** 读盘时迁移旧 `interrupted` → cancelled / crashed。 */
+function normalizeRunStatus(value: string, interruptReason?: string | null): SessionRunStatus {
+  if (value === "idle" || value === "running" || value === "cancelled" || value === "crashed" || value === "failed") {
     return value;
+  }
+  if (value === "interrupted") {
+    const reason = (interruptReason ?? "").toLowerCase();
+    if (reason.includes("crash") || reason.includes("exit") || reason.includes("utility")) {
+      return "crashed";
+    }
+    return "cancelled";
   }
   return "idle";
 }
@@ -136,7 +144,7 @@ function mapThread(row: SessionRow): ThreadMeta {
     updatedAt: row.updated_at,
     pinned: row.pinned === 1,
     sortOrder: row.sort_order,
-    runStatus: normalizeRunStatus(row.run_status),
+    runStatus: normalizeRunStatus(row.run_status, row.interrupt_reason),
   };
 }
 
@@ -477,9 +485,9 @@ export function countRunningSessions(): number {
 
 /**
  * 进程退出 / 启动时愈合会话状态：
- * - `running` 且有 checkpoint → `interrupted`（可 Resume）
+ * - `running` 且有 checkpoint → `crashed`（可 Resume）
  * - `running` 且无 checkpoint → `failed`，收束 pending 消息
- * - `failed`/`interrupted` 仍有 checkpoint → 统一为 `interrupted`（修复旧版误标 failed）
+ * - 旧 `interrupted` / `failed` 仍有 checkpoint → `crashed`（修复旧版误标）
  * - 非 running 且无 checkpoint、却仍有 pending 助手消息 → 收束，避免永远 Planning
  */
 export function healRunningSessions(): number {
@@ -491,7 +499,7 @@ export function healRunningSessions(): number {
     const rows = db
       .prepare(
         `SELECT id, thread_id, run_status, interrupt_reason FROM chat_sessions
-         WHERE run_status IN ('running', 'interrupted', 'failed')`,
+         WHERE run_status IN ('running', 'interrupted', 'cancelled', 'crashed', 'failed')`,
       )
       .all() as Array<{
       id: string;
@@ -506,11 +514,28 @@ export function healRunningSessions(): number {
         const dirtyReason = /no pending interrupt|tool_approval/i.test(
           row.interrupt_reason ?? "",
         );
-        // 旧版审批 / resume 失败文案写进 interrupt_reason，一并洗掉
-        if (row.run_status !== "interrupted" || dirtyReason) {
+        const alreadyCrashed = row.run_status === "crashed" && !dirtyReason;
+        const alreadyCancelled =
+          row.run_status === "cancelled" &&
+          (row.interrupt_reason ?? "").toLowerCase() === "cancelled" &&
+          !dirtyReason;
+        // 启动愈合：残留 running / 旧 interrupted → crashed；保留用户 cancelled
+        if (row.run_status === "cancelled" && !dirtyReason) {
+          continue;
+        }
+        if (!alreadyCrashed && !alreadyCancelled) {
           db.prepare(
             `UPDATE chat_sessions
-             SET run_status = 'interrupted',
+             SET run_status = 'crashed',
+                 interrupt_reason = ?,
+                 updated_at = ?
+             WHERE id = ?`,
+          ).run("crash", now, row.id);
+          changes += 1;
+        } else if (dirtyReason) {
+          db.prepare(
+            `UPDATE chat_sessions
+             SET run_status = 'crashed',
                  interrupt_reason = ?,
                  updated_at = ?
              WHERE id = ?`,
@@ -534,7 +559,7 @@ export function healRunningSessions(): number {
         continue;
       }
 
-      // interrupted/failed 但无 checkpoint：若仍有 pending 气泡则收束
+      // cancelled/crashed/interrupted/failed 但无 checkpoint：若仍有 pending 气泡则收束
       const pending = db
         .prepare(
           `SELECT COUNT(*) AS c FROM chat_messages
@@ -543,7 +568,11 @@ export function healRunningSessions(): number {
         .get(row.id) as { c: number };
       if ((pending?.c ?? 0) > 0) {
         finalizeOrphanPendingMessages(ws.id, row.id, "Run interrupted by process restart.");
-        if (row.run_status === "interrupted") {
+        if (
+          row.run_status === "interrupted" ||
+          row.run_status === "cancelled" ||
+          row.run_status === "crashed"
+        ) {
           db.prepare(
             `UPDATE chat_sessions
              SET run_status = 'failed',
@@ -600,6 +629,8 @@ function finalizeOrphanPendingMessages(
         id: `tl_heal_${row.id}`,
         kind: "error",
         message: errorText,
+        // 无 checkpoint 的进程中断：按异常退出展示，便于时间线「继续」识别
+        code: "PROCESS_EXIT",
       });
       upd.run(JSON.stringify({ timeline, pending: false }), row.id);
     }
@@ -711,8 +742,16 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
     for (let seq = 0; seq < messages.length; seq++) {
       const m = messages[seq];
       if (!m) continue;
+      // 落库前冻结思考耗时：有 durationMs 则丢掉 startedAt，避免下次 hydrate 按墙钟重算
+      const timeline = m.timeline?.map((step) => {
+        if (step.kind !== "status" || step.status !== "thinking") return step;
+        if (step.durationMs == null) {
+          return { ...step, active: false, startedAt: undefined };
+        }
+        return { ...step, active: false, startedAt: undefined, durationMs: step.durationMs };
+      });
       const hasPayload =
-        m.timeline ||
+        timeline ||
         m.pending ||
         m.usage ||
         m.durationMs != null ||
@@ -720,11 +759,12 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
         Boolean(m.traceId);
       const payload = hasPayload
         ? JSON.stringify({
-            timeline: m.timeline,
+            timeline,
             pending: m.pending,
             usage: m.usage,
             durationMs: m.durationMs,
-            runStartedAt: m.runStartedAt,
+            // 已结束消息不持久化 live 计时锚点
+            runStartedAt: m.pending ? m.runStartedAt : undefined,
             traceId: m.traceId,
           })
         : null;

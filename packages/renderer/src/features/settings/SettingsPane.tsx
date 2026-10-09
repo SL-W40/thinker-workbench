@@ -6,6 +6,7 @@ import { EmptyState, SideNavItem } from "@thinker-workbench/design/react";
 import { useT } from "../../i18n/I18nProvider";
 import { SETTINGS_SECTIONS, type SettingsSectionId } from "./sections";
 import { GeneralSettingsForm } from "./GeneralSettingsForm";
+import { McpSettingsForm } from "./McpSettingsForm";
 import { ModelSettingsForm } from "./ModelSettingsForm";
 import { ShortcutsSettingsForm } from "./ShortcutsSettingsForm";
 
@@ -50,6 +51,8 @@ export function SettingsPane({ active, section, onSectionChange }: Props) {
             </header>
             {section === "model" ? (
               <ModelSettingsForm />
+            ) : section === "mcp" ? (
+              <McpSettingsForm />
             ) : section === "general" ? (
               <GeneralSettingsForm active={active} />
             ) : (

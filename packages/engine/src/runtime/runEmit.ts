@@ -23,6 +23,11 @@ export type RunEmitEvent =
       detail?: string;
       ok?: boolean;
       diff?: string;
+      sessionId?: string;
+      command?: string;
+      exitCode?: number | null;
+      backgrounded?: boolean;
+      restoreContent?: string;
     }
   | {
       type: "usage";
@@ -39,10 +44,17 @@ export type RunEmitter = (event: RunEmitEvent) => void;
 
 /** 当前异步调用栈上的 emitter；不在 withRunEmitter 内时为 null。 */
 let current: RunEmitter | null = null;
+/** 当前 run 的 thread / run id（供 HITL / PTY）。 */
+let currentIds: { threadId: string; runId: string } | null = null;
 
 /** 供 agent / tools 节点取当前 run 的发射器。 */
 export function getRunEmitter(): RunEmitter | null {
   return current;
+}
+
+/** 当前 run 标识；不在 run 内时为 null。 */
+export function getRunIds(): { threadId: string; runId: string } | null {
+  return currentIds;
 }
 
 /**
@@ -67,7 +79,9 @@ export function bindRuntimeEmitter(
   threadId: string,
   runId: string,
 ): RunEmitter {
+  currentIds = { threadId, runId };
   return (event) => {
+    currentIds = { threadId, runId };
     emit({
       ...event,
       threadId,

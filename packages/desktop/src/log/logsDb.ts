@@ -341,6 +341,25 @@ function lookupTraceShard(traceId: string): string | null {
   }
 }
 
+/** 近期 trace 路由（按 last_ts 新→旧），供 Traces 侧栏，避免只扫最近 N 条日志漏链。 */
+export function listRecentTraceRoutes(limit: number): Array<{ traceId: string; lastTs: number }> {
+  const capped = Math.min(500, Math.max(1, limit));
+  try {
+    const meta = openMeta();
+    const rows = meta
+      .prepare(
+        `SELECT trace_id AS traceId, last_ts AS lastTs
+         FROM trace_routes
+         ORDER BY last_ts DESC
+         LIMIT ?`,
+      )
+      .all(capped) as Array<{ traceId: string; lastTs: number }>;
+    return rows.filter((r) => typeof r.traceId === "string" && r.traceId.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 /** 跨分片合并查询。 */
 export function queryLogRecords(query: LogsDbQuery): {
   records: LogRecord[];

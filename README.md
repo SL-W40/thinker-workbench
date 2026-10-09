@@ -103,6 +103,41 @@ Rules: `.md` / `.mdc` / `.txt`. Skills: Cursor-style `SKILL.md`.
 
 Repo `.cursor/rules/` files are **contributor conventions** for this monorepo (e.g. Chinese source comments, design-system usage); they are not the app’s runtime rule roots unless copied into the paths above.
 
+### Composer `/` and `@`
+
+In the chat composer:
+
+- Type `/` (after start of line or whitespace) to pick a **Skill**. Selecting inserts `/skill-name `; the engine already activates skills from that slash form.
+- Type `@` to mention a **workspace file** (recent files + searchable paths). Selecting inserts `@path/to/file` (quoted if the path has spaces). On send, paths become `contextPaths` and the engine injects file contents into the run context (size-capped; binary/oversize files are skipped with a note).
+
+## MCP (stdio)
+
+Settings → **MCP** manages stdio servers. Config merge order (later wins same `id`):
+
+1. `<dataDir>/mcps/*.json`
+2. `<workspace>/.thinker/mcps/*.json`
+3. Optional import from Cursor `mcp.json` (Settings → Import)
+
+Per-server fields: `id`, `name`, `enabled`, `transport: "stdio"`, `command`, `args`, `env`, optional `cwd`. Desktop pushes an enabled snapshot to the utility process; the engine connects with `@modelcontextprotocol/sdk` and exposes tools as `mcp__{serverId}__{toolName}`.
+
+**Windows:** if the command is `npx` / `npm` / `node`, the app resolves `npx.cmd` (etc.) automatically; you can also enter `npx.cmd` explicitly.
+
+Example filesystem server (via npx):
+
+```json
+{
+  "id": "filesystem",
+  "name": "Filesystem",
+  "enabled": true,
+  "transport": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/path/to/workspace"],
+  "env": {}
+}
+```
+
+Disable a server in Settings to drop its tools; quitting the app should leave no orphan MCP child processes.
+
 ## Contributing
 
 - Use **pnpm** only.

@@ -6,6 +6,7 @@ import type { LogFileInfo, LogsQuery, LogsResponse, TraceSummary } from "@thinke
 import { getLogDir } from "../config/paths";
 import {
   listLogShards,
+  listRecentTraceRoutes,
   queryLogRecords,
   queryTraceRecords,
   readRecentLogRecords,
@@ -55,11 +56,19 @@ export function logsMeta(): { logDir: string; files: LogFileInfo[] } {
   return { logDir: getLogDir(), files: listLogFiles() };
 }
 
-/** 近期 trace 列表。 */
+/** 近期 trace 列表（优先 meta.db 路由，再回退近期记录扫描）。 */
 export function logsTraces(limit = 60): TraceSummary[] {
   const capped = Math.min(200, Math.max(10, limit));
-  const records = readRecentLogRecords(8000);
-  return collectTraces(records, capped);
+  const routes = listRecentTraceRoutes(capped);
+  if (routes.length > 0) {
+    const out: TraceSummary[] = [];
+    for (const route of routes) {
+      const one = collectTraces(queryTraceRecords(route.traceId), 1)[0];
+      if (one) out.push(one);
+    }
+    if (out.length > 0) return out.sort((a, b) => b.lastTs - a.lastTs);
+  }
+  return collectTraces(readRecentLogRecords(8000), capped);
 }
 
 /** 按条件查询日志（最新侧分页；跨分片合并）。 */

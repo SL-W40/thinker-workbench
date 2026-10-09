@@ -1,5 +1,5 @@
 /**
- * 聊天会话状态：多会话 hydrate、流式事件合并、崩溃 Resume、防抖落库。
+ * Ã¨ÂÂÃ¥Â¤Â©Ã¤Â¼ÂÃ¨Â¯ÂÃ§ÂÂ¶Ã¦ÂÂÃ¯Â¼ÂÃ¥Â¤ÂÃ¤Â¼ÂÃ¨Â¯Â hydrateÃ£ÂÂÃ¦ÂµÂÃ¥Â¼ÂÃ¤ÂºÂÃ¤Â»Â¶Ã¥ÂÂÃ¥Â¹Â¶Ã£ÂÂÃ¥Â´Â©Ã¦ÂºÂ ResumeÃ£ÂÂÃ©ÂÂ²Ã¦ÂÂÃ¨ÂÂ½Ã¥ÂºÂÃ£ÂÂ
  */
 
 import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
@@ -10,6 +10,7 @@ import {
   createTraceId,
 } from "@thinker-workbench/shared";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { onTerminalEvent } from "../../bridge/terminal";
 import {
   cancelAgent,
   GENERAL_SETTINGS_CHANGED,
@@ -36,18 +37,28 @@ import {
 import { useT } from "../../i18n/I18nProvider";
 import { appLog } from "../../log/sessionLog";
 import { createMessage, toAgentHistory, visibleAssistantText } from "./messageModel";
-import { classifyRunError } from "./runErrors";
+import {
+  classifyRunError,
+  isSoftStopCode,
+  softStopResumeKind,
+} from "./runErrors";
 import {
   appendError,
   appendReplyText,
+  appendShellLiveOutput,
   appendThinkingText,
+  applyHitlRequest,
+  applyHitlResolved,
   applyStatus,
   applyToolEvent,
+  bindShellSessionId,
+  freezeTimelineHistory,
   deactivateAll,
   isDeleteRestoreExpired,
   pruneExpiredDeleteRestoreCaches,
   readDeleteFileRestoreTtlDays,
 } from "./timelineModel";
+import { extractContextPaths } from "./composerMentions";
 import {
   EMPTY_USAGE,
   addUsage,
@@ -55,7 +66,7 @@ import {
   totalTokens,
 } from "./usageStats";
 
-/** 收集助手气泡之前的可见历史，供中断时粗估 input。 */
+/** Ã¦ÂÂ¶Ã©ÂÂÃ¥ÂÂ©Ã¦ÂÂÃ¦Â°ÂÃ¦Â³Â¡Ã¤Â¹ÂÃ¥ÂÂÃ§ÂÂÃ¥ÂÂ¯Ã¨Â§ÂÃ¥ÂÂÃ¥ÂÂ²Ã¯Â¼ÂÃ¤Â¾ÂÃ¤Â¸Â­Ã¦ÂÂ­Ã¦ÂÂ¶Ã§Â²ÂÃ¤Â¼Â° inputÃ£ÂÂ */
 function collectInputTextsBefore(
   messages: ChatMessage[],
   assistantId: string,
@@ -74,7 +85,7 @@ function collectInputTextsBefore(
   return texts;
 }
 
-/** 比较两条时间线，保留工具行与 diff 更完整的一侧。 */
+/** Ã¦Â¯ÂÃ¨Â¾ÂÃ¤Â¸Â¤Ã¦ÂÂ¡Ã¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿Ã¯Â¼ÂÃ¤Â¿ÂÃ§ÂÂÃ¥Â·Â¥Ã¥ÂÂ·Ã¨Â¡ÂÃ¤Â¸Â diff Ã¦ÂÂ´Ã¥Â®ÂÃ¦ÂÂ´Ã§ÂÂÃ¤Â¸ÂÃ¤Â¾Â§Ã£ÂÂ */
 function pickRicherTimeline(
   a: ChatTimelineStep[],
   b: ChatTimelineStep[] | undefined,
@@ -98,9 +109,20 @@ function pickRicherTimeline(
   return deactivateAll(score(left) >= score(right) ? left : right);
 }
 
+/** 结算消息级耗时（把 live 段写入 durationMs）。 */
+function settleMessageClock(message: ChatMessage): ChatMessage {
+  if (message.runStartedAt == null) return message;
+  return {
+    ...message,
+    durationMs:
+      (message.durationMs ?? 0) + Math.max(0, Date.now() - message.runStartedAt),
+    runStartedAt: undefined,
+  };
+}
+
 /**
  * 将失败收束为助手气泡内的错误时间线步（不改成 System 角色）。
- * 保留已流式的正文；错误只出现在 timeline。
+ * 保留已流式的正文；错误只出现在 timeline。失败时一并结算耗时。
  */
 function failAssistantMessage(
   message: ChatMessage,
@@ -109,24 +131,21 @@ function failAssistantMessage(
   /** 显式错误码；省略时从文案推断。 */
   code?: string,
 ): ChatMessage {
-  const nextTimeline = appendError(
-    timeline,
-    errorText,
-    code ?? classifyRunError(errorText),
-  );
-  return {
+  const resolved = code ?? classifyRunError(errorText);
+  const nextTimeline = appendError(timeline, errorText, resolved);
+  return settleMessageClock({
     ...message,
     pending: false,
     role: "assistant",
     // 错误不进气泡正文，避免与时间线重复；保留已生成的部分回复
     text: message.text,
     timeline: nextTimeline,
-  };
+  });
 }
 
 /**
- * 先前 Resume 失败时新建的空壳助手气泡（无正文、时间线仅 error）。
- * Resume 时应丢掉，继续写回真正的那条助手消息。
+ * Ã¥ÂÂÃ¥ÂÂ Resume Ã¥Â¤Â±Ã¨Â´Â¥Ã¦ÂÂ¶Ã¦ÂÂ°Ã¥Â»ÂºÃ§ÂÂÃ§Â©ÂºÃ¥Â£Â³Ã¥ÂÂ©Ã¦ÂÂÃ¦Â°ÂÃ¦Â³Â¡Ã¯Â¼ÂÃ¦ÂÂ Ã¦Â­Â£Ã¦ÂÂÃ£ÂÂÃ¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿Ã¤Â»Â errorÃ¯Â¼ÂÃ£ÂÂ
+ * Resume Ã¦ÂÂ¶Ã¥ÂºÂÃ¤Â¸Â¢Ã¦ÂÂÃ¯Â¼ÂÃ§Â»Â§Ã§Â»Â­Ã¥ÂÂÃ¥ÂÂÃ§ÂÂÃ¦Â­Â£Ã§ÂÂÃ©ÂÂ£Ã¦ÂÂ¡Ã¥ÂÂ©Ã¦ÂÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã£ÂÂ
  */
 function isResumeStubMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
@@ -136,30 +155,45 @@ function isResumeStubMessage(message: ChatMessage): boolean {
 }
 
 /**
- * 从磁盘 hydrate 时收束「进程已死但仍 active」的时间线。
- * - interrupted：保留 pending 以便 Resume，但关掉 thinking shimmer
- * - 其它终态：pending 一并清掉，避免永远 Planning
+ * Ã¤Â»ÂÃ§Â£ÂÃ§ÂÂ hydrate Ã¦ÂÂ¶Ã¦ÂÂ¶Ã¦ÂÂÃ£ÂÂÃ¨Â¿ÂÃ§Â¨ÂÃ¥Â·Â²Ã¦Â­Â»Ã¤Â½ÂÃ¤Â»Â activeÃ£ÂÂÃ§ÂÂÃ¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿Ã£ÂÂ
+ * - cancelled / crashedÃ¯Â¼ÂÃ¤Â¿ÂÃ§ÂÂ pending Ã¤Â»Â¥Ã¤Â¾Â¿ ResumeÃ¯Â¼ÂÃ¤Â½ÂÃ¥ÂÂ³Ã¦ÂÂ thinking shimmer
+ * - Ã¥ÂÂ¶Ã¥Â®ÂÃ§Â»ÂÃ¦ÂÂÃ¯Â¼Âpending Ã¤Â¸ÂÃ¥Â¹Â¶Ã¦Â¸ÂÃ¦ÂÂÃ¯Â¼ÂÃ©ÂÂ¿Ã¥ÂÂÃ¦Â°Â¸Ã¨Â¿Â Planning
  */
 function settleLoadedMessages(
   messages: ChatMessage[],
   runStatus: string | undefined,
 ): ChatMessage[] {
   if (runStatus === "running") return messages;
-  const resumable = runStatus === "interrupted";
+  const resumable = runStatus === "cancelled" || runStatus === "crashed";
   return messages.map((m) => {
     if (m.role !== "assistant") return m;
-    // 非运行中：清掉 live 计时，避免 hydrate 后误走表
-    const base = m.runStartedAt != null ? { ...m, runStartedAt: undefined } : m;
-    const hasActive = (base.timeline ?? []).some(
-      (s) =>
-        (s.kind === "status" && s.active) ||
-        (s.kind === "tool" && s.active),
-    );
-    if (!hasActive && (resumable || !base.pending)) return base;
+    // 非运行中：丢掉 live 计时字段；时间线用历史冻结（禁止墙钟重算）
+    let base = m.runStartedAt != null ? { ...m, runStartedAt: undefined } : m;
+    let timeline = freezeTimelineHistory(base.timeline ?? [], base.durationMs);
+    // 崩溃 / 取消恢复：补一条软中断，便于时间线展示「继续」
+    if (
+      resumable &&
+      !timeline.some((s) => s.kind === "error" && isSoftStopCode(s.code))
+    ) {
+      const softCode = runStatus === "crashed" ? "PROCESS_EXIT" : "CANCELLED";
+      const softMsg =
+        softCode === "PROCESS_EXIT" ? "Exited unexpectedly." : "Stopped.";
+      timeline = appendError(timeline, softMsg, softCode);
+    }
+    // 仅用已冻结的思考耗时回填消息耗时；绝不 Date.now()-runStartedAt
+    if ((base.durationMs ?? 0) <= 0) {
+      let inferred = 0;
+      for (const s of timeline) {
+        if (s.kind === "status" && typeof s.durationMs === "number") {
+          inferred += s.durationMs;
+        }
+      }
+      if (inferred > 0) base = { ...base, durationMs: inferred };
+    }
     return {
       ...base,
       pending: resumable ? base.pending : false,
-      timeline: deactivateAll(base.timeline ?? []),
+      timeline,
     };
   });
 }
@@ -170,7 +204,7 @@ function scrollElToBottom(el: HTMLElement | null, behavior: ScrollBehavior = "sm
 }
 
 /**
- * @param visible 聊天页是否在前台。离开再回来时用于立刻刷 token 并滚到底。
+ * @param visible Ã¨ÂÂÃ¥Â¤Â©Ã©Â¡ÂµÃ¦ÂÂ¯Ã¥ÂÂ¦Ã¥ÂÂ¨Ã¥ÂÂÃ¥ÂÂ°Ã£ÂÂÃ§Â¦Â»Ã¥Â¼ÂÃ¥ÂÂÃ¥ÂÂÃ¦ÂÂ¥Ã¦ÂÂ¶Ã§ÂÂ¨Ã¤ÂºÂÃ§Â«ÂÃ¥ÂÂ»Ã¥ÂÂ· token Ã¥Â¹Â¶Ã¦Â»ÂÃ¥ÂÂ°Ã¥ÂºÂÃ£ÂÂ
  */
 export function useChatSession(visible = true) {
   const t = useT();
@@ -179,13 +213,20 @@ export function useChatSession(visible = true) {
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | undefined>();
-  /** 当前侧栏 / 输入框展示的工作空间（可与活动会话同步）。 */
+  /** Ã¥Â½ÂÃ¥ÂÂÃ¤Â¾Â§Ã¦Â Â / Ã¨Â¾ÂÃ¥ÂÂ¥Ã¦Â¡ÂÃ¥Â±ÂÃ§Â¤ÂºÃ§ÂÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¯Â¼ÂÃ¥ÂÂ¯Ã¤Â¸ÂÃ¦Â´Â»Ã¥ÂÂ¨Ã¤Â¼ÂÃ¨Â¯ÂÃ¥ÂÂÃ¦Â­Â¥Ã¯Â¼ÂÃ£ÂÂ */
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [activeTraceId, setActiveTraceId] = useState<string | null>(null);
-  const [canResume, setCanResume] = useState(false);
-  /** 发送前缺少工作空间 / 会话时的门禁（显示在输入框上方）。 */
+  /** cancelledÃ¯Â¼ÂÃ¤Â»ÂÃ¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿Ã¥ÂÂ¯Ã§Â»Â­Ã¯Â¼ÂcrashedÃ¯Â¼ÂÃ¨Â¾ÂÃ¥ÂÂ¥Ã¥ÂÂºÃ¤Â¹ÂÃ¦ÂÂÃ§Â¤ÂºÃ¦Â£ÂÃ¦ÂÂ¥Ã§ÂÂ¹Ã§Â»Â­Ã¨Â·ÂÃ£ÂÂ */
+  const [resumeKind, setResumeKind] = useState<null | "cancelled" | "crashed">(null);
+  const canResume = resumeKind != null;
+  const setCanResume = (v: boolean | "cancelled" | "crashed") => {
+    if (v === false) setResumeKind(null);
+    else if (v === true) setResumeKind("cancelled");
+    else setResumeKind(v);
+  };
+  /** Ã¥ÂÂÃ©ÂÂÃ¥ÂÂÃ§Â¼ÂºÃ¥Â°ÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´ / Ã¤Â¼ÂÃ¨Â¯ÂÃ¦ÂÂ¶Ã§ÂÂÃ©ÂÂ¨Ã§Â¦ÂÃ¯Â¼ÂÃ¦ÂÂ¾Ã§Â¤ÂºÃ¥ÂÂ¨Ã¨Â¾ÂÃ¥ÂÂ¥Ã¦Â¡ÂÃ¤Â¸ÂÃ¦ÂÂ¹Ã¯Â¼ÂÃ£ÂÂ */
   const [workspaceGate, setWorkspaceGate] = useState<{
     kind: "no-workspace" | "need-session";
     message: string;
@@ -193,7 +234,7 @@ export function useChatSession(visible = true) {
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
-  /** 正在原位编辑的用户消息；未发送前不改历史。 */
+  /** Ã¦Â­Â£Ã¥ÂÂ¨Ã¥ÂÂÃ¤Â½ÂÃ§Â¼ÂÃ¨Â¾ÂÃ§ÂÂÃ§ÂÂ¨Ã¦ÂÂ·Ã¦Â¶ÂÃ¦ÂÂ¯Ã¯Â¼ÂÃ¦ÂÂªÃ¥ÂÂÃ©ÂÂÃ¥ÂÂÃ¤Â¸ÂÃ¦ÂÂ¹Ã¥ÂÂÃ¥ÂÂ²Ã£ÂÂ */
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const editingUserIdRef = useRef<string | null>(null);
@@ -201,12 +242,12 @@ export function useChatSession(visible = true) {
   const activeRunId = useRef<string | null>(null);
   const targetMsgId = useRef<string | null>(null);
   const runEpoch = useRef(0);
-  /** 会话切换时递增，丢弃迟到事件。 */
+  /** Ã¤Â¼ÂÃ¨Â¯ÂÃ¥ÂÂÃ¦ÂÂ¢Ã¦ÂÂ¶Ã©ÂÂÃ¥Â¢ÂÃ¯Â¼ÂÃ¤Â¸Â¢Ã¥Â¼ÂÃ¨Â¿ÂÃ¥ÂÂ°Ã¤ÂºÂÃ¤Â»Â¶Ã£ÂÂ */
   const sessionEpoch = useRef(0);
   const streamText = useRef("");
-  /** 自上次官方 usage 以来未入账的回复正文（中断估算用）。 */
+  /** Ã¨ÂÂªÃ¤Â¸ÂÃ¦Â¬Â¡Ã¥Â®ÂÃ¦ÂÂ¹ usage Ã¤Â»Â¥Ã¦ÂÂ¥Ã¦ÂÂªÃ¥ÂÂ¥Ã¨Â´Â¦Ã§ÂÂÃ¥ÂÂÃ¥Â¤ÂÃ¦Â­Â£Ã¦ÂÂÃ¯Â¼ÂÃ¤Â¸Â­Ã¦ÂÂ­Ã¤Â¼Â°Ã§Â®ÂÃ§ÂÂ¨Ã¯Â¼ÂÃ£ÂÂ */
   const unbilledReply = useRef("");
-  /** 自上次官方 usage 以来未入账的思考文本（中断估算用）。 */
+  /** Ã¨ÂÂªÃ¤Â¸ÂÃ¦Â¬Â¡Ã¥Â®ÂÃ¦ÂÂ¹ usage Ã¤Â»Â¥Ã¦ÂÂ¥Ã¦ÂÂªÃ¥ÂÂ¥Ã¨Â´Â¦Ã§ÂÂÃ¦ÂÂÃ¨ÂÂÃ¦ÂÂÃ¦ÂÂ¬Ã¯Â¼ÂÃ¤Â¸Â­Ã¦ÂÂ­Ã¤Â¼Â°Ã§Â®ÂÃ§ÂÂ¨Ã¯Â¼ÂÃ£ÂÂ */
   const unbilledThinking = useRef("");
   const timelineRef = useRef<ChatTimelineStep[]>([]);
   const raf = useRef<number | null>(null);
@@ -222,8 +263,8 @@ export function useChatSession(visible = true) {
   }
 
   /**
-   * 取出未入账流式文本的粗估 usage，并清空缓冲。
-   * 尚无官方 input 时，顺带用可见历史粗估 input。
+   * Ã¥ÂÂÃ¥ÂÂºÃ¦ÂÂªÃ¥ÂÂ¥Ã¨Â´Â¦Ã¦ÂµÂÃ¥Â¼ÂÃ¦ÂÂÃ¦ÂÂ¬Ã§ÂÂÃ§Â²ÂÃ¤Â¼Â° usageÃ¯Â¼ÂÃ¥Â¹Â¶Ã¦Â¸ÂÃ§Â©ÂºÃ§Â¼ÂÃ¥ÂÂ²Ã£ÂÂ
+   * Ã¥Â°ÂÃ¦ÂÂ Ã¥Â®ÂÃ¦ÂÂ¹ input Ã¦ÂÂ¶Ã¯Â¼ÂÃ©Â¡ÂºÃ¥Â¸Â¦Ã§ÂÂ¨Ã¥ÂÂ¯Ã¨Â§ÂÃ¥ÂÂÃ¥ÂÂ²Ã§Â²ÂÃ¤Â¼Â° inputÃ£ÂÂ
    */
   function consumeUnbilledUsageEstimate(
     assistantId: string,
@@ -245,19 +286,19 @@ export function useChatSession(visible = true) {
     return delta;
   }
 
-  /** 中断 / 取消收束时把粗估 usage 打进助手消息。 */
+  /** Ã¤Â¸Â­Ã¦ÂÂ­ / Ã¥ÂÂÃ¦Â¶ÂÃ¦ÂÂ¶Ã¦ÂÂÃ¦ÂÂ¶Ã¦ÂÂÃ§Â²ÂÃ¤Â¼Â° usage Ã¦ÂÂÃ¨Â¿ÂÃ¥ÂÂ©Ã¦ÂÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã£ÂÂ */
   function withUnbilledUsageEstimate(message: ChatMessage): ChatMessage {
     const delta = consumeUnbilledUsageEstimate(message.id, message.usage);
     if (!delta) return message;
     return { ...message, usage: addUsage(message.usage ?? EMPTY_USAGE, delta) };
   }
 
-  /** 给目标助手消息累加 usage（消息级）。 */
+  /** Ã§Â»ÂÃ§ÂÂ®Ã¦Â ÂÃ¥ÂÂ©Ã¦ÂÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã§Â´Â¯Ã¥ÂÂ  usageÃ¯Â¼ÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã§ÂºÂ§Ã¯Â¼ÂÃ£ÂÂ */
   function patchTargetUsage(delta: ChatMessage["usage"]) {
     if (!delta) return;
     const id = targetMsgId.current;
     if (!id) return;
-    // 官方 usage 已覆盖本段流式输出，清空未入账缓冲以免中断时重复估算
+    // Ã¥Â®ÂÃ¦ÂÂ¹ usage Ã¥Â·Â²Ã¨Â¦ÂÃ§ÂÂÃ¦ÂÂ¬Ã¦Â®ÂµÃ¦ÂµÂÃ¥Â¼ÂÃ¨Â¾ÂÃ¥ÂÂºÃ¯Â¼ÂÃ¦Â¸ÂÃ§Â©ÂºÃ¦ÂÂªÃ¥ÂÂ¥Ã¨Â´Â¦Ã§Â¼ÂÃ¥ÂÂ²Ã¤Â»Â¥Ã¥ÂÂÃ¤Â¸Â­Ã¦ÂÂ­Ã¦ÂÂ¶Ã©ÂÂÃ¥Â¤ÂÃ¤Â¼Â°Ã§Â®Â
     resetUnbilled();
     setMessages((prev) => {
       const next = prev.map((m) =>
@@ -271,7 +312,7 @@ export function useChatSession(visible = true) {
     });
   }
 
-  /** 本轮结束：把 live 段写入消息 durationMs。 */
+  /** Ã¦ÂÂ¬Ã¨Â½Â®Ã§Â»ÂÃ¦ÂÂÃ¯Â¼ÂÃ¦ÂÂ live Ã¦Â®ÂµÃ¥ÂÂÃ¥ÂÂ¥Ã¦Â¶ÂÃ¦ÂÂ¯ durationMsÃ£ÂÂ */
   function endMessageClock(id: string | null = targetMsgId.current) {
     if (!id) return;
     setMessages((prev) => {
@@ -303,7 +344,7 @@ export function useChatSession(visible = true) {
     setEditDraft(value);
   }
 
-  /** 掐断当前运行但不改消息（原位重发前用，历史由截断覆盖）。 */
+  /** Ã¦ÂÂÃ¦ÂÂ­Ã¥Â½ÂÃ¥ÂÂÃ¨Â¿ÂÃ¨Â¡ÂÃ¤Â½ÂÃ¤Â¸ÂÃ¦ÂÂ¹Ã¦Â¶ÂÃ¦ÂÂ¯Ã¯Â¼ÂÃ¥ÂÂÃ¤Â½ÂÃ©ÂÂÃ¥ÂÂÃ¥ÂÂÃ§ÂÂ¨Ã¯Â¼ÂÃ¥ÂÂÃ¥ÂÂ²Ã§ÂÂ±Ã¦ÂÂªÃ¦ÂÂ­Ã¨Â¦ÂÃ§ÂÂÃ¯Â¼ÂÃ£ÂÂ */
   function abortRunSilently() {
     runEpoch.current += 1;
     targetMsgId.current = null;
@@ -322,7 +363,7 @@ export function useChatSession(visible = true) {
 
   useEffect(() => {
     messagesRef.current = messages;
-    // hydrate / 切会话后顺带清掉已过期的恢复缓存
+    // hydrate / Ã¥ÂÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¥ÂÂÃ©Â¡ÂºÃ¥Â¸Â¦Ã¦Â¸ÂÃ¦ÂÂÃ¥Â·Â²Ã¨Â¿ÂÃ¦ÂÂÃ§ÂÂÃ¦ÂÂ¢Ã¥Â¤ÂÃ§Â¼ÂÃ¥Â­Â
     const ttl = readDeleteFileRestoreTtlDays();
     const pruned = pruneExpiredDeleteRestoreCaches(messages, ttl);
     if (pruned === messages) return;
@@ -339,7 +380,7 @@ export function useChatSession(visible = true) {
     workspaceIdRef.current = workspaceId;
   }, [workspaceId]);
 
-  /** 按设置 TTL 定时清掉过期的删除恢复缓存；TTL 变更时立刻再扫一遍。 */
+  /** Ã¦ÂÂÃ¨Â®Â¾Ã§Â½Â® TTL Ã¥Â®ÂÃ¦ÂÂ¶Ã¦Â¸ÂÃ¦ÂÂÃ¨Â¿ÂÃ¦ÂÂÃ§ÂÂÃ¥ÂÂ Ã©ÂÂ¤Ã¦ÂÂ¢Ã¥Â¤ÂÃ§Â¼ÂÃ¥Â­ÂÃ¯Â¼ÂTTL Ã¥ÂÂÃ¦ÂÂ´Ã¦ÂÂ¶Ã§Â«ÂÃ¥ÂÂ»Ã¥ÂÂÃ¦ÂÂ«Ã¤Â¸ÂÃ©ÂÂÃ£ÂÂ */
   useEffect(() => {
     function prune() {
       const ttl = readDeleteFileRestoreTtlDays();
@@ -363,7 +404,7 @@ export function useChatSession(visible = true) {
     };
   }, []);
 
-  /** 防抖落库当前会话消息。 */
+  /** Ã©ÂÂ²Ã¦ÂÂÃ¨ÂÂ½Ã¥ÂºÂÃ¥Â½ÂÃ¥ÂÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã£ÂÂ */
   function scheduleSave(nextMessages?: ChatMessage[]) {
     const sid = sessionIdRef.current;
     if (!sid) return;
@@ -385,7 +426,7 @@ export function useChatSession(visible = true) {
     await saveSessionMessages(sid, messagesRef.current);
   }
 
-  /** 同步工作空间展示名与根路径；别名变更时刷新。 */
+  /** Ã¥ÂÂÃ¦Â­Â¥Ã¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¥Â±ÂÃ§Â¤ÂºÃ¥ÂÂÃ¤Â¸ÂÃ¦Â Â¹Ã¨Â·Â¯Ã¥Â¾ÂÃ¯Â¼ÂÃ¥ÂÂ«Ã¥ÂÂÃ¥ÂÂÃ¦ÂÂ´Ã¦ÂÂ¶Ã¥ÂÂ·Ã¦ÂÂ°Ã£ÂÂ */
   async function syncWorkspaceLabel(id: string | null) {
     if (!id) {
       setWorkspaceId(null);
@@ -400,7 +441,7 @@ export function useChatSession(visible = true) {
     setWorkspaceRoot(hit?.rootPath ?? null);
   }
 
-  // 启动：恢复上次会话；否则恢复上次工作空间（及其最近会话）；再否则默认工作空间
+  // Ã¥ÂÂ¯Ã¥ÂÂ¨Ã¯Â¼ÂÃ¦ÂÂ¢Ã¥Â¤ÂÃ¤Â¸ÂÃ¦Â¬Â¡Ã¤Â¼ÂÃ¨Â¯ÂÃ¯Â¼ÂÃ¥ÂÂ¦Ã¥ÂÂÃ¦ÂÂ¢Ã¥Â¤ÂÃ¤Â¸ÂÃ¦Â¬Â¡Ã¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¯Â¼ÂÃ¥ÂÂÃ¥ÂÂ¶Ã¦ÂÂÃ¨Â¿ÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¯Â¼ÂÃ¯Â¼ÂÃ¥ÂÂÃ¥ÂÂ¦Ã¥ÂÂÃ©Â»ÂÃ¨Â®Â¤Ã¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -416,6 +457,7 @@ export function useChatSession(visible = true) {
         const loaded = await getSession(active);
         if (!cancelled && loaded) {
           sessionEpoch.current += 1;
+          sessionIdRef.current = loaded.session.id;
           setSessionId(loaded.session.id);
           setThreadId(loaded.session.threadId);
           const settled = settleLoadedMessages(
@@ -424,7 +466,9 @@ export function useChatSession(visible = true) {
           );
           setMessages(settled);
           messagesRef.current = settled;
-          setCanResume(loaded.session.runStatus === "interrupted");
+          setCanResume(loaded.session.runStatus === "crashed" ? "crashed" : loaded.session.runStatus === "cancelled" ? "cancelled" : false);
+          // 把冻结后的耗时写回，避免旧 startedAt 下次刷新再被墙钟拉长
+          scheduleSave(settled);
           await syncWorkspaceLabel(loaded.session.workspaceId);
           await setLastWorkspaceId(loaded.session.workspaceId);
           return;
@@ -445,6 +489,7 @@ export function useChatSession(visible = true) {
       sessionEpoch.current += 1;
       const loaded = await getSession(latest.id);
       if (cancelled || !loaded) return;
+      sessionIdRef.current = loaded.session.id;
       setSessionId(loaded.session.id);
       setThreadId(loaded.session.threadId);
       const settled = settleLoadedMessages(
@@ -453,17 +498,18 @@ export function useChatSession(visible = true) {
       );
       setMessages(settled);
       messagesRef.current = settled;
-      setCanResume(loaded.session.runStatus === "interrupted");
+      setCanResume(loaded.session.runStatus === "crashed" ? "crashed" : loaded.session.runStatus === "cancelled" ? "cancelled" : false);
+      scheduleSave(settled);
       await setActiveSession(loaded.session.id);
     })();
     return () => {
       cancelled = true;
     };
-    // 仅挂载时恢复
+    // Ã¤Â»ÂÃ¦ÂÂÃ¨Â½Â½Ã¦ÂÂ¶Ã¦ÂÂ¢Ã¥Â¤Â
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 别名等变更时刷新输入框工作空间名
+  // Ã¥ÂÂ«Ã¥ÂÂÃ§Â­ÂÃ¥ÂÂÃ¦ÂÂ´Ã¦ÂÂ¶Ã¥ÂÂ·Ã¦ÂÂ°Ã¨Â¾ÂÃ¥ÂÂ¥Ã¦Â¡ÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¥ÂÂ
   useEffect(() => {
     if (!workspaceId) return;
     return onWorkspacesChanged(() => {
@@ -472,18 +518,18 @@ export function useChatSession(visible = true) {
   }, [workspaceId]);
 
   /**
-   * 侧栏删除会话 / 清空工作空间后：DB 已无当前会话，但主区仍可能挂着内存消息。
-   * 监听 threads 变更，若当前会话已不存在则切到同空间最近会话或清空主区。
+   * Ã¤Â¾Â§Ã¦Â ÂÃ¥ÂÂ Ã©ÂÂ¤Ã¤Â¼ÂÃ¨Â¯Â / Ã¦Â¸ÂÃ§Â©ÂºÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¥ÂÂÃ¯Â¼ÂDB Ã¥Â·Â²Ã¦ÂÂ Ã¥Â½ÂÃ¥ÂÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¯Â¼ÂÃ¤Â½ÂÃ¤Â¸Â»Ã¥ÂÂºÃ¤Â»ÂÃ¥ÂÂ¯Ã¨ÂÂ½Ã¦ÂÂÃ§ÂÂÃ¥ÂÂÃ¥Â­ÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã£ÂÂ
+   * Ã§ÂÂÃ¥ÂÂ¬ threads Ã¥ÂÂÃ¦ÂÂ´Ã¯Â¼ÂÃ¨ÂÂ¥Ã¥Â½ÂÃ¥ÂÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¥Â·Â²Ã¤Â¸ÂÃ¥Â­ÂÃ¥ÂÂ¨Ã¥ÂÂÃ¥ÂÂÃ¥ÂÂ°Ã¥ÂÂÃ§Â©ÂºÃ©ÂÂ´Ã¦ÂÂÃ¨Â¿ÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¦ÂÂÃ¦Â¸ÂÃ§Â©ÂºÃ¤Â¸Â»Ã¥ÂÂºÃ£ÂÂ
    */
   async function reconcileIfSessionGone() {
     const sid = sessionIdRef.current;
     if (!sid) return;
     const loaded = await getSession(sid);
     if (loaded) return;
-    // 用户可能已切到别的会话
+    // Ã§ÂÂ¨Ã¦ÂÂ·Ã¥ÂÂ¯Ã¨ÂÂ½Ã¥Â·Â²Ã¥ÂÂÃ¥ÂÂ°Ã¥ÂÂ«Ã§ÂÂÃ¤Â¼ÂÃ¨Â¯Â
     if (sessionIdRef.current !== sid) return;
 
-    // 会话已删：取消未落库的 save，避免 saveMessages 报 Session not found / 写回幽灵数据
+    // Ã¤Â¼ÂÃ¨Â¯ÂÃ¥Â·Â²Ã¥ÂÂ Ã¯Â¼ÂÃ¥ÂÂÃ¦Â¶ÂÃ¦ÂÂªÃ¨ÂÂ½Ã¥ÂºÂÃ§ÂÂ saveÃ¯Â¼ÂÃ©ÂÂ¿Ã¥ÂÂ saveMessages Ã¦ÂÂ¥ Session not found / Ã¥ÂÂÃ¥ÂÂÃ¥Â¹Â½Ã§ÂÂµÃ¦ÂÂ°Ã¦ÂÂ®
     if (saveTimer.current != null) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -508,7 +554,7 @@ export function useChatSession(visible = true) {
     if (wid) {
       const workspaces = await listWorkspaces();
       if (workspaces.some((w) => w.id === wid)) {
-        // 再次确认仍停在已删会话上（避免覆盖用户新选择）
+        // Ã¥ÂÂÃ¦Â¬Â¡Ã§Â¡Â®Ã¨Â®Â¤Ã¤Â»ÂÃ¥ÂÂÃ¥ÂÂ¨Ã¥Â·Â²Ã¥ÂÂ Ã¤Â¼ÂÃ¨Â¯ÂÃ¤Â¸ÂÃ¯Â¼ÂÃ©ÂÂ¿Ã¥ÂÂÃ¨Â¦ÂÃ§ÂÂÃ§ÂÂ¨Ã¦ÂÂ·Ã¦ÂÂ°Ã©ÂÂÃ¦ÂÂ©Ã¯Â¼Â
         if (sessionIdRef.current !== sid && sessionIdRef.current != null) return;
         const sessions = await listSessions(wid);
         const latest = sessions[0];
@@ -526,7 +572,8 @@ export function useChatSession(visible = true) {
           );
           setMessages(msgs);
           messagesRef.current = msgs;
-          setCanResume(next?.session.runStatus === "interrupted");
+          setCanResume(next?.session.runStatus === "crashed" ? "crashed" : next?.session.runStatus === "cancelled" ? "cancelled" : false);
+          scheduleSave(msgs);
           return;
         }
         setSessionId(null);
@@ -554,11 +601,11 @@ export function useChatSession(visible = true) {
     return onThreadsChanged(() => {
       void reconcileIfSessionGone();
     });
-    // 仅挂载订阅；逻辑读 ref
+    // Ã¤Â»ÂÃ¦ÂÂÃ¨Â½Â½Ã¨Â®Â¢Ã©ÂÂÃ¯Â¼ÂÃ©ÂÂ»Ã¨Â¾ÂÃ¨Â¯Â» ref
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 用 messages/busy 触发滚底
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Ã§ÂÂ¨ messages/busy Ã¨Â§Â¦Ã¥ÂÂÃ¦Â»ÂÃ¥ÂºÂ
   useEffect(() => {
     scrollElToBottom(scroller.current, visible ? "smooth" : "auto");
   }, [messages, busy, visible]);
@@ -615,7 +662,7 @@ export function useChatSession(visible = true) {
     };
 
     const unsub = onAgentEvent((event) => {
-      // 仅处理当前 thread 的事件（切换会话后丢弃迟到事件）
+      // Ã¤Â»ÂÃ¥Â¤ÂÃ§ÂÂÃ¥Â½ÂÃ¥ÂÂ thread Ã§ÂÂÃ¤ÂºÂÃ¤Â»Â¶Ã¯Â¼ÂÃ¥ÂÂÃ¦ÂÂ¢Ã¤Â¼ÂÃ¨Â¯ÂÃ¥ÂÂÃ¤Â¸Â¢Ã¥Â¼ÂÃ¨Â¿ÂÃ¥ÂÂ°Ã¤ÂºÂÃ¤Â»Â¶Ã¯Â¼Â
       if (threadId && event.threadId !== threadId) return;
 
       if (event.type === "usage") {
@@ -632,13 +679,29 @@ export function useChatSession(visible = true) {
         event.type !== "done" &&
         event.type !== "error" &&
         event.type !== "status" &&
-        event.type !== "tool"
+        event.type !== "tool" &&
+        event.type !== "hitl"
       ) {
         return;
       }
       if (activeRunId.current && event.runId !== activeRunId.current) return;
       activeRunId.current = event.runId;
       setThreadId(event.threadId);
+
+      if (event.type === "hitl") {
+        if (event.phase === "request" && event.request?.kind === "shell_approval") {
+          timelineRef.current = applyHitlRequest(timelineRef.current, event.request);
+          patchTarget({ timeline: [...timelineRef.current], pending: true });
+        } else if (event.phase === "resolved") {
+          timelineRef.current = applyHitlResolved(
+            timelineRef.current,
+            event.hitlId,
+            event.response?.actionId,
+          );
+          patchTarget({ timeline: [...timelineRef.current], pending: true });
+        }
+        return;
+      }
 
       if (event.type === "status") {
         timelineRef.current = applyStatus(timelineRef.current, event.status);
@@ -696,35 +759,43 @@ export function useChatSession(visible = true) {
       }
 
       if (event.type === "error") {
-        // 手动取消的 error 仍可 Resume；勿清掉 cancel() 刚置位的 canResume
-        const cancelled = classifyRunError(event.error) === "CANCELLED";
-        setCanResume(cancelled);
+        const errCode = classifyRunError(event.error);
+        const resume = softStopResumeKind(event.error, errCode);
+        // 手动取消：仅时间线可续；进程异常：时间线 + 输入区横幅
+        setCanResume(resume ?? false);
         setMessages((prev) => {
           const next = prev.map((m) => {
             if (m.id !== id) return m;
             const baseTimeline =
               timelineRef.current.length ? timelineRef.current : (m.timeline ?? []);
-            // 本地已写入「已停止」CANCELLED 时，保留友好文案，勿被 agent 的 "…cancelled" 盖掉
+            // 本地已写入「已停止」CANCELLED 时，保留友好文案，勿被 agent 的 "…cancelled" 覆盖
             const alreadyStopped = baseTimeline.some(
               (s) => s.kind === "error" && s.code === "CANCELLED",
             );
-            if (cancelled && alreadyStopped) {
-              const settled = {
+            if (errCode === "CANCELLED" && alreadyStopped) {
+              const settled = settleMessageClock({
                 ...m,
                 pending: false,
                 text: streamText.current || m.text,
                 timeline: deactivateAll(baseTimeline),
-              };
+              });
               timelineRef.current = settled.timeline ?? [];
               return settled;
             }
+            const display =
+              errCode === "PROCESS_EXIT"
+                ? "Exited unexpectedly."
+                : errCode === "CANCELLED"
+                  ? "Stopped."
+                  : event.error;
             const failed = failAssistantMessage(
               withUnbilledUsageEstimate({
                 ...m,
                 text: streamText.current || m.text,
               }),
-              event.error,
+              display,
               baseTimeline,
+              errCode,
             );
             timelineRef.current = failed.timeline ?? [];
             return failed;
@@ -740,9 +811,49 @@ export function useChatSession(visible = true) {
       flushStreamRef.current = null;
       unsub();
     };
-    // scheduleSave 读 ref，勿列入依赖以免重订事件
+    // scheduleSave Ã¨Â¯Â» refÃ¯Â¼ÂÃ¥ÂÂ¿Ã¥ÂÂÃ¥ÂÂ¥Ã¤Â¾ÂÃ¨ÂµÂÃ¤Â»Â¥Ã¥ÂÂÃ©ÂÂÃ¨Â®Â¢Ã¤ÂºÂÃ¤Â»Â¶
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
+
+  // Ã§Â»ÂÃ§Â«Â¯Ã¨Â¾ÂÃ¥ÂÂº Ã¢ÂÂ Ã¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿ shell Ã¦Â­Â¥Ã©ÂªÂ¤ liveOutput
+  useEffect(() => {
+    return onTerminalEvent((event) => {
+      const id = targetMsgId.current;
+      if (!id) return;
+      if (event.type === "created" && event.session.fromAgent) {
+        timelineRef.current = bindShellSessionId(
+          timelineRef.current,
+          event.session.sessionId,
+          { runId: event.session.runId, command: event.session.command },
+        );
+        setMessages((prev) => {
+          const next = prev.map((m) =>
+            m.id === id
+              ? { ...m, pending: true, timeline: [...timelineRef.current] }
+              : m,
+          );
+          messagesRef.current = next;
+          return next;
+        });
+        return;
+      }
+      if (event.type !== "data") return;
+      timelineRef.current = appendShellLiveOutput(
+        timelineRef.current,
+        event.data,
+        event.sessionId,
+      );
+      setMessages((prev) => {
+        const next = prev.map((m) =>
+          m.id === id
+            ? { ...m, pending: true, timeline: [...timelineRef.current] }
+            : m,
+        );
+        messagesRef.current = next;
+        return next;
+      });
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -751,7 +862,7 @@ export function useChatSession(visible = true) {
     };
   }, []);
 
-  /** 切换到指定会话；busy 时由侧栏拦截。 */
+  /** Ã¥ÂÂÃ¦ÂÂ¢Ã¥ÂÂ°Ã¦ÂÂÃ¥Â®ÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¯Â¼Âbusy Ã¦ÂÂ¶Ã§ÂÂ±Ã¤Â¾Â§Ã¦Â ÂÃ¦ÂÂ¦Ã¦ÂÂªÃ£ÂÂ */
   async function selectSession(nextSessionId: string, nextThreadId: string) {
     if (busy) return;
     await flushSave();
@@ -772,7 +883,8 @@ export function useChatSession(visible = true) {
     );
     setMessages(msgs);
     messagesRef.current = msgs;
-    setCanResume(loaded?.session.runStatus === "interrupted");
+    setCanResume(loaded?.session.runStatus === "crashed" ? "crashed" : loaded?.session.runStatus === "cancelled" ? "cancelled" : false);
+    scheduleSave(msgs);
     setWorkspaceGate(null);
     clearUserEdit();
     setDraft("");
@@ -782,7 +894,7 @@ export function useChatSession(visible = true) {
     timelineRef.current = [];
   }
 
-  /** 新建会话后激活空聊天。 */
+  /** Ã¦ÂÂ°Ã¥Â»ÂºÃ¤Â¼ÂÃ¨Â¯ÂÃ¥ÂÂÃ¦Â¿ÂÃ¦Â´Â»Ã§Â©ÂºÃ¨ÂÂÃ¥Â¤Â©Ã£ÂÂ */
   async function activateNewSession(nextSessionId: string, nextThreadId: string) {
     if (busy) return;
     await flushSave();
@@ -809,7 +921,7 @@ export function useChatSession(visible = true) {
     timelineRef.current = [];
   }
 
-  /** 在当前工作空间新建会话（快捷键 / 命令用）；忙碌时忽略。 */
+  /** Ã¥ÂÂ¨Ã¥Â½ÂÃ¥ÂÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¦ÂÂ°Ã¥Â»ÂºÃ¤Â¼ÂÃ¨Â¯ÂÃ¯Â¼ÂÃ¥Â¿Â«Ã¦ÂÂ·Ã©ÂÂ® / Ã¥ÂÂ½Ã¤Â»Â¤Ã§ÂÂ¨Ã¯Â¼ÂÃ¯Â¼ÂÃ¥Â¿ÂÃ§Â¢ÂÃ¦ÂÂ¶Ã¥Â¿Â½Ã§ÂÂ¥Ã£ÂÂ */
   async function newChat() {
     if (busy) return;
     let wid = workspaceId ?? (await getLastWorkspaceId());
@@ -828,7 +940,7 @@ export function useChatSession(visible = true) {
     }, 0);
   }
 
-  /** 选中工作空间：记住选择；切到该空间最近会话，若无则清空当前聊天。 */
+  /** Ã©ÂÂÃ¤Â¸Â­Ã¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¯Â¼ÂÃ¨Â®Â°Ã¤Â½ÂÃ©ÂÂÃ¦ÂÂ©Ã¯Â¼ÂÃ¥ÂÂÃ¥ÂÂ°Ã¨Â¯Â¥Ã§Â©ÂºÃ©ÂÂ´Ã¦ÂÂÃ¨Â¿ÂÃ¤Â¼ÂÃ¨Â¯ÂÃ¯Â¼ÂÃ¨ÂÂ¥Ã¦ÂÂ Ã¥ÂÂÃ¦Â¸ÂÃ§Â©ÂºÃ¥Â½ÂÃ¥ÂÂÃ¨ÂÂÃ¥Â¤Â©Ã£ÂÂ */
   async function selectWorkspace(nextWorkspaceId: string) {
     if (busy) return;
     await setLastWorkspaceId(nextWorkspaceId);
@@ -861,16 +973,16 @@ export function useChatSession(visible = true) {
   }
 
   /**
-   * @param override 快捷方式 / 原位编辑的正文。
-   * @param replaceUserId 从该用户消息截断后重发；未传则追加到末尾。
+   * @param override Ã¥Â¿Â«Ã¦ÂÂ·Ã¦ÂÂ¹Ã¥Â¼Â / Ã¥ÂÂÃ¤Â½ÂÃ§Â¼ÂÃ¨Â¾ÂÃ§ÂÂÃ¦Â­Â£Ã¦ÂÂÃ£ÂÂ
+   * @param replaceUserId Ã¤Â»ÂÃ¨Â¯Â¥Ã§ÂÂ¨Ã¦ÂÂ·Ã¦Â¶ÂÃ¦ÂÂ¯Ã¦ÂÂªÃ¦ÂÂ­Ã¥ÂÂÃ©ÂÂÃ¥ÂÂÃ¯Â¼ÂÃ¦ÂÂªÃ¤Â¼Â Ã¥ÂÂÃ¨Â¿Â½Ã¥ÂÂ Ã¥ÂÂ°Ã¦ÂÂ«Ã¥Â°Â¾Ã£ÂÂ
    */
   async function send(override?: string, replaceUserId?: string | null) {
     const text = (override ?? draft).trim();
     if (!text) return;
     if (busy && !replaceUserId) return;
 
-    // 必须有活动会话所属的工作空间；有工作空间无会话时自动建会话
-    // getSession 返回 { session, messages }，工作空间在 session.workspaceId
+    // Ã¥Â¿ÂÃ©Â¡Â»Ã¦ÂÂÃ¦Â´Â»Ã¥ÂÂ¨Ã¤Â¼ÂÃ¨Â¯ÂÃ¦ÂÂÃ¥Â±ÂÃ§ÂÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¯Â¼ÂÃ¦ÂÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¦ÂÂ Ã¤Â¼ÂÃ¨Â¯ÂÃ¦ÂÂ¶Ã¨ÂÂªÃ¥ÂÂ¨Ã¥Â»ÂºÃ¤Â¼ÂÃ¨Â¯Â
+    // getSession Ã¨Â¿ÂÃ¥ÂÂ { session, messages }Ã¯Â¼ÂÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¥ÂÂ¨ session.workspaceId
     let sid = sessionId ?? (await getActiveSessionId());
     let sess = sid ? await getSession(sid) : null;
     let runThreadId = sess?.session.threadId ?? threadId;
@@ -926,7 +1038,7 @@ export function useChatSession(visible = true) {
       runStartedAt: Date.now(),
       traceId,
     };
-    // 在追加本轮气泡之前快照历史，避免把当前 user / 空助手也塞进模型上下文
+    // Ã¥ÂÂ¨Ã¨Â¿Â½Ã¥ÂÂ Ã¦ÂÂ¬Ã¨Â½Â®Ã¦Â°ÂÃ¦Â³Â¡Ã¤Â¹ÂÃ¥ÂÂÃ¥Â¿Â«Ã§ÂÂ§Ã¥ÂÂÃ¥ÂÂ²Ã¯Â¼ÂÃ©ÂÂ¿Ã¥ÂÂÃ¦ÂÂÃ¥Â½ÂÃ¥ÂÂ user / Ã§Â©ÂºÃ¥ÂÂ©Ã¦ÂÂÃ¤Â¹ÂÃ¥Â¡ÂÃ¨Â¿ÂÃ¦Â¨Â¡Ã¥ÂÂÃ¤Â¸ÂÃ¤Â¸ÂÃ¦ÂÂ
     const history = toAgentHistory(messagesRef.current);
     targetMsgId.current = pending.id;
     activeRunId.current = null;
@@ -946,11 +1058,13 @@ export function useChatSession(visible = true) {
     });
     setBusy(true);
     try {
+      const contextPaths = extractContextPaths(text);
       const result = await runAgent({
         message: text,
         history,
         threadId: runThreadId,
         traceId,
+        ...(contextPaths.length > 0 ? { contextPaths } : {}),
       });
       if (epoch !== runEpoch.current) return;
       if (result.runId) activeRunId.current = result.runId;
@@ -977,16 +1091,25 @@ export function useChatSession(visible = true) {
           if (m.id !== pending.id) return m;
           const timeline = pickRicherTimeline(timelineRef.current, m.timeline);
           if (!result.ok) {
-            const cancelled = classifyRunError(result.error || "") === "CANCELLED";
+            const errText = result.error || "Unknown error";
+            const errCode = classifyRunError(errText);
+            const soft = isSoftStopCode(errCode);
+            const display =
+              errCode === "PROCESS_EXIT"
+                ? "Exited unexpectedly."
+                : errCode === "CANCELLED"
+                  ? "Stopped."
+                  : errText;
             const failed = failAssistantMessage(
-              cancelled
+              soft
                 ? withUnbilledUsageEstimate({
                     ...m,
                     text: streamText.current || m.text,
                   })
                 : { ...m, text: streamText.current || m.text },
-              result.error || "Unknown error",
+              display,
               timeline,
+              errCode,
             );
             timelineRef.current = failed.timeline ?? [];
             return failed;
@@ -1005,12 +1128,9 @@ export function useChatSession(visible = true) {
         scheduleSave(next);
         return next;
       });
-      // runAgent 以 cancel 收束时也要可 Resume（不只依赖 cancel() 置位）
-      if (
-        !result.ok &&
-        classifyRunError(result.error || "") === "CANCELLED"
-      ) {
-        setCanResume(true);
+      if (!result.ok) {
+        const resume = softStopResumeKind(result.error || "");
+        if (resume) setCanResume(resume);
       }
     } catch (err) {
       if (epoch !== runEpoch.current) return;
@@ -1019,16 +1139,24 @@ export function useChatSession(visible = true) {
       setMessages((prev) => {
         const next = prev.map((m) => {
           if (m.id !== pending.id) return m;
-          const cancelled = classifyRunError(msg) === "CANCELLED";
+          const errCode = classifyRunError(msg);
+          const soft = isSoftStopCode(errCode);
+          const display =
+            errCode === "PROCESS_EXIT"
+              ? "Exited unexpectedly."
+              : errCode === "CANCELLED"
+                ? "Stopped."
+                : msg;
           const failed = failAssistantMessage(
-            cancelled
+            soft
               ? withUnbilledUsageEstimate({
                   ...m,
                   text: streamText.current || m.text,
                 })
               : { ...m, text: streamText.current || m.text },
-            msg,
+            display,
             pickRicherTimeline(timelineRef.current, m.timeline),
+            errCode,
           );
           timelineRef.current = failed.timeline ?? [];
           return failed;
@@ -1037,9 +1165,16 @@ export function useChatSession(visible = true) {
         scheduleSave(next);
         return next;
       });
-      if (classifyRunError(msg) === "CANCELLED") setCanResume(true);
+      {
+        const resume = softStopResumeKind(msg);
+        if (resume) setCanResume(resume);
+      }
     } finally {
       if (epoch === runEpoch.current) {
+        if (raf.current != null) {
+          window.cancelAnimationFrame(raf.current);
+          raf.current = null;
+        }
         endMessageClock(pending.id);
         setBusy(false);
         inputRef.current?.focus();
@@ -1050,7 +1185,7 @@ export function useChatSession(visible = true) {
   async function resume() {
     if (!threadId || busy) return;
 
-    // 续写原先那条助手消息：丢掉末尾空壳错误气泡，再取最后一条 assistant
+    // Ã§Â»Â­Ã¥ÂÂÃ¥ÂÂÃ¥ÂÂÃ©ÂÂ£Ã¦ÂÂ¡Ã¥ÂÂ©Ã¦ÂÂÃ¦Â¶ÂÃ¦ÂÂ¯Ã¯Â¼ÂÃ¤Â¸Â¢Ã¦ÂÂÃ¦ÂÂ«Ã¥Â°Â¾Ã§Â©ÂºÃ¥Â£Â³Ã©ÂÂÃ¨Â¯Â¯Ã¦Â°ÂÃ¦Â³Â¡Ã¯Â¼ÂÃ¥ÂÂÃ¥ÂÂÃ¦ÂÂÃ¥ÂÂÃ¤Â¸ÂÃ¦ÂÂ¡ assistant
     let base = [...messagesRef.current];
     while (base.length > 0) {
       const last = base[base.length - 1]!;
@@ -1073,7 +1208,7 @@ export function useChatSession(visible = true) {
     activeRunId.current = null;
     streamText.current = existing.text || "";
     resetUnbilled();
-    // 清掉上次失败残留的 error 步，保留已有正文 / 工具时间线
+    // Ã¦Â¸ÂÃ¦ÂÂÃ¤Â¸ÂÃ¦Â¬Â¡Ã¥Â¤Â±Ã¨Â´Â¥Ã¦Â®ÂÃ§ÂÂÃ§ÂÂ error Ã¦Â­Â¥Ã¯Â¼ÂÃ¤Â¿ÂÃ§ÂÂÃ¥Â·Â²Ã¦ÂÂÃ¦Â­Â£Ã¦ÂÂ / Ã¥Â·Â¥Ã¥ÂÂ·Ã¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿
     timelineRef.current = deactivateAll(
       (existing.timeline ?? []).filter((s) => s.kind !== "error"),
     );
@@ -1102,34 +1237,45 @@ export function useChatSession(visible = true) {
       if (result.runId) activeRunId.current = result.runId;
       if (!result.ok) {
         const errText = result.error || "Resume failed.";
-        // 进程被热重载 / 退出掐断：保留 pending，可再次 Resume
-        const crashed =
-          /utilityProcess exited|ready timeout|Process exited|EPIPE|crash/i.test(errText);
+        const resumeKind = softStopResumeKind(errText);
+        // 进程被热重载 / 退出打断：保留 pending，可再次 Resume；并补软中断行
+        const crashed = resumeKind === "crashed";
         setMessages((prev) => {
           const next = prev.map((m) => {
             if (m.id !== pendingId) return m;
             if (crashed) {
-              const timeline = deactivateAll(
+              let timeline = deactivateAll(
                 pickRicherTimeline(timelineRef.current, m.timeline),
               );
+              if (!timeline.some((s) => s.kind === "error" && isSoftStopCode(s.code))) {
+                timeline = appendError(timeline, "Exited unexpectedly.", "PROCESS_EXIT");
+              }
               timelineRef.current = timeline;
-              return {
+              return settleMessageClock({
                 ...m,
                 pending: true,
                 text: streamText.current || m.text,
                 timeline,
-              };
+              });
             }
-            const cancelled = classifyRunError(errText) === "CANCELLED";
+            const errCode = classifyRunError(errText);
+            const soft = isSoftStopCode(errCode);
+            const display =
+              errCode === "PROCESS_EXIT"
+                ? "Exited unexpectedly."
+                : errCode === "CANCELLED"
+                  ? "Stopped."
+                  : errText;
             const failed = failAssistantMessage(
-              cancelled
+              soft
                 ? withUnbilledUsageEstimate({
                     ...m,
                     text: streamText.current || m.text,
                   })
                 : { ...m, text: streamText.current || m.text },
-              errText,
+              display,
               pickRicherTimeline(timelineRef.current, m.timeline),
+              errCode,
             );
             timelineRef.current = failed.timeline ?? [];
             return failed;
@@ -1138,11 +1284,10 @@ export function useChatSession(visible = true) {
           scheduleSave(next);
           return next;
         });
-        if (crashed) setCanResume(true);
-        else if (classifyRunError(errText) === "CANCELLED") setCanResume(true);
+        if (resumeKind) setCanResume(resumeKind);
         return;
       }
-      // done 事件可能已写完；若仍 pending 则用 result 收束
+      // done Ã¤ÂºÂÃ¤Â»Â¶Ã¥ÂÂ¯Ã¨ÂÂ½Ã¥Â·Â²Ã¥ÂÂÃ¥Â®ÂÃ¯Â¼ÂÃ¨ÂÂ¥Ã¤Â»Â pending Ã¥ÂÂÃ§ÂÂ¨ result Ã¦ÂÂ¶Ã¦ÂÂ
       setMessages((prev) => {
         const next = prev.map((m) => {
           if (m.id !== pendingId || !m.pending) return m;
@@ -1175,7 +1320,7 @@ export function useChatSession(visible = true) {
     if (!busy) return;
     runEpoch.current += 1;
     const id = targetMsgId.current;
-    // 先掐断事件目标，避免迟到的 error 再写一条
+    // Ã¥ÂÂÃ¦ÂÂÃ¦ÂÂ­Ã¤ÂºÂÃ¤Â»Â¶Ã§ÂÂ®Ã¦Â ÂÃ¯Â¼ÂÃ©ÂÂ¿Ã¥ÂÂÃ¨Â¿ÂÃ¥ÂÂ°Ã§ÂÂ error Ã¥ÂÂÃ¥ÂÂÃ¤Â¸ÂÃ¦ÂÂ¡
     targetMsgId.current = null;
     void cancelAgent(activeRunId.current ?? undefined);
     if (id) {
@@ -1191,7 +1336,7 @@ export function useChatSession(visible = true) {
                   runStartedAt: undefined,
                 }
               : m;
-          // 流末包 usage 常随中断丢失：用未入账正文 / 思考粗估
+          // Ã¦ÂµÂÃ¦ÂÂ«Ã¥ÂÂ usage Ã¥Â¸Â¸Ã©ÂÂÃ¤Â¸Â­Ã¦ÂÂ­Ã¤Â¸Â¢Ã¥Â¤Â±Ã¯Â¼ÂÃ§ÂÂ¨Ã¦ÂÂªÃ¥ÂÂ¥Ã¨Â´Â¦Ã¦Â­Â£Ã¦ÂÂ / Ã¦ÂÂÃ¨ÂÂÃ§Â²ÂÃ¤Â¼Â°
           const failed = failAssistantMessage(
             withUnbilledUsageEstimate({
               ...withClock,
@@ -1212,8 +1357,8 @@ export function useChatSession(visible = true) {
       resetUnbilled();
     }
     setBusy(false);
-    // 手动停止保留 checkpoint，可从时间线「继续」续跑
-    setCanResume(true);
+    // Ã¦ÂÂÃ¥ÂÂ¨Ã¥ÂÂÃ¦Â­Â¢Ã¯Â¼ÂÃ¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿Ã¥ÂÂ¯Ã£ÂÂÃ§Â»Â§Ã§Â»Â­Ã£ÂÂÃ¯Â¼ÂÃ¨Â¾ÂÃ¥ÂÂ¥Ã¥ÂÂºÃ¤Â¸ÂÃ¥Â¼Â¹Ã¦Â£ÂÃ¦ÂÂ¥Ã§ÂÂ¹Ã¦Â¨ÂªÃ¥Â¹Â
+    setCanResume("cancelled");
     activeRunId.current = null;
     streamText.current = "";
     timelineRef.current = [];
@@ -1233,7 +1378,7 @@ export function useChatSession(visible = true) {
   }
 
   /**
-   * 点击已发送的用户消息：原位进入编辑，历史不动；发送时才从该条截断。
+   * Ã§ÂÂ¹Ã¥ÂÂ»Ã¥Â·Â²Ã¥ÂÂÃ©ÂÂÃ§ÂÂÃ§ÂÂ¨Ã¦ÂÂ·Ã¦Â¶ÂÃ¦ÂÂ¯Ã¯Â¼ÂÃ¥ÂÂÃ¤Â½ÂÃ¨Â¿ÂÃ¥ÂÂ¥Ã§Â¼ÂÃ¨Â¾ÂÃ¯Â¼ÂÃ¥ÂÂÃ¥ÂÂ²Ã¤Â¸ÂÃ¥ÂÂ¨Ã¯Â¼ÂÃ¥ÂÂÃ©ÂÂÃ¦ÂÂ¶Ã¦ÂÂÃ¤Â»ÂÃ¨Â¯Â¥Ã¦ÂÂ¡Ã¦ÂÂªÃ¦ÂÂ­Ã£ÂÂ
    */
   function beginEditUserMessage(messageId: string) {
     const idx = messagesRef.current.findIndex((m) => m.id === messageId);
@@ -1279,8 +1424,8 @@ export function useChatSession(visible = true) {
   }
 
   /**
-   * 时间线 delete_file「恢复」：把删前缓存的正文写回工作区，并标记 restored。
-   * 失败时抛错，供卡片展示提示。
+   * Ã¦ÂÂ¶Ã©ÂÂ´Ã§ÂºÂ¿ delete_fileÃ£ÂÂÃ¦ÂÂ¢Ã¥Â¤ÂÃ£ÂÂÃ¯Â¼ÂÃ¦ÂÂÃ¥ÂÂ Ã¥ÂÂÃ§Â¼ÂÃ¥Â­ÂÃ§ÂÂÃ¦Â­Â£Ã¦ÂÂÃ¥ÂÂÃ¥ÂÂÃ¥Â·Â¥Ã¤Â½ÂÃ¥ÂÂºÃ¯Â¼ÂÃ¥Â¹Â¶Ã¦Â ÂÃ¨Â®Â° restoredÃ£ÂÂ
+   * Ã¥Â¤Â±Ã¨Â´Â¥Ã¦ÂÂ¶Ã¦ÂÂÃ©ÂÂÃ¯Â¼ÂÃ¤Â¾ÂÃ¥ÂÂ¡Ã§ÂÂÃ¥Â±ÂÃ§Â¤ÂºÃ¦ÂÂÃ§Â¤ÂºÃ£ÂÂ
    */
   async function restoreDeletedFile(messageId: string, stepId: string) {
     const wid = workspaceId;
@@ -1296,7 +1441,7 @@ export function useChatSession(visible = true) {
 
     const ttl = readDeleteFileRestoreTtlDays();
     if (isDeleteRestoreExpired(step, ttl)) {
-      // 已超时：清缓存，不可再恢复
+      // Ã¥Â·Â²Ã¨Â¶ÂÃ¦ÂÂ¶Ã¯Â¼ÂÃ¦Â¸ÂÃ§Â¼ÂÃ¥Â­ÂÃ¯Â¼ÂÃ¤Â¸ÂÃ¥ÂÂ¯Ã¥ÂÂÃ¦ÂÂ¢Ã¥Â¤Â
       const pruned = pruneExpiredDeleteRestoreCaches(messagesRef.current, ttl);
       if (pruned !== messagesRef.current) {
         messagesRef.current = pruned;
@@ -1361,8 +1506,10 @@ export function useChatSession(visible = true) {
     sessionId,
     threadId,
     canResume,
+    /** Ã¤Â»ÂÃ¥Â´Â©Ã¦ÂºÂÃ§Â­ÂÃ¥Â¼ÂÃ¥Â¸Â¸Ã¤Â¸Â­Ã¦ÂÂ­Ã¦ÂÂ¶Ã¥ÂÂ¨Ã¨Â¾ÂÃ¥ÂÂ¥Ã¥ÂÂºÃ¤Â¸ÂÃ¦ÂÂ¹Ã¦ÂÂÃ§Â¤ÂºÃ¦Â£ÂÃ¦ÂÂ¥Ã§ÂÂ¹Ã§Â»Â­Ã¨Â·ÂÃ£ÂÂ */
+    composerResume: resumeKind === "crashed",
     workspaceGate,
-    /** 门禁「打开」：选目录建工作空间并进入新会话。 */
+    /** Ã©ÂÂ¨Ã§Â¦ÂÃ£ÂÂÃ¦ÂÂÃ¥Â¼ÂÃ£ÂÂÃ¯Â¼ÂÃ©ÂÂÃ§ÂÂ®Ã¥Â½ÂÃ¥Â»ÂºÃ¥Â·Â¥Ã¤Â½ÂÃ§Â©ÂºÃ©ÂÂ´Ã¥Â¹Â¶Ã¨Â¿ÂÃ¥ÂÂ¥Ã¦ÂÂ°Ã¤Â¼ÂÃ¨Â¯ÂÃ£ÂÂ */
     openWorkspaceFromGate: async () => {
       const dir = await pickDirectory({ title: t("workspaces.pickDirectoryTitle") });
       if (!dir) return;

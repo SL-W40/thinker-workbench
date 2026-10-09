@@ -1,0 +1,101 @@
+/* Composer / @ 弹出菜单 */
+
+.composer-mention {
+  position: fixed;
+  z-index: 80;
+  width: min(360px, calc(100vw - 16px));
+  max-height: min(320px, 45vh);
+  overflow: auto;
+  padding: 6px 0;
+  border-radius: 10px;
+  border: 1px solid var(--tw-border-subtle, rgba(127, 127, 127, 0.28));
+  background: var(--tw-panel, var(--panel, #fff));
+  color: var(--tw-fg, var(--text));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+
+.composer-mention__group-title {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tw-fg-muted, var(--muted));
+  text-transform: none;
+}
+
+.composer-mention__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.composer-mention__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.composer-mention__item:hover,
+.composer-mention__item.is-active {
+  background: var(--tw-bg-subtle, var(--border, rgba(127, 127, 127, 0.12)));
+}
+
+.composer-mention__ico {
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--tw-fg-muted, var(--muted));
+}
+
+.composer-mention__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.composer-mention__label {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-mention__desc {
+  font-size: 12px;
+  color: var(--tw-fg-muted, var(--muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-mention__more {
+  display: block;
+  width: 100%;
+  padding: 6px 12px 8px;
+  border: none;
+  background: transparent;
+  color: var(--tw-fg-muted, var(--muted));
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-mention__more:hover {
+  color: var(--tw-fg, var(--text));
+}
+
+.composer-mention__empty {
+  margin: 0;
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--tw-fg-muted, var(--muted));
+}

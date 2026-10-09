@@ -16,11 +16,15 @@ import {
   type AgentRunCommand,
   type ContextUsageRequest,
   type ContextUsageSnapshot,
+  type HitlResponse,
   type LogRecord,
   type RunResult,
+  type UtilityBrowserRequest,
+  type UtilityPtyRequest,
   type UtilityToChild,
 } from "@thinker-workbench/shared";
 import type { UtilityProcess } from "electron";
+import { browserSessionManager } from "../browser/BrowserSessionManager";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings, getModelSettings } from "../config/settingsStore";
 import {
@@ -30,6 +34,8 @@ import {
 } from "../db/workspacesStore";
 import { desktopLog } from "../log/setup";
 import { broadcastThreadsChanged } from "../ipc/workspacesHandlers";
+import { shellFactsForAgent } from "../terminal/detectShellProfiles";
+import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { isUtilityToParent } from "./transfer";
 
 /** 等待终态的进行中 run。 */
@@ -95,8 +101,184 @@ export class AgentBridge {
         clearTimeout(pending.timer);
         this.pendingContextUsage.delete(raw.requestId);
         pending.resolve(raw.usage);
+        return;
+      }
+      if (raw.kind === "ptyRequest") {
+        void this.handlePtyRequest(raw);
+        return;
+      }
+      if (raw.kind === "browserRequest") {
+        void this.handleBrowserRequest(raw);
+        return;
+      }
+      if (raw.kind === "hitl") {
+        // 转成 AgentEvent 推给 renderer / 通知；engine 仍 await hitlResult
+        this.onAgentEvent({
+          type: "hitl",
+          phase: "request",
+          hitlId: raw.request.hitlId,
+          kind: raw.request.kind,
+          threadId: raw.request.threadId,
+          runId: raw.request.runId,
+          ts: Date.now(),
+          request: raw.request,
+        });
+        return;
+      }
+      if (raw.kind === "mcpStatus") {
+        try {
+          const { handleMcpStatusFromAgent } = require("../ipc/mcpHandlers") as typeof import("../ipc/mcpHandlers");
+          handleMcpStatusFromAgent(raw.status);
+        } catch {
+          /* ignore */
+        }
       }
     });
+  }
+
+  /** 将 HITL 答复发回 utility。 */
+  sendHitlResult(response: HitlResponse): void {
+    try {
+      this.send({ channel: "utility", kind: "hitlResult", response });
+    } catch (err) {
+      desktopLog("bridge").warn("hitlResult send failed", {
+        meta: { error: err instanceof Error ? err.message : String(err) },
+      });
+    }
+  }
+
+  /** 处理 utility 侧 PTY 请求。 */
+  private async handlePtyRequest(req: UtilityPtyRequest): Promise<void> {
+    const reply = (
+      phase: "data" | "exit" | "result" | "error",
+      extra: Partial<{
+        sessionId: string;
+        data: string;
+        exitCode: number | null;
+        backgrounded: boolean;
+        output: string;
+        error: string;
+      }> = {},
+    ) => {
+      try {
+        this.send({
+          channel: "utility",
+          kind: "ptyEvent",
+          requestId: req.requestId,
+          phase,
+          ...extra,
+        });
+      } catch {
+        /* child gone */
+      }
+    };
+
+    try {
+      if (req.action === "exec") {
+        if (!req.command?.trim()) {
+          reply("error", { error: "Missing command." });
+          return;
+        }
+        let sessionId = "";
+        const result = await terminalSessionManager.exec({
+          command: req.command,
+          cwd: req.workingDirectory,
+          blockUntilMs: req.blockUntilMs,
+          cols: req.cols,
+          rows: req.rows,
+          runId: req.runId,
+          threadId: req.threadId,
+          onSession: (id) => {
+            sessionId = id;
+          },
+          onData: (data) => reply("data", { sessionId, data }),
+        });
+        reply("result", {
+          sessionId: result.sessionId,
+          output: result.output,
+          exitCode: result.exitCode,
+          backgrounded: result.backgrounded,
+        });
+        return;
+      }
+
+      if (req.action === "await") {
+        if (!req.sessionId?.trim()) {
+          reply("error", { error: "Missing sessionId." });
+          return;
+        }
+        const result = terminalSessionManager.finishAwait(
+          req.sessionId,
+          await terminalSessionManager.awaitSession(req.sessionId, {
+            blockUntilMs: req.blockUntilMs ?? 30_000,
+            pattern: req.pattern,
+            requestId: req.requestId,
+            onData: (data) => reply("data", { sessionId: req.sessionId, data }),
+          }),
+        );
+        reply("result", {
+          sessionId: result.sessionId,
+          output: result.output,
+          exitCode: result.exitCode,
+          backgrounded: result.backgrounded,
+        });
+        return;
+      }
+
+      if (req.action === "write") {
+        if (!req.sessionId?.trim() || typeof req.data !== "string") {
+          reply("error", { error: "Missing sessionId or data." });
+          return;
+        }
+        terminalSessionManager.write(req.sessionId, req.data);
+        reply("result", { sessionId: req.sessionId, output: "" });
+        return;
+      }
+
+      if (req.action === "kill") {
+        if (!req.sessionId?.trim()) {
+          reply("error", { error: "Missing sessionId." });
+          return;
+        }
+        terminalSessionManager.kill(req.sessionId);
+        reply("result", { sessionId: req.sessionId, output: "" });
+        return;
+      }
+
+      reply("error", { error: `Unknown pty action: ${req.action}` });
+    } catch (err) {
+      reply("error", { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  /** 处理 utility 侧浏览器自动化请求。 */
+  private async handleBrowserRequest(req: UtilityBrowserRequest): Promise<void> {
+    const reply = (
+      phase: "result" | "error",
+      extra: Partial<{ output: string; error: string; screenshotPath: string }> = {},
+    ) => {
+      try {
+        this.send({
+          channel: "utility",
+          kind: "browserEvent",
+          requestId: req.requestId,
+          phase,
+          ...extra,
+        });
+      } catch {
+        /* child gone */
+      }
+    };
+
+    try {
+      const result = await browserSessionManager.handleRequest(req);
+      reply("result", {
+        output: result.output,
+        screenshotPath: result.screenshotPath,
+      });
+    } catch (err) {
+      reply("error", { error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   /**
@@ -234,12 +416,25 @@ export class AgentBridge {
         runId: id,
         threadId: pending?.threadId,
       });
+      terminalSessionManager.killByRunId(id);
       this.send({
         channel: "utility",
         kind: "cancel",
         command: { runId: id },
       });
     }
+  }
+
+  /** hello / run / resume 共用的 shell 相关字段。 */
+  private shellPayload() {
+    const general = getGeneralSettings();
+    return {
+      allowAiShell: general.allowAiShell,
+      allowAiBrowser: general.allowAiBrowser,
+      shellApprovalMode: general.shellApprovalMode,
+      shellAllowlist: general.shellAllowlist,
+      shell: shellFactsForAgent(general.shellProfileId),
+    };
   }
 
   /**
@@ -302,6 +497,7 @@ export class AgentBridge {
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
+          ...this.shellPayload(),
           logTruncateLongContent: general.logTruncateLongContent,
           loggingEnabled: general.loggingEnabled,
           workspaceRoot: command.workspaceRoot,
@@ -371,6 +567,9 @@ export class AgentBridge {
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
+          ...this.shellPayload(),
+          logTruncateLongContent: general.logTruncateLongContent,
+          loggingEnabled: general.loggingEnabled,
           dataDir: getDataDir(),
         });
       } catch (err) {
