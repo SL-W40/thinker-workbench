@@ -1,0 +1,70 @@
+/* IconButton 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-icon-btn {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid transparent;
+  border-radius: var(--tw-radius-control, 10px);
+  background: transparent;
+  color: var(--tw-fg-muted, var(--muted));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  cursor: pointer;
+
+  svg {
+    display: block;
+    width: 1em;
+    height: 1em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--tw-fg, var(--ink));
+    background: var(--tw-hover, var(--hover-wash));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &--sm {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.85rem;
+  }
+
+  &--md {
+    width: 2.1rem;
+    height: 2.1rem;
+    font-size: 1rem;
+  }
+
+  &--lg {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1.15rem;
+  }
+
+  &--secondary {
+    border-color: var(--tw-border, var(--line));
+    background: var(--tw-bg-elev, var(--bg-elev));
+    color: var(--tw-fg, var(--ink));
+
+    &:hover:not(:disabled) {
+      border-color: var(--tw-accent, var(--accent));
+    }
+  }
+}

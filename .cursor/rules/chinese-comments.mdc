@@ -1,0 +1,39 @@
+---
+description: Code comments and JSDoc must be written in Chinese
+alwaysApply: true
+---
+
+# 注释用中文
+
+本仓库源码注释（含 `//`、`/* */`、JSDoc）**一律用中文**。新增、改代码时同步补全或改写注释，不要留英文注释。
+
+## 要写中文的
+
+- 文件头 / 模块职责说明
+- 函数、类型、字段的 JSDoc
+- 关键逻辑分支旁注（为何这样写，而不是复述代码）
+
+## 可以继续用英文的（不是注释）
+
+- 标识符、公开 API 名、IPC channel / kind
+- 用户可见文案走 i18n（`messages/en.ts` + `zh.ts`）
+- 发给模型的 prompt / tool `description`（面向模型的稳定英文基座可保留）
+- 对外错误码、协议字段字面量
+
+## 示例
+
+```ts
+// ❌ BAD
+/** Apply model settings from desktop hello / each run. */
+export function configureChatModel(settings?: ModelSettings | null): void {}
+
+// ✅ GOOD
+/** 应用桌面 Settings 下发的模型配置；会清空已缓存的客户端。 */
+export function configureChatModel(settings?: ModelSettings | null): void {}
+```
+
+## 不要
+
+- 中英混写整段注释（专有名词如 `AbortSignal`、`parentPort` 可保留）
+- 为凑规则写废话注释（显而易见的一行赋值不必注释）
+- 在 `/* ... */` / JSDoc 里出现 `*/` 字符序列（含 glob 写法 `**/`）；会提前结束块注释、打崩 esbuild。改写成「双星号 + 斜杠」等不含该序列的说法

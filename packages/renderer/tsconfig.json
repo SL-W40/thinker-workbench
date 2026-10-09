@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@thinker-workbench/shared": ["../shared/src/index.ts"],
+      "@thinker-workbench/design": ["../design/src/index.ts"],
+      "@thinker-workbench/design/react": ["../design/src/react/index.ts"],
+      "@thinker-workbench/design/styles.less": ["../design/src/styles/design.less"],
+      "@thinker-workbench/design/controls.less": ["../design/src/styles/controls.less"],
+      "@thinker-workbench/design/notes.less": ["../markdown/src/styles/notes.less"],
+      "@thinker-workbench/markdown": ["../markdown/src/index.ts"],
+      "@thinker-workbench/markdown/react": ["../markdown/src/react/index.ts"],
+      "@thinker-workbench/markdown/styles.less": ["../markdown/src/styles/markdown.less"],
+      "@thinker-workbench/markdown/notes.less": ["../markdown/src/styles/notes.less"]
+    }
+  },
+  "include": ["src"]
+}

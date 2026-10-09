@@ -1,0 +1,57 @@
+/* TextArea 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-textarea {
+  appearance: none;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  padding: 10px 12px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.9rem;
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+
+  &::placeholder {
+    color: var(--tw-placeholder, var(--placeholder));
+  }
+
+  &:focus {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+    border-color: var(--tw-accent, var(--accent));
+  }
+
+  &.is-invalid {
+    border-color: var(--tw-danger, var(--danger));
+  }
+
+  &.is-disabled,
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  &--sm {
+    font-size: 0.82rem;
+    padding: 8px 10px;
+  }
+
+  &--lg {
+    font-size: 1rem;
+    padding: 12px 14px;
+  }
+
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--tw-fg, var(--ink));
+    box-shadow: 0 0 0 1000px var(--tw-bg-elev, var(--bg-elev)) inset;
+    transition: background-color 99999s ease-out;
+  }
+}

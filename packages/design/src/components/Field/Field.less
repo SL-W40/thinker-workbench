@@ -1,0 +1,37 @@
+/* Field 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-field {
+  display: grid;
+  gap: 6px;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  color: var(--tw-fg, var(--ink));
+}
+
+.tw-field__label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--tw-fg, var(--ink));
+}
+
+.tw-field__required {
+  margin-left: 0.2em;
+  color: var(--tw-danger, var(--danger));
+  font-weight: 700;
+}
+
+.tw-field__desc {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--tw-fg-muted, var(--muted));
+}
+
+.tw-field__error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--tw-danger, var(--danger));
+}
+
+.tw-field__control {
+  min-width: 0;
+}

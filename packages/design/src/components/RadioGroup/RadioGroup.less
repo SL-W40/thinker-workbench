@@ -1,0 +1,59 @@
+/* RadioGroup 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-radio-group {
+  display: grid;
+  gap: 8px;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+
+  &.is-disabled {
+    opacity: 0.55;
+  }
+}
+
+.tw-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--tw-fg, var(--ink));
+  cursor: pointer;
+
+  &.is-disabled {
+    cursor: default;
+  }
+}
+
+.tw-radio__dot {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: 999px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+  cursor: inherit;
+
+  &[aria-checked="true"] {
+    border-color: var(--tw-accent-strong, var(--accent-strong));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+}
+
+.tw-radio__fill {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--tw-accent-strong, var(--accent-strong));
+}
+
+.tw-radio__label {
+  min-width: 0;
+}

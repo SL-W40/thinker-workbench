@@ -1,0 +1,53 @@
+---
+description: Prefer @thinker-workbench/design controls over raw HTML/custom chrome
+alwaysApply: true
+---
+
+# Design components first
+
+UI in `packages/renderer` must prefer `@thinker-workbench/design/react` before inventing local buttons, inputs, toggles, or dialogs.
+
+Import from `@thinker-workbench/design/react`. Global chrome: `@thinker-workbench/design/styles.less`; control styles: `@thinker-workbench/design/controls.less` (per-control `components/<Name>/<Name>.less`). Live catalog: app `#/components` (click a title for that folder’s `.md`).
+
+## Catalog
+
+| Control | Use for |
+|---|---|
+| `Button` | Labeled actions (`primary` / `secondary` / `ghost` / `text` / `danger`; `text` = inline “Try it” style) |
+| `IconButton` | Icon-only actions (requires `aria-label`) |
+| `*Icon` / `Icon` | Named SVG icons (`ChevronLeftIcon`, …); 16×16 / stroke 1.5; catalog via `listDesignIcons()` |
+| `Input` / `TextArea` | Text fields (spellcheck / autofill off by default) |
+| `Field` | Label + description + error around a control |
+| `Select` | Single choice listbox (portaled menu) |
+| `SegmentedControl` | Compact 2–3 choice toggle |
+| `Switch` / `Checkbox` / `RadioGroup` | Boolean / multi-option toggles |
+| `Modal` | Dialogs (backdrop dismiss opt-in) |
+| `ChoiceCard` | Selectable option cards (e.g. theme pickers) |
+| `SideNavItem` | Side navigation rows |
+| `Kbd` | Shortcut keycaps |
+| `Badge` | Small status chips |
+| `Callout` | Inline info / warning / danger notices |
+| `EmptyState` | Empty placeholders + optional action |
+| `Spinner` / `Progress` | Loading / progress |
+| `Separator` | Dividers |
+| `Masonry` | Waterfall / masonry grid (shortest-column packing) |
+| `ThemeProvider` / `useDesignTheme` | Theme host (already wired in app) |
+
+## Do
+
+- Reuse an existing control; extend it in `packages/design` if the pattern will be shared
+- Match existing `variant` / `size` / token usage; avoid one-off colors in feature Less
+- Preview new shared controls on the Components page when adding to the library
+- New shared control = `packages/design/src/components/<Name>/{Name}.tsx, Name.less, Name.md}`, wired into `styles/controls.less` and `react/index.ts`
+
+## Do not
+
+- Hand-roll `<button>` / `<input>` / `<select>` / checkbox chrome when a design control fits
+- Duplicate settings-switch / modal / select styling in `packages/renderer/src/styles.less`
+- Put reusable control implementations in `renderer` — they belong in `packages/design`
+
+## Exceptions
+
+- OS / window chrome (e.g. Windows title-bar controls) may stay app-local
+- Pure layout wrappers and one-off SVG glyphs inside a design control are fine
+- If nothing in the catalog fits and the UI is not reusable, a local control is OK — note why briefly in the PR/commit

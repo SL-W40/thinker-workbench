@@ -1,0 +1,208 @@
+/* Components 预览页布局。 */
+
+.components-shell[hidden] {
+  display: none !important;
+}
+
+.components-shell {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 28px 32px 48px;
+}
+
+.components-header {
+  margin-bottom: 22px;
+  max-width: 48rem;
+
+  h1 {
+    margin: 0 0 6px;
+    font-family: var(--font-hand);
+    font-size: 1.55rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+}
+
+/* 目录页卡片；排布由 design 的 Masonry（.components-grid）负责 */
+.components-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 16px 16px 18px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-solid, var(--bg-elev));
+}
+
+/* 标题行可点开组件 Markdown 说明 */
+.components-card-title {
+  appearance: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  h2 {
+    margin: 0;
+    font-family: var(--font-hand);
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+
+  &:hover .components-card-docs-hint,
+  &:focus-visible .components-card-docs-hint {
+    color: var(--accent-strong, var(--accent));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-ring, var(--accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+.components-card-docs-hint {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.components-masonry-tile {
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: color-mix(in srgb, var(--accent, #c4a574) 14%, var(--panel-solid, var(--bg-elev)));
+  color: var(--muted);
+  font-family: var(--font-hand);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.components-card-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.components-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.components-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 8px;
+}
+
+.components-icon-cell {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #c4a574) 8%, var(--panel-solid, var(--bg-elev)));
+  color: var(--ink);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-align: center;
+  word-break: break-all;
+
+  span {
+    color: var(--muted);
+  }
+}
+
+.components-nav-demo {
+  display: grid;
+  gap: 4px;
+}
+
+.components-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  &--between {
+    justify-content: space-between;
+  }
+
+  &--end {
+    justify-content: flex-end;
+  }
+}
+
+.components-modal-title {
+  margin: 0;
+  font-family: var(--font-hand);
+  font-size: 1.25rem;
+}
+
+.components-modal-body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.components-docs-panel {
+  width: min(40rem, 100%);
+  /* 过高时交给 Modal 蒙层滚动，面板自身不裁切、不出滚动条 */
+  max-height: none;
+  overflow: visible;
+}
+
+.components-docs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.components-docs-body {
+  min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
+
+  .components-docs-md {
+    font-size: 0.92rem;
+    /* 弹窗头已有组件名：隐藏文档首个 h1，避免双标题 */
+    > h1:first-child {
+      display: none;
+    }
+
+    > h1:first-child + p {
+      margin-top: 0;
+    }
+
+    > h2:first-of-type {
+      margin-top: 0.75rem;
+      padding-top: 0;
+      border-top: 0;
+    }
+  }
+}

@@ -1,0 +1,51 @@
+/* Icon 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-icon {
+  display: block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  fill: none;
+  stroke: currentColor;
+  /* 统一线宽；缩放时保持视觉重量 */
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+  color: inherit;
+
+  &--sm {
+    width: 14px;
+    height: 14px;
+  }
+
+  &--md {
+    width: 16px;
+    height: 16px;
+  }
+
+  &--lg {
+    width: 20px;
+    height: 20px;
+  }
+
+  &--inherit {
+    width: 1em;
+    height: 1em;
+  }
+
+  /* 实心块（侧栏激活态等）；线框图标勿滥用 */
+  .tw-icon__fill {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  /* 展开箭头：open 时顺时针 90° */
+  &.is-open {
+    transform: rotate(90deg);
+    transition: transform 120ms ease;
+  }
+
+  &:not(.is-open) {
+    transition: transform 120ms ease;
+  }
+}

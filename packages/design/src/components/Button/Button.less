@@ -1,0 +1,131 @@
+/* Button 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-btn {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: center;
+
+  &:hover:not(:disabled) {
+    border-color: var(--tw-accent, var(--accent));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  &--sm {
+    min-height: 2rem;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+  }
+
+  &--md {
+    min-height: 2.25rem;
+    padding: 6px 14px;
+    font-size: 0.88rem;
+  }
+
+  &--lg {
+    min-height: 2.6rem;
+    padding: 8px 18px;
+    font-size: 0.95rem;
+  }
+
+  &--block {
+    width: 100%;
+  }
+
+  &--primary {
+    border-color: var(--tw-accent-strong, var(--accent-strong));
+    background: var(--tw-accent-strong, var(--accent-strong));
+    color: var(--tw-accent-ink, #fff);
+
+    &:hover:not(:disabled) {
+      border-color: var(--tw-accent-strong, var(--accent-strong));
+      filter: brightness(1.05);
+    }
+  }
+
+  &--ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--tw-fg-muted, var(--muted));
+
+    &:hover:not(:disabled) {
+      color: var(--tw-fg, var(--ink));
+      border-color: transparent;
+      background: var(--tw-hover, var(--hover-wash));
+    }
+  }
+
+  /* 文字链按钮：无边框 / 无底，强调色 + 下划线（如 Try it）；悬停不用小手。 */
+  &--text {
+    min-height: 0;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--tw-accent-strong, var(--accent-strong));
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: default;
+
+    &:hover:not(:disabled) {
+      border-color: transparent;
+      background: transparent;
+      opacity: 0.85;
+      cursor: default;
+    }
+
+    &.tw-btn--sm {
+      min-height: 0;
+      padding: 0;
+      font-size: 0.84rem;
+    }
+
+    &.tw-btn--md {
+      min-height: 0;
+      padding: 0;
+    }
+
+    &.tw-btn--lg {
+      min-height: 0;
+      padding: 0;
+      font-size: 0.95rem;
+    }
+  }
+
+  &--danger {
+    border-color: var(--tw-danger, var(--danger));
+    background: var(--tw-danger-bg, rgba(155, 59, 46, 0.1));
+    color: var(--tw-danger, var(--danger));
+  }
+}
+
+.tw-btn__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.tw-btn__label {
+  min-width: 0;
+}

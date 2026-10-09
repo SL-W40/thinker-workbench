@@ -1,0 +1,63 @@
+/* 设计体系全局样式（滚动条、选区等）。控件样式见各 components/<Name>/<Name>.less。 */
+/* 颜色来自 ThemeProvider 写入的 CSS token。 */
+@import "./hand-font.less";
+
+/* 全局细滚动条；滑块色由主题 notesChrome（--scrollbar-thumb*）写入。 */
+:root {
+  --scrollbar-size: 7px;
+  --scrollbar-track: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, rgba(90, 70, 50, 0.22))
+    var(--scrollbar-track, transparent);
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size, 7px);
+  height: var(--scrollbar-size, 7px);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track, transparent);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, rgba(90, 70, 50, 0.22));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+
+  &:hover {
+    background: var(--scrollbar-thumb-hover, rgba(107, 83, 68, 0.5));
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
+ * 文本选中高亮：用 accent 与背景混成不透明色。
+ * 半透明 rgba 在 Markdown 嵌套节点 / 行距重叠处会叠色变深。
+ */
+::selection {
+  background: color-mix(
+    in srgb,
+    var(--tw-accent, var(--accent)) 32%,
+    var(--tw-bg, var(--bg))
+  );
+  color: var(--tw-fg, var(--ink));
+}
+
+::-moz-selection {
+  background: color-mix(
+    in srgb,
+    var(--tw-accent, var(--accent)) 32%,
+    var(--tw-bg, var(--bg))
+  );
+  color: var(--tw-fg, var(--ink));
+}

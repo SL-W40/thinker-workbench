@@ -1,0 +1,17 @@
+node_modules
+dist
+packages/*/artifacts
+packages/*/dist
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+package-lock.json
+yarn.lock
+.npm-cache
+*.zip

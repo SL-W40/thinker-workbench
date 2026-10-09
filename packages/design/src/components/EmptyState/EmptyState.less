@@ -1,0 +1,39 @@
+/* EmptyState 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 20px 4px;
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+}
+
+.tw-empty__icon {
+  display: inline-flex;
+  color: var(--tw-fg-muted, var(--muted));
+  font-size: 1.5rem;
+  margin-bottom: 2px;
+
+  .tw-icon {
+    width: 1.35em;
+    height: 1.35em;
+  }
+}
+
+.tw-empty__title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.tw-empty__desc {
+  margin: 0;
+  max-width: 28rem;
+  color: var(--tw-fg-muted, var(--muted));
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.tw-empty__action {
+  margin-top: 6px;
+}

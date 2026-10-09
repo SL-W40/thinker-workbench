@@ -1,0 +1,21 @@
+/* Spinner 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-spinner {
+  display: inline-flex;
+  color: var(--tw-accent-strong, var(--accent-strong));
+
+  &__track {
+    opacity: 0.18;
+  }
+
+  &__arc {
+    transform-origin: 14px 14px;
+    animation: tw-spin 0.85s linear infinite;
+  }
+}
+
+@keyframes tw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

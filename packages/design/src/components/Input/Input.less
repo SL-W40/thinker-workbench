@@ -1,0 +1,102 @@
+/* Input 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-input {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  line-height: 1.3;
+
+  &:focus-within {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+    border-color: var(--tw-accent, var(--accent));
+  }
+
+  &.is-invalid {
+    border-color: var(--tw-danger, var(--danger));
+  }
+
+  &.is-disabled {
+    opacity: 0.55;
+  }
+
+  &--sm {
+    min-height: 2rem;
+    font-size: 0.82rem;
+  }
+
+  &--md {
+    min-height: 2.25rem;
+    font-size: 0.9rem;
+  }
+
+  &--lg {
+    min-height: 2.6rem;
+    font-size: 1rem;
+  }
+}
+
+.tw-input__control {
+  appearance: none;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 8px 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  outline: none;
+
+  &::placeholder {
+    color: var(--tw-placeholder, var(--placeholder));
+  }
+
+  /* 去掉 Chrome / Edge 自动填充黄底（及深色态） */
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--tw-fg, var(--ink));
+    caret-color: var(--tw-fg, var(--ink));
+    box-shadow: 0 0 0 1000px var(--tw-bg-elev, var(--bg-elev)) inset;
+    transition: background-color 99999s ease-out;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.tw-input.has-start .tw-input__control {
+  padding-left: 0;
+}
+
+.tw-input.has-end .tw-input__control {
+  padding-right: 0;
+}
+
+.tw-input__adornment {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--tw-fg-muted, var(--muted));
+  font-size: 0.85em;
+
+  &--start {
+    padding-left: 10px;
+  }
+
+  &--end {
+    padding-right: 10px;
+  }
+}

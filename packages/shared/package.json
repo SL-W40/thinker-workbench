@@ -1,0 +1,17 @@
+{
+  "name": "@thinker-workbench/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "artifacts/index.js",
+  "types": "artifacts/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./artifacts/index.d.ts",
+      "default": "./artifacts/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --watch --preserveWatchOutput"
+  }
+}

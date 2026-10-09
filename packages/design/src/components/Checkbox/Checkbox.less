@@ -1,0 +1,46 @@
+/* Checkbox 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.9rem;
+  color: var(--tw-fg, var(--ink));
+  cursor: pointer;
+
+  &.is-disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+}
+
+.tw-checkbox__box {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: 5px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-accent-ink, #fff);
+  cursor: inherit;
+
+  &[aria-checked="true"] {
+    border-color: var(--tw-accent-strong, var(--accent-strong));
+    background: var(--tw-accent-strong, var(--accent-strong));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+}
+
+.tw-checkbox__label {
+  min-width: 0;
+}

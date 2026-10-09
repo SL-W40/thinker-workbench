@@ -1,0 +1,32 @@
+{
+  "name": "@thinker-workbench/engine",
+  "version": "0.1.0",
+  "private": true,
+  "main": "artifacts/index.js",
+  "types": "artifacts/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./artifacts/index.d.ts",
+      "default": "./artifacts/index.js"
+    },
+    "./entry": {
+      "types": "./artifacts/entry.d.ts",
+      "default": "./artifacts/entry.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && pnpm run bundle:entry",
+    "bundle:entry": "esbuild src/entry.ts --bundle --platform=node --format=cjs --outfile=artifacts/entry.js",
+    "dev:tsc": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:esbuild": "esbuild src/entry.ts --bundle --platform=node --format=cjs --outfile=artifacts/entry.js --watch --log-level=warning",
+    "dev": "npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:esbuild\""
+  },
+  "dependencies": {
+    "@thinker-workbench/logger": "workspace:*",
+    "@thinker-workbench/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "esbuild": "^0.28.2"
+  }
+}

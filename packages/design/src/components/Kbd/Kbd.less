@@ -1,0 +1,72 @@
+/* Kbd 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-kbd {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12em;
+  min-width: 5.5rem;
+  min-height: 2.1rem;
+  margin: 0;
+  padding: 4px 12px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: 8px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  /* 系统 UI 字体对 ⌘⌥ 与拉丁字母的光学校准更好；等宽字体会把符号缩得很小 */
+  font-family:
+    var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body)))),
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--tw-border, var(--line)) 70%, transparent);
+  cursor: default;
+
+  &:is(button) {
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      border-color: var(--tw-accent, var(--accent));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+      outline-offset: 1px;
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+  }
+
+  &.is-recording {
+    border-color: var(--tw-accent-strong, var(--accent-strong));
+    color: var(--tw-accent-strong, var(--accent-strong));
+    background: color-mix(in srgb, var(--tw-accent, var(--accent)) 12%, var(--tw-bg-elev, var(--bg-elev)));
+    box-shadow: none;
+  }
+}
+
+.tw-kbd__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.1em;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* 修饰符符号本体偏小，略放大以与字母视觉对齐 */
+.tw-kbd__glyph--sym {
+  font-size: 1.2em;
+  font-weight: 500;
+}

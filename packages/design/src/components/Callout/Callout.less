@@ -1,0 +1,56 @@
+/* Callout 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-callout {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.86rem;
+  line-height: 1.4;
+
+  &--info {
+    border-color: color-mix(in srgb, var(--tw-accent, var(--accent)) 55%, var(--tw-border, var(--line)));
+    background: color-mix(in srgb, var(--tw-accent, var(--accent)) 10%, var(--tw-bg-elev, var(--bg-elev)));
+  }
+
+  &--warning {
+    border-color: color-mix(in srgb, #c48a2a 55%, var(--tw-border, var(--line)));
+    background: color-mix(in srgb, #c48a2a 10%, var(--tw-bg-elev, var(--bg-elev)));
+  }
+
+  &--danger {
+    border-color: var(--tw-danger, var(--danger));
+    background: var(--tw-danger-bg, rgba(155, 59, 46, 0.1));
+    color: var(--tw-danger, var(--danger));
+  }
+}
+
+.tw-callout__title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.tw-callout__body {
+  color: inherit;
+  opacity: 0.92;
+
+  &.has-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+}
+
+.tw-callout__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tw-callout__action {
+  flex-shrink: 0;
+}

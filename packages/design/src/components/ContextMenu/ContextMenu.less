@@ -1,0 +1,85 @@
+/* ContextMenu 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+/* 上下文菜单（Portal） */
+.tw-context-menu {
+  position: fixed;
+  z-index: 9200;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  background: var(--tw-bg-elev, var(--bg-elev));
+  box-shadow: 0 8px 24px var(--tw-shadow-soft, rgba(0, 0, 0, 0.12));
+  overflow: auto;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.86rem;
+  color: var(--tw-fg, var(--ink));
+  line-height: 1.3;
+
+  > li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+}
+
+.tw-context-menu__sep {
+  display: block;
+  height: 1px;
+  margin: 4px 6px;
+  border: 0;
+  background: var(--tw-border, var(--line));
+  opacity: 0.7;
+}
+
+.tw-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &.is-active,
+  &:focus-visible {
+    outline: none;
+    background: var(--tw-bg-muted, rgba(0, 0, 0, 0.06));
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &.is-danger {
+    color: var(--tw-danger, #b42318);
+  }
+}
+
+.tw-context-menu__icon {
+  display: inline-flex;
+  width: 1em;
+  flex: 0 0 auto;
+}
+
+.tw-context-menu__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

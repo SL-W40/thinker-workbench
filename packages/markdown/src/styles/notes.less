@@ -1,0 +1,91 @@
+// renderer + desktop 共用的笔记 / 手写墨色皮肤 token。
+// 消费者在 `:root` 上调用 `.notes-tokens()`，在表面上调用 `.notes-paper()`。
+
+.notes-tokens() {
+  color-scheme: light;
+  --bg: #f4ebe0;
+  --bg-elev: #f7efe3;
+  --ink: #2a2218;
+  --muted: #6b5344;
+  --line: rgba(90, 70, 50, 0.18);
+  --panel: #f7efe3;
+  --accent: #6b5344;
+  --accent-strong: #5c4033;
+  --accent-ink: #f4ebe0;
+  --accent-soft: rgba(107, 83, 68, 0.12);
+  --accent-soft-strong: rgba(107, 83, 68, 0.35);
+  --accent-soft-muted: rgba(107, 83, 68, 0.1);
+  --accent-ring: rgba(107, 83, 68, 0.45);
+  --accent-glow: rgba(196, 165, 116, 0.22);
+  --ink-fade: rgba(42, 34, 24, 0.05);
+  --ink-fade-strong: rgba(42, 34, 24, 0.08);
+  --panel-solid: rgba(247, 239, 227, 0.94);
+  --panel-muted: rgba(244, 235, 224, 0.72);
+  --bar-bg: rgba(244, 235, 224, 0.92);
+  --code-bg: #efe2cc;
+  --danger: #9b3b2e;
+  --user: #efe2cc;
+  --placeholder: rgba(107, 83, 68, 0.7);
+  --hover-wash: rgba(42, 34, 24, 0.06);
+  --titlebar-bg: rgba(244, 235, 224, 0.88);
+  --dock-fade: rgba(244, 235, 224, 0.92);
+  --win-close: #9b3b2e;
+  --win-close-ink: #f7efe3;
+  --paper-rule: rgba(120, 90, 60, 0.12);
+  --paper-margin: rgba(180, 120, 90, 0.14);
+  --paper-glow: rgba(196, 165, 116, 0.2);
+  /* ThemeProvider / applyTypeStyle 已写入时优先使用设计 `--tw-*`。 */
+  --font-body: var(
+    --tw-font-body,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei UI",
+    sans-serif
+  );
+  --font-hand: var(
+    --tw-font-hand,
+    "Segoe Print",
+    "Bradley Hand",
+    "Apple Chancery",
+    "TW Hand",
+    cursive
+  );
+  --font: var(--tw-font-ui, var(--font-hand));
+  --display: var(--tw-font-hand, var(--font-hand));
+  --mono: var(--tw-font-mono, ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace);
+  --radius: 14px;
+  --scrollbar-size: 7px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(90, 70, 50, 0.22);
+  --scrollbar-thumb-hover: rgba(107, 83, 68, 0.5);
+}
+
+.notes-paper() {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(
+      90deg,
+      var(--paper-margin) 0,
+      var(--paper-margin) 1px,
+      transparent 1px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 28px,
+      var(--paper-rule) 28px,
+      var(--paper-rule) 29px
+    ),
+    radial-gradient(120% 80% at 50% 0%, var(--paper-glow), transparent 55%);
+
+  /* Mono：纯色底，无横线 / 网格（`data-tw-theme` 由 applyDesignTheme 写入）。 */
+  html[data-tw-theme="mono"] & {
+    background-image: none;
+  }
+}
+
+.notes-ink-border() {
+  border: 1.5px solid var(--line);
+  border-radius: 12px 14px 11px 13px;
+  box-shadow: 1px 2px 0 var(--ink-fade, rgba(90, 70, 50, 0.04));
+}

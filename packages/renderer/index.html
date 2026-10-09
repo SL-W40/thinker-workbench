@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="apple-touch-icon" href="./brand/app-icon.png" />
+    <title>Thinker Workbench</title>
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        /* 回退与 DEFAULT_APP_THEME=light 一致，避免模块加载前闪 notes 米色 */
+        background: var(--bg, #ffffff);
+        color: var(--ink, #111111);
+        font-family: var(--font, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif);
+        overflow: hidden;
+      }
+
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: grid;
+        place-items: center;
+        pointer-events: all;
+        background:
+          radial-gradient(120% 90% at 50% 18%, var(--paper-glow, transparent), transparent 58%),
+          color-mix(in srgb, var(--bg, #ffffff) 72%, transparent);
+        backdrop-filter: blur(20px) saturate(1.1);
+        -webkit-backdrop-filter: blur(20px) saturate(1.1);
+      }
+
+      #boot-splash.is-leaving {
+        animation: boot-splash-out 360ms ease forwards;
+        pointer-events: none;
+      }
+
+      #boot-splash::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(var(--paper-rule, rgba(0, 0, 0, 0.05)) 1px, transparent 1px);
+        background-size: 100% 28px;
+        background-position: 0 36px;
+        opacity: 0.5;
+        pointer-events: none;
+      }
+
+      html[data-tw-theme="light"] #boot-splash::before,
+      html[data-tw-theme="dark"] #boot-splash::before {
+        background-image:
+          linear-gradient(var(--paper-rule, rgba(0, 0, 0, 0.05)) 1px, transparent 1px),
+          linear-gradient(90deg, var(--paper-rule, rgba(0, 0, 0, 0.05)) 1px, transparent 1px);
+        background-size: 24px 24px;
+        background-position: 0 0;
+      }
+
+      .boot-splash__inner {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        text-align: center;
+      }
+
+      .boot-splash__mark {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+        opacity: 0;
+        transform: translateY(10px) scale(0.92);
+        animation: boot-mark-in 560ms cubic-bezier(0.16, 1, 0.3, 1) 40ms both;
+      }
+
+      .boot-splash__title {
+        margin: 0;
+        font-family: var(
+          --font,
+          var(--font-hand, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif)
+        );
+        font-size: 1.4rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--ink, #111111);
+        line-height: 1.2;
+      }
+
+      .boot-splash__char {
+        display: inline-block;
+        opacity: 0;
+        transform: translateY(0.45em);
+        animation: boot-char-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation-delay: calc(var(--i, 0) * 36ms + 220ms);
+      }
+
+      @keyframes boot-mark-in {
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes boot-char-in {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes boot-splash-out {
+        to {
+          opacity: 0;
+          filter: blur(6px);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-splash__mark,
+        .boot-splash__char,
+        #boot-splash.is-leaving {
+          animation: none !important;
+          opacity: 1;
+          transform: none;
+          filter: none;
+        }
+      }
+    </style>
+    <script>
+      /**
+       * 模块图加载前按持久化设置绘制闪屏。
+       * 色板须与 packages/design 内置主题 `--tw-bg` / `--tw-fg` 对齐；
+       * 旧版把 light 画成 notes 米色，导致首屏先闪 notes 再切到真实主题。
+       */
+      (function paintBootSplash() {
+        var HAND = '"Segoe Print", "Bradley Hand", "Apple Chancery", "TW Hand", cursive';
+        var SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
+        var palettes = {
+          light: {
+            bg: "#ffffff",
+            ink: "#111111",
+            glow: "transparent",
+            rule: "rgba(0, 0, 0, 0.05)",
+            dark: false,
+          },
+          dark: {
+            bg: "#111111",
+            ink: "#f2f2f2",
+            glow: "transparent",
+            rule: "rgba(255, 255, 255, 0.06)",
+            dark: true,
+          },
+          notes: {
+            bg: "#f4ebe0",
+            ink: "#2a2218",
+            glow: "rgba(196, 165, 116, 0.2)",
+            rule: "rgba(120, 90, 60, 0.12)",
+            dark: false,
+          },
+          eyecare: {
+            bg: "#eef2e6",
+            ink: "#2f3a2c",
+            glow: "rgba(79, 111, 82, 0.12)",
+            rule: "rgba(79, 111, 82, 0.1)",
+            dark: false,
+          },
+          aurora: {
+            bg: "#0b1220",
+            ink: "#e8f4f2",
+            glow: "rgba(94, 234, 212, 0.1)",
+            rule: "rgba(94, 234, 212, 0.08)",
+            dark: true,
+          },
+        };
+        try {
+          var general =
+            window.thinker &&
+            window.thinker.settings &&
+            typeof window.thinker.settings.getGeneralSync === "function"
+              ? window.thinker.settings.getGeneralSync()
+              : null;
+          var pref = (general && general.uiTheme) || "light";
+          // 旧 id 映射，与 shared migrate / normalize 一致
+          if (pref === "mono") pref = "light";
+          if (pref === "dusk") pref = "aurora";
+          var prefersDark =
+            typeof window.matchMedia === "function" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var visual = pref;
+          if (pref === "system") visual = prefersDark ? "dark" : "light";
+          var p = palettes[visual] || null;
+          var themeId = palettes[visual] ? visual : "light";
+          // 自定义主题：尽量读快照里的 --tw-bg / --tw-fg
+          if (!p && typeof visual === "string" && visual.indexOf("custom_") === 0 && general) {
+            var customs = general.customThemes || [];
+            for (var i = 0; i < customs.length; i++) {
+              if (customs[i] && customs[i].id === visual && customs[i].theme && customs[i].theme.ui) {
+                var ui = customs[i].theme.ui;
+                var bg = ui["--tw-bg"];
+                var ink = ui["--tw-fg"];
+                if (typeof bg === "string" && bg.trim()) {
+                  p = {
+                    bg: bg.trim(),
+                    ink: typeof ink === "string" && ink.trim() ? ink.trim() : "#111111",
+                    glow: "transparent",
+                    rule: "rgba(0, 0, 0, 0.05)",
+                    dark: !!(customs[i].theme.colorScheme === "dark"),
+                  };
+                  themeId = visual;
+                }
+                break;
+              }
+            }
+          }
+          if (!p) {
+            p = palettes.light;
+            themeId = "light";
+          }
+          // 默认字型与 shared DEFAULT_APP_TYPE_STYLE=regular 一致
+          var typeStyle = general && general.uiTypeStyle === "hand" ? "hand" : "regular";
+          var root = document.documentElement;
+          root.dataset.twTheme = themeId;
+          root.dataset.twType = typeStyle;
+          root.style.setProperty("--bg", p.bg);
+          root.style.setProperty("--ink", p.ink);
+          root.style.setProperty("--tw-bg", p.bg);
+          root.style.setProperty("--tw-fg", p.ink);
+          root.style.setProperty("--paper-glow", p.glow);
+          root.style.setProperty("--paper-rule", p.rule);
+          root.style.setProperty("--tw-font-body", SANS);
+          root.style.setProperty("--font-body", SANS);
+          var handFont = typeStyle === "regular" ? SANS : HAND;
+          root.style.setProperty("--tw-font-hand", handFont);
+          root.style.setProperty("--tw-font-ui", handFont);
+          root.style.setProperty("--md-font-hand", handFont);
+          root.style.setProperty("--font-hand", handFont);
+          root.style.setProperty("--font", handFont);
+          root.style.setProperty("--display", handFont);
+          root.style.colorScheme = p.dark ? "dark" : "light";
+        } catch (_) {
+          /* Vite preview without Electron — keep CSS fallbacks */
+        }
+      })();
+
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="boot-splash" aria-busy="true" aria-live="polite" role="status">
+      <div class="boot-splash__inner">
+        <img class="boot-splash__mark" src="./brand/logo-glyph.png" alt="" width="96" height="96" />
+        <p class="boot-splash__title" id="boot-splash-title">Thinker Workbench</p>
+      </div>
+    </div>
+    <script>
+      /** 产品名逐字拆入 span，驱动进场动画。 */
+      (function fillBootTitle() {
+        var el = document.getElementById("boot-splash-title");
+        if (!el) return;
+        var title = "Thinker Workbench";
+        el.setAttribute("aria-label", title);
+        el.textContent = "";
+        for (var i = 0; i < title.length; i++) {
+          var span = document.createElement("span");
+          span.className = "boot-splash__char";
+          span.style.setProperty("--i", String(i));
+          span.setAttribute("aria-hidden", "true");
+          span.textContent = title.charAt(i) === " " ? "\u00a0" : title.charAt(i);
+          el.appendChild(span);
+        }
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,417 @@
+/* 左侧 Workspaces 侧栏 */
+
+.ws-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 0.86rem;
+}
+
+/* 竖排动作按钮组：占原面板标题栏位置；默认无边框，悬停洗底 */
+.ws-sidebar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 2px 8px;
+  border-bottom: 1px solid var(--line, rgba(42, 34, 24, 0.12));
+  margin: 0 0 8px;
+
+  /* 与下方 .ws-workspace__row 对齐：同左内边距 / 图标槽，去掉选中描边 */
+  .tw-side-nav-item {
+    padding: 4px 6px;
+    gap: 4px;
+    font-size: inherit;
+    font-weight: 550;
+    min-height: 30px;
+
+    &:focus,
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  .tw-side-nav-item__leading {
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.ws-sidebar__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 2px 12px;
+}
+
+.ws-sidebar__empty {
+  margin: 0;
+  padding: 10px 8px;
+  color: var(--ink-muted, #6b655c);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.ws-workspace {
+  margin-bottom: 0;
+}
+
+.ws-workspace__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 1px 6px;
+  min-height: 24px;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover,
+  &.is-menu-open {
+    background: var(--tw-bg-muted, rgba(0, 0, 0, 0.06));
+  }
+}
+
+.ws-workspace__plus {
+  opacity: 0;
+  pointer-events: none;
+  /* 避免 sm IconButton（1.75rem）把整行撑高 */
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 0.75rem !important;
+  flex: 0 0 auto;
+}
+
+.ws-workspace__row:hover .ws-workspace__plus,
+.ws-workspace__row.is-menu-open .ws-workspace__plus {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 前导图标槽：默认文件夹 / 悬停箭头，同一位置互斥 */
+.ws-workspace__lead {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--ink-muted, #6b655c);
+}
+
+.ws-workspace__lead-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.ws-workspace__lead-icon--folder {
+  opacity: 0.75;
+}
+
+.ws-workspace__lead-icon--chevron {
+  display: none;
+}
+
+.ws-workspace__row:hover .ws-workspace__lead-icon--folder,
+.ws-workspace__row.is-menu-open .ws-workspace__lead-icon--folder {
+  display: none;
+}
+
+.ws-workspace__row:hover .ws-workspace__lead-icon--chevron,
+.ws-workspace__row.is-menu-open .ws-workspace__lead-icon--chevron {
+  display: inline-flex;
+}
+
+.ws-workspace__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.ws-workspace__pin {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  opacity: 0.55;
+}
+
+.ws-workspace__rename {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 会话列表：grid 0fr↔1fr 做高度动画，内层再淡入淡出 */
+.ws-sessions {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  &.is-collapsed {
+    grid-template-rows: 0fr;
+    pointer-events: none;
+  }
+}
+
+.ws-sessions__inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 4px 0 2px 10px;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 160ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ws-sessions.is-collapsed .ws-sessions__inner {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-sessions,
+  .ws-sessions__inner {
+    transition: none;
+  }
+
+  .ws-sessions.is-collapsed .ws-sessions__inner {
+    transform: none;
+  }
+
+  .ws-session__dot.is-running::before {
+    animation: none;
+  }
+}
+
+.ws-session {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 5px 8px;
+  min-height: 28px;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background: var(--tw-bg-muted, rgba(0, 0, 0, 0.05));
+  }
+
+  &.is-selected {
+    background: var(--tw-accent-soft, rgba(0, 0, 0, 0.08));
+  }
+}
+
+/* 状态槽固定 14px，避免 running↔完成 时标题横向跳动 */
+.ws-session__dot {
+  --ws-dot-g: 3.5px;
+  --ws-dot-g2: 7px;
+  --ws-dot-g3: 10.5px;
+  --ws-dot-r: 0.7px;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-radius: 0;
+  color: var(--tw-fg-muted, #8a8478);
+
+  /* 空闲 / 中断：槽内居中 6px 圆点 */
+  &::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  &.is-interrupted {
+    color: var(--tw-danger, #b42318);
+  }
+
+  /*
+   * 进行中：子 agent 同款 3×3 点阵（css-loaders l26）。
+   * 仅画高亮点；间距略疏、点略小，减轻拥挤。
+   */
+  &.is-running {
+    color: var(--tw-accent-strong, #3d6b4f);
+    overflow: visible;
+  }
+
+  &.is-running::after {
+    display: none;
+  }
+
+  &.is-running::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 1px;
+    height: 1px;
+    margin: auto;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g2) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+    color: inherit;
+    transform: translateX(calc(-1 * var(--ws-dot-g2)));
+    animation: ws-session-matrix 2s infinite linear;
+    pointer-events: none;
+  }
+}
+
+@keyframes ws-session-matrix {
+  12.5% {
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g2) 0 0 0 transparent,
+      var(--ws-dot-g3) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+  }
+
+  25% {
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g) 0 0 0 transparent,
+      var(--ws-dot-g2) 0 0 0 transparent,
+      var(--ws-dot-g3) 0 0 0 transparent,
+      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+  }
+
+  50% {
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g) 0 0 0 transparent,
+      var(--ws-dot-g2) 0 0 0 transparent,
+      var(--ws-dot-g3) 0 0 0 transparent,
+      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor;
+  }
+
+  62.5% {
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g2) 0 0 0 transparent,
+      var(--ws-dot-g3) 0 0 0 transparent,
+      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor;
+  }
+
+  75% {
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g) 0 0 0 transparent,
+      var(--ws-dot-g2) 0 0 0 transparent,
+      var(--ws-dot-g3) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor;
+  }
+
+  87.5% {
+    box-shadow:
+      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
+      var(--ws-dot-g) 0 0 0 transparent,
+      var(--ws-dot-g2) 0 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g3) 0 0 0 transparent,
+      var(--ws-dot-g) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor,
+      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
+      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+  }
+}
+
+.ws-session__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-session__meta {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--tw-fg-muted, #8a8478);
+}
+
+.ws-session__pin {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  opacity: 0.55;
+}
+
+.ws-more {
+  margin: 2px 0 0 8px;
+}
+
+.ws-hint {
+  margin: 4px 8px 6px;
+  font-size: 0.78rem;
+  color: var(--tw-fg-muted, #8a8478);
+  line-height: 1.35;
+}
+
+.ws-alias-modal__path {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: var(--tw-fg-muted, #8a8478);
+  word-break: break-all;
+}
+
+.ws-toast {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--tw-bg-elev, #fff);
+  border: 1px solid var(--tw-border, #ddd);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  font-size: 0.8rem;
+  z-index: 2;
+}

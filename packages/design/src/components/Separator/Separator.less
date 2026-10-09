@@ -1,0 +1,20 @@
+/* Separator 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-separator {
+  flex: 0 0 auto;
+  border: 0;
+  background: var(--tw-border, var(--line));
+
+  &--horizontal {
+    width: 100%;
+    height: 1px;
+    margin: 8px 0;
+  }
+
+  &--vertical {
+    width: 1px;
+    height: 1.25rem;
+    margin: 0 8px;
+    align-self: center;
+  }
+}

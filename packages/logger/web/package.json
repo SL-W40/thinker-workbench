@@ -1,0 +1,36 @@
+{
+  "name": "@thinker-workbench/logger-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/App.tsx",
+    "./App": "./src/App.tsx",
+    "./i18n": "./src/i18n.ts",
+    "./styles.less": "./src/styles.less",
+    "./vite-plugin": "./src/vite/logsApiPlugin.ts"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@thinker-workbench/design": "workspace:*",
+    "@thinker-workbench/logger": "workspace:*",
+    "@thinker-workbench/shared": "workspace:*",
+    "better-sqlite3": "12.11.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "less": "^4.9.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}

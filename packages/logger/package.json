@@ -1,0 +1,30 @@
+{
+  "name": "@thinker-workbench/logger",
+  "version": "0.1.0",
+  "private": true,
+  "main": "artifacts/index.js",
+  "types": "artifacts/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./artifacts/index.d.ts",
+      "default": "./artifacts/index.js"
+    },
+    "./node": {
+      "types": "./artifacts/node/index.d.ts",
+      "default": "./artifacts/node/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:web": "pnpm --filter @thinker-workbench/logger-web dev",
+    "build:web": "pnpm --filter @thinker-workbench/logger-web build"
+  },
+  "dependencies": {
+    "@thinker-workbench/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}

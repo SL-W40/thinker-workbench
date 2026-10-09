@@ -1,0 +1,127 @@
+/* Modal 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  overflow: hidden;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  color: var(--tw-fg, var(--ink));
+}
+
+/* 蒙层固定铺满，不随内容滚动 */
+.tw-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--tw-bg, var(--bg)) 55%, transparent);
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+}
+
+/* 内容滚动层：盖在蒙层上，过高时滚动；滚动条隐藏 */
+.tw-modal__scroll {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  align-items: safe center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+.tw-modal__panel {
+  position: relative;
+  width: min(36rem, 100%);
+  max-height: none;
+  overflow: visible;
+  margin-block: auto;
+  padding: 22px 28px 24px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: calc(var(--tw-radius, var(--radius, 14px)) + 2px);
+  background: var(--tw-panel-solid, var(--panel-solid, var(--tw-bg-elev, var(--bg-elev))));
+  box-shadow: 0 18px 48px var(--tw-shadow-soft, rgb(0 0 0 / 16%));
+  display: grid;
+  gap: 18px;
+}
+
+/* 进场：蒙层淡入，面板轻微上移 + 缩放。 */
+.tw-modal.is-enter .tw-modal__backdrop {
+  animation: tw-modal-backdrop-in 180ms ease both;
+}
+
+.tw-modal.is-enter .tw-modal__panel {
+  animation: tw-modal-panel-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 离场：面板先收，蒙层同步淡出。 */
+.tw-modal.is-exit .tw-modal__backdrop {
+  animation: tw-modal-backdrop-out 150ms ease both;
+}
+
+.tw-modal.is-exit .tw-modal__panel {
+  animation: tw-modal-panel-out 160ms ease both;
+}
+
+@keyframes tw-modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tw-modal-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes tw-modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tw-modal-panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-modal.is-enter .tw-modal__backdrop,
+  .tw-modal.is-enter .tw-modal__panel,
+  .tw-modal.is-exit .tw-modal__backdrop,
+  .tw-modal.is-exit .tw-modal__panel {
+    animation: none;
+  }
+}

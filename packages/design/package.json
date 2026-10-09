@@ -1,0 +1,41 @@
+{
+  "name": "@thinker-workbench/design",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "artifacts/index.js",
+  "types": "artifacts/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./artifacts/index.d.ts",
+      "import": "./artifacts/index.js",
+      "default": "./artifacts/index.js"
+    },
+    "./react": {
+      "types": "./artifacts/react/index.d.ts",
+      "import": "./artifacts/react/index.js",
+      "default": "./artifacts/react/index.js"
+    },
+    "./styles.less": "./src/styles/design.less",
+    "./controls.less": "./src/styles/controls.less",
+    "./notes.less": "../markdown/src/styles/notes.less"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@thinker-workbench/markdown": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "packages/desktop/artifacts/main.js",
+    "packages/desktop/artifacts/preload.js",
+    "packages/engine/artifacts/entry.js"
+  ],
+  "ext": "js",
+  "ignore": ["**/node_modules/**"],
+  "exec": "node scripts/run-electron.mjs product -- --log-level=3 .",
+  "delay": 5000,
+  "signal": "SIGKILL",
+  "quiet": true
+}

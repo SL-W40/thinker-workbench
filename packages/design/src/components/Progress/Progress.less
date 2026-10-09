@@ -1,0 +1,31 @@
+/* Progress 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-progress {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tw-border, var(--line)) 55%, transparent);
+}
+
+.tw-progress__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tw-accent-strong, var(--accent-strong));
+  transition: width 0.2s ease;
+}
+
+.tw-progress.is-indeterminate .tw-progress__bar {
+  width: 36%;
+  animation: tw-progress-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes tw-progress-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}

@@ -1,0 +1,71 @@
+/* ChoiceCard 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-choice-card {
+  appearance: none;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  /* 顶对齐：等高拉伸时标题不会因内容行数不同而高低错位 */
+  align-items: start;
+  width: 100%;
+  margin: 0;
+  padding: 12px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: calc(var(--tw-radius, var(--radius, 14px)));
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--tw-accent, var(--accent));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+
+  &.is-selected {
+    border-color: var(--tw-accent-strong, var(--accent-strong));
+    box-shadow: 0 0 0 1px var(--tw-accent-strong, var(--accent-strong));
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+}
+
+.tw-choice-card__swatch {
+  display: block;
+  min-width: 3.2rem;
+  min-height: 3.2rem;
+}
+
+.tw-choice-card__body {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+
+  strong {
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  span,
+  em {
+    font-size: 0.78rem;
+    color: var(--tw-fg-muted, var(--muted));
+    font-style: normal;
+    line-height: 1.35;
+  }
+
+  em {
+    color: var(--tw-accent-strong, var(--accent-strong));
+    font-weight: 600;
+  }
+}

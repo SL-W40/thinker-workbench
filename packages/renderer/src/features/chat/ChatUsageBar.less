@@ -1,0 +1,237 @@
+/* 聊天底部 Tokens / 耗时状态条 */
+
+.chat-usage-bar {
+  width: 100%;
+  max-width: var(--composer-max-width, 40rem);
+  margin: 8px auto 0;
+
+  &--message {
+    max-width: none;
+    margin: 8px 0 0;
+  }
+}
+
+.chat-usage-bar__pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-usage-pill-wrap {
+  position: relative;
+}
+
+.chat-usage-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.18)));
+  border-radius: 999px;
+  background: var(--bg-elev, var(--tw-bg-elev, rgba(0, 0, 0, 0.04)));
+  color: var(--ink-muted, var(--muted, #6b655c));
+  font-size: 0.72rem;
+  font-family: var(--font-ui, var(--tw-font-ui, inherit));
+  line-height: 1.2;
+  cursor: pointer;
+  max-width: 100%;
+
+  .tw-icon {
+    flex: 0 0 auto;
+    opacity: 0.85;
+  }
+
+  &:hover,
+  &.is-open {
+    color: var(--ink);
+    background: var(--tw-bg-muted, rgba(0, 0, 0, 0.06));
+  }
+
+  &.is-static {
+    cursor: default;
+
+    &:hover {
+      color: var(--ink-muted, var(--muted, #6b655c));
+      background: var(--bg-elev, var(--tw-bg-elev, rgba(0, 0, 0, 0.04)));
+    }
+  }
+}
+
+.chat-usage-pill__info {
+  opacity: 0.55;
+}
+
+/* fixed + portal：位置由 JS 按触发器与视口空间计算（上/下翻转） */
+.chat-usage-popover {
+  position: fixed;
+  z-index: 1200;
+  box-sizing: border-box;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.18)));
+  border-radius: 12px;
+  background: var(--bg-elev, var(--tw-bg-elev, #1a1a1a));
+  color: var(--ink);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-usage-popover__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.chat-usage-popover__total {
+  font-weight: 500;
+  color: var(--ink-muted, var(--muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-usage-popover__sep {
+  margin: 8px 0;
+}
+
+/* Input / Output 分组：子集缩进 + 左侧树线 */
+.chat-usage-group {
+  display: grid;
+  gap: 2px;
+}
+
+.chat-usage-group__children {
+  display: grid;
+  gap: 1px;
+  margin: 2px 0 0 11px;
+  padding: 2px 0 2px 10px;
+  border-left: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.chat-usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 22px;
+  font-size: 0.74rem;
+
+  &.is-parent {
+    font-weight: 600;
+  }
+
+  &.is-nested {
+    color: var(--ink-muted, var(--muted));
+    font-size: 0.7rem;
+  }
+}
+
+.chat-usage-row__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.chat-usage-row__value {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.72rem;
+
+  &.is-rate {
+    color: #3d9a5f;
+    font-weight: 650;
+  }
+}
+
+.chat-usage-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+
+  &--input {
+    background: #4c8dff;
+  }
+
+  &--output {
+    background: #9b6bff;
+  }
+
+  &--hit {
+    background: #3d9a5f;
+  }
+
+  &--miss {
+    background: #e06b8a;
+  }
+
+  &--write {
+    background: #d4a017;
+  }
+
+  /* 输出子集：思考偏紫、回复偏青，与 output 主色区分 */
+  &--reasoning {
+    background: #c084fc;
+  }
+
+  &--reply {
+    background: #67a0ff;
+  }
+
+  &--none {
+    background: transparent;
+  }
+}
+
+.chat-usage-bar-meter {
+  display: flex;
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.chat-usage-bar-meter__seg {
+  min-width: 2px;
+
+  &.is-hit {
+    background: #3d9a5f;
+  }
+
+  &.is-write {
+    background: #d4a017;
+  }
+
+  &.is-miss {
+    background: #e06b8a;
+  }
+}
+
+.chat-usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 0.68rem;
+  color: var(--ink-muted, var(--muted));
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  i {
+    font-style: normal;
+  }
+}

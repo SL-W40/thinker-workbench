@@ -1,0 +1,34 @@
+/* Badge 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: 999px;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--tw-fg-muted, var(--muted));
+  background: var(--tw-bg-elev, var(--bg-elev));
+
+  &--accent {
+    border-color: var(--tw-accent, var(--accent));
+    color: var(--tw-accent-strong, var(--accent-strong));
+    background: color-mix(in srgb, var(--tw-accent, var(--accent)) 14%, transparent);
+  }
+
+  &--danger {
+    border-color: var(--tw-danger, var(--danger));
+    color: var(--tw-danger, var(--danger));
+    background: var(--tw-danger-bg, rgba(155, 59, 46, 0.1));
+  }
+
+  &--success {
+    border-color: color-mix(in srgb, var(--tw-accent-strong, #2f6f4e) 70%, var(--tw-border, var(--line)));
+    color: var(--tw-accent-strong, #2f6f4e);
+    background: color-mix(in srgb, var(--tw-accent-strong, #2f6f4e) 12%, transparent);
+  }
+}

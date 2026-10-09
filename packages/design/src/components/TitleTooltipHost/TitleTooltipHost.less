@@ -1,0 +1,22 @@
+/* TitleTooltipHost 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: min(22rem, calc(100vw - 16px));
+  margin: 0;
+  padding: 6px 10px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: 8px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 22px var(--tw-shadow-soft, rgba(0, 0, 0, 0.14));
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
