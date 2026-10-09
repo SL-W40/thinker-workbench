@@ -2059,7 +2059,8 @@ kbd {
 }
 
 .composer-workspace {
-  display: inline-flex;
+  /* 与 .composer-shell 同宽居中；勿用 inline-flex，否则 margin:auto 无效会顶到 dock 左侧 */
+  display: flex;
   align-items: center;
   gap: 5px;
   width: 100%;
