@@ -1,30 +1,38 @@
-/* 左侧 Workspaces 侧栏 */
+/* 左侧 Workspaces 侧栏
+ * 层次靠颜色/字号，不靠加粗；工作空间组间距保持紧凑
+ */
 
 .ws-sidebar {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  font-size: 0.86rem;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--tw-fg, var(--ink));
 }
 
-/* 竖排动作按钮组：占原面板标题栏位置；默认无边框，悬停洗底 */
+/* 竖排动作：与下方工作空间行同槽宽，分隔线后留一点呼吸 */
 .ws-sidebar__actions {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 2px 8px;
+  padding: 8px 4px 10px;
   border-bottom: 1px solid var(--line, rgba(42, 34, 24, 0.12));
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 
-  /* 与下方 .ws-workspace__row 对齐：同左内边距 / 图标槽，去掉选中描边 */
   .tw-side-nav-item {
-    padding: 4px 6px;
-    gap: 4px;
-    font-size: inherit;
-    font-weight: 550;
-    min-height: 30px;
+    padding: 6px 8px;
+    gap: 8px;
+    min-height: 32px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--tw-fg-muted, var(--ink-muted, #6b655c));
+
+    &:hover:not(:disabled) {
+      color: var(--tw-fg, var(--ink));
+    }
 
     &:focus,
     &:focus-visible {
@@ -44,46 +52,51 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 0 2px 12px;
+  padding: 0 4px 14px;
 }
 
 .ws-sidebar__empty {
   margin: 0;
-  padding: 10px 8px;
+  padding: 12px 10px;
   color: var(--ink-muted, #6b655c);
-  font-size: 0.82rem;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .ws-workspace {
-  margin-bottom: 0;
+  margin-bottom: 2px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
 }
 
 .ws-workspace__row {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  border-radius: 6px;
-  padding: 1px 6px;
-  min-height: 24px;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-height: 32px;
   cursor: pointer;
   user-select: none;
 
   &:hover,
   &.is-menu-open {
-    background: var(--tw-bg-muted, rgba(0, 0, 0, 0.06));
+    background: var(--tw-hover, var(--hover-wash, rgba(0, 0, 0, 0.04)));
   }
 }
 
 .ws-workspace__plus {
   opacity: 0;
   pointer-events: none;
-  /* 避免 sm IconButton（1.75rem）把整行撑高 */
-  width: 20px !important;
-  height: 20px !important;
-  font-size: 0.75rem !important;
+  /* 避免 sm IconButton（28px）把整行撑高 */
+  width: 22px !important;
+  height: 22px !important;
+  font-size: 12px !important;
   flex: 0 0 auto;
+  color: var(--tw-fg-muted, var(--ink-muted, #6b655c));
 }
 
 .ws-workspace__row:hover .ws-workspace__plus,
@@ -101,7 +114,7 @@
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  color: var(--ink-muted, #6b655c);
+  color: var(--tw-fg-muted, var(--ink-muted, #6b655c));
 }
 
 .ws-workspace__lead-icon {
@@ -113,7 +126,7 @@
 }
 
 .ws-workspace__lead-icon--folder {
-  opacity: 0.75;
+  opacity: 0.85;
 }
 
 .ws-workspace__lead-icon--chevron {
@@ -136,13 +149,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
   font-weight: 400;
+  color: var(--tw-fg, var(--ink));
 }
 
 .ws-workspace__pin {
   flex: 0 0 auto;
-  font-size: 0.7rem;
-  opacity: 0.55;
+  font-size: 11px;
+  opacity: 0.45;
 }
 
 .ws-workspace__rename {
@@ -165,7 +180,8 @@
 .ws-sessions__inner {
   min-height: 0;
   overflow: hidden;
-  padding: 4px 0 2px 10px;
+  /* 略缩进即可，避免会话药丸左侧空一大块 */
+  padding: 2px 0 2px 8px;
   opacity: 1;
   transform: translateY(0);
   transition:
@@ -199,19 +215,26 @@
 .ws-session {
   display: flex;
   align-items: center;
-  gap: 6px;
-  border-radius: 8px;
-  padding: 5px 8px;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 5px 6px;
   min-height: 28px;
   cursor: pointer;
   user-select: none;
+  color: var(--tw-fg-muted, var(--ink-muted, #6b655c));
+
+  & + & {
+    margin-top: 1px;
+  }
 
   &:hover {
-    background: var(--tw-bg-muted, rgba(0, 0, 0, 0.05));
+    color: var(--tw-fg, var(--ink));
+    background: var(--tw-hover, var(--hover-wash, rgba(0, 0, 0, 0.04)));
   }
 
   &.is-selected {
-    background: var(--tw-accent-soft, rgba(0, 0, 0, 0.08));
+    color: var(--tw-fg, var(--ink));
+    background: color-mix(in srgb, var(--tw-accent, var(--accent, #3d6b4f)) 10%, transparent);
   }
 }
 
@@ -238,17 +261,22 @@
   border-radius: 0;
   color: var(--tw-fg-muted, #8a8478);
 
-  /* 空闲 / 中断：槽内居中 6px 圆点 */
+  /* 空闲 / 中断：槽内居中小圆点，避免压过文件夹线宽 */
   &::after {
     content: "";
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
     background: currentColor;
+    opacity: 0.7;
   }
 
   &.is-interrupted {
     color: var(--tw-danger, #b42318);
+
+    &::after {
+      opacity: 1;
+    }
   }
 
   /*
@@ -399,34 +427,42 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .ws-session__meta {
   flex: 0 0 auto;
-  font-size: 0.72rem;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
   color: var(--tw-fg-muted, #8a8478);
+  opacity: 0.85;
 }
 
 .ws-session__pin {
   flex: 0 0 auto;
-  font-size: 0.68rem;
-  opacity: 0.55;
+  font-size: 10px;
+  opacity: 0.4;
 }
 
 .ws-more {
-  margin: 2px 0 0 8px;
+  margin: 4px 0 0 2px;
 }
 
 .ws-hint {
   margin: 4px 8px 6px;
-  font-size: 0.78rem;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--tw-fg-muted, #8a8478);
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .ws-alias-modal__path {
   margin: 0 0 12px;
-  font-size: 0.8rem;
+  font-size: 13px;
   color: var(--tw-fg-muted, #8a8478);
   word-break: break-all;
 }
@@ -441,6 +477,6 @@
   background: var(--tw-bg-elev, #fff);
   border: 1px solid var(--tw-border, #ddd);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  font-size: 0.8rem;
+  font-size: 13px;
   z-index: 2;
 }

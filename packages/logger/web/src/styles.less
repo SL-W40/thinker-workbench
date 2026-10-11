@@ -30,13 +30,13 @@ body {
   h1 {
     margin: 0 0 4px;
     font-family: var(--font);
-    font-size: 1.35rem;
+    font-size: 22px;
   }
 
   p {
     margin: 0 0 6px;
     color: var(--ink-muted, var(--ink));
-    font-size: 0.9rem;
+    font-size: 14px;
   }
 }
 
@@ -47,19 +47,19 @@ body {
   gap: 12px;
 
   h1 {
-    font-size: 1.1rem;
+    font-size: 18px;
   }
 }
 
 .logs-dir {
   display: inline-block;
-  font-size: 0.72rem;
+  font-size: 12px;
   opacity: 0.75;
   word-break: break-all;
 }
 
 .logs-count {
-  font-size: 0.8rem;
+  font-size: 13px;
   color: var(--ink-muted, var(--ink));
   white-space: nowrap;
 }
@@ -78,7 +78,7 @@ body {
   min-width: 120px;
 
   span {
-    font-size: 0.75rem;
+    font-size: 12px;
     color: var(--ink-muted, var(--ink));
   }
 
@@ -105,7 +105,7 @@ body {
 .logs-error {
   margin: 0;
   color: var(--danger, #b33);
-  font-size: 0.85rem;
+  font-size: 14px;
 }
 
 .logs-chain {
@@ -121,10 +121,10 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  font-size: 0.8rem;
+  font-size: 13px;
 
   code {
-    font-size: 0.72rem;
+    font-size: 12px;
     word-break: break-all;
   }
 }
@@ -145,7 +145,7 @@ body {
   gap: 4px 14px;
   counter-reset: hop;
   font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 0.7rem;
+  font-size: 11px;
   color: var(--ink-muted, var(--ink));
 
   li {
@@ -177,7 +177,7 @@ body {
 }
 
 .logs-traces-title {
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 6px 8px;
   color: var(--ink-muted, var(--ink));
@@ -219,12 +219,12 @@ body {
 
 .logs-trace-id {
   font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 0.78rem;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .logs-trace-meta {
-  font-size: 0.68rem;
+  font-size: 11px;
   color: var(--ink-muted, var(--ink));
   line-height: 1.3;
 }
@@ -269,19 +269,19 @@ body {
 
   &--aside {
     margin: 8px;
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 }
 
 /* 虚拟列表：表头固定 + 滚动区只挂载可视行 */
 .logs-vtable {
-  --logs-cols: 9.5rem 3.2rem 4.5rem 9rem 5.5rem minmax(0, 1fr) 5rem;
+  --logs-cols: 152px 51px 72px 144px 88px minmax(0, 1fr) 80px;
   height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 0.72rem;
+  font-size: 12px;
 }
 
 .logs-vtable-head,
@@ -409,13 +409,13 @@ body {
 
   h2 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 17px;
   }
 }
 
 .logs-detail-sub {
   margin: 4px 0 0;
-  font-size: 0.78rem;
+  font-size: 12px;
   color: var(--ink-muted, var(--ink));
   word-break: break-word;
 }
@@ -427,7 +427,7 @@ body {
   flex: 1;
   min-height: 0;
   font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 0.74rem;
+  font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -438,7 +438,7 @@ body {
   display: inline-block;
   padding: 1px 5px;
   border-radius: 4px;
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 600;
 
   &.is-app {

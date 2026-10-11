@@ -1,5 +1,5 @@
 /**
- * 通用应用设置：通知、托盘、语言、主题、工作区访问、AI 删文件与恢复缓存 TTL、引导完成态、数据目录与日志策略。
+ * 通用应用设置：通知、托盘、语言、主题、字体大小档位、工作区访问、AI 删文件与恢复缓存 TTL、引导完成态、数据目录与日志策略。
  * 持久化于主进程设置文件；经 IPC 与 renderer 同步。
  *
  * `dataDir` 不走 `setGeneral` 即时生效，须经 `previewDataDirChange` / `applyDataDirChange`。
@@ -131,6 +131,23 @@ export function migrateAppThemeFromCatalogV1(value: unknown): AppThemeId {
   return normalizeAppTheme(value, DEFAULT_APP_THEME);
 }
 
+/** UI 字体大小档位（相对默认约 87.5% / 100% / 112.5%）。 */
+export const APP_FONT_SCALE_IDS = ["small", "medium", "large"] as const;
+/** UI 字体大小档位联合类型。 */
+export type AppFontScale = (typeof APP_FONT_SCALE_IDS)[number];
+/** 默认：中档。 */
+export const DEFAULT_APP_FONT_SCALE: AppFontScale = "medium";
+
+/** 将未知值规范为合法字体大小档位。 */
+export function normalizeAppFontScale(
+  value: unknown,
+  fallback: AppFontScale = DEFAULT_APP_FONT_SCALE,
+): AppFontScale {
+  return typeof value === "string" && (APP_FONT_SCALE_IDS as readonly string[]).includes(value)
+    ? (value as AppFontScale)
+    : fallback;
+}
+
 /**
  * 文件工具对工作区外路径的访问档位。
  * - `workspace`：读写均不可越界
@@ -189,6 +206,8 @@ export type GeneralSettings = {
   uiTheme: AppThemeId;
   /** 用户自定义主题目录（完整色板快照）。 */
   customThemes: CustomThemeRecord[];
+  /** UI 整体缩放档位（小 / 中 / 大）。 */
+  uiFontScale: AppFontScale;
   /** 首次启动引导是否已完成（或已跳过）。 */
   onboardingCompleted: boolean;
   /**
@@ -396,6 +415,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   deleteFileRestoreTtlDays: DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
   uiTheme: DEFAULT_APP_THEME,
   customThemes: [],
+  uiFontScale: DEFAULT_APP_FONT_SCALE,
   onboardingCompleted: false,
   dataDir: "",
   logRetentionDays: 0,
@@ -500,6 +520,7 @@ export function normalizeGeneral(
   } else {
     base.uiTheme = normalizeUiTheme(obj.uiTheme, base.customThemes, DEFAULT_APP_THEME);
   }
+  base.uiFontScale = normalizeAppFontScale(obj.uiFontScale, DEFAULT_APP_FONT_SCALE);
   if (typeof obj.onboardingCompleted === "boolean") {
     base.onboardingCompleted = obj.onboardingCompleted;
   } else {

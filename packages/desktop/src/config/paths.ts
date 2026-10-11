@@ -110,14 +110,14 @@ export function getAppIconPath(): string {
 }
 
 /**
- * Start Menu / Toast 标题栏图标——仅头部的 `logo-glyph`（小号 UI 用）。
- * 回退顺序：toast-icon → 主应用图标。
+ * Start Menu / 任务栏快捷方式图标（完整 app icon，避免用 glyph 被 Windows 缓存成旧图）。
+ * 回退：toast-icon → logo-glyph → png。
  */
 export function getToastShortcutIconPath(): string {
   const names =
     process.platform === "win32"
-      ? (["logo-glyph.ico", "toast-icon.ico", "icon.ico", "icon.png"] as const)
-      : (["logo-glyph.png", "toast-icon.png", "icon.png", "icon.ico"] as const);
+      ? (["icon.ico", "toast-icon.ico", "logo-glyph.ico", "icon.png"] as const)
+      : (["icon.png", "toast-icon.png", "logo-glyph.png", "icon.ico"] as const);
   return resolveIcon(names);
 }
 

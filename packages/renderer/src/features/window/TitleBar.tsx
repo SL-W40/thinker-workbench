@@ -1,21 +1,20 @@
 /**
- * 自定义标题栏：品牌回首页、页面后退/前进、左侧栏开关、控制台入口： * 以及 Windows 窗口控件（最小化 / 最大化 / 关闭）。 *
- * 以及 Windows 窗口控件（最小化 / 最大化 / 关闭）。
- *
+ * 自定义标题栏：品牌回首页、控制台 tab（主窗 logo 旁）、非聊天时「返回」tab、
+ * 聊天时左侧栏开关，以及 Windows 窗口控件（最小化 / 最大化 / 关闭）。
  */
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronLeftIcon,
-  ChevronRightIcon,
   CloseIcon,
-  ConsoleIcon,
   IconButton,
   MaximizeIcon,
   MinimizeIcon,
   RestoreIcon,
   SidebarLeftIcon,
+  useDesignTheme,
 } from "@thinker-workbench/design/react";
-import type { AuxPageId, WindowRole } from "@thinker-workbench/shared";
+import type { WindowRole } from "@thinker-workbench/shared";
+import { brandGlyphSrc } from "../../brand/logo";
 import { windowApi } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
 import type { PageId } from "../nav/usePageStack";
@@ -23,41 +22,54 @@ import { TOOL_TAB_IDS, toolTabIcon, toolTabLabel, type ToolTabId } from "../tool
 import "../tools/tools.less";
 
 type TitleBarProps = {
-  /** 当前窗口角色；辅助窗渲染精简栏。*/
+  /** 当前窗口角色；辅助窗渲染精简栏。 */
   role: WindowRole;
   current: PageId;
-  canBack: boolean;
-  canForward: boolean;
   leftPanelOpen: boolean;
-  onBack: () => void;
-  onForward: () => void;
   onGoHome: () => void;
   onToggleLeftPanel: () => void;
-  /** 打开控制台（主窗内导航）。*/
-  onOpenConsole: () => void;
- /** 控制台当?tab。*/
+  /** 控制台当前 tab。 */
   toolsTab?: ToolTabId;
+  /** 点 tab：切 tab 并打开控制台页。 */
   onToolsTabChange?: (tab: ToolTabId) => void;
 };
 
-/** 控制台顶?tab 条。*/
+/** 控制台顶栏 tab；可选在 Settings 左侧插入「返回」。 */
 function ConsoleTabs({
   toolsTab,
+  active,
   onToolsTabChange,
   ariaLabel,
+  showReturn,
+  onReturn,
 }: {
   toolsTab: ToolTabId;
+  /** 是否处在控制台页（高亮当前 tab）。 */
+  active: boolean;
   onToolsTabChange?: (tab: ToolTabId) => void;
   ariaLabel: string;
+  showReturn?: boolean;
+  onReturn?: () => void;
 }) {
   const t = useT();
   return (
     <nav className="titlebar-tool-tabs" aria-label={ariaLabel}>
+      {showReturn ? (
+        <button
+          type="button"
+          className="titlebar-tool-tab"
+          onClick={onReturn}
+          title={t("nav.returnToChat")}
+        >
+          <ChevronLeftIcon size="sm" />
+          <span>{t("nav.returnToChat")}</span>
+        </button>
+      ) : null}
       {TOOL_TAB_IDS.map((id) => (
         <button
           key={id}
           type="button"
-          className={`titlebar-tool-tab${toolsTab === id ? " is-active" : ""}`}
+          className={`titlebar-tool-tab${active && toolsTab === id ? " is-active" : ""}`}
           onClick={() => onToolsTabChange?.(id)}
         >
           {toolTabIcon(id)}
@@ -71,18 +83,15 @@ function ConsoleTabs({
 export function TitleBar({
   role,
   current,
-  canBack,
-  canForward,
   leftPanelOpen,
-  onBack,
-  onForward,
   onGoHome,
   onToggleLeftPanel,
-  onOpenConsole,
   toolsTab = "settings",
   onToolsTabChange,
 }: TitleBarProps) {
   const t = useT();
+  const { theme } = useDesignTheme();
+  const glyphSrc = brandGlyphSrc(theme.colorScheme);
   const [maximized, setMaximized] = useState(false);
   const api = windowApi();
   const onChat = current === "chat";
@@ -96,30 +105,9 @@ export function TitleBar({
     return api.onMaximized(setMaximized);
   }, [api]);
 
-  /** Mod（Ctrl/Cmd： 点击 →开/聚焦辅助窗；否则若已有辅助窗则聚焦，否则主窗内导航。*/
-  function handleAuxNavClick(page: AuxPageId, openInMain: () => void) {
-    return (event: MouseEvent<HTMLButtonElement>) => {
-      const mod = event.ctrlKey || event.metaKey;
-      if (mod && api?.openOrFocusPage) {
-        event.preventDefault();
-        void api.openOrFocusPage(page);
-        return;
-      }
-      if (api?.focusPageIfOpen) {
-        void api.focusPageIfOpen(page).then((focused) => {
-          if (!focused) openInMain();
-        });
-        return;
-      }
-      openInMain();
-    };
-  }
-
- // 辅助窗口：品牌标?+（控制台顶栏 tab： 关闭
+  // 辅助窗口：品牌 + 控制台 tab + 关闭
   if (isAux) {
     const isTools = role.page === "tools" || role.page === "settings";
-    const pageLabel = t("nav.tools");
-    const fullTitle = t("nav.auxWindowTitle", { page: pageLabel });
     return (
       <header className="titlebar titlebar--aux">
         <div className="titlebar-drag">
@@ -130,12 +118,12 @@ export function TitleBar({
             aria-label={t("nav.focusMain")}
             onClick={() => void api?.focusMain?.()}
           >
-            <img className="mark-logo" src="./brand/logo-glyph.png" alt="" width={22} height={22} />
-            <span className="mark-name">{fullTitle}</span>
+            <img className="mark-logo" src={glyphSrc} alt="" width={22} height={22} />
           </button>
           {isTools ? (
             <ConsoleTabs
               toolsTab={toolsTab}
+              active
               onToolsTabChange={onToolsTabChange}
               ariaLabel={t("tools.navLabel")}
             />
@@ -169,11 +157,18 @@ export function TitleBar({
           aria-label={t("nav.goHome")}
           onClick={onGoHome}
         >
-          <img className="mark-logo" src="./brand/logo-glyph.png" alt="" width={22} height={22} />
-          <span className="mark-name">{t("brand.name")}</span>
+          <img className="mark-logo" src={glyphSrc} alt="" width={22} height={22} />
         </button>
-        <div className="titlebar-nav" aria-label={t("nav.pageNav")}>
-          {onChat ? (
+        <ConsoleTabs
+          toolsTab={toolsTab}
+          active={onConsole}
+          onToolsTabChange={onToolsTabChange}
+          ariaLabel={t("tools.navLabel")}
+          showReturn={!onChat}
+          onReturn={onGoHome}
+        />
+        {onChat ? (
+          <div className="titlebar-nav" aria-label={t("nav.pageNav")}>
             <IconButton
               className={`titlebar-nav-btn${leftPanelOpen ? " is-active" : ""}`}
               size="sm"
@@ -184,47 +179,10 @@ export function TitleBar({
             >
               <SidebarLeftIcon open={leftPanelOpen} />
             </IconButton>
-          ) : null}
-          <IconButton
-            className="titlebar-nav-btn"
-            size="sm"
-            title={t("nav.back")}
-            aria-label={t("nav.back")}
-            disabled={!canBack}
-            onClick={onBack}
-          >
-            <ChevronLeftIcon />
-          </IconButton>
-          <IconButton
-            className="titlebar-nav-btn"
-            size="sm"
-            title={t("nav.forward")}
-            aria-label={t("nav.forward")}
-            disabled={!canForward}
-            onClick={onForward}
-          >
-            <ChevronRightIcon />
-          </IconButton>
-        </div>
-        {onConsole ? (
-          <ConsoleTabs
-            toolsTab={toolsTab}
-            onToolsTabChange={onToolsTabChange}
-            ariaLabel={t("tools.navLabel")}
-          />
+          </div>
         ) : null}
       </div>
       <div className="titlebar-actions">
-        <IconButton
-          className={`titlebar-action-icon${onConsole ? " is-active" : ""}`}
-          size="sm"
-          title={t("nav.openConsoleHint")}
-          aria-label={t("nav.openConsole")}
-          aria-current={onConsole ? "page" : undefined}
-          onClick={handleAuxNavClick("tools", onOpenConsole)}
-        >
-          <ConsoleIcon active={onConsole} />
-        </IconButton>
         {api ? (
           <div className="win-controls" aria-label={t("window.controls")}>
             <button

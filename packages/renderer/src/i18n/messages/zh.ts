@@ -55,6 +55,7 @@ export const zh: MessageTree = {
   nav: {
     back: "后退",
     forward: "前进",
+    returnToChat: "返回",
     settings: "设置",
     tools: "控制台",
     openSettings: "打开设置",
@@ -690,6 +691,13 @@ export const zh: MessageTree = {
           mermaidVarsHint: "字符串键值对象，会合并进 Mermaid themeVariables。",
           limitReached: "自定义主题最多 {n} 个。",
         },
+      },
+      uiFontScale: {
+        title: "界面字体大小",
+        description: "调整应用整体文字与控件尺寸。",
+        small: "小",
+        medium: "中",
+        large: "大",
       },
       uiLocale: {
         title: "界面语言",

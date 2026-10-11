@@ -53,6 +53,7 @@ export const en = {
   nav: {
     back: "Back",
     forward: "Forward",
+    returnToChat: "Back",
     settings: "Settings",
     tools: "Console",
     openSettings: "Open settings",
@@ -699,6 +700,13 @@ export const en = {
           mermaidVarsHint: "Object of string values merged into Mermaid themeVariables.",
           limitReached: "You can keep at most {n} custom themes.",
         },
+      },
+      uiFontScale: {
+        title: "Interface text size",
+        description: "Scale text and controls across the app.",
+        small: "Small",
+        medium: "Medium",
+        large: "Large",
       },
       uiLocale: {
         title: "Interface language",

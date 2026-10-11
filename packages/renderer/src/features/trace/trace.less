@@ -110,14 +110,14 @@
   gap: 2px;
 
   strong {
-    font-size: 0.84rem;
+    font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   span {
-    font-size: 0.72rem;
+    font-size: 12px;
     color: var(--muted);
   }
 }
@@ -141,7 +141,7 @@
 .trace-pane__hint {
   margin: 16px 8px;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 13px;
 }
 
 /* 主区 / 详情区加载：在可用区域内水平垂直居中 */
@@ -155,7 +155,7 @@
   width: 100%;
   margin: 0;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 13px;
 }
 
 .trace-pane__toolbar {
@@ -171,15 +171,15 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.78rem;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .trace-pane__toolbar-hint {
   margin: 0;
-  flex: 1 1 12rem;
+  flex: 1 1 192px;
   min-width: 0;
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -215,7 +215,7 @@
   gap: 8px;
   padding: 4px 8px;
   border-radius: 6px;
-  font-size: 0.78rem;
+  font-size: 12px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
 
   &.is-main {
@@ -245,7 +245,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 700;
   color: var(--panel, #fff);
   background: color-mix(in srgb, var(--accent) 75%, var(--ink));
@@ -274,7 +274,7 @@
 }
 
 .trace-pane__kind {
-  font-size: 0.68rem;
+  font-size: 11px;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -285,12 +285,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8rem;
+  font-size: 13px;
 }
 
 .trace-pane__src,
 .trace-pane__status {
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -300,7 +300,7 @@
 
   h3 {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 15px;
     word-break: break-all;
   }
 }
@@ -309,11 +309,11 @@
   margin: 0;
   display: grid;
   gap: 6px;
-  font-size: 0.78rem;
+  font-size: 12px;
 
   div {
     display: grid;
-    grid-template-columns: 4.5rem 1fr;
+    grid-template-columns: 72px 1fr;
     gap: 8px;
   }
 
@@ -337,7 +337,7 @@
     padding: 8px 10px;
     max-height: 240px;
     overflow: auto;
-    font-size: 0.72rem;
+    font-size: 12px;
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;
@@ -350,7 +350,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 6px 10px;
-  font-size: 0.74rem;
+  font-size: 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
 
   span {
@@ -929,7 +929,7 @@
   margin-bottom: 4px;
   background: color-mix(in srgb, var(--panel, #fff) 92%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
-  font-size: 0.68rem;
+  font-size: 11px;
   color: var(--muted);
   display: grid;
   grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
@@ -976,7 +976,7 @@
 
 .trace-calltree__par-banner {
   padding: 4px 10px;
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 650;
   color: color-mix(in srgb, var(--seq-par) 55%, var(--ink));
   background: color-mix(in srgb, var(--seq-par) 14%, var(--panel));
@@ -1028,7 +1028,7 @@
   align-items: center;
   gap: 6px;
   padding: 2px 8px 2px 0;
-  font-size: 0.74rem;
+  font-size: 12px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1091,7 +1091,7 @@
 
 .trace-calltree__kind {
   flex: 0 0 auto;
-  font-size: 0.62rem;
+  font-size: 10px;
   text-transform: uppercase;
   color: var(--muted);
   letter-spacing: 0.03em;
@@ -1110,7 +1110,7 @@
   flex: 0 0 auto;
   color: var(--muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.68rem;
+  font-size: 11px;
 }
 
 .trace-calltree__track {

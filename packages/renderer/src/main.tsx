@@ -17,6 +17,7 @@ import "katex/dist/katex.min.css";
 import { readBootAppearance } from "./boot/readBootAppearance";
 import { installBlankRootRecovery } from "./hmr/recoverBlankRoot";
 import { RootApp } from "./RootApp";
+import { applyUiFontScale } from "./theme/fontScale";
 import "./styles.less";
 
 // 全局禁止 Tab 切换焦点（桌面端以指针为主）
@@ -31,6 +32,7 @@ const BOOT_APPEARANCE_FALLBACK_MS = 2000;
 
 const boot = readBootAppearance();
 applyDesignTheme(boot.theme);
+applyUiFontScale(boot.fontScale);
 
 /**
  * 在 AppearanceProvider 发出就绪事件（或超时）后，短暂保留闪屏再淡出移除。

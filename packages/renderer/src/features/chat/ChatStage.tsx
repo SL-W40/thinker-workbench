@@ -1,12 +1,12 @@
 /**
- * 聊天主舞台：空会话展示 IP 形象 + 引导文案 + 快捷方式；有消息时渲染可滚动气泡列表。
+ * 聊天主舞台：空会话展示品牌字标 + 引导文案 + 快捷方式；有消息时渲染可滚动气泡列表。
  * 滚动策略（贴底跟随）：
  * - 靠近底部时内容增高才自动跟上
  * - 用户上翻 / 划词时绝不抢滚动
  * - 父级 `stickNonce` 递增（发送、切会话）时强制贴底
  */
 
-import { Button, ChevronRightIcon } from "@thinker-workbench/design/react";
+import { Button, ChevronRightIcon, useDesignTheme } from "@thinker-workbench/design/react";
 import type { ChatMessage } from "@thinker-workbench/shared";
 import {
   useEffect,
@@ -16,6 +16,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
+import { brandGlyphSrc } from "../../brand/logo";
 import { bindSubagentSession } from "../../bridge/subagent";
 import { workspaceTree } from "../../bridge/workspaceFs";
 import { Bubble } from "../../components/Bubble";
@@ -132,6 +133,8 @@ export function ChatStage({
   sessionId = null,
 }: Props) {
   const t = useT();
+  const { theme } = useDesignTheme();
+  const glyphSrc = brandGlyphSrc(theme.colorScheme);
   /** true = 无文件 / 未选工作空间；探测完成前先按空处理，避免闪一下「了解项目」*/
   const [workspaceEmpty, setWorkspaceEmpty] = useState(true);
   /** 是否贴底跟随（用户上翻后为 false）*/
@@ -229,7 +232,7 @@ export function ChatStage({
           <section className="chat-welcome" aria-label={t("chat.welcomeLabel")}>
             <img
               className="chat-welcome__mascot"
-              src="./brand/logo-glyph.png"
+              src={glyphSrc}
               alt=""
               width={96}
               height={96}

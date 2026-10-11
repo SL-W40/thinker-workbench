@@ -87,6 +87,7 @@ export {
   toCustomThemeExport,
 } from "./ipc/customTheme";
 export type {
+  AppFontScale,
   AppThemeBaseId,
   AppThemeCreativeId,
   AppThemeId,
@@ -100,9 +101,11 @@ export type {
   WorkspaceAccess,
 } from "./ipc/general";
 export {
+  APP_FONT_SCALE_IDS,
   APP_THEME_BASE_IDS,
   APP_THEME_CREATIVE_IDS,
   APP_THEME_IDS,
+  DEFAULT_APP_FONT_SCALE,
   DEFAULT_APP_THEME,
   DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
   DEFAULT_GENERAL_SETTINGS,
@@ -118,6 +121,7 @@ export {
   WORKSPACE_ACCESS_OPTIONS,
   isBuiltinAppTheme,
   migrateAppThemeFromCatalogV1,
+  normalizeAppFontScale,
   normalizeAppTheme,
   normalizeDeleteFileRestoreTtlDays,
   normalizeGeneral,

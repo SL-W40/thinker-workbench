@@ -82,14 +82,14 @@ export function mermaidVariablesFromCss(host: Element): Record<string, string> {
   const noteBorder = v("--md-mermaid-note-border");
   const activation = v("--md-mermaid-activation");
   const actorLine = v("--md-mermaid-actor-line");
-  const mdFont = v("--md-font");
+  const fontHand = v("--md-font-hand");
   const fontSize = v("--md-mermaid-font-size") || "16px";
   const darkMode = v("--md-mermaid-dark") || "false";
 
   return {
     darkMode,
     background: paper,
-    fontFamily: mdFont,
+    fontFamily: fontHand,
     fontSize,
     primaryColor: primary,
     primaryTextColor: primaryText,

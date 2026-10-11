@@ -302,16 +302,11 @@ export function App() {
         <TitleBar
           role={role}
           current={normalizePage(nav.current)}
-          canBack={!isAux && nav.canBack}
-          canForward={!isAux && nav.canForward}
           leftPanelOpen={panels.leftOpen}
-          onBack={nav.back}
-          onForward={nav.forward}
           onGoHome={() => nav.reset("chat")}
           onToggleLeftPanel={panels.toggleLeft}
-          onOpenConsole={() => openConsole(toolsTab)}
           toolsTab={toolsTab}
-          onToolsTabChange={selectToolsTab}
+          onToolsTabChange={(tab) => openConsole(tab)}
         />
       ) : null}
       <main className="app-body">

@@ -82,7 +82,7 @@
       .boot-splash__title {
         margin: 0;
         font-family: var(--font, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif);
-        font-size: 1.4rem;
+        font-size: 22px;
         font-weight: 600;
         letter-spacing: -0.02em;
         color: var(--ink, #111111);
@@ -244,11 +244,21 @@
     <div id="root"></div>
     <div id="boot-splash" aria-busy="true" aria-live="polite" role="status">
       <div class="boot-splash__inner">
-        <img class="boot-splash__mark" src="./brand/logo-glyph.png" alt="" width="96" height="96" />
+        <img class="boot-splash__mark" src="./brand/app-icon.png" alt="" width="96" height="96" />
         <p class="boot-splash__title" id="boot-splash-title">Thinker Workbench</p>
       </div>
     </div>
     <script>
+      /** 闪屏字标随 colorScheme：深色白标 / 浅色黑标。 */
+      (function pickBootMark() {
+        var mark = document.querySelector(".boot-splash__mark");
+        if (!mark) return;
+        var dark = document.documentElement.style.colorScheme === "dark";
+        mark.setAttribute(
+          "src",
+          dark ? "./brand/app-icon-light.png" : "./brand/app-icon.png",
+        );
+      })();
       /** 产品名逐字拆入 span，驱动进场动画。 */
       (function fillBootTitle() {
         var el = document.getElementById("boot-splash-title");

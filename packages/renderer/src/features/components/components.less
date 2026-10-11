@@ -13,19 +13,19 @@
 
 .components-header {
   margin-bottom: 22px;
-  max-width: 48rem;
+  max-width: 768px;
 
   h1 {
     margin: 0 0 6px;
     font-family: var(--font);
-    font-size: 1.55rem;
+    font-size: 25px;
     font-weight: 600;
   }
 
   p {
     margin: 0;
     color: var(--muted);
-    font-size: 0.92rem;
+    font-size: 15px;
     line-height: 1.45;
   }
 }
@@ -61,7 +61,7 @@
   h2 {
     margin: 0;
     font-family: var(--font);
-    font-size: 1.05rem;
+    font-size: 17px;
     font-weight: 600;
   }
 
@@ -79,7 +79,7 @@
 
 .components-card-docs-hint {
   flex: 0 0 auto;
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
   text-decoration: underline;
@@ -94,13 +94,13 @@
   background: color-mix(in srgb, var(--accent, #c4a574) 14%, var(--panel-solid, var(--bg-elev)));
   color: var(--muted);
   font-family: var(--font);
-  font-size: 0.9rem;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .components-card-desc {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -113,7 +113,7 @@
 
 .components-icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   gap: 8px;
 }
 
@@ -126,7 +126,7 @@
   border-radius: 10px;
   background: color-mix(in srgb, var(--accent, #c4a574) 8%, var(--panel-solid, var(--bg-elev)));
   color: var(--ink);
-  font-size: 0.68rem;
+  font-size: 11px;
   line-height: 1.2;
   text-align: center;
   word-break: break-all;
@@ -159,18 +159,18 @@
 .components-modal-title {
   margin: 0;
   font-family: var(--font);
-  font-size: 1.25rem;
+  font-size: 20px;
 }
 
 .components-modal-body {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 14px;
   line-height: 1.45;
 }
 
 .components-docs-panel {
-  width: min(40rem, 100%);
+  width: min(640px, 100%);
   /* 过高时交给 Modal 蒙层滚动，面板自身不裁切、不出滚动条 */
   max-height: none;
   overflow: visible;
@@ -189,7 +189,7 @@
   -webkit-user-select: text;
 
   .components-docs-md {
-    font-size: 0.92rem;
+    font-size: 15px;
     /* 弹窗头已有组件名：隐藏文档首个 h1，避免双标题 */
     > h1:first-child {
       display: none;
@@ -200,7 +200,7 @@
     }
 
     > h2:first-of-type {
-      margin-top: 0.75rem;
+      margin-top: 12px;
       padding-top: 0;
       border-top: 0;
     }

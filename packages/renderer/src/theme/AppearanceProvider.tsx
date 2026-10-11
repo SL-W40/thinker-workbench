@@ -23,12 +23,14 @@ import {
   normalizeUiTheme,
   type AppThemeId,
   type CustomThemeRecord,
+  type GeneralSettings,
 } from "@thinker-workbench/shared";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings } from "../bridge/thinker";
 import {
   AppearanceContext,
   type AppearanceContextValue,
 } from "./appearanceContext";
+import { applyUiFontScale } from "./fontScale";
 
 /** 当前 OS 是否偏好深色。 */
 function readPrefersDark(): boolean {
@@ -127,10 +129,21 @@ export function AppearanceProvider({
   useEffect(() => {
     const off = window.thinker?.settings?.onGeneralChanged?.((general) => {
       applyAppearance(general.uiTheme, general.customThemes);
+      applyUiFontScale(general.uiFontScale);
       window.dispatchEvent(new CustomEvent(GENERAL_SETTINGS_CHANGED, { detail: general }));
     });
     return off;
   }, [applyAppearance]);
+
+  // 本窗保存通用设置后同步字体档位（与主题事件同源）
+  useEffect(() => {
+    function onChanged(event: Event) {
+      const saved = (event as CustomEvent<GeneralSettings>).detail;
+      if (saved) applyUiFontScale(saved.uiFontScale);
+    }
+    window.addEventListener(GENERAL_SETTINGS_CHANGED, onChanged);
+    return () => window.removeEventListener(GENERAL_SETTINGS_CHANGED, onChanged);
+  }, []);
 
   useEffect(() => {
     if (booted.current) return;
@@ -162,6 +175,7 @@ export function AppearanceProvider({
         ) {
           applyAppearance(nextTheme, general.customThemes);
         }
+        applyUiFontScale(general.uiFontScale);
       } catch {
         /* 保持默认 */
       } finally {

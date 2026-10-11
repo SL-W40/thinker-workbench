@@ -5,7 +5,7 @@
  * 关闭时写 session / 可选隐藏到托盘，以及开发态等待 Vite 后再 loadURL。
  */
 import path from "node:path";
-import { BrowserWindow, app, screen } from "electron";
+import { BrowserWindow, app, nativeImage, screen } from "electron";
 import { IpcChannels, matchAccelerator } from "@thinker-workbench/shared";
 import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStore";
 import { isShortcutRecording } from "../config/shortcutRecording";
@@ -123,6 +123,8 @@ export function createWindow(): BrowserWindow {
   const work = screen.getPrimaryDisplay().workAreaSize;
   const { minWidth, minHeight } = windowMinSize(work.width, work.height);
 
+  const appIconPath = getAppIconPath();
+  const appIcon = nativeImage.createFromPath(appIconPath);
   win = new BrowserWindow({
     width: initial.width,
     height: initial.height,
@@ -134,7 +136,7 @@ export function createWindow(): BrowserWindow {
     backgroundColor: windowBackgroundForTheme(getGeneralSettings().uiTheme),
     frame: false,
     show: false,
-    icon: getAppIconPath(),
+    icon: appIcon.isEmpty() ? appIconPath : appIcon,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -142,6 +144,8 @@ export function createWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+  // 再设一次，避免部分 Windows 构建只吃构造参数里的旧缓存路径
+  if (!appIcon.isEmpty()) win.setIcon(appIcon);
 
   const contentsId = registerMainWindow(win);
 
