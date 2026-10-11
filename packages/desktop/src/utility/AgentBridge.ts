@@ -10,14 +10,18 @@ import {
   createRunId,
   createThreadId,
   createTraceId,
+  DEFAULT_CHAT_MODE,
   emptyContextUsageSnapshot,
+  normalizeChatMode,
   type AgentEvent,
   type AgentResumeCommand,
   type AgentRunCommand,
+  type ChatMode,
   type ContextUsageRequest,
   type ContextUsageSnapshot,
   type HitlResponse,
   type LogRecord,
+  type ModelSelection,
   type RunResult,
   type UtilityBrowserRequest,
   type UtilityPtyRequest,
@@ -26,9 +30,18 @@ import {
 import type { UtilityProcess } from "electron";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
 import { getDataDir } from "../config/paths";
-import { getGeneralSettings, getModelSettings } from "../config/settingsStore";
 import {
+  getGeneralSettings,
+  getModelCatalog,
+  resolvePrimaryModelSettings,
+} from "../config/settingsStore";
+import { listAgents } from "../customize/agentsStore";
+import {
+  getActiveSessionId,
+  getSession,
   getSessionByThreadId,
+  getSessionChatMode,
+  getSessionModelSelection,
   setSessionRunStatus,
   upsertSessionForRun,
 } from "../db/workspacesStore";
@@ -36,6 +49,7 @@ import { desktopLog } from "../log/setup";
 import { broadcastThreadsChanged } from "../ipc/workspacesHandlers";
 import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
+import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
 import { isUtilityToParent } from "./transfer";
 
 /** 等待终态的进行中 run。 */
@@ -131,6 +145,46 @@ export class AgentBridge {
           handleMcpStatusFromAgent(raw.status);
         } catch {
           /* ignore */
+        }
+        return;
+      }
+      if (raw.kind === "span") {
+        try {
+          if (raw.phase === "start") {
+            const s = raw.span;
+            const attrs = s.attrs ?? {};
+            startTraceSpan({
+              spanId: s.spanId,
+              sessionId: s.sessionId,
+              runId: s.runId,
+              traceId: s.traceId,
+              parentSpanId: s.parentSpanId,
+              taskId: s.taskId,
+              name: s.name,
+              kind: s.kind,
+              source: s.source ?? "agent",
+              summary: s.summary,
+              attrs,
+              input: s.input,
+              startTs: s.startTs,
+              workspaceId:
+                typeof attrs.workspaceId === "string" ? attrs.workspaceId : undefined,
+              threadId: typeof attrs.threadId === "string" ? attrs.threadId : undefined,
+              title: typeof attrs.title === "string" ? attrs.title : undefined,
+              bumpRun: s.name === "run",
+            });
+          } else {
+            endTraceSpan(raw.spanId, {
+              status: raw.status,
+              summary: raw.summary,
+              output: raw.output,
+              error: raw.error,
+              attrs: raw.attrs,
+              endTs: raw.endTs,
+            });
+          }
+        } catch {
+          /* Trace 写入失败不拖垮 bridge */
         }
       }
     });
@@ -333,12 +387,15 @@ export class AgentBridge {
       }, timeoutMs);
       this.pendingContextUsage.set(requestId, { resolve, timer });
       try {
+        const activeId = getActiveSessionId();
+        const activeSession = activeId ? getSession(activeId) : null;
         this.send({
           channel: "utility",
           kind: "contextUsage",
           requestId,
           request,
-          model: getModelSettings(),
+          ...this.modelPayload(activeSession?.threadId),
+          model: resolvePrimaryModelSettings(),
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
@@ -437,6 +494,41 @@ export class AgentBridge {
     };
   }
 
+  /** 解析本轮模型目录与生效选用（会话覆盖优先于全局）。 */
+  private modelPayload(threadId?: string): {
+    catalog: ReturnType<typeof getModelCatalog>;
+    selection: ModelSelection;
+  } {
+    const catalog = getModelCatalog();
+    let selection = catalog.selection;
+    if (threadId) {
+      const session = getSessionByThreadId(threadId);
+      if (session) {
+        const override = getSessionModelSelection(session.id);
+        if (override) selection = override;
+      }
+    }
+    return { catalog, selection };
+  }
+
+  /** 解析本轮会话 ChatMode（缺省 agent）。 */
+  private chatModePayload(threadId?: string): { chatMode: ChatMode } {
+    let chatMode = DEFAULT_CHAT_MODE;
+    if (threadId) {
+      const session = getSessionByThreadId(threadId);
+      if (session) {
+        const stored = getSessionChatMode(session.id);
+        if (stored) chatMode = normalizeChatMode(stored);
+      }
+    }
+    return { chatMode };
+  }
+
+  /** 当前工作区可见的子代理定义快照。 */
+  private subagentsPayload(workspaceRoot?: string | null) {
+    return { subagents: listAgents(workspaceRoot).agents };
+  }
+
   /**
    * 发起一次 run：等待 ready、分配 threadId/runId/traceId、发送 run 消息，
    * 直到收到对应 done/error 事件才 resolve。
@@ -449,9 +541,12 @@ export class AgentBridge {
     const message = typeof command.message === "string" ? command.message : "";
     const log = desktopLog("bridge.run");
 
+    let sessionId: string | undefined;
+    let workspaceId: string | undefined;
+    let sessionTitle: string | undefined;
     try {
       const existing = getSessionByThreadId(threadId);
-      upsertSessionForRun({
+      const session = upsertSessionForRun({
         threadId,
         workspaceId: existing?.workspaceId,
         titleHint: message,
@@ -459,6 +554,9 @@ export class AgentBridge {
         activeRunId: runId,
         interruptReason: null,
       });
+      sessionId = session.id;
+      workspaceId = session.workspaceId;
+      sessionTitle = session.title;
       broadcastThreadsChanged();
     } catch {
       /* 无 workspace 时可能创建失败；仍继续 run */
@@ -485,6 +583,9 @@ export class AgentBridge {
           runId,
           threadId,
           traceId,
+          sessionId,
+          workspaceId,
+          sessionTitle,
           command: {
             threadId,
             message,
@@ -493,13 +594,17 @@ export class AgentBridge {
             workspaceRoot: command.workspaceRoot,
             workspaceName: command.workspaceName,
           },
-          model: getModelSettings(),
+          ...this.modelPayload(threadId),
+          ...this.chatModePayload(threadId),
+          ...this.subagentsPayload(command.workspaceRoot),
+          model: resolvePrimaryModelSettings(),
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
           ...this.shellPayload(),
           logTruncateLongContent: general.logTruncateLongContent,
           loggingEnabled: general.loggingEnabled,
+          traceEnabled: general.traceEnabled,
           workspaceRoot: command.workspaceRoot,
           dataDir: getDataDir(),
         });
@@ -533,12 +638,19 @@ export class AgentBridge {
     const general = getGeneralSettings();
     const log = desktopLog("bridge.resume");
 
+    let sessionId: string | undefined;
+    let workspaceId: string | undefined;
+    let sessionTitle: string | undefined;
     try {
       setSessionRunStatus(threadId, "running", {
         byThread: true,
         activeRunId: runId,
         interruptReason: null,
       });
+      const session = getSessionByThreadId(threadId);
+      sessionId = session?.id;
+      workspaceId = session?.workspaceId;
+      sessionTitle = session?.title;
       broadcastThreadsChanged();
     } catch {
       /* ignore */
@@ -557,19 +669,26 @@ export class AgentBridge {
           channel: "utility",
           kind: "resume",
           runId,
+          sessionId,
+          workspaceId,
+          sessionTitle,
           command: {
             threadId,
             workspaceName: command.workspaceName,
             traceId,
           },
           workspaceRoot: command.workspaceRoot,
-          model: getModelSettings(),
+          ...this.modelPayload(threadId),
+          ...this.chatModePayload(threadId),
+          ...this.subagentsPayload(command.workspaceRoot),
+          model: resolvePrimaryModelSettings(),
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
           ...this.shellPayload(),
           logTruncateLongContent: general.logTruncateLongContent,
           loggingEnabled: general.loggingEnabled,
+          traceEnabled: general.traceEnabled,
           dataDir: getDataDir(),
         });
       } catch (err) {

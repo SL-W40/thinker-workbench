@@ -12,6 +12,7 @@ import type {
   AttentionPreviewKind,
   ContextUsageRequest,
   ContextUsageSnapshot,
+  CustomizeScope,
   DataDirChangePreview,
   DataDirChangeRequest,
   DataDirChangeResult,
@@ -19,12 +20,16 @@ import type {
   GeneralSettings,
   HitlResponse,
   LogRecord,
+  McpImportConflict,
   McpListResult,
   McpServerConfig,
   McpServerRuntimeStatus,
   McpServerUpsertInput,
-  ModelSettingsPatch,
-  ModelSettingsPublic,
+  ModelCatalogPatch,
+  ModelCatalogPublic,
+  ModelProbeRequest,
+  ModelProbeResult,
+  ModelSelection,
   ShortcutsMap,
   SkillListItem,
   ThinkerApi,
@@ -114,18 +119,69 @@ export function windowApi() {
   return api()?.window;
 }
 
-/** 读取模型相关公开设置（不含完整 API Key）。 */
-export function getModelSettings(): Promise<ModelSettingsPublic> {
+/** 读取模型目录公开视图（不含完整 API Key）。 */
+export function getModelSettings(): Promise<ModelCatalogPublic> {
   const settings = api()?.settings;
   if (!settings) return Promise.reject(new Error("Settings API unavailable."));
   return settings.getModel();
 }
 
-/** 部分更新模型设置并返回最新公开快照。 */
-export function setModelSettings(patch: ModelSettingsPatch): Promise<ModelSettingsPublic> {
+/** 部分更新模型目录并返回最新公开快照。 */
+export function setModelSettings(patch: ModelCatalogPatch): Promise<ModelCatalogPublic> {
   const settings = api()?.settings;
   if (!settings) return Promise.reject(new Error("Settings API unavailable."));
   return settings.setModel(patch);
+}
+
+/** 对指定模型做连通性测试。 */
+export function probeModel(request: ModelProbeRequest): Promise<ModelProbeResult> {
+  const settings = api()?.settings;
+  if (!settings?.probeModel) return Promise.reject(new Error("Settings API unavailable."));
+  return settings.probeModel(request);
+}
+
+/** 读取会话级模型选用覆盖。 */
+export function getSessionModelSelection(sessionId: string): Promise<ModelSelection | null> {
+  const settings = api()?.settings;
+  if (!settings?.getSessionModelSelection) {
+    return Promise.reject(new Error("Settings API unavailable."));
+  }
+  return settings.getSessionModelSelection(sessionId);
+}
+
+/** 写入会话级模型选用覆盖。 */
+export function setSessionModelSelection(
+  sessionId: string,
+  selection: ModelSelection,
+): Promise<ModelSelection | null> {
+  const settings = api()?.settings;
+  if (!settings?.setSessionModelSelection) {
+    return Promise.reject(new Error("Settings API unavailable."));
+  }
+  return settings.setSessionModelSelection(sessionId, selection);
+}
+
+/** 读取会话级 ChatMode。 */
+export function getSessionChatMode(
+  sessionId: string,
+): Promise<import("@thinker-workbench/shared").ChatMode | null> {
+  const settings = api()?.settings;
+  if (!settings?.getSessionChatMode) {
+    return Promise.reject(new Error("Settings API unavailable."));
+  }
+  return settings.getSessionChatMode(sessionId);
+}
+
+/** 写入会话级 ChatMode。 */
+export function setSessionChatMode(
+  sessionId: string,
+  chatMode: import("@thinker-workbench/shared").ChatMode,
+): Promise<import("@thinker-workbench/shared").ChatMode> {
+  const settings = api()?.settings;
+  if (!settings?.setSessionChatMode) {
+    return Promise.reject(new Error("Settings API unavailable."));
+  }
+  return settings.setSessionChatMode(sessionId, chatMode);
 }
 
 /** 读取快捷键映射。 */
@@ -238,9 +294,9 @@ export async function listSkills(workspaceRoot?: string | null): Promise<SkillLi
   return api()?.skills?.list(workspaceRoot) ?? [];
 }
 
-/** MCP 列表。 */
-export async function mcpList(): Promise<McpListResult> {
-  return api()?.mcp?.list() ?? { servers: [], statuses: [] };
+/** MCP 列表（可带工作区根以合并 workspace 作用域）。 */
+export async function mcpList(workspaceRoot?: string | null): Promise<McpListResult> {
+  return api()?.mcp?.list(workspaceRoot) ?? { servers: [], statuses: [] };
 }
 
 /** 新建 / 更新 MCP。 */
@@ -251,15 +307,19 @@ export async function mcpUpsert(input: McpServerUpsertInput): Promise<McpServerC
 }
 
 /** 删除 MCP。 */
-export async function mcpRemove(id: string): Promise<void> {
-  await api()?.mcp?.remove(id);
+export async function mcpRemove(id: string, scope?: CustomizeScope): Promise<void> {
+  await api()?.mcp?.remove(id, scope);
 }
 
 /** 启用 / 禁用 MCP。 */
-export async function mcpSetEnabled(id: string, enabled: boolean): Promise<McpServerConfig> {
+export async function mcpSetEnabled(
+  id: string,
+  enabled: boolean,
+  scope?: CustomizeScope,
+): Promise<McpServerConfig> {
   const mcp = api()?.mcp;
   if (!mcp) throw new Error("MCP API unavailable.");
-  return mcp.setEnabled(id, enabled);
+  return mcp.setEnabled(id, enabled, scope);
 }
 
 /** 测试 MCP 连接。 */
@@ -269,12 +329,26 @@ export async function mcpTest(input: McpServerUpsertInput): Promise<McpServerRun
   return mcp.test(input);
 }
 
-/** 导入 Cursor mcp.json。 */
-export async function mcpImportCursorFile(): Promise<{
+/** 导入 mcp.json。 */
+export async function mcpImportFile(
+  conflict?: McpImportConflict,
+  scope?: CustomizeScope,
+): Promise<{
   imported: string[];
   skipped: string[];
 }> {
-  return api()?.mcp?.importCursorFile() ?? { imported: [], skipped: [] };
+  const mcp = api()?.mcp;
+  if (!mcp?.importFile) return { imported: [], skipped: [] };
+  return mcp.importFile(conflict, scope);
+}
+
+/** 导出 mcp.json。 */
+export async function mcpExportFile(
+  scope?: CustomizeScope,
+): Promise<{ ok: boolean; path?: string }> {
+  const mcp = api()?.mcp;
+  if (!mcp?.exportFile) return { ok: false };
+  return mcp.exportFile(scope);
 }
 
 /** 订阅 MCP 状态。 */

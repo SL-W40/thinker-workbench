@@ -1,8 +1,5 @@
 /**
- * 设计系统组件目录页：在应用内展示 `@thinker-workbench/design/react` 控件样例。
- * 点击卡片标题可打开弹窗，用自研 Markdown 渲染对应组件说明文档。
- * 路由一般为 `#/components`；非激活时 CSS hidden 保活。
- */
+ * 设计系统组件目录页：在应用内展示 `@thinker-workbench/design/react` 控件样例。 * 点击卡片标题可打开弹窗，用自研 Markdown 渲染对应组件说明文档。 * 路由一般为 `#/components`；非激活时 CSS hidden 保活。 */
 import { useId, useState, type ReactNode } from "react";
 import {
   Badge,
@@ -30,28 +27,29 @@ import {
   SideNavItem,
   Spinner,
   Switch,
+  Table,
   TextArea,
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import { MarkdownView } from "@thinker-workbench/markdown/react";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
 import { getComponentDoc } from "./componentDocs";
 import "./components.less";
 
-/** 嵌套演示固定 3 列，不跟容器宽度降列。 */
+/** 嵌套演示固定 3 列，不跟容器宽度降列。*/
 const MASONRY_DEMO_BREAKPOINTS: [] = [];
 
-/** 设计图标画廊（稳定顺序）。 */
+/** 设计图标画廊（稳定顺序）。*/
 const DESIGN_ICON_GALLERY = listDesignIcons();
 
 type Props = {
-  /** 当前是否为可见的组件目录页（否则 CSS hidden，仍可保活）。 */
+  /** 当前是否为可见的组件目录页（否则 CSS hidden，仍可保活）。*/
   active: boolean;
 };
 
 type CardProps = {
-  /** 对应 `packages/design/src/components/<docId>/<docId>.md`。 */
+  /** 对应 `packages/design/src/components/<docId>/<docId>.md`。*/
   docId: string;
   title: string;
   description: string;
@@ -60,7 +58,7 @@ type CardProps = {
   children: ReactNode;
 };
 
-/** 预览卡：标题可点开说明文档，正文区留给交互演示。 */
+/** 预览卡：标题可点开说明文档，正文区留给交互演示。*/
 function ComponentCard({ docId, title, description, docsHint, onOpenDocs, children }: CardProps) {
   return (
     <section className="components-card">
@@ -68,7 +66,7 @@ function ComponentCard({ docId, title, description, docsHint, onOpenDocs, childr
         type="button"
         className="components-card-title"
         onClick={() => onOpenDocs(docId)}
-        aria-label={`${title} — ${docsHint}`}
+        aria-label={`${title} …${docsHint}`}
       >
         <h2>{title}</h2>
         <span className="components-card-docs-hint">{docsHint}</span>
@@ -80,9 +78,7 @@ function ComponentCard({ docId, title, description, docsHint, onOpenDocs, childr
 }
 
 /**
- * 瀑布流卡片式预览：每个控件一张卡；页面本身用 Masonry 排布。
- * 各控件绑定独立 useState，便于点击试用；`useId` 保证 Field/htmlFor 在同页唯一。
- */
+ * 瀑布流卡片式预览：每个控件一张卡；页面本身用 Masonry 排布。 * 各控件绑定独?useState，便于点击试用；`useId` 保证 Field/htmlFor 在同页唯一。 */
 export function ComponentsPane({ active }: Props) {
   const t = useT();
   const { markdownTheme } = useDesignTheme();
@@ -93,23 +89,23 @@ export function ComponentsPane({ active }: Props) {
   const [text, setText] = useState("doubao-seed-2-1-pro");
   const [notes, setNotes] = useState("");
   const [fieldValue, setFieldValue] = useState("");
-  /** Select 演示用语言选项（非应用真实 locale）。 */
+  /** Select 演示用语言选项（非应用真实 locale）。*/
   const [locale, setLocale] = useState("en");
   const [on, setOn] = useState(true);
   const [checked, setChecked] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [ctxOpen, setCtxOpen] = useState(false);
   const [ctxAnchor, setCtxAnchor] = useState<{ x: number; y: number } | null>(null);
-  /** 切换 Input 的 invalid 态，演示错误描边。 */
+ /** 切换 Input ?invalid 态，演示错误描边。*/
   const [invalid, setInvalid] = useState(false);
   const [segment, setSegment] = useState("regular");
   const [choice, setChoice] = useState("a");
   const [nav, setNav] = useState("general");
   const [radio, setRadio] = useState("one");
-  /** Kbd 录制高亮开关（演示 recording 视觉）。 */
+  /** Kbd 录制高亮开关（演示 recording 视觉）。*/
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(42);
-  /** 当前打开的组件说明文档 id；null 表示关闭。 */
+ /** 当前打开的组件说明文?id；null 表示关闭。*/
   const [docId, setDocId] = useState<string | null>(null);
 
   const docsHint = t("components.openDocs");
@@ -470,6 +466,42 @@ export function ComponentsPane({ active }: Props) {
               ]}
             />
           </>
+        ))}
+
+        {card("Table", "components.section.table", "components.section.tableDesc", (
+          <Table density="compact" scroll={false} cellOverflow="ellipsis">
+            <Table.Head>
+              <Table.Row>
+                <Table.Header>{t("components.demo.tableName")}</Table.Header>
+                <Table.Header>{t("components.demo.tableStatus")}</Table.Header>
+                <Table.Header fit>{t("components.demo.tableAction")}</Table.Header>
+              </Table.Row>
+            </Table.Head>
+            <Table.Body>
+              <Table.Row>
+                <Table.Cell>{t("components.demo.tableRowA")}</Table.Cell>
+                <Table.Cell>
+                  <Badge variant="success">{t("components.demo.badgeSuccess")}</Badge>
+                </Table.Cell>
+                <Table.Cell align="end" fit>
+                  <Button size="sm" variant="ghost">
+                    {t("components.demo.tableEdit")}
+                  </Button>
+                </Table.Cell>
+              </Table.Row>
+              <Table.Row>
+                <Table.Cell>{t("components.demo.tableRowB")}</Table.Cell>
+                <Table.Cell>
+                  <Badge variant="danger">{t("components.demo.badgeDanger")}</Badge>
+                </Table.Cell>
+                <Table.Cell align="end" fit>
+                  <Button size="sm" variant="ghost">
+                    {t("components.demo.tableEdit")}
+                  </Button>
+                </Table.Cell>
+              </Table.Row>
+            </Table.Body>
+          </Table>
         ))}
       </Masonry>
 

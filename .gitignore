@@ -10,8 +10,9 @@ packages/*/src/**/*.d.ts.map
 *.log
 .env
 .env.*
-!.env.example
 package-lock.json
 yarn.lock
 .npm-cache
 *.zip
+test-results/
+coverage/

@@ -1,7 +1,5 @@
 /**
  * 设置 → 快捷键：按分组展示可编辑加速键，点击后进入录制模式（捕获 keydown）。
- * 录制中拦截全局快捷键（含主进程 reload）；保存前做冲突检测。
- * Escape 取消录制（「停止运行」除外，可录 Escape）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Callout, Kbd } from "@thinker-workbench/design/react";
@@ -18,7 +16,7 @@ import {
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
 import { getShortcutsSettings, setShortcutsSettings } from "../../bridge/thinker";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
 import { setShortcutRecording } from "../shortcuts/recordingGate";
 
@@ -27,7 +25,7 @@ type Props = {
   description: string;
 };
 
-/** 各 ShortcutId 对应的标题/描述文案键。 */
+/** ?ShortcutId 对应的标?描述文案键。*/
 const SHORTCUT_COPY: Record<ShortcutId, { titleKey: MessageKey; descriptionKey: MessageKey }> = {
   reload: {
     titleKey: "settings.shortcuts.reloadTitle",
@@ -71,7 +69,7 @@ const SHORTCUT_COPY: Record<ShortcutId, { titleKey: MessageKey; descriptionKey: 
   },
 };
 
-/** 分组标题文案键。 */
+/** 分组标题文案键。*/
 const GROUP_TITLE: Record<ShortcutGroup, MessageKey> = {
   window: "settings.shortcuts.groups.window",
   chat: "settings.shortcuts.groups.chat",
@@ -88,7 +86,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const available = Boolean(window.thinker?.settings?.getShortcuts);
 
-  // 录制监听只用 ref，避免 shortcuts/t 变化时拆掉 keydown 监听导致「录不上」
+ // 录制监听只用 ref，避?shortcuts/t 变化时拆?keydown 监听导致「录不上。
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
   const tRef = useRef(t);
@@ -101,7 +99,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
     })).filter((g) => g.items.length > 0);
   }, []);
 
-  // 加载已保存映射
+  // 加载已保存映
   useEffect(() => {
     if (!available) return;
     let cancelled = false;
@@ -118,11 +116,11 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
     };
   }, [available]);
 
-  // 录制中：捕获阶段拦截按键；依赖仅 `recording`，监听稳定
+  // 录制中：捕获阶段拦截按键；依赖仅 `recording`，监听稳
   useEffect(() => {
     if (!recording) return;
     setShortcutRecording(true);
-    // 离开按钮焦点，避免 Space/Enter 再次点到 Kbd
+ // 离开按钮焦点，避?Space/Enter 再次点到 Kbd
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -182,7 +180,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
     };
   }, [recording]);
 
-  /** 恢复当前平台的目录默认快捷键。 */
+  /** 恢复当前平台的目录默认快捷键。*/
   async function resetDefaults() {
     try {
       const next = await setShortcutsSettings({ ...getDefaultShortcuts() });

@@ -1,5 +1,6 @@
 /**
- * 读取用户 `@` 选中的工作区文件，组装 `<context_files>` 块。
+ * 读取用户 `@` 选中的工作区文件 / 目录，组装 `<context_files>` 块。
+ * 目录注入浅层文件名列表（`<directory>`），不递归读入文件内容。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -50,6 +51,26 @@ export function loadContextFilesBlock(
       st = fs.statSync(abs);
     } catch {
       parts.push(`<file path="${display}">\nskipped: not found\n</file>`);
+      continue;
+    }
+    if (st.isDirectory()) {
+      // 目录：注入浅层文件名列表（不递归读内容），供模型知道结构
+      let names: string[];
+      try {
+        names = fs.readdirSync(abs).sort((a, b) => a.localeCompare(b));
+      } catch {
+        parts.push(`<directory path="${display.replace(/\/$/, "")}">\nskipped: read error\n</directory>`);
+        continue;
+      }
+      const dirPath = display.replace(/\/$/, "") || display;
+      const listing = names.length ? names.join("\n") : "(empty)";
+      const body = `${listing}\n`;
+      if (total + Buffer.byteLength(body, "utf8") > MAX_TOTAL_BYTES) {
+        parts.push(`<directory path="${dirPath}">\nskipped: total context budget exceeded\n</directory>`);
+        continue;
+      }
+      total += Buffer.byteLength(body, "utf8");
+      parts.push(`<directory path="${dirPath}">\n${body}</directory>`);
       continue;
     }
     if (!st.isFile()) {

@@ -29,8 +29,19 @@ export type SessionState = {
 
 /** 合法页面 id（`settings` 仍接受以便迁移旧 session，渲染层映射到控制台）。 */
 const PAGE_IDS = new Set(["chat", "settings", "components", "tools"]);
-/** 合法设置分区 id。 */
-const SECTION_IDS = new Set(["general", "model", "shortcuts"]);
+/** 合法设置分区 id（含旧 general，加载时迁到 appearance）。 */
+const SECTION_IDS = new Set([
+  "appearance",
+  "notifications",
+  "data",
+  "permissions",
+  "browser",
+  "model",
+  "shortcuts",
+  "general",
+]);
+/** 控制台 tab（写入 hash 时保留，避免一律落回 settings）。 */
+const TOOL_TAB_IDS = new Set(["settings", "customize", "logs", "components"]);
 
 /** Electron `screen` 不可用时（测试 / 极早启动）的窗口回退尺寸。 */
 const FALLBACK_WINDOW: SessionWindow = {
@@ -127,15 +138,40 @@ export function normalizeStack(raw: unknown): PageStackSnapshot {
   return { entries: safeEntries, index, visited };
 }
 
-/** 规范化设置分区；非法则回退 general。 */
+/** 规范化设置分区；旧 general → appearance；非法回退 appearance。 */
 function normalizeSection(raw: unknown): string {
-  return typeof raw === "string" && SECTION_IDS.has(raw) ? raw : "general";
+  if (typeof raw !== "string" || !SECTION_IDS.has(raw)) return "appearance";
+  return raw === "general" ? "appearance" : raw;
 }
 
-/** 由当前页与设置分区推导 location hash。 */
+/** 由当前页与设置分区推导 location hash（无 tab 信息时的回退）。 */
 function hashFor(page: string, section: string): string {
   if (page === "settings" || page === "tools") return `#/tools/settings/${section}`;
   return page === "chat" ? "#/chat" : `#/${page}`;
+}
+
+/**
+ * 若传入 hash 与栈当前页一致则保留（含 `#/tools/customize` 等 tab）；
+ * 否则按页 + 分区重新推导。
+ */
+function alignHash(hash: string, page: string, section: string): string {
+  const normalized = normalizeHash(hash);
+  const parts = normalized.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const hashPage = parts[0] ?? "chat";
+  const pageNorm = page === "settings" ? "tools" : page;
+  if (hashPage !== page && hashPage !== pageNorm) {
+    return hashFor(pageNorm, section);
+  }
+  if (pageNorm === "tools") {
+    const tab = parts[1];
+    if (tab === "settings") {
+      const sec = normalizeSection(parts[2] ?? section);
+      return `#/tools/settings/${sec}`;
+    }
+    if (tab && TOOL_TAB_IDS.has(tab)) return `#/tools/${tab}`;
+    return hashFor("tools", section);
+  }
+  return hashFor(pageNorm, section);
 }
 
 /**
@@ -151,14 +187,16 @@ export function loadSession(): SessionState {
       const stack = normalizeStack(parsed.stack);
       const settingsSection = normalizeSection(parsed.settingsSection);
       const current = stack.entries[stack.index] ?? "chat";
+      const rawHash = parsed.hash
+        ? normalizeHash(parsed.hash)
+        : hashFor(current, settingsSection);
       cached = {
-        hash: parsed.hash ? normalizeHash(parsed.hash) : hashFor(current, settingsSection),
+        // 与栈对齐，但保留 tools 下的 tab / settings section
+        hash: alignHash(rawHash, current, settingsSection),
         settingsSection,
         stack,
         window: normalizeWindow(parsed.window),
       };
-      // 保持 hash 与栈当前页一致
-      cached.hash = hashFor(current, settingsSection);
       return cached;
     }
   } catch (err) {
@@ -166,7 +204,7 @@ export function loadSession(): SessionState {
   }
   cached = {
     hash: "#/chat",
-    settingsSection: "general",
+    settingsSection: "appearance",
     stack: {
       entries: [...DEFAULT_STACK.entries],
       index: 0,
@@ -256,22 +294,22 @@ export function getUiSessionSnapshot(): UiSessionSnapshot {
 
 /**
  * 由渲染进程写入 UI session 快照。
- * hash 优先由栈当前页推导，保证前进/后退一致；窗口几何保留原值。
+ * 保留传入 hash 中的控制台 tab；仅在与栈页不一致时按页重推。
  */
 export function setUiSessionSnapshot(snapshot: UiSessionSnapshot): void {
   const stack = normalizeStack(snapshot.stack);
   const settingsSection = normalizeSection(snapshot.settingsSection);
   const current = stack.entries[stack.index] ?? "chat";
-  const hash = snapshot.hash ? normalizeHash(snapshot.hash) : hashFor(current, settingsSection);
+  const incoming = snapshot.hash?.trim()
+    ? normalizeHash(snapshot.hash)
+    : hashFor(current, settingsSection);
   const prev = loadSession();
   cached = {
-    hash: hashFor(current, settingsSection) || hash,
+    hash: alignHash(incoming, current, settingsSection),
     settingsSection,
     stack,
     window: prev.window,
   };
-  // 优先使用栈推导的 hash，保证前进/后退一致
-  cached.hash = hashFor(current, settingsSection);
   scheduleSave();
 }
 

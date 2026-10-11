@@ -32,16 +32,21 @@
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check .",
+    "test": "vitest run",
+    "test:report": "vitest run --coverage",
     "pack:zip": "node scripts/pack-zip.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@electron/rebuild": "^4.2.1",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
     "concurrently": "^9.1.2",
     "electron": "^34.0.0",
     "nodemon": "^3.1.14",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3",
+    "vitest": "^3.2.4",
     "wait-on": "^8.0.1"
   }
 }

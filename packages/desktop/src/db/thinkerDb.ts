@@ -136,4 +136,3 @@ export function closeThinkerDb(): void {
     catalogPath = null;
   }
 }
-

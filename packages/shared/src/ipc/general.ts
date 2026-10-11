@@ -23,6 +23,17 @@ import {
   normalizeAiLocale,
   normalizeAppLocale,
 } from "./locale";
+import {
+  DEFAULT_TRACE_MAX_FIELD_BYTES,
+  DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
+  DEFAULT_TRACE_MAX_MESSAGE_CHARS,
+  DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
+  DEFAULT_TRACE_MAX_SESSIONS,
+  DEFAULT_TRACE_MAX_TOTAL_BYTES,
+  DEFAULT_TRACE_REDACT_KEYS,
+  DEFAULT_TRACE_RETENTION_DAYS,
+  type TraceCaptureBinary,
+} from "./trace";
 
 /**
  * 内置 UI 主题 id（写入设置的字面量）。
@@ -245,7 +256,41 @@ export type GeneralSettings = {
    * 磁盘缺字段时用 `DEFAULT_SHELL_ALLOWLIST`；已存空数组 `[]` 保留为空。
    */
   shellAllowlist: string[];
+  /** 禁止执行的首 token 黑名单（与 allowlist 正交）。 */
+  shellBlocklist: string[];
+  /** 本地 file:// 链接是否在内置浏览器打开（否则走系统默认应用）。 */
+  openLocalLinksInBrowser: boolean;
+  /** 模型 HTTP 客户端兼容模式（HTTP/2 vs HTTP/1.1）。 */
+  httpCompatibilityMode: HttpCompatibilityMode;
+  /** 是否采集会话 Trace（span + jsonl）。 */
+  traceEnabled: boolean;
+  traceRetentionDays: number;
+  traceMaxSessions: number;
+  traceMaxTotalBytes: number;
+  traceTruncateEnabled: boolean;
+  traceMaxFieldBytes: number;
+  traceMaxPayloadBytes: number;
+  traceMaxMessageChars: number;
+  traceMaxHistoryMessages: number;
+  traceCaptureBinary: TraceCaptureBinary;
+  traceRedactKeys: string[];
 };
+
+/** 模型 HTTP 兼容模式。 */
+export const HTTP_COMPATIBILITY_MODES = ["http2", "http1"] as const;
+export type HttpCompatibilityMode = (typeof HTTP_COMPATIBILITY_MODES)[number];
+export const DEFAULT_HTTP_COMPATIBILITY_MODE: HttpCompatibilityMode = "http2";
+
+/** 将未知值规范为合法 HTTP 兼容模式。 */
+export function normalizeHttpCompatibilityMode(
+  value: unknown,
+  fallback: HttpCompatibilityMode = DEFAULT_HTTP_COMPATIBILITY_MODE,
+): HttpCompatibilityMode {
+  return typeof value === "string" &&
+    (HTTP_COMPATIBILITY_MODES as readonly string[]).includes(value)
+    ? (value as HttpCompatibilityMode)
+    : fallback;
+}
 
 /** 命令行审批三模式。 */
 export const SHELL_APPROVAL_MODES = ["ai_review", "allowlist", "unrestricted"] as const;
@@ -296,6 +341,21 @@ export function normalizeShellApprovalMode(
 export function normalizeShellAllowlist(raw: unknown): string[] {
   if (raw === undefined) return [...DEFAULT_SHELL_ALLOWLIST];
   if (!Array.isArray(raw)) return [...DEFAULT_SHELL_ALLOWLIST];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const token = item.trim().toLowerCase();
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+  }
+  return out;
+}
+
+/** 规范化 shell 黑名单（缺省为空；传入数组则去重小写化）。 */
+export function normalizeShellBlocklist(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of raw) {
@@ -369,6 +429,20 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   shellProfileId: "default",
   shellApprovalMode: DEFAULT_SHELL_APPROVAL_MODE,
   shellAllowlist: [...DEFAULT_SHELL_ALLOWLIST],
+  shellBlocklist: [],
+  openLocalLinksInBrowser: false,
+  httpCompatibilityMode: DEFAULT_HTTP_COMPATIBILITY_MODE,
+  traceEnabled: true,
+  traceRetentionDays: DEFAULT_TRACE_RETENTION_DAYS,
+  traceMaxSessions: DEFAULT_TRACE_MAX_SESSIONS,
+  traceMaxTotalBytes: DEFAULT_TRACE_MAX_TOTAL_BYTES,
+  traceTruncateEnabled: true,
+  traceMaxFieldBytes: DEFAULT_TRACE_MAX_FIELD_BYTES,
+  traceMaxPayloadBytes: DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
+  traceMaxMessageChars: DEFAULT_TRACE_MAX_MESSAGE_CHARS,
+  traceMaxHistoryMessages: DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
+  traceCaptureBinary: "meta",
+  traceRedactKeys: [...DEFAULT_TRACE_REDACT_KEYS],
 };
 
 /** 规范化可选路径字段：仅保留 trim 后的字符串，非法类型视为空。 */
@@ -483,6 +557,44 @@ export function normalizeGeneral(
     base.shellAllowlist = normalizeShellAllowlist(obj.shellAllowlist);
   } else {
     base.shellAllowlist = [...DEFAULT_SHELL_ALLOWLIST];
+  }
+  if (Object.hasOwn(obj, "shellBlocklist")) {
+    base.shellBlocklist = normalizeShellBlocklist(obj.shellBlocklist);
+  }
+  if (typeof obj.openLocalLinksInBrowser === "boolean") {
+    base.openLocalLinksInBrowser = obj.openLocalLinksInBrowser;
+  }
+  base.httpCompatibilityMode = normalizeHttpCompatibilityMode(obj.httpCompatibilityMode);
+  if (typeof obj.traceEnabled === "boolean") base.traceEnabled = obj.traceEnabled;
+  if (typeof obj.traceRetentionDays === "number" && Number.isFinite(obj.traceRetentionDays)) {
+    base.traceRetentionDays = Math.max(0, Math.min(3650, Math.floor(obj.traceRetentionDays)));
+  }
+  if (typeof obj.traceMaxSessions === "number" && Number.isFinite(obj.traceMaxSessions)) {
+    base.traceMaxSessions = Math.max(0, Math.floor(obj.traceMaxSessions));
+  }
+  if (typeof obj.traceMaxTotalBytes === "number" && Number.isFinite(obj.traceMaxTotalBytes)) {
+    base.traceMaxTotalBytes = Math.max(0, Math.floor(obj.traceMaxTotalBytes));
+  }
+  if (typeof obj.traceTruncateEnabled === "boolean") {
+    base.traceTruncateEnabled = obj.traceTruncateEnabled;
+  }
+  if (typeof obj.traceMaxFieldBytes === "number" && Number.isFinite(obj.traceMaxFieldBytes)) {
+    base.traceMaxFieldBytes = Math.max(1024, Math.floor(obj.traceMaxFieldBytes));
+  }
+  if (typeof obj.traceMaxPayloadBytes === "number" && Number.isFinite(obj.traceMaxPayloadBytes)) {
+    base.traceMaxPayloadBytes = Math.max(1024, Math.floor(obj.traceMaxPayloadBytes));
+  }
+  if (typeof obj.traceMaxMessageChars === "number" && Number.isFinite(obj.traceMaxMessageChars)) {
+    base.traceMaxMessageChars = Math.max(1000, Math.floor(obj.traceMaxMessageChars));
+  }
+  if (typeof obj.traceMaxHistoryMessages === "number" && Number.isFinite(obj.traceMaxHistoryMessages)) {
+    base.traceMaxHistoryMessages = Math.max(1, Math.floor(obj.traceMaxHistoryMessages));
+  }
+  if (obj.traceCaptureBinary === "meta" || obj.traceCaptureBinary === "omit") {
+    base.traceCaptureBinary = obj.traceCaptureBinary;
+  }
+  if (Array.isArray(obj.traceRedactKeys)) {
+    base.traceRedactKeys = obj.traceRedactKeys.filter((k): k is string => typeof k === "string");
   }
   return base;
 }

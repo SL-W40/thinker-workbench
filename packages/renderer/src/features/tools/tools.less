@@ -40,6 +40,19 @@
   display: none !important;
 }
 
+/* Trace 自管滚动，禁止外壳再出横向条 */
+.tools-embed.is-logs {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tools-embed.is-logs .trace-pane {
+  flex: 1;
+  min-height: 0;
+}
+
 .tools-embed.is-settings .settings-shell,
 .tools-embed.is-logs .logs-app,
 .tools-embed.is-components .components-shell {

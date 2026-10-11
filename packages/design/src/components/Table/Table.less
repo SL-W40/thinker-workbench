@@ -1,0 +1,219 @@
+/* Table 控件：紧凑数据表，颜色来自主题 token。 */
+
+.tw-table-wrap {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--tw-border, var(--line));
+  border-radius: 10px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+
+  /* 不滚动：表宽锁在容器内，由单元格策略消化溢出 */
+  &--scroll-none {
+    overflow: hidden;
+  }
+
+  &--scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  &--scroll-y {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  &--scroll-both {
+    overflow: auto;
+  }
+}
+
+.tw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--tw-fg, var(--ink));
+  table-layout: auto;
+
+  /* 按内容撑开（需配合 scroll=x/both，否则可能被 wrap 裁切） */
+  &--cell-auto {
+    width: max-content;
+    min-width: 100%;
+  }
+}
+
+.tw-table__th {
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tw-fg-muted, var(--muted));
+  background: color-mix(in srgb, var(--tw-bg, var(--bg)) 55%, var(--tw-bg-elev, var(--bg-elev)));
+  border-bottom: 1px solid var(--tw-border, var(--line));
+  min-width: 0;
+
+  &--end {
+    text-align: right;
+  }
+
+  &--center {
+    text-align: center;
+  }
+
+  &--overflow-wrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /*
+   * 弹性省略列：max-width:0 让列吃掉「剩余宽度」，
+   * 与 fit 列（width:1% + nowrap）搭配，避免 fixed 布局下 1% 把操作列压扁重叠。
+   */
+  &--overflow-ellipsis {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &--overflow-auto {
+    white-space: nowrap;
+  }
+
+  &--fit {
+    width: 1%;
+    max-width: none;
+    white-space: nowrap;
+    overflow: visible;
+  }
+
+  &--drag {
+    width: 2.25rem;
+    max-width: none;
+    padding-left: 8px;
+    padding-right: 4px;
+    white-space: nowrap;
+    overflow: visible;
+  }
+}
+
+.tw-table__td {
+  padding: 10px 12px;
+  vertical-align: middle;
+  border-bottom: 1px solid color-mix(in srgb, var(--tw-border, var(--line)) 70%, transparent);
+  min-width: 0;
+
+  &--end {
+    text-align: right;
+  }
+
+  &--center {
+    text-align: center;
+  }
+
+  &--overflow-wrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  &--overflow-ellipsis {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &--overflow-auto {
+    white-space: nowrap;
+    overflow: visible;
+  }
+
+  &--fit {
+    width: 1%;
+    max-width: none;
+    white-space: nowrap;
+    overflow: visible;
+  }
+
+  &--drag {
+    width: 2.25rem;
+    max-width: none;
+    padding-left: 8px;
+    padding-right: 4px;
+    white-space: nowrap;
+    overflow: visible;
+  }
+
+  &.is-muted {
+    color: var(--tw-fg-muted, var(--muted));
+    font-size: 0.78rem;
+  }
+}
+
+.tw-table__body .tw-table__row:last-child .tw-table__td {
+  border-bottom: 0;
+}
+
+.tw-table__body .tw-table__row:hover .tw-table__td {
+  background: color-mix(in srgb, var(--tw-accent, var(--accent)) 6%, transparent);
+}
+
+.tw-table__body .tw-table__row.is-dragging .tw-table__td {
+  opacity: 0.45;
+  background: color-mix(in srgb, var(--tw-accent, var(--accent)) 8%, transparent);
+}
+
+.tw-table__body .tw-table__row.is-drag-over .tw-table__td {
+  box-shadow: inset 0 2px 0 0 var(--tw-accent, var(--accent));
+}
+
+.tw-table__drag-handle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tw-fg-muted, var(--muted));
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+
+  &:hover {
+    color: var(--tw-fg, var(--ink));
+    background: color-mix(in srgb, var(--tw-fg, var(--ink)) 8%, transparent);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.tw-table__drag-icon {
+  display: block;
+  pointer-events: none;
+}
+
+.tw-table--compact {
+  .tw-table__th {
+    padding: 7px 10px;
+  }
+
+  .tw-table__td {
+    padding: 7px 10px;
+  }
+
+  .tw-table__th--drag,
+  .tw-table__td--drag {
+    padding-left: 6px;
+    padding-right: 2px;
+  }
+}

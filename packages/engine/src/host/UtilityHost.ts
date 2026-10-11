@@ -12,6 +12,8 @@ import {
   emptyContextUsageSnapshot,
   type AiLocale,
   type McpServerConfig,
+  type ModelCatalog,
+  type ModelSelection,
   type ModelSettings,
   type UtilityCancel,
   type UtilityContextUsage,
@@ -21,20 +23,26 @@ import {
   type UtilityToChild,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
+import { setChatMode } from "../chatMode";
 import { setDataDir } from "../config/dataDir";
 import { assembleContext } from "../context/assembleContext";
 import { rejectAllHitl, resolveHitl } from "../hitl/requestHitl";
 import { agentLog, configureAgentLog } from "../log/setup";
 import { getMcpManager } from "../mcp/McpManager";
+import { configureAgentTrace } from "../trace/emit";
+import {
+  configureFromLegacyModel,
+  configureModelCatalog,
+} from "../model/catalog";
 import {
   configureAiLocale,
-  configureChatModel,
   getAiLocale,
   getAllowEmoji,
   getContextWindow,
 } from "../model/openai";
 import type { ChatMessage } from "../model/types";
 import { createAgentRuntime, type AgentRuntime } from "../runtime/AgentRuntime";
+import { setSubagentDefinitions } from "../subagents/registry";
 import { setAllowAiDeleteFiles, setWorkspaceAccess, setWorkspaceRoot } from "../workspace";
 import { handleBrowserEvent } from "./browserClient";
 import { handlePtyEvent } from "./ptyClient";
@@ -95,10 +103,23 @@ export class UtilityHost {
     return this.runtime;
   }
 
-  /** 应用本轮模型凭据与 AI 语言（有字段才覆盖）。 */
-  private applyConfig(model?: ModelSettings, aiLocale?: AiLocale): void {
-    if (model) configureChatModel(model);
-    if (aiLocale) configureAiLocale(aiLocale);
+  /**
+   * 应用本轮模型目录 / 选用 / 旧单字段回退，以及 AI 语言。
+   * chatWithFailover 依赖 catalog；仅 configureChatModel 不够。
+   */
+  private applyConfig(options: {
+    catalog?: ModelCatalog | null;
+    selection?: ModelSelection | null;
+    model?: ModelSettings | null;
+    aiLocale?: AiLocale;
+    route?: { userText?: string; contextPaths?: string[] };
+  }): void {
+    if (options.catalog || options.selection || options.route) {
+      configureModelCatalog(options.catalog, options.selection, options.route);
+    } else if (options.model) {
+      configureFromLegacyModel(options.model);
+    }
+    if (options.aiLocale) configureAiLocale(options.aiLocale);
   }
 
   /** 应用工作区外访问档位（有字段才覆盖）。 */
@@ -167,12 +188,36 @@ export class UtilityHost {
     if (typeof dir === "string") setDataDir(dir);
   }
 
+  /** 同步 Trace 开关与本轮会话上下文。 */
+  private applyTrace(message: {
+    traceEnabled?: boolean;
+    sessionId?: string;
+    workspaceId?: string;
+    sessionTitle?: string;
+    runId?: string;
+    threadId?: string;
+    traceId?: string;
+  }): void {
+    configureAgentTrace({
+      enabled: message.traceEnabled !== false,
+      sessionId: message.sessionId?.trim() || undefined,
+      workspaceId: message.workspaceId?.trim() || undefined,
+      title: message.sessionTitle?.trim() || undefined,
+      runId: message.runId?.trim() || undefined,
+      threadId: message.threadId?.trim() || undefined,
+      traceId: message.traceId?.trim() || undefined,
+      nodeSpanId: undefined,
+      parentSpanId: undefined,
+    });
+  }
+
   private onHello(message: UtilityHello): void {
     this.ensureLog(message.loggingEnabled);
     this.applyLogPolicy({
       truncateLongContent: message.logTruncateLongContent,
       loggingEnabled: message.loggingEnabled,
     });
+    this.applyTrace({ traceEnabled: message.traceEnabled });
     agentLog("host").info("hello", {
       meta: {
         hasModel: Boolean(message.model?.apiKey),
@@ -184,14 +229,21 @@ export class UtilityHost {
         logTruncateLongContent: message.logTruncateLongContent ?? null,
         workspaceRoot: message.workspaceRoot ?? null,
         dataDir: message.dataDir ?? null,
+        traceEnabled: message.traceEnabled ?? null,
       },
     });
-    this.applyConfig(message.model, message.aiLocale);
+    this.applyConfig({
+      catalog: message.catalog,
+      selection: message.selection,
+      model: message.model,
+      aiLocale: message.aiLocale,
+    });
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
     this.applyDataDir(message.dataDir);
     void this.applyMcpServers(message.mcpServers);
+    if (message.subagents) setSubagentDefinitions(message.subagents);
     if (message.workspaceRoot) {
       try {
         setWorkspaceRoot(message.workspaceRoot);
@@ -220,11 +272,31 @@ export class UtilityHost {
       threadId: message.threadId,
       meta: withTextPreview(text, "message", PREVIEW_BODY_CHARS),
     });
-    this.applyConfig(message.model, message.aiLocale);
+    this.applyConfig({
+      catalog: message.catalog,
+      selection: message.selection,
+      model: message.model,
+      aiLocale: message.aiLocale,
+      route: {
+        userText: text,
+        contextPaths: message.command.contextPaths,
+      },
+    });
+    setChatMode(message.chatMode);
+    if (message.subagents) setSubagentDefinitions(message.subagents);
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
     this.applyDataDir(message.dataDir);
+    this.applyTrace({
+      traceEnabled: message.traceEnabled,
+      sessionId: message.sessionId,
+      workspaceId: message.workspaceId,
+      sessionTitle: message.sessionTitle,
+      runId: message.runId,
+      threadId: message.threadId,
+      traceId,
+    });
     if (!workspaceRoot?.trim()) {
       postToParent({
         channel: "utility",
@@ -284,13 +356,27 @@ export class UtilityHost {
     const traceId = message.command.traceId;
     agentLog("host").info("resume", { runId, threadId, traceId });
     try {
-      if (message.model || message.aiLocale) {
-        this.applyConfig(message.model, message.aiLocale);
-      }
+      this.applyConfig({
+        catalog: message.catalog,
+        selection: message.selection,
+        model: message.model,
+        aiLocale: message.aiLocale,
+      });
+      setChatMode(message.chatMode);
+      if (message.subagents) setSubagentDefinitions(message.subagents);
       this.applyWorkspaceAccess(message.workspaceAccess);
       this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
       applyShellConfig(message);
       this.applyDataDir(message.dataDir);
+      this.applyTrace({
+        traceEnabled: message.traceEnabled,
+        sessionId: message.sessionId,
+        workspaceId: message.workspaceId,
+        sessionTitle: message.sessionTitle,
+        runId: message.runId,
+        threadId,
+        traceId,
+      });
       if (message.workspaceRoot) {
         setWorkspaceRoot(message.workspaceRoot, { name: message.command.workspaceName });
       }
@@ -311,7 +397,12 @@ export class UtilityHost {
 
   /** 与 assembleContext 同源估算上下文占用。 */
   private onContextUsage(message: UtilityContextUsage): void {
-    this.applyConfig(message.model, message.aiLocale);
+    this.applyConfig({
+      catalog: message.catalog,
+      selection: message.selection,
+      model: message.model,
+      aiLocale: message.aiLocale,
+    });
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     this.applyDataDir(message.dataDir);

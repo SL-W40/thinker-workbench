@@ -1,25 +1,24 @@
 /**
  * 产品控制台内容区：Settings / Logs / Components。
- * UI 来自设置页、`@thinker-workbench/logger-web` 与组件预览；顶部 tab 在 TitleBar。
  */
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import {
+  CodeIcon,
   ConsoleIcon,
   GridIcon,
   LogsIcon,
   SettingsIcon,
   Spinner,
 } from "@thinker-workbench/design/react";
-import { useI18n, useT } from "../../i18n/I18nProvider";
-import type { Locale as LogsLocale } from "@thinker-workbench/logger-web/i18n";
+import { useT } from "../../i18n/useI18n";
+import type { MessageKey } from "../../i18n/translate";
 import { SettingsPane } from "../settings/SettingsPane";
 import type { SettingsSectionId } from "../settings/sections";
 import "./tools.less";
 
-const LogsApp = lazy(async () => {
-  await import("@thinker-workbench/logger-web/styles.less");
-  const m = await import("@thinker-workbench/logger-web/App");
-  return { default: m.App };
+const TracePane = lazy(async () => {
+  const m = await import("../trace/TracePane");
+  return { default: m.TracePane };
 });
 
 const ComponentsPane = lazy(async () => {
@@ -27,11 +26,17 @@ const ComponentsPane = lazy(async () => {
   return { default: m.ComponentsPane };
 });
 
-export type ToolTabId = "settings" | "logs" | "components";
+const CustomizePane = lazy(async () => {
+  const m = await import("../customize/CustomizePane");
+  return { default: m.CustomizePane };
+});
 
-export const TOOL_TAB_IDS: ToolTabId[] = ["settings", "logs", "components"];
+/** `logs` 为历史路由键，UI 文案?Trace。*/
+export type ToolTabId = "settings" | "customize" | "logs" | "components";
 
-/** 是否为合法控制台 tab。 */
+export const TOOL_TAB_IDS: ToolTabId[] = ["settings", "customize", "logs", "components"];
+
+/** 是否为合法控制台 tab。*/
 export function isToolTabId(value: unknown): value is ToolTabId {
   return typeof value === "string" && (TOOL_TAB_IDS as readonly string[]).includes(value);
 }
@@ -42,24 +47,20 @@ type ToolsPaneProps = {
   visited: ReadonlySet<ToolTabId>;
   settingsSection: SettingsSectionId;
   onSettingsSectionChange: (section: SettingsSectionId) => void;
-  /** 从聊天 Trace 胶囊跳转时要筛选的追踪 id。 */
-  logsFocusTraceId?: string | null;
-  /** 与 logsFocusTraceId 配对；同 id 再次跳转时递增以触发筛选。 */
-  logsFocusSeq?: number;
+  /** 从聊天跳转聚焦会话。*/
+  focusSessionId?: string | null;
 };
 
-/** 产品控制台主体（tab 切换由 TitleBar 控制）。 */
+/** 产品控制台主体（tab 切换?TitleBar 控制）。*/
 export function ToolsPane({
   active,
   tab,
   visited,
   settingsSection,
   onSettingsSectionChange,
-  logsFocusTraceId = null,
-  logsFocusSeq = 0,
+  focusSessionId = null,
 }: ToolsPaneProps) {
   const t = useT();
-  const { locale } = useI18n();
 
   useEffect(() => {
     if (!active) return;
@@ -85,13 +86,14 @@ export function ToolsPane({
               />
             </div>
           ) : null}
+          {visited.has("customize") ? (
+            <div className="tools-embed is-customize" hidden={tab !== "customize"}>
+              <CustomizePane active={active && tab === "customize"} />
+            </div>
+          ) : null}
           {visited.has("logs") ? (
             <div className="tools-embed is-logs" hidden={tab !== "logs"}>
-              <LogsApp
-                hostLocale={locale as LogsLocale}
-                focusTraceId={logsFocusTraceId}
-                focusSeq={logsFocusSeq}
-              />
+              <TracePane active={active && tab === "logs"} focusSessionId={focusSessionId} />
             </div>
           ) : null}
           {visited.has("components") ? (
@@ -105,17 +107,20 @@ export function ToolsPane({
   );
 }
 
-export function toolTabLabel(
-  t: (key: "tools.settings" | "tools.logs" | "tools.components") => string,
-  id: ToolTabId,
-): string {
-  if (id === "settings") return t("tools.settings");
-  if (id === "logs") return t("tools.logs");
-  return t("tools.components");
+const TOOL_TAB_LABEL_KEYS: Record<ToolTabId, MessageKey> = {
+  settings: "tools.settings",
+  customize: "tools.tabs.customize",
+  logs: "tools.tabTrace",
+  components: "tools.components",
+};
+
+export function toolTabLabel(t: (key: MessageKey) => string, id: ToolTabId): string {
+  return t(TOOL_TAB_LABEL_KEYS[id]);
 }
 
 export function toolTabIcon(id: ToolTabId): ReactNode {
   if (id === "settings") return <SettingsIcon />;
+  if (id === "customize") return <CodeIcon />;
   if (id === "logs") return <LogsIcon />;
   if (id === "components") return <GridIcon />;
   return <ConsoleIcon />;

@@ -1,4 +1,12 @@
 {
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/packages/*/artifacts/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/packages/*/artifacts": true
+  },
   "json.schemaDownload.enable": true,
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "biomejs.biome",
@@ -26,5 +34,10 @@
   },
   "[css]": {
     "editor.defaultFormatter": "biomejs.biome"
-  }
+  },
+  "cSpell.words": [
+    "esbuild",
+    "homebridge",
+    "multiarch"
+  ]
 }

@@ -67,8 +67,12 @@ export function extractContextPaths(text: string): string[] {
     /(?:^|[\s])@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    const p = (m[1] || m[2] || m[3] || "").trim().replace(/\\/g, "/");
-    if (p) out.push(p.replace(/^\.\//, ""));
+    const p = (m[1] || m[2] || m[3] || "")
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/^\.\//, "")
+      .replace(/\/+$/, "");
+    if (p) out.push(p);
   }
   return [...new Set(out)];
 }
@@ -83,4 +87,63 @@ export function formatAtPath(relPath: string): string {
 /** 插入 skill 斜杠。 */
 export function formatSlashSkill(name: string): string {
   return `/${name} `;
+}
+
+/** 富文本分段：普通文本 / `/skill` / `@path`。 */
+export type MentionSegment =
+  | { kind: "text"; text: string }
+  | { kind: "slash"; text: string; name: string }
+  | { kind: "at"; text: string; path: string };
+
+export type ParseMentionMode = "display" | "edit";
+
+/**
+ * 把用户文拆成可着色的 mention 段（与 slash / @ 抽取规则对齐）。
+ * - `display`：气泡展示，行末 token 也成芯片
+ * - `edit`：输入中，仅「后面已有空白」的 token 成芯片（避免 /cre 半截被芯片化）
+ */
+export function parseMentionSegments(
+  text: string,
+  mode: ParseMentionMode = "display",
+): MentionSegment[] {
+  if (!text) return [];
+  // 全局交替匹配：@ 引用 或 /skill（行首/空白后）。
+  // `\b` 只挂在 skill 上——路径常以 `/` 结尾，`/` 与空白之间没有词边界。
+  const re =
+    /(?:^|[\s])(?:@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))|\/([a-z0-9]+(?:-[a-z0-9]+)*)\b)/gi;
+  const out: MentionSegment[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const full = m[0]!;
+    // 匹配可能含前导空白；token 从第一个 @ 或 / 起
+    const tokenOffset = full.search(/[@/]/);
+    if (tokenOffset < 0) continue;
+    const absStart = m.index + tokenOffset;
+    const token = full.slice(tokenOffset);
+    const absEnd = absStart + token.length;
+    // 编辑态：必须后跟空白才固化为芯片
+    if (mode === "edit") {
+      const next = text[absEnd];
+      if (next === undefined || !/\s/.test(next)) {
+        continue;
+      }
+    }
+    if (absStart > last) {
+      out.push({ kind: "text", text: text.slice(last, absStart) });
+    }
+    const slashName = m[4];
+    if (slashName) {
+      out.push({ kind: "slash", text: token, name: slashName.toLowerCase() });
+    } else {
+      const path = (m[1] || m[2] || m[3] || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+      if (path) out.push({ kind: "at", text: token, path });
+      else out.push({ kind: "text", text: token });
+    }
+    last = absEnd;
+    // 避免零宽死循环
+    if (m.index === re.lastIndex) re.lastIndex += 1;
+  }
+  if (last < text.length) out.push({ kind: "text", text: text.slice(last) });
+  return out.length ? out : [{ kind: "text", text }];
 }

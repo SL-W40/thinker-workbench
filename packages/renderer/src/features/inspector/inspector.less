@@ -151,8 +151,8 @@
 /* ---------------- 上下文菜单 ---------------- */
 
 .stage-tab-dirty {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #c4a15a;
   flex-shrink: 0;
@@ -190,7 +190,7 @@
   font-family: var(--mono, ui-monospace, "SF Mono", Menlo, Monaco, monospace);
 }
 
-/* Monaco / loading 占满中间区，statusline 才能钉在底部 */
+/* Monaco / loading 铺满编辑区 */
 .editor-wrap__monaco > * {
   position: absolute !important;
   inset: 0;
@@ -393,39 +393,6 @@
   flex: 0 0 auto;
 }
 
-.statusline-dirty {
-  font-style: normal;
-  color: #e6c97a;
-  background: color-mix(in srgb, #e6c97a 18%, var(--panel-alt));
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-
-[data-theme="light"] .statusline-dirty,
-[data-theme="eye-care"] .statusline-dirty,
-[data-theme="book"] .statusline-dirty,
-[data-theme="mist"] .statusline-dirty,
-[data-theme="petal"] .statusline-dirty,
-[data-theme="clay"] .statusline-dirty,
-[data-theme="lilac"] .statusline-dirty {
-  color: #a8692a;
-  background: #f8f0e4;
-}
-
-.statusline-kbd {
-  border: 1px solid var(--border-strong);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  padding: 0 4px;
-  background: var(--panel);
-  color: var(--text);
-  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, Monaco, monospace);
-  font-size: 0.92em;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-}
-
 .agent-inspector {
   display: flex;
   flex-direction: column;
@@ -484,15 +451,47 @@
   text-overflow: ellipsis;
 }
 
+.agent-inspector__tab-trail {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.agent-inspector__tab-trail .stage-tab-dirty,
 .agent-inspector__tab-close {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.agent-inspector__tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0.4;
   font-size: 14px;
   line-height: 1;
-  padding: 0 2px;
 }
 
 .agent-inspector__tab:hover .agent-inspector__tab-close,
 .agent-inspector__tab.is-active .agent-inspector__tab-close {
+  opacity: 0.8;
+}
+
+/* 未保存：圆点占关闭位；悬停露出 × */
+.agent-inspector__tab.is-dirty .agent-inspector__tab-close {
+  opacity: 0;
+}
+
+.agent-inspector__tab.is-dirty:hover .stage-tab-dirty {
+  opacity: 0;
+}
+
+.agent-inspector__tab.is-dirty:hover .agent-inspector__tab-close {
   opacity: 0.8;
 }
 
@@ -603,6 +602,104 @@
   flex-direction: column;
   position: relative;
   background: var(--panel);
+}
+
+/* 子代理时间线：头部固定，正文纵向滚动、宽度自适应无横滚 */
+.agent-subagent-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-subagent-pane__header {
+  flex: 0 0 auto;
+  z-index: 1;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
+  background: var(--panel, var(--tw-bg-elev, #fff));
+}
+
+.agent-subagent-pane__title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--ink, var(--tw-fg, #1a1a1a));
+}
+
+.agent-subagent-pane__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 2px;
+  margin: 4px 0 0;
+  min-width: 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--tw-fg-muted, #8a8478);
+}
+
+.agent-subagent-pane__sep {
+  margin: 0 4px;
+  opacity: 0.55;
+}
+
+.agent-subagent-pane__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px 12px 16px;
+}
+
+.agent-subagent-pane .thread {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-subagent-pane .bubble {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-subagent-pane .bubble-main,
+.agent-subagent-pane .run-timeline,
+.agent-subagent-pane .run-timeline-item,
+.agent-subagent-pane .run-timeline-tool,
+.agent-subagent-pane .run-timeline-tool-head,
+.agent-subagent-pane .run-timeline-label {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-subagent-pane .run-timeline-tool-bit.is-path:not(.is-paths-trigger),
+.agent-subagent-pane .run-timeline-tool-bit.is-query {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-subagent-pane__empty {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--tw-fg-muted, #8a8478);
+}
+
+.agent-subagent-pane__hint {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--tw-fg-muted, #8a8478);
 }
 
 .agent-inspector__section {
@@ -1743,6 +1840,15 @@
   width: max-content;
   min-width: 100%;
   box-sizing: border-box;
+  /* 离屏行跳过布局/绘制，全部展开时减轻滚动压力 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 17px;
+}
+
+.changes-pane__diff-wrap--spacer {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+  pointer-events: none;
 }
 
 .changes-diff.is-wrap .changes-diff__body {

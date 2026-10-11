@@ -22,11 +22,11 @@ export function getSessionMemorySink(): MemorySink {
   return memory;
 }
 
-/** 按通用设置同步日志总开关与截断策略。 */
+/** 按通用设置同步附属 logger 开关与截断策略（落盘由 Trace）。 */
 function applyAppLogPolicy(general?: GeneralSettings): void {
   const g = general ?? window.thinker?.settings?.getGeneralSync?.() ?? DEFAULT_GENERAL_SETTINGS;
-  configureLogPreview({ truncateLongContent: g.logTruncateLongContent });
-  configureLog({ enabled: g.loggingEnabled });
+  configureLogPreview({ truncateLongContent: g.traceTruncateEnabled });
+  configureLog({ enabled: g.traceEnabled });
 }
 
 /** 应用启动时调用一次。 */
@@ -36,7 +36,7 @@ export function bootstrapAppLog(): void {
   const general = window.thinker?.settings?.getGeneralSync?.() ?? DEFAULT_GENERAL_SETTINGS;
   configureLog({
     minLevel: "debug",
-    enabled: general.loggingEnabled,
+    enabled: general.traceEnabled,
     sinks: [
       memory,
       createCallbackSink((record) => {
@@ -48,7 +48,7 @@ export function bootstrapAppLog(): void {
       }),
     ],
   });
-  configureLogPreview({ truncateLongContent: general.logTruncateLongContent });
+  configureLogPreview({ truncateLongContent: general.traceTruncateEnabled });
   createLogger({ scope: "app", source: "app" }).info("log ready");
 
   // 并入 desktop / agent 广播，便于内存时间线与同进程调试

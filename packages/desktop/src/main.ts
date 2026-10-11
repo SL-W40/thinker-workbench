@@ -10,9 +10,11 @@ import { getAppIconPath } from "./config/paths";
 import { loadSession } from "./config/sessionStore";
 import { getGeneralSettings, loadSettings } from "./config/settingsStore";
 import { reloadSessionAfterDataDirChange } from "./config/dataDirMigrate";
+import { ensureBundledCustomize } from "./customize/ensureBundledCustomize";
 import { closeThinkerDb, openCatalogDb } from "./db/thinkerDb";
 import { ensureDefaultWorkspace, healRunningSessions } from "./db/workspacesStore";
 import { registerIpc } from "./ipc/register";
+import { ensureBundledSkills } from "./skills/ensureBundledSkills";
 import { broadcastThreadsChanged } from "./ipc/workspacesHandlers";
 import { closeLogsDb } from "./log/logsDb";
 import { pruneExpiredLogs } from "./log/retention";
@@ -60,6 +62,17 @@ app.whenReady().then(() => {
   } catch {
     /* ignore */
   }
+  // 内置 skills / rules / agents / mcps → dataDir（已存在则跳过）
+  try {
+    ensureBundledSkills();
+  } catch {
+    /* ignore */
+  }
+  try {
+    ensureBundledCustomize();
+  } catch {
+    /* ignore */
+  }
   applyAppIcon();
   applyContentSecurityPolicy();
   ensureWindowsToastShortcut();
@@ -101,6 +114,16 @@ app.whenReady().then(() => {
       openCatalogDb();
       try {
         ensureDefaultWorkspace();
+      } catch {
+        /* ignore */
+      }
+      try {
+        ensureBundledSkills();
+      } catch {
+        /* ignore */
+      }
+      try {
+        ensureBundledCustomize();
       } catch {
         /* ignore */
       }

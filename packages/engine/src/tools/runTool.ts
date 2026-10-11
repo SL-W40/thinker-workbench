@@ -14,6 +14,7 @@ export async function runTool(
   name: string,
   args: ToolArgs,
   signal: AbortSignal,
+  callId?: string,
 ): Promise<ToolResult> {
   const log = agentLog("tools.run");
   if (isMcpToolName(name)) {
@@ -31,7 +32,11 @@ export async function runTool(
     meta: { name, argKeys: Object.keys(args), ...withJsonPreview(args, "args") },
   });
   try {
-    const result = await tool.run(args, { workspaceRoot: getWorkspaceRoot(), signal });
+    const result = await tool.run(args, {
+      workspaceRoot: getWorkspaceRoot(),
+      signal,
+      callId,
+    });
     log.info("result", {
       spanId: name,
       meta: {

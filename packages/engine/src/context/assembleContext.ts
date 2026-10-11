@@ -5,10 +5,12 @@
 import {
   DEFAULT_CONTEXT_WINDOW,
   type AiLocale,
+  type ChatMode,
   type ContextUsageSegment,
   type ContextUsageSnapshot,
   emptyContextUsageSnapshot,
 } from "@thinker-workbench/shared";
+import { buildChatModeAddendum, getChatMode, setChatMode } from "../chatMode";
 import { getDataDir } from "../config/dataDir";
 import {
   emojiInstruction,
@@ -18,6 +20,7 @@ import {
 import { buildEnvironmentContextMessage } from "../prompts/environment";
 import { loadRules } from "../rules/loadRules";
 import { loadSkills } from "../skills/loadSkills";
+import { getSubagentIndexText } from "../subagents/registry";
 import { listChatTools } from "../tools/schema";
 import type { ChatMessage, ChatToolDefinition } from "../model/types";
 import { getWorkspaceRootOrNull } from "../workspace";
@@ -35,6 +38,12 @@ export type AssembleContextInput = {
   latestUserText?: string;
   /** 用户 `@` 选中的工作区相对路径。 */
   contextPaths?: string[];
+  /** 子代理只读：收紧写/ shell / Task。 */
+  childReadonly?: boolean;
+  /** 是否暴露 Task / task_await。 */
+  allowTask?: boolean;
+  /** 临时覆盖进程 ChatMode（组装后还原）。 */
+  chatMode?: ChatMode;
 };
 
 export type AssembledContext = {
@@ -79,6 +88,9 @@ function conversationText(messages: ChatMessage[]): string {
  * workspace / dataDir 优先用入参，否则读进程内已配置值。
  */
 export function assembleContext(input: AssembleContextInput): AssembledContext {
+  const prevMode = getChatMode();
+  if (input.chatMode) setChatMode(input.chatMode);
+  try {
   const dataDir = input.dataDir !== undefined ? input.dataDir : getDataDir();
   const workspaceRoot =
     input.workspaceRoot !== undefined ? input.workspaceRoot : getWorkspaceRootOrNull();
@@ -97,18 +109,23 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     input.latestUserText ?? latestUserFromMessages(input.messages);
   const skills = loadSkills(dataDir, workspaceRoot, latestUser);
   const contextFiles = loadContextFilesBlock(workspaceRoot, input.contextPaths);
-  const tools = listChatTools();
+  const tools = listChatTools({
+    childReadonly: input.childReadonly,
+    allowTask: input.allowTask,
+  });
   const toolsJson = JSON.stringify(tools);
   const conversation = conversationText(input.messages);
 
-  const systemParts = [base, environment];
+  const subagentIndex = getSubagentIndexText();
+  const systemParts = [base, environment, buildChatModeAddendum()];
+  if (subagentIndex) systemParts.push(subagentIndex);
   if (rules.text) systemParts.push(rules.text);
   if (skills.text) systemParts.push(skills.text);
   if (contextFiles.text) systemParts.push(contextFiles.text);
   const system = systemParts.join("\n\n");
 
   const segmentDefs: Array<{ id: ContextUsageSegment["id"]; text: string }> = [
-    { id: "system", text: `${base}\n\n${environment}` },
+    { id: "system", text: `${base}\n\n${environment}\n\n${subagentIndex}` },
     { id: "tools", text: toolsJson },
     { id: "rules", text: rules.text },
     { id: "skills", text: skills.text },
@@ -129,6 +146,9 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     segments,
     usage,
   };
+  } finally {
+    if (input.chatMode) setChatMode(prevMode);
+  }
 }
 
 /** utility 未配置工作区时的空用量。 */

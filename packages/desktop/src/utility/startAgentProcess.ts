@@ -7,7 +7,12 @@
 import type { UtilityHello } from "@thinker-workbench/shared";
 import { utilityProcess } from "electron";
 import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths";
-import { getGeneralSettings, getModelSettings } from "../config/settingsStore";
+import {
+  getGeneralSettings,
+  getModelCatalog,
+  resolvePrimaryModelSettings,
+} from "../config/settingsStore";
+import { listAgents } from "../customize/agentsStore";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
 import { onAgentUtilityExited } from "../ipc/agentHandlers";
 import { listEnabledMcpConfigs } from "../mcp/mcpStore";
@@ -24,11 +29,14 @@ export type AgentProcessHandle = {
 /** 组装下发给 agent 的 hello 载荷（设置变更时可重发）。 */
 export function buildAgentHello(): UtilityHello {
   const general = getGeneralSettings();
+  const catalog = getModelCatalog();
   return {
     channel: "utility",
     kind: "hello",
     checkpointDir: getCheckpointDir(),
-    model: getModelSettings(),
+    catalog,
+    selection: catalog.selection,
+    model: resolvePrimaryModelSettings(),
     aiLocale: general.aiLocale,
     workspaceAccess: general.workspaceAccess,
     allowAiDeleteFiles: general.allowAiDeleteFiles,
@@ -36,12 +44,16 @@ export function buildAgentHello(): UtilityHello {
     allowAiBrowser: general.allowAiBrowser,
     shellApprovalMode: general.shellApprovalMode,
     shellAllowlist: general.shellAllowlist,
+    shellBlocklist: general.shellBlocklist,
+    httpCompatibilityMode: general.httpCompatibilityMode,
+    traceEnabled: general.traceEnabled,
     shell: shellFactsForAgent(general.shellProfileId),
     logTruncateLongContent: general.logTruncateLongContent,
     loggingEnabled: general.loggingEnabled,
     workspaceRoot: getActiveWorkspaceRoot() ?? undefined,
     dataDir: getDataDir(),
     mcpServers: listEnabledMcpConfigs(),
+    subagents: listAgents(getActiveWorkspaceRoot()).agents,
   };
 }
 

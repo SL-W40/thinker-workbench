@@ -1,0 +1,176 @@
+/**
+ * Composer ChatMode：窄芯片触发器 + 带说明的上浮面板。
+ */
+
+.composer-mode-picker {
+  position: relative;
+  flex: 0 0 auto;
+  max-width: 7.25rem;
+  min-width: 0;
+}
+
+.composer-mode-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 2px 6px 2px 8px;
+  margin: 0;
+  border: 1px solid var(--line, #e4e0d8);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel, #fff) 92%, transparent);
+  color: var(--ink-muted, #6b655c);
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+
+  &:hover:not(:disabled) {
+    color: var(--ink, #1c1917);
+    border-color: color-mix(in srgb, var(--ink, #1c1917) 22%, var(--line, #e4e0d8));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent, #3b82f6);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.composer-mode-picker.is-open .composer-mode-picker__trigger {
+  color: var(--ink, #1c1917);
+  border-color: color-mix(in srgb, var(--accent, #3b82f6) 45%, var(--line, #e4e0d8));
+}
+
+.composer-mode-picker__icon {
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
+.composer-mode-picker__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.composer-mode-picker__chevron {
+  flex: 0 0 auto;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.composer-mode-picker.is-open .composer-mode-picker__chevron {
+  transform: rotate(180deg);
+}
+
+.composer-mode-menu {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line, #e4e0d8);
+  border-radius: 12px;
+  background: var(--panel, #fff);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, #000 12%, transparent),
+    0 1px 0 color-mix(in srgb, #000 4%, transparent);
+  box-sizing: border-box;
+}
+
+.composer-mode-menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-mode-menu__item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 14px;
+  grid-template-areas:
+    "icon name check"
+    "desc desc desc";
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
+    outline: none;
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent);
+  }
+}
+
+.composer-mode-menu__icon {
+  grid-area: icon;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-muted, #6b655c);
+}
+
+.composer-mode-menu__item.is-selected .composer-mode-menu__icon {
+  color: var(--accent, #3b82f6);
+}
+
+.composer-mode-menu__name {
+  grid-area: name;
+  min-width: 0;
+  font-size: 0.84rem;
+  font-weight: 560;
+  line-height: 1.25;
+  color: var(--ink, #1c1917);
+}
+
+.composer-mode-menu__desc {
+  grid-area: desc;
+  margin: 0;
+  padding: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--ink-muted, #6b655c);
+}
+
+.composer-mode-menu__check,
+.composer-mode-menu__check-slot {
+  grid-area: check;
+  box-sizing: border-box;
+  width: 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: var(--accent, #3b82f6);
+}
+
+.composer-mode-menu__check-slot {
+  visibility: hidden;
+}

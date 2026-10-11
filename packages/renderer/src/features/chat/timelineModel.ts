@@ -108,12 +108,34 @@ export function deactivateStatuses(steps: ChatTimelineStep[]): ChatTimelineStep[
   return steps.map((s) => (s.kind === "status" ? finalizeStatusStep(s) : s));
 }
 
+/** 会话停止时：仍在跑的子代理收束为 cancelled。 */
+function finalizeActiveSubagent(
+  step: Extract<ChatTimelineStep, { kind: "subagent" }>,
+): Extract<ChatTimelineStep, { kind: "subagent" }> {
+  if (step.phase === "finished" || step.phase === "failed" || step.phase === "cancelled") {
+    return {
+      ...step,
+      active: false,
+      childTimeline: step.childTimeline ? deactivateAll(step.childTimeline) : undefined,
+    };
+  }
+  return {
+    ...step,
+    phase: "cancelled",
+    active: false,
+    liveLine: undefined,
+    error: step.error || "Cancelled.",
+    childTimeline: step.childTimeline ? deactivateAll(step.childTimeline) : undefined,
+  };
+}
+
 /** 将所有活动行标为非活动（实时收束，可用墙钟结算思考耗时）。 */
 export function deactivateAll(steps: ChatTimelineStep[]): ChatTimelineStep[] {
   return dropTrailingEphemeralThoughts(
     steps.map((s) => {
       if (s.kind === "status") return finalizeStatusStep(s, { wallClock: true });
       if (s.kind === "tool") return { ...s, active: false };
+      if (s.kind === "subagent") return finalizeActiveSubagent(s);
       return s;
     }),
   );
@@ -320,6 +342,8 @@ export function applyToolEvent(
         diff: event.diff ?? prev.diff,
         sessionId: event.sessionId ?? prev.sessionId,
         command: event.command ?? prev.command,
+        resultPaths: event.resultPaths ?? prev.resultPaths,
+        resultPathKinds: event.resultPathKinds ?? prev.resultPathKinds,
         ...mergeRestoreCache(prev, event),
         // 真实 tool start：清掉审批挂载
         hitl: undefined,
@@ -364,6 +388,8 @@ export function applyToolEvent(
       command: event.command ?? prev.command,
       exitCode: event.exitCode ?? prev.exitCode,
       backgrounded: event.backgrounded ?? prev.backgrounded,
+      resultPaths: event.resultPaths ?? prev.resultPaths,
+      resultPathKinds: event.resultPathKinds ?? prev.resultPathKinds,
       ...mergeRestoreCache(prev, event),
     };
     return copy;
@@ -385,6 +411,8 @@ export function applyToolEvent(
       command: event.command,
       exitCode: event.exitCode,
       backgrounded: event.backgrounded,
+      resultPaths: event.resultPaths,
+      resultPathKinds: event.resultPathKinds,
       ...mergeRestoreCache(undefined, event),
       active: false,
     },
@@ -654,4 +682,139 @@ export function appendError(
       ...(code ? { code } : {}),
     },
   ];
+}
+
+/** 追加一条 Auto 故障切换说明。 */
+export function appendModelSwitch(
+  steps: ChatTimelineStep[],
+  event: {
+    fromModelId?: string;
+    fromLabel: string;
+    toModelId: string;
+    toLabel: string;
+    reason: "auth" | "not_found" | "rate_limit" | "network" | "server" | "other";
+    detail?: string;
+  },
+): ChatTimelineStep[] {
+  return [
+    ...steps,
+    {
+      id: createId("tl"),
+      kind: "model_switch",
+      fromModelId: event.fromModelId,
+      fromLabel: event.fromLabel,
+      toModelId: event.toModelId,
+      toLabel: event.toLabel,
+      reason: event.reason,
+      ...(event.detail ? { detail: event.detail } : {}),
+    },
+  ];
+}
+
+const MAX_SUBAGENT_ENTRIES = 80;
+
+/** 把子代理 childEvent 归并进其 childTimeline（与主会话同一套规则）。 */
+function applySubagentChildEvent(
+  childTimeline: ChatTimelineStep[],
+  event: Extract<AgentEvent, { type: "subagent" }>,
+): ChatTimelineStep[] {
+  const child = event.childEvent;
+  if (!child) return childTimeline;
+  const base = {
+    threadId: event.threadId,
+    runId: event.runId,
+    ts: event.ts,
+  };
+  if (child.type === "status") {
+    return applyStatus(childTimeline, child.status);
+  }
+  if (child.type === "token") {
+    const channel = child.channel ?? "reply";
+    if (channel === "thinking") {
+      return appendThinkingText(childTimeline, child.text);
+    }
+    return appendReplyText(childTimeline, child.text);
+  }
+  if (child.type === "tool") {
+    return applyToolEvent(childTimeline, { ...base, ...child });
+  }
+  return childTimeline;
+}
+
+/** 合并子代理 Task 生命周期到时间线。 */
+export function applySubagentEvent(
+  steps: ChatTimelineStep[],
+  event: Extract<AgentEvent, { type: "subagent" }>,
+): ChatTimelineStep[] {
+  const next = [...steps];
+  const idx = next.findIndex(
+    (s) => s.kind === "subagent" && s.taskId === event.taskId,
+  );
+  const prev =
+    idx >= 0 && next[idx]?.kind === "subagent"
+      ? (next[idx] as Extract<ChatTimelineStep, { kind: "subagent" }>)
+      : null;
+  // 已收束（含会话停止）后忽略迟到的 progress
+  if (
+    prev &&
+    (prev.phase === "finished" ||
+      prev.phase === "failed" ||
+      prev.phase === "cancelled") &&
+    (event.phase === "started" || event.phase === "progress")
+  ) {
+    return steps;
+  }
+  const active = event.phase === "started" || event.phase === "progress";
+  const liveLine =
+    event.phase === "progress" || event.phase === "started"
+      ? (event.liveLine ?? event.summary ?? prev?.liveLine)
+      : event.phase === "cancelled"
+        ? undefined
+        : prev?.liveLine;
+  let entries = prev?.entries ? [...prev.entries] : [];
+  if (event.timelineEntry) {
+    entries.push(event.timelineEntry);
+    if (entries.length > MAX_SUBAGENT_ENTRIES) {
+      entries = entries.slice(entries.length - MAX_SUBAGENT_ENTRIES);
+    }
+  }
+  let childTimeline = prev?.childTimeline ? [...prev.childTimeline] : [];
+  if (event.childEvent) {
+    childTimeline = applySubagentChildEvent(childTimeline, event);
+  }
+  if (
+    event.phase === "finished" ||
+    event.phase === "failed" ||
+    event.phase === "cancelled"
+  ) {
+    childTimeline = deactivateAll(childTimeline);
+  }
+  const patch: Extract<ChatTimelineStep, { kind: "subagent" }> = {
+    id: prev?.id ?? createId("tl"),
+    kind: "subagent",
+    taskId: event.taskId,
+    subagent: event.subagent,
+    // 标题只增不减：避免后续 progress 冲掉已解析的 title
+    title: event.title?.trim() || prev?.title,
+    phase: event.phase,
+    background: event.background ?? prev?.background,
+    summary:
+      event.phase === "finished" ||
+      event.phase === "failed" ||
+      event.phase === "cancelled"
+        ? (event.summary ?? prev?.summary)
+        : prev?.summary,
+    liveLine,
+    entries: entries.length ? entries : undefined,
+    childTimeline: childTimeline.length ? childTimeline : undefined,
+    error:
+      event.error ??
+      (event.phase === "failed" || event.phase === "cancelled"
+        ? event.summary
+        : undefined),
+    active,
+  };
+  if (idx >= 0) next[idx] = patch;
+  else next.push(patch);
+  return next;
 }

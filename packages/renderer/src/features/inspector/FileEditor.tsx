@@ -1,20 +1,16 @@
 /**
- * Monaco 文件编辑器：脏状态 pill + Ctrl/Cmd+S；主题色跟随设计体系。
+ * Monaco 文件编辑器；⌘S / Ctrl+S 保存；主题色跟随设计体系。
+ * 未保存状态由 inspector tab 展示，不在编辑器底部重复。
  */
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import { useDesignTheme } from "@thinker-workbench/design/react";
 import { useEffect, useRef, useState } from "react";
-import { useT } from "../../i18n/I18nProvider";
 import "./monacoSetup";
 import {
   applyMonacoTheme,
   readMonacoFontFamily,
   TW_MONACO_THEME,
 } from "./monacoTheme";
-
-const isMac =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
-const modKey = isMac ? "⌘" : "Ctrl+";
 
 export type FileEditorProps = {
   value: string;
@@ -23,8 +19,6 @@ export type FileEditorProps = {
   modelPath?: string;
   language?: string;
   readOnly?: boolean;
-  /** 未保存编辑 — 以 statusline pill 展示，而非 Save 按钮。 */
-  dirty?: boolean;
   onChange?: (value: string) => void;
   /** ⌘S / Ctrl+S 触发；Monaco 默认吞键，需显式绑定。 */
   onSave?: () => void;
@@ -66,11 +60,9 @@ export function FileEditor({
   modelPath,
   language,
   readOnly,
-  dirty,
   onChange,
   onSave,
 }: FileEditorProps) {
-  const t = useT();
   const { theme, themeId } = useDesignTheme();
   const colorScheme = theme.colorScheme === "dark" ? "dark" : "light";
   const lang = language ?? langFromPath(path);
@@ -134,8 +126,9 @@ export function FileEditor({
             scrollbar: {
               vertical: "auto",
               horizontal: "auto",
-              verticalScrollbarSize: 6,
-              horizontalScrollbarSize: 6,
+              // 槽宽 = 滑块 6 + 两侧各 4，与全局 --scrollbar-gap 视觉对齐
+              verticalScrollbarSize: 14,
+              horizontalScrollbarSize: 14,
               arrowSize: 0,
               useShadows: false,
               verticalHasArrows: false,
@@ -149,18 +142,6 @@ export function FileEditor({
           }}
           onChange={(v) => onChange?.(v ?? "")}
         />
-      </div>
-      <div className="statusline">
-        <span className="statusline-path" title={path ?? undefined}>
-          {path ?? t("inspector.files.untitled")}
-        </span>
-        <span className="statusline-meta">
-          {dirty ? <em className="statusline-dirty">{t("inspector.files.dirty")}</em> : null}
-          <span className="statusline-kbd" title={t("inspector.files.saveHint", { key: `${modKey}S` })}>
-            {modKey}S
-          </span>
-          <span>{lang}</span>
-        </span>
       </div>
     </div>
   );

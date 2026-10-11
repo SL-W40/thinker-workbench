@@ -2,6 +2,15 @@
  * 模型请求可重试判定与指数退避等待。
  * 网络抖动 / 429 / 5xx 可重试；鉴权、取消、业务 4xx 不重试。
  */
+import { isCancelErrorMessage } from "@thinker-workbench/shared";
+
+export { isCancelErrorMessage };
+
+/** Error / DOMException 等是否表示用户取消。 */
+export function isCancelError(err: unknown): boolean {
+  if (err instanceof Error && err.name === "AbortError") return true;
+  return isCancelErrorMessage(formatErrorMessage(err));
+}
 
 /** 最大尝试次数（含首次）。 */
 export const MODEL_RETRY_MAX_ATTEMPTS = 3;
@@ -35,7 +44,7 @@ export function isRetryableHttpStatus(status: number): boolean {
 export function isRetryableError(err: unknown, options?: { emittedTokens?: boolean }): boolean {
   if (options?.emittedTokens) return false;
   const msg = formatErrorMessage(err);
-  if (/cancel/i.test(msg)) return false;
+  if (isCancelError(err)) return false;
   if (/MODEL_API_KEY_MISSING|api key is not set/i.test(msg)) return false;
   if (/OpenAI HTTP (401|403|400|404)\b/.test(msg)) return false;
   // undici：TypeError "terminated" / fetch failed + socket

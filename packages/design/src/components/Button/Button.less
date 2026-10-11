@@ -77,7 +77,7 @@
     }
   }
 
-  /* 文字链按钮：无边框 / 无底，强调色 + 下划线（如 Try it）；悬停不用小手。 */
+  /* 文字链按钮：无边框 / 无底，强调色 + 下划线（如 Try it）。 */
   &--text {
     min-height: 0;
     padding: 0;
@@ -87,13 +87,11 @@
     font-weight: 500;
     text-decoration: underline;
     text-underline-offset: 2px;
-    cursor: default;
 
     &:hover:not(:disabled) {
       border-color: transparent;
       background: transparent;
       opacity: 0.85;
-      cursor: default;
     }
 
     &.tw-btn--sm {

@@ -12,6 +12,10 @@ const FILE_TOOLS = new Set(["read_file", "list_dir"]);
 /** 搜索类 → searches 计数。 */
 const SEARCH_TOOLS = new Set(["grep", "search_files"]);
 
+function isExploreTool(name: string): boolean {
+  return FILE_TOOLS.has(name) || SEARCH_TOOLS.has(name);
+}
+
 export type ExploreGroup = {
   type: "explore";
   id: string;
@@ -22,24 +26,27 @@ export type ExploreGroup = {
   active: boolean;
 };
 
-export type TimelineDisplayItem = { type: "step"; step: ChatTimelineStep } | ExploreGroup;
-
-function isExploreTool(name: string): boolean {
-  return FILE_TOOLS.has(name) || SEARCH_TOOLS.has(name);
+/** 是否为探索类工具（读 / 列 / 搜）。 */
+export function isExploreToolName(name: string): boolean {
+  return isExploreTool(name);
 }
+
+export type TimelineDisplayItem = { type: "step"; step: ChatTimelineStep } | ExploreGroup;
 
 /** 改文件类工具：进行中显示 edit/write 行，完成后换成 diff 卡片。 */
 export function isMutationTool(name: string): boolean {
   return name === "edit_file" || name === "write_file";
 }
 
-/** 单独展示、不收进 Explored（改文件 / 删除 / shell）。 */
+/** 单独展示、不收进 Explored（改文件 / 删除 / shell / Task）。 */
 export function isStandaloneTool(name: string): boolean {
   return (
     isMutationTool(name) ||
     name === "delete_file" ||
     name === "shell" ||
-    name === "shell_await"
+    name === "shell_await" ||
+    name === "Task" ||
+    name === "task_await"
   );
 }
 
@@ -136,8 +143,8 @@ export function groupTimelineForDisplay(steps: ChatTimelineStep[]): TimelineDisp
       continue;
     }
 
-    // 错误步始终单独展示，不收进 Explored
-    if (step.kind === "error") {
+    // 错误 / 模型切换 / 子代理卡片始终单独展示，不收进 Explored
+    if (step.kind === "error" || step.kind === "model_switch" || step.kind === "subagent") {
       flushAll();
       items.push({ type: "step", step });
       continue;

@@ -1,6 +1,5 @@
 /**
  * Tokens / 耗时 / Trace 胶囊：消息级挂在助手气泡下；亦可作会话级底栏。
- * Tokens 明细经 portal 挂到 body，按触发器位置上下翻转，避免被聊天区 overflow 裁切。
  */
 import {
   ClockIcon,
@@ -19,7 +18,7 @@ import {
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import {
   cacheHitRate,
   cacheMissTokens,
@@ -31,7 +30,7 @@ import {
 } from "./usageStats";
 import "./ChatUsageBar.less";
 
-/** 展示用短 id：取末段前 8 位。 */
+/** 展示用短 id：取末段 8 位*/
 function shortTraceId(id: string): string {
   const parts = id.split("_");
   return parts[parts.length - 1]?.slice(0, 8) ?? id.slice(-8);
@@ -40,7 +39,6 @@ function shortTraceId(id: string): string {
 type PopoverCoords = {
   left: number;
   width: number;
-  maxHeight: number;
   top?: number;
   bottom?: number;
 };
@@ -48,10 +46,9 @@ type PopoverCoords = {
 const POPOVER_GAP = 8;
 const POPOVER_PAD = 8;
 const POPOVER_WIDTH = 280;
-/** 判定「上方够用」的最小高度；不够则翻到下方。 */
-const POPOVER_MIN_COMFORT = 200;
 
-/** 相对触发器放置明细浮层：优先上方，空间不足则翻到下方，并夹入视口。 */
+/**
+ * 相对触发器放置明细浮层：哪边空间更大就往哪边开。 * 不设 maxHeight、不滚内层——窗口太小时宁可被裁切。 */
 function placeUsagePopover(trigger: DOMRect): PopoverCoords {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -62,43 +59,40 @@ function placeUsagePopover(trigger: DOMRect): PopoverCoords {
   }
   if (left < POPOVER_PAD) left = POPOVER_PAD;
 
-  const spaceAbove = trigger.top - POPOVER_GAP - POPOVER_PAD;
-  const spaceBelow = vh - trigger.bottom - POPOVER_GAP - POPOVER_PAD;
-  const preferAbove =
-    spaceAbove >= POPOVER_MIN_COMFORT || spaceAbove >= spaceBelow;
+  const spaceAbove = trigger.top - POPOVER_GAP;
+  const spaceBelow = vh - trigger.bottom - POPOVER_GAP;
+  const preferAbove = spaceAbove >= spaceBelow;
 
   if (preferAbove) {
     return {
       bottom: vh - trigger.top + POPOVER_GAP,
       left,
       width,
-      maxHeight: Math.max(0, spaceAbove),
     };
   }
   return {
     top: trigger.bottom + POPOVER_GAP,
     left,
     width,
-    maxHeight: Math.max(0, spaceBelow),
   };
 }
 
 type Props = {
   usage: ModelUsage;
-  /** 已累计结束轮次耗时（ms）。 */
+  /** 已累计结束轮次耗时（ms）*/
   durationMs: number;
-  /** 当前轮开始时间；忙碌时叠加 live 段。 */
+ /** 当前轮开始时间；忙碌时叠加 live 段*/
   runStartedAt: number | null;
   busy: boolean;
-  /** `message`：气泡内；默认会话底栏布局。 */
+  /** `message`：气泡内；默认会话底栏布局*/
   variant?: "session" | "message";
-  /** 本轮追踪 id；有则展示可点击 Trace 胶囊。 */
+  /** 本轮追踪 id；有则展示可点击 Trace 胶囊*/
   traceId?: string | null;
-  /** 点击 Trace 胶囊：跳转控制台 Logs 并筛选该 id。 */
+  /** 点击 Trace 胶囊：跳转控制台 Logs 并筛选该 id*/
   onOpenTrace?: (traceId: string) => void;
 };
 
-/** 明细行：色点 + 标签 + 数值。 */
+/** 明细行：色点 + 标签 + 数值*/
 function UsageRow({
   label,
   value,
@@ -155,7 +149,7 @@ export function ChatUsageBar({
     return () => window.clearInterval(id);
   }, [busy, runStartedAt]);
 
-  // 打开时按触发器位置重算；滚动 / 缩放时跟随
+  // 打开时按触发器位置重算；缩放时跟随，滚动则关闭（见下：
   useLayoutEffect(() => {
     if (!open) {
       setCoords(null);
@@ -168,14 +162,24 @@ export function ChatUsageBar({
     }
     update();
     window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
     return () => {
       window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
     };
   }, [open]);
 
-  // 点击外侧 / Escape 关闭（仅 pill + portal，避免点 Trace 等同条胶囊时不关）
+  // 页面 / 聊天区滚动时关掉，避免浮层与触发器脱
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = (e: Event) => {
+      const t = e.target;
+      if (t instanceof Node && panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", onScroll, true);
+    return () => window.removeEventListener("scroll", onScroll, true);
+  }, [open]);
+
+  // 点击外侧 / Escape 关闭（仅 pill + portal，避免点 Trace 等同条胶囊时不关：
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: PointerEvent) => {
@@ -188,7 +192,7 @@ export function ChatUsageBar({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    // capture：避免中间层 stopPropagation 导致关不掉
+    // capture：避免中间层 stopPropagation 导致关不
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -197,7 +201,7 @@ export function ChatUsageBar({
     };
   }, [open]);
 
-  // 聊天页 keep-alive（hidden）时 portal 仍挂在 body，需在切页 / 触发器被藏时主动关掉
+ // 聊天页 keep-alive（hidden）时 portal 仍挂在 body，需在切换页 / 触发器被藏时主动关掉
   useEffect(() => {
     if (!open) return;
     const trigger = pillRef.current;
@@ -239,7 +243,6 @@ export function ChatUsageBar({
     ? {
         left: coords.left,
         width: coords.width,
-        maxHeight: coords.maxHeight,
         ...(coords.top != null ? { top: coords.top } : {}),
         ...(coords.bottom != null ? { bottom: coords.bottom } : {}),
       }

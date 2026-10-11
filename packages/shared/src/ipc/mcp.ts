@@ -62,8 +62,8 @@ export type ThinkerMcpApi = {
   setEnabled(id: string, enabled: boolean): Promise<McpServerConfig>;
   /** 临时连接一次，返回状态（不永久占用）。 */
   test(input: McpServerUpsertInput): Promise<McpServerRuntimeStatus>;
-  /** 弹出选文件对话框，从 Cursor 风格 mcp.json 导入。 */
-  importCursorFile(): Promise<{ imported: string[]; skipped: string[] }>;
+  /** 弹出选文件对话框，从 mcp.json（`mcpServers` 映射）导入。 */
+  importFile(): Promise<{ imported: string[]; skipped: string[] }>;
   /** 订阅运行时状态推送。 */
   onStatus(cb: (status: McpServerRuntimeStatus) => void): () => void;
 };

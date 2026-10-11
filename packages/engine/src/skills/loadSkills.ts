@@ -1,10 +1,9 @@
 /**
- * Cursor 兼容 Skills 发现与激活。
+ * Skills 发现与激活。
  *
  * 路径（后者覆盖同名）：
  * 1. dataDir/skills 下递归 SKILL.md
  * 2. workspace/.thinker/skills 下递归 SKILL.md
- * 3. workspace/.cursor/skills 下递归 SKILL.md（兼容 Cursor 项目）
  *
  * Frontmatter：name / description / paths|globs / disable-model-invocation。
  */
@@ -59,6 +58,11 @@ function walkSkillMd(root: string): string[] {
   return out;
 }
 
+/** 是否为 YAML 块标量指示符（`>` / `>-` / `|` / `|-` 等）。 */
+function isBlockScalarIndicator(value: string): boolean {
+  return /^[|>][+-]?$/.test(value);
+}
+
 /** 解析 YAML frontmatter（极简，够用 name/description/paths/disable）。 */
 function parseFrontmatter(raw: string): {
   meta: Record<string, unknown>;
@@ -74,7 +78,29 @@ function parseFrontmatter(raw: string): {
   const body = trimmed.slice(end + 4).replace(/^\r?\n/, "");
   const meta: Record<string, unknown> = {};
   let listKey: string | null = null;
+  let blockKey: string | null = null;
+  let blockFolded = true;
+  const blockLines: string[] = [];
+
+  const flushBlock = () => {
+    if (!blockKey) return;
+    const parts = blockLines.map((l) => l.replace(/^\s+/, ""));
+    const text = (blockFolded ? parts.join(" ") : parts.join("\n"))
+      .replace(/\s+/g, blockFolded ? " " : "\n")
+      .trim();
+    meta[blockKey] = text;
+    blockKey = null;
+    blockLines.length = 0;
+  };
+
   for (const line of fm.split(/\r?\n/)) {
+    if (blockKey) {
+      if (/^\s+\S/.test(line) || line.trim() === "") {
+        if (line.trim()) blockLines.push(line);
+        continue;
+      }
+      flushBlock();
+    }
     const listItem = line.match(/^\s*-\s+(.+)$/);
     if (listItem && listKey) {
       const prev = meta[listKey];
@@ -88,7 +114,13 @@ function parseFrontmatter(raw: string): {
     if (!m) continue;
     const key = m[1]!;
     const value = m[2]!.trim();
-    if (value === "" || value === "|" || value === ">") {
+    if (isBlockScalarIndicator(value)) {
+      blockKey = key;
+      blockFolded = value.startsWith(">");
+      blockLines.length = 0;
+      continue;
+    }
+    if (value === "") {
       listKey = key;
       meta[key] = [];
       continue;
@@ -103,6 +135,7 @@ function parseFrontmatter(raw: string): {
     }
     meta[key] = coerceScalar(value);
   }
+  flushBlock();
   return { meta, body };
 }
 
@@ -237,7 +270,6 @@ export function loadSkills(
   if (workspaceRoot?.trim()) {
     const ws = workspaceRoot.trim();
     roots.push({ source: "thinker", root: path.join(ws, ".thinker", "skills") });
-    roots.push({ source: "cursor", root: path.join(ws, ".cursor", "skills") });
   }
 
   for (const { source, root } of roots) {

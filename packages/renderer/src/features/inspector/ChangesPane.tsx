@@ -1,6 +1,5 @@
 /**
  * Changes 面板：Git 状态、懒加载 diff、侧栏文件列表与 CTA prompt。
- * 交互与 className 对齐 v1 ChangesPane。
  */
 import type { GitChangedFile, GitStatus } from "@thinker-workbench/shared";
 import { ContextMenu, EmptyState } from "@thinker-workbench/design/react";
@@ -27,7 +26,7 @@ import {
   useFileListWidth,
 } from "./useFileListPanel";
 import { workspaceGitFileDiff } from "../../bridge/workspaceFs";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import {
   buildChangeTree,
   filterChangeTree,
@@ -45,7 +44,7 @@ type FloatingMenuCoords = {
   minWidth: number;
 };
 
-/** 右对齐触发器，必要时夹入视口，避免被侧栏 overflow 裁切（配合 portal）。 */
+/** 右对齐触发器，必要时夹入视口，避免被侧栏 overflow 裁切（配?portal）。*/
 function placeFloatingMenu(
   trigger: DOMRect,
   minWidth: number,
@@ -64,7 +63,7 @@ function placeFloatingMenu(
   };
 }
 
-/** 将菜单挂到 body，并随触发器 / 滚动 / 窗口变化重算位置。 */
+/** 将菜单挂?body，并随触发器 / 滚动 / 窗口变化重算位置。*/
 function useFloatingMenuCoords(
   open: boolean,
   triggerRef: RefObject<HTMLElement | null>,
@@ -126,7 +125,7 @@ function PortalMenu({
   );
 }
 
-/** 限制并行 git diff 请求，避免「全部展开」打爆 runtime。 */
+/** 限制并行 git diff 请求，避免「全部展开」打?runtime。*/
 const DIFF_FETCH_LIMIT = 3;
 let diffFetchesActive = 0;
 const diffFetchWaiters: Array<() => void> = [];
@@ -148,6 +147,66 @@ function releaseDiffFetch() {
   diffFetchesActive = Math.max(0, diffFetchesActive - 1);
   const next = diffFetchWaiters.shift();
   if (next) next();
+}
+
+/** 全部展开 / 折叠：一代号 + 目标开关，子行用本地覆盖，避免 N ?setState。*/
+type BulkExpand = { gen: number; open: boolean };
+
+/** 高亮分片大小；空闲时推进，避免一次同步高亮上千行。*/
+const HIGHLIGHT_CHUNK = 40;
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function scheduleIdle(cb: () => void): () => void {
+  if (typeof requestIdleCallback === "function") {
+    const id = requestIdleCallback(() => cb(), { timeout: 120 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = window.setTimeout(cb, 0);
+  return () => window.clearTimeout(id);
+}
+
+/** 全局高亮队列：多文件同时在视口时轮转分片，避免并行打满主线程。*/
+type HighlightJob = {
+  cancelled: boolean;
+ /** 执行一片；还有剩余则返?true。*/
+  tick: () => boolean;
+};
+
+const highlightQueue: HighlightJob[] = [];
+let cancelHighlightPump: (() => void) | null = null;
+
+function enqueueHighlightJob(job: HighlightJob): () => void {
+  highlightQueue.push(job);
+  pumpHighlightQueue();
+  return () => {
+    job.cancelled = true;
+  };
+}
+
+function pumpHighlightQueue() {
+  if (cancelHighlightPump) return;
+  cancelHighlightPump = scheduleIdle(() => {
+    cancelHighlightPump = null;
+    const start = performance.now();
+    while (highlightQueue.length && performance.now() - start < 10) {
+      const job = highlightQueue[0]!;
+      if (job.cancelled) {
+        highlightQueue.shift();
+        continue;
+      }
+      const more = job.tick();
+      if (!more || job.cancelled) {
+        highlightQueue.shift();
+      } else {
+ // 轮转到队尾，让其它文件也有机会推? highlightQueue.push(highlightQueue.shift()!);
+        break;
+      }
+    }
+    if (highlightQueue.length) pumpHighlightQueue();
+  });
 }
 
 async function copyRelativePath(path: string) {
@@ -276,7 +335,7 @@ function parseUnifiedDiff(patch: string): DiffRow[] {
   return rows;
 }
 
-/** 扩展名 → highlight.js 语言 id（与聊天 FileDiffView 对齐）。 */
+/** 扩展?→highlight.js 语言 id（与聊天 FileDiffView 对齐）。*/
 function langFromPath(path: string): string | undefined {
   const base = path.split(/[/\\]/).pop() ?? path;
   const dot = base.lastIndexOf(".");
@@ -304,8 +363,33 @@ function langFromPath(path: string): string | undefined {
     sh: "bash",
     bash: "bash",
   };
-  return map[ext] ?? ext;
+  // 未登记语言不返回扩展名，避免无意义的逐行「高亮」排
+  return map[ext];
 }
+
+/** 单行 diff：memo，避免分片高亮时整表重绘。*/
+const DiffCodeLine = memo(function DiffCodeLine({
+  kind,
+  lineNo,
+  html,
+}: {
+  kind: "add" | "del" | "ctx";
+  lineNo: number | null;
+  html: string;
+}) {
+  return (
+    <div className={`changes-diff__line changes-diff__line--${kind}`}>
+      <span className="changes-diff__gutter">{lineNo ?? ""}</span>
+      <span className="changes-diff__mark" aria-hidden>
+        {kind === "add" ? "+" : kind === "del" ? "−" : " "}
+      </span>
+      <code
+        className="changes-diff__text hljs"
+        dangerouslySetInnerHTML={{ __html: html || " " }}
+      />
+    </div>
+  );
+});
 
 const FileDiffBody = memo(function FileDiffBody({
   path,
@@ -327,11 +411,50 @@ const FileDiffBody = memo(function FileDiffBody({
   const t = useT();
   const rows = useMemo(() => parseUnifiedDiff(patch), [patch]);
   const lang = useMemo(() => langFromPath(path), [path]);
-  const highlighted = useMemo(() => {
-    return rows.map((row) => {
-      if (row.kind === "gap" || row.kind === "hunk" || row.kind === "meta") return "";
-      if (!row.text) return "";
-      return highlightCode(row.text, lang).html;
+
+  // 先纯文本首屏，再空闲分片高亮，避免全部展开时主线程长时间阻塞。
+  const [highlighted, setHighlighted] = useState<string[]>(() =>
+    rows.map((row) => {
+      if (row.kind === "gap" || row.kind === "hunk" || row.kind === "meta" || !row.text) {
+        return "";
+      }
+      return escapeHtml(row.text);
+    }),
+  );
+  const highlightedRef = useRef(highlighted);
+
+  useEffect(() => {
+    const plain = rows.map((row) => {
+      if (row.kind === "gap" || row.kind === "hunk" || row.kind === "meta" || !row.text) {
+        return "";
+      }
+      return escapeHtml(row.text);
+    });
+    highlightedRef.current = plain;
+    setHighlighted(plain);
+
+    // 无可用语言时纯文本已足够，不必进高亮队
+    if (!lang) return;
+
+    let index = 0;
+    return enqueueHighlightJob({
+      cancelled: false,
+      tick: () => {
+        const next = highlightedRef.current.slice();
+        const end = Math.min(index + HIGHLIGHT_CHUNK, rows.length);
+        for (let i = index; i < end; i++) {
+          const row = rows[i]!;
+          if (row.kind === "gap" || row.kind === "hunk" || row.kind === "meta" || !row.text) {
+            next[i] = "";
+            continue;
+          }
+          next[i] = highlightCode(row.text, lang).html;
+        }
+        index = end;
+        highlightedRef.current = next;
+        setHighlighted(next);
+        return index < rows.length;
+      },
     });
   }, [rows, lang]);
 
@@ -378,19 +501,12 @@ const FileDiffBody = memo(function FileDiffBody({
           if (row.kind === "hunk" || row.kind === "meta") return null;
           const lineNo = row.kind === "del" ? row.oldNo : row.newNo;
           return (
-            <div
+            <DiffCodeLine
               key={`l-${i}`}
-              className={`changes-diff__line changes-diff__line--${row.kind}`}
-            >
-              <span className="changes-diff__gutter">{lineNo ?? ""}</span>
-              <span className="changes-diff__mark" aria-hidden>
-                {row.kind === "add" ? "+" : row.kind === "del" ? "−" : " "}
-              </span>
-              <code
-                className="changes-diff__text hljs"
-                dangerouslySetInnerHTML={{ __html: highlighted[i] || " " }}
-              />
-            </div>
+              kind={row.kind}
+              lineNo={lineNo}
+              html={highlighted[i] || " "}
+            />
           );
         })}
       </div>
@@ -398,7 +514,7 @@ const FileDiffBody = memo(function FileDiffBody({
   );
 });
 
-function ChangedFileRow({
+const ChangedFileRow = memo(function ChangedFileRow({
   workspaceId,
   path,
   added,
@@ -406,8 +522,7 @@ function ChangedFileRow({
   status,
   onOpenFile,
   expandToken,
-  expandAllToken,
-  collapseToken,
+  bulk,
   wordWrap,
 }: {
   workspaceId: string;
@@ -416,26 +531,30 @@ function ChangedFileRow({
   removed: number;
   status: string;
   onOpenFile: (path: string) => void;
-  /** 侧栏点开文件时递增，驱动本行展开。 */
+  /** 侧栏点开文件时递增，驱动本行展开。*/
   expandToken?: number;
-  /** 工具栏「全部展开」时递增。 */
-  expandAllToken?: number;
-  /** 工具栏「全部折叠」时递增。 */
-  collapseToken?: number;
+  /** 工具栏全部展开 / 折叠。*/
+  bulk: BulkExpand;
   wordWrap: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState<{ gen: number; open: boolean } | null>(null);
+  const open = local && local.gen >= bulk.gen ? local.open : bulk.open;
+  const [inView, setInView] = useState(false);
   const [full, setFull] = useState(false);
   const [patch, setPatch] = useState<string | null>(null);
   const [binary, setBinary] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingFull, setLoadingFull] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [spacerHeight, setSpacerHeight] = useState<number | null>(null);
   const t = useT();
   const rowRef = useRef<HTMLLIElement>(null);
+  const diffWrapRef = useRef<HTMLDivElement>(null);
   const patchRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
+  const bulkGenRef = useRef(bulk.gen);
   patchRef.current = patch;
+  bulkGenRef.current = bulk.gen;
 
   async function loadDiff(nextFull: boolean) {
     if (!nextFull) {
@@ -463,43 +582,39 @@ function ChangedFileRow({
     }
   }
 
+  function setOpen(next: boolean) {
+    setLocal({ gen: bulk.gen, open: next });
+  }
+
   function toggle() {
-    setOpen((v) => !v);
+    setOpen(!open);
   }
 
   useEffect(() => {
     if (expandToken == null || expandToken <= 0) return;
-    setOpen(true);
+    setLocal({ gen: bulkGenRef.current, open: true });
     rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [expandToken]);
 
+  // 跟踪是否在滚动容器视口附近：离屏卸载 diff DOM，保留高度占位防跳动。
   useEffect(() => {
-    if (expandAllToken == null || expandAllToken <= 0) return;
-    setOpen(true);
-  }, [expandAllToken]);
-
-  useEffect(() => {
-    if (collapseToken == null || collapseToken <= 0) return;
-    setOpen(false);
-  }, [collapseToken]);
-
-  // 仅在展开行进入视口附近时拉取 diff（全部展开时更轻）。
-  useEffect(() => {
-    if (!open || patch !== null) return;
+    if (!open) {
+      setInView(false);
+      return;
+    }
     const el = rowRef.current;
     if (!el) return;
     const root = el.closest(".changes-pane__list");
     let cancelled = false;
     const io = new IntersectionObserver(
       (entries) => {
-        if (cancelled || !entries.some((e) => e.isIntersecting)) return;
-        if (patchRef.current !== null || loadingRef.current) return;
-        io.disconnect();
-        void loadDiff(false);
+        if (cancelled) return;
+        const next = entries.some((e) => e.isIntersecting);
+        startTransition(() => setInView(next));
       },
       {
         root: root instanceof Element ? root : null,
-        rootMargin: "280px 0px",
+        rootMargin: "120px 0px",
         threshold: 0,
       },
     );
@@ -508,7 +623,28 @@ function ChangedFileRow({
       cancelled = true;
       io.disconnect();
     };
-  }, [open, patch, workspaceId, path]);
+  }, [open]);
+
+  // 列表首次加载或清空搜索时，默认展开顶层目录。
+  useEffect(() => {
+    if (!open || !inView || patch !== null || loadingRef.current) return;
+    void loadDiff(false);
+  }, [open, inView, patch, workspaceId, path]);
+
+  // 离屏前记下高度，挂占位避免滚动条跳动。
+  useLayoutEffect(() => {
+    if (!open) {
+      setSpacerHeight(null);
+      return;
+    }
+    if (inView && diffWrapRef.current) {
+      setSpacerHeight(diffWrapRef.current.offsetHeight);
+    }
+  }, [open, inView, patch, full, loading, err, wordWrap]);
+
+  const showDiff = open && inView && (loading || patch !== null || err);
+  const showSpacer =
+    open && !inView && spacerHeight != null && spacerHeight > 0 && (patch !== null || err != null);
 
   return (
     <li ref={rowRef} className={`changes-pane__item${open ? " is-open" : ""}`} data-path={path}>
@@ -552,8 +688,8 @@ function ChangedFileRow({
           {MI.copy}
         </button>
       </div>
-      {open && (loading || patch !== null || err) ? (
-        <div className="changes-pane__diff-wrap">
+      {showDiff ? (
+        <div ref={diffWrapRef} className="changes-pane__diff-wrap">
           {patch === null && !err ? (
             <div className="changes-diff__empty">{t("inspector.changes.loadingDiff")}</div>
           ) : err ? (
@@ -570,10 +706,16 @@ function ChangedFileRow({
             />
           )}
         </div>
+      ) : showSpacer ? (
+        <div
+          className="changes-pane__diff-wrap changes-pane__diff-wrap--spacer"
+          style={{ height: spacerHeight }}
+          aria-hidden
+        />
       ) : null}
     </li>
   );
-}
+});
 
 function ChangesFileList({
   files,
@@ -587,7 +729,7 @@ function ChangesFileList({
   files: GitChangedFile[];
   selectedPath: string | null;
   onSelect: (path: string) => void;
-  /** 右键「在编辑器中打开」。 */
+  /** 右键「在编辑器中打开」。*/
   onOpenFile: (path: string) => void;
   width: number;
   dragging: boolean;
@@ -766,7 +908,7 @@ function ChangesFileList({
   );
 }
 
-/** 冲突优先，其次按改动量（+/-）降序，再按路径。 */
+/** 冲突优先，其次按改动量（+/-）降序，再按路径。*/
 function sortChangedFiles(list: GitChangedFile[]): GitChangedFile[] {
   return [...list].sort((a, b) => {
     const rank = (s: string) => (s === "conflict" ? 0 : 1);
@@ -795,8 +937,7 @@ export function ChangesPane({
   const [wordWrap, setWordWrap] = useState(false);
   const [focusPath, setFocusPath] = useState<string | null>(null);
   const [expandTick, setExpandTick] = useState(0);
-  const [expandAllTick, setExpandAllTick] = useState(0);
-  const [collapseTick, setCollapseTick] = useState(0);
+  const [bulkExpand, setBulkExpand] = useState<BulkExpand>({ gen: 0, open: false });
   const viewWrapRef = useRef<HTMLDivElement>(null);
   const ctaSplitRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
@@ -865,12 +1006,12 @@ export function ChangesPane({
       setViewMenuOpen(false);
       setCtaMenuOpen(false);
     };
-    // capture：避免中间层 stopPropagation 导致关不掉
+    // capture：避免中间层 stopPropagation 导致关不
     window.addEventListener("mousedown", onPointer, true);
     return () => window.removeEventListener("mousedown", onPointer, true);
   }, [viewMenuOpen, ctaMenuOpen]);
 
-  // 聊天页 keep-alive（hidden）时 portal 菜单仍挂在 body，切页时主动关掉
+ // 聊天?keep-alive（hidden）时 portal 菜单仍挂?body，切页时主动关掉
   useEffect(() => {
     if (!viewMenuOpen && !ctaMenuOpen) return;
     const triggers = [viewWrapRef.current, ctaSplitRef.current].filter(
@@ -1043,7 +1184,9 @@ export function ChangesPane({
                   disabled={noChanges}
                   onClick={() => {
                     setViewMenuOpen(false);
-                    startTransition(() => setExpandAllTick((n) => n + 1));
+                    startTransition(() =>
+                      setBulkExpand((prev) => ({ gen: prev.gen + 1, open: true })),
+                    );
                   }}
                 >
                   {t("inspector.changes.expandAll")}
@@ -1054,8 +1197,10 @@ export function ChangesPane({
                   role="menuitem"
                   disabled={noChanges}
                   onClick={() => {
-                    setCollapseTick((n) => n + 1);
                     setViewMenuOpen(false);
+                    startTransition(() =>
+                      setBulkExpand((prev) => ({ gen: prev.gen + 1, open: false })),
+                    );
                   }}
                 >
                   {t("inspector.changes.collapseAll")}
@@ -1154,8 +1299,7 @@ export function ChangesPane({
                     status={f.status}
                     onOpenFile={onOpenFile}
                     expandToken={focusPath === f.path ? expandTick : 0}
-                    expandAllToken={expandAllTick}
-                    collapseToken={collapseTick}
+                    bulk={bulkExpand}
                     wordWrap={wordWrap}
                   />
                 ) : (

@@ -1,0 +1,48 @@
+/**
+ * 根组件树（与 main.tsx 的 createRoot 分文件）。
+ *
+ * 入口文件若同时含组件与 createRoot，Vite Fast Refresh 失败时会二次挂载导致 Electron 白屏。
+ */
+import { StrictMode, useCallback, useState, type ReactNode } from "react";
+import { ThemeProvider } from "@thinker-workbench/design/react";
+import { App } from "./App";
+import { readBootAppearance } from "./boot/readBootAppearance";
+import { HmrErrorBoundary } from "./hmr/HmrErrorBoundary";
+import { I18nProvider } from "./i18n/I18nProvider";
+import { AppearanceProvider } from "./theme/AppearanceProvider";
+
+const boot = readBootAppearance();
+
+/** 开发态才包 HMR 错误边界；生产包不挂载，避免出现「恢复界面」页。 */
+function DevHmrShell({ children }: { children: ReactNode }) {
+  const [resetKey, setResetKey] = useState(0);
+  const remount = useCallback(() => {
+    window.setTimeout(() => setResetKey((k) => k + 1), 0);
+  }, []);
+  return (
+    <HmrErrorBoundary resetKey={resetKey} onError={remount}>
+      {children}
+    </HmrErrorBoundary>
+  );
+}
+
+/** 根树：主题 / 外观 / i18n / App；开发态外加 HMR remount 兜底。 */
+export function RootApp() {
+  const tree = (
+    <StrictMode>
+      <ThemeProvider theme={boot.theme}>
+        <AppearanceProvider
+          initialThemeId={boot.themeId}
+          initialTypeStyle={boot.typeStyle}
+          initialCustomThemes={boot.customThemes}
+        >
+          <I18nProvider>
+            <App />
+          </I18nProvider>
+        </AppearanceProvider>
+      </ThemeProvider>
+    </StrictMode>
+  );
+
+  return import.meta.env.DEV ? <DevHmrShell>{tree}</DevHmrShell> : tree;
+}

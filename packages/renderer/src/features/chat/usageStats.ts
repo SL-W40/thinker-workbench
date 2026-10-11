@@ -1,7 +1,9 @@
 /**
  * 会话级 token / 耗时累计与展示格式化。
  */
-import type { ModelUsage } from "@thinker-workbench/shared";
+import { estimateTokens, type ModelUsage } from "@thinker-workbench/shared";
+
+export { estimateTokens };
 
 /** 空用量。 */
 export const EMPTY_USAGE: ModelUsage = {
@@ -11,16 +13,6 @@ export const EMPTY_USAGE: ModelUsage = {
   cacheWriteTokens: 0,
   reasoningTokens: 0,
 };
-
-/**
- * 按 chars/4 粗估 token；与 Context Usage / engine `estimateTokens` 一致。
- * 非精确 tokenizer，仅供中断或官方 usage 未回时展示。
- */
-export function estimateTokens(text: string): number {
-  const n = text.length;
-  if (n <= 0) return 0;
-  return Math.ceil(n / 4);
-}
 
 /**
  * 用已流出的正文 / 思考（及可选可见历史）粗估一条 ModelUsage。

@@ -4,11 +4,12 @@
  * - 初始值来自 boot 同步绘制，避免与闪屏 / ThemeProvider 不一致
  * - 若存在 `getGeneralSync`，不再异步覆盖（曾与设置页竞态导致字型「像坏了」）
  * - 就绪后派发 `tw-appearance-ready`，供 main.tsx 关闭闪屏
+ *
+ * 注意：本文件只导出组件。hooks 见 `useAppearance.ts`——同文件混导出会让
+ * Vite Fast Refresh 失败并触发整页 reload，Electron 下常表现为白屏。
  */
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -26,22 +27,10 @@ import {
   type CustomThemeRecord,
 } from "@thinker-workbench/shared";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings } from "../bridge/thinker";
-
-type AppearanceContextValue = {
-  /** 用户偏好主题 id（可为 `system` 或 `custom_*`）。 */
-  themeId: AppThemeId;
-  typeStyle: AppTypeStyle;
-  /** 当前自定义主题目录（与 general 同步）。 */
-  customThemes: CustomThemeRecord[];
-  /** 将颜色主题与字型一并应用到 ThemeProvider（含字体 / Mermaid）。 */
-  applyAppearance: (
-    theme: AppThemeId,
-    typeStyle: AppTypeStyle,
-    customs?: readonly CustomThemeRecord[],
-  ) => void;
-};
-
-const AppearanceContext = createContext<AppearanceContextValue | null>(null);
+import {
+  AppearanceContext,
+  type AppearanceContextValue,
+} from "./appearanceContext";
 
 /** 当前 OS 是否偏好深色。 */
 function readPrefersDark(): boolean {
@@ -50,6 +39,30 @@ function readPrefersDark(): boolean {
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
+}
+
+/** 自定义主题列表是否等价（避免无意义的 setState）。 */
+function sameCustomThemes(
+  a: readonly CustomThemeRecord[],
+  b: readonly CustomThemeRecord[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      !x ||
+      !y ||
+      x.id !== y.id ||
+      x.name !== y.name ||
+      x.basedOn !== y.basedOn ||
+      JSON.stringify(x.theme) !== JSON.stringify(y.theme)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** 通知启动闪屏：外观已可展示。 */
@@ -97,7 +110,8 @@ export function AppearanceProvider({
       const list = [...customs];
       setThemeId(theme);
       setTypeStyle(style);
-      setCustomThemes(list);
+      // 内容未变则保留原引用，避免上下文 applyAppearance 包装函数身份抖动
+      setCustomThemes((prev) => (sameCustomThemes(prev, list) ? prev : list));
       document.documentElement.dataset.twType = style;
       const visual = resolveUiTheme(theme, list, dark);
       setTheme(applyTypeStyle(visual, style));
@@ -174,26 +188,10 @@ export function AppearanceProvider({
       themeId: normalizeUiTheme(themeId, customThemes, DEFAULT_APP_THEME),
       typeStyle,
       customThemes,
-      applyAppearance: (theme, style, customs) => applyAppearance(theme, style, customs),
+      applyAppearance,
     }),
     [themeId, typeStyle, customThemes, applyAppearance],
   );
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;
-}
-
-/**
- * 读取外观上下文；若在 Provider 外使用则返回安全默认值（no-op apply）。
- */
-export function useAppearance(): AppearanceContextValue {
-  const ctx = useContext(AppearanceContext);
-  if (!ctx) {
-    return {
-      themeId: DEFAULT_APP_THEME,
-      typeStyle: DEFAULT_APP_TYPE_STYLE,
-      customThemes: [],
-      applyAppearance: () => undefined,
-    };
-  }
-  return ctx;
 }

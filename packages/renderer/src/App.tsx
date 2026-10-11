@@ -5,7 +5,7 @@
  * - 辅助窗口（`getRoleSync().kind === "aux"`）固定单页、精简标题栏、不写主 session、不弹引导
  * - 聊天页始终挂载（`hidden` + 离屏保布局，避免 display:none 把滚动高度清零）；控制台按 `visited` 懒挂载以保活
  * - `?tool=1` 嵌入时隐藏产品 chrome
- * - 产品控制台 `#/tools`：Settings / Logs / Components（旧 `#/settings` 映射至此）
+ * - 产品控制台 `#/tools`：Settings / Customize / Trace / Components（旧 `#/settings` 映射至此）
  * - hash 与 session 双向同步，便于重启后回到上次视图
  */
 
@@ -22,14 +22,15 @@ import { RightInspector } from "./features/inspector/RightInspector";
 import { ensureHash, parseHash, writeHash } from "./features/nav/locationHash";
 import { type PageId, usePageStack } from "./features/nav/usePageStack";
 import { OnboardingGate } from "./features/onboarding/OnboardingGate";
-import { isSettingsSection, type SettingsSectionId } from "./features/settings/sections";
+import { normalizeSettingsSection, type SettingsSectionId } from "./features/settings/sections";
 import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
 import { ToolsPane, type ToolTabId } from "./features/tools/ToolsPane";
 import { HitlHost } from "./features/hitl/HitlHost";
 import { TitleBar } from "./features/window/TitleBar";
 import { OPEN_BROWSER_EVENT, onBrowserEvent } from "./bridge/browser";
+import { OPEN_SUBAGENT_EVENT, RESTORE_SUBAGENT_TABS_EVENT } from "./bridge/subagent";
 import { requestOpenTerminal } from "./bridge/terminal";
-import { useT } from "./i18n/I18nProvider";
+import { useT } from "./i18n/useI18n";
 import { bootstrapAppLog } from "./log/sessionLog";
 
 bootstrapAppLog();
@@ -72,16 +73,21 @@ function readBoot(role: WindowRole): {
   }
   const saved = window.thinker?.session?.getSnapshot?.() ?? null;
   if (saved?.stack?.entries?.length) {
-    const section = isSettingsSection(saved.settingsSection)
-      ? saved.settingsSection
-      : fromHash.section;
+    // 优先用 session 里的 hash 恢复控制台 tab / 设置分区（勿只用 location，HMR 时可能不准）
+    const fromSaved = saved.hash ? parseHash(saved.hash) : fromHash;
+    const section = normalizeSettingsSection(
+      saved.settingsSection ?? fromSaved.section ?? fromHash.section,
+    );
     const entries = saved.stack.entries.map((p) =>
       normalizePage(p as PageId),
     ) as PageId[];
     const visited = (saved.stack.visited ?? entries).map((p) =>
       normalizePage(p as PageId),
     ) as PageId[];
-    const current = entries[saved.stack.index] ?? fromHash.page;
+    const current = normalizePage(
+      (entries[saved.stack.index] ?? fromSaved.page ?? fromHash.page) as PageId,
+    );
+    const onTools = current === "tools" || current === "settings";
     return {
       stack: {
         ...saved.stack,
@@ -89,7 +95,7 @@ function readBoot(role: WindowRole): {
         visited,
       },
       section,
-      toolsTab: current === "tools" ? fromHash.tab : "settings",
+      toolsTab: onTools ? fromSaved.tab : "settings",
     };
   }
   return {
@@ -117,9 +123,8 @@ export function App() {
   );
   /** 聊天 diff 点文件名 → 右侧 inspector 打开该路径 */
   const [pendingOpenPath, setPendingOpenPath] = useState<string | null>(null);
-  /** 从气泡 Trace 胶囊跳转 Logs 时要筛选的 id；seq 用于同 id 再次点击仍生效 */
-  const [logsFocusTraceId, setLogsFocusTraceId] = useState<string | null>(null);
-  const [logsFocusSeq, setLogsFocusSeq] = useState(0);
+  /** 从聊天跳转 Trace 时聚焦的会话 id */
+  const [traceFocusSessionId, setTraceFocusSessionId] = useState<string | null>(null);
   const isAux = role.kind === "aux";
   const hideChrome = isAux || toolEmbed;
 
@@ -143,17 +148,26 @@ export function App() {
     requestOpenTerminal(detail);
   }
 
-  // Markdown / 主进程导航 / agent：打开右侧栏（Browser tab 由 RightInspector 处理）
+  // Markdown / 主进程导航 / agent / 子代理：打开右侧栏
   useEffect(() => {
     function onOpen() {
       panels.setRightOpen(true);
     }
+    function onRestore(e: Event) {
+      const detail = (e as CustomEvent<{ activeTaskId?: string | null }>).detail;
+      // 刷新前正在看 Task tab → 保持右侧栏打开
+      if (detail?.activeTaskId) panels.setRightOpen(true);
+    }
     window.addEventListener(OPEN_BROWSER_EVENT, onOpen);
+    window.addEventListener(OPEN_SUBAGENT_EVENT, onOpen);
+    window.addEventListener(RESTORE_SUBAGENT_TABS_EVENT, onRestore);
     const off = onBrowserEvent((event) => {
       if (event.type === "reveal") panels.setRightOpen(true);
     });
     return () => {
       window.removeEventListener(OPEN_BROWSER_EVENT, onOpen);
+      window.removeEventListener(OPEN_SUBAGENT_EVENT, onOpen);
+      window.removeEventListener(RESTORE_SUBAGENT_TABS_EVENT, onRestore);
       off();
     };
   }, [panels]);
@@ -180,12 +194,10 @@ export function App() {
     if (nav.current !== "tools" && nav.current !== "settings") go("tools");
   }
 
-  /** 打开 Logs 并筛选指定 trace。 */
-  function openTrace(traceId: string) {
-    const id = traceId.trim();
-    if (!id) return;
-    setLogsFocusTraceId(id);
-    setLogsFocusSeq((n) => n + 1);
+  /** 打开控制台 Trace，聚焦当前聊天会话。 */
+  function openTrace(_traceId?: string) {
+    const sid = session.sessionId?.trim();
+    if (sid) setTraceFocusSessionId(sid);
     openConsole("logs");
   }
 
@@ -236,7 +248,7 @@ export function App() {
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-    // replaceCurrent 闭包依赖稳定的 setState
+    // replaceCurrent 闭包依赖稳定；勿把 nav 整对象塞进 deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAux, toolEmbed]);
 
@@ -334,7 +346,10 @@ export function App() {
                 empty={session.empty}
                 messages={session.messages}
                 scroller={session.scroller}
+                stickNonce={session.stickNonce}
                 busy={session.busy}
+                sessionId={session.sessionId}
+                workspaceId={session.workspaceId}
                 onShortcut={(prompt) => void session.send(prompt)}
                 onOpenModelSettings={() => openConsole("settings", "model")}
                 onOpenTrace={openTrace}
@@ -365,6 +380,7 @@ export function App() {
                 workspaceName={session.workspaceName}
                 workspaceRoot={session.workspaceRoot}
                 workspaceId={session.workspaceId}
+                sessionId={session.sessionId}
                 messages={session.messages}
                 gateMessage={session.workspaceGate?.message ?? null}
                 onOpenWorkspace={
@@ -372,8 +388,6 @@ export function App() {
                     ? () => void session.openWorkspaceFromGate()
                     : undefined
                 }
-                canResume={session.composerResume}
-                onResume={() => void session.resume()}
                 onOpenTerminal={openTerminal}
               />
             </div>
@@ -404,8 +418,7 @@ export function App() {
             visited={toolsVisited}
             settingsSection={settingsSection}
             onSettingsSectionChange={setSettingsSection}
-            logsFocusTraceId={logsFocusTraceId}
-            logsFocusSeq={logsFocusSeq}
+            focusSessionId={traceFocusSessionId}
           />
         ) : null}
       </main>

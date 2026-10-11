@@ -21,13 +21,13 @@ import {
   browserSetVisible,
   onBrowserEvent,
 } from "../../bridge/browser";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import "./BrowserPane.less";
 
 type Props = {
-  /** 面板是否为当前激活 tab。 */
+ /** 面板是否为当前激?tab。*/
   active?: boolean;
-  /** 外部请求导航的 URL（消费后清空）。 */
+ /** 外部请求导航?URL（消费后清空）。*/
   pendingUrl?: string | null;
   onPendingUrlConsumed?: () => void;
 };

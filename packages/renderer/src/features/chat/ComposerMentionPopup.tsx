@@ -4,30 +4,55 @@
 import { CodeIcon, FolderIcon } from "@thinker-workbench/design/react";
 import { useEffect, useId, useMemo, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
+import { FileGlyph, IconFolder } from "../inspector/icons";
 import type { MentionKind } from "./composerMentions";
 import "./ComposerMentionPopup.less";
 
 export type MentionItem = {
   id: string;
+  /** 插入用完整值（skill 名或文件/目录相对路径）*/
   label: string;
+  /** 主行展示；缺省用 label（文件场景为文件名）*/
+  title?: string;
+  /** 副行（skill 描述 / 父目录）*/
   description?: string;
-  /** 分组标题键：skills / recent / files。 */
+  /** 分组标题键：skills / recent / files*/
   group: "skills" | "recent" | "files";
+  /** 用于文件名匹配高亮的查询串*/
+  query?: string;
+  /** `@` 命中是否为目录*/
+  isDir?: boolean;
 };
+
+/** 在文本中高亮第一处 query（大小写不敏感）*/
+function HighlightMatch({ text, query }: { text: string; query?: string }) {
+  const q = query?.trim();
+  if (!q) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const i = lower.indexOf(q.toLowerCase());
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="composer-mention__hl">{text.slice(i, i + q.length)}</mark>
+      {text.slice(i + q.length)}
+    </>
+  );
+}
 
 type Props = {
   open: boolean;
   kind: MentionKind;
   items: MentionItem[];
   highlight: number;
-  /** 锚点：textarea 内 caret 附近屏幕坐标。 */
+ /** 锚点：textarea 内 caret 附近屏幕坐标*/
   anchor: { left: number; top: number; bottom: number } | null;
   onHighlight: (index: number) => void;
   onSelect: (item: MentionItem) => void;
   onClose: () => void;
-  /** Skills 列表是否仍折叠「显示更多」。 */
+  /** Skills 列表是否仍折叠「显示更多」*/
   skillsCollapsed?: boolean;
   onExpandSkills?: () => void;
   skillsHiddenCount?: number;
@@ -47,7 +72,7 @@ function groupIcon(group: MentionItem["group"]): ReactNode {
   return <FolderIcon size="sm" />;
 }
 
-/** 锚定在输入光标上方的 mention 菜单。 */
+/** 锚定在输入光标上方的 mention 菜单*/
 export function ComposerMentionPopup({
   open,
   kind,
@@ -65,6 +90,7 @@ export function ComposerMentionPopup({
   const t = useT();
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const fileQuery = kind === "at" ? (items[0]?.query ?? "") : "";
 
   const grouped = useMemo(() => {
     const map = new Map<MentionItem["group"], MentionItem[]>();
@@ -111,16 +137,28 @@ export function ComposerMentionPopup({
       role="listbox"
       aria-label={kind === "slash" ? t("chat.mention.skills") : t("chat.mention.files")}
     >
+      {/* 有结果时才显示顶栏提示；空态只用 emptyHint，避免与 typeToSearch / noRecent 叠两行 */}
+      {kind === "at" && items.length > 0 ? (
+        <div className="composer-mention__hint">
+          {fileQuery
+            ? t("chat.mention.searching", { q: fileQuery })
+            : t("chat.mention.typeToSearch")}
+        </div>
+      ) : null}
       {items.length === 0 ? (
         <p className="composer-mention__empty">{emptyHint || t("chat.mention.empty")}</p>
       ) : (
         grouped.map(({ group, items: rows }) => (
           <div key={group} className="composer-mention__group">
-            <div className="composer-mention__group-title">{t(GROUP_TITLE_KEY[group])}</div>
+            {/* 搜索结果不再套一层 Files 标题，减少噪音 */}
+            {kind === "slash" || (kind === "at" && !fileQuery) ? (
+              <div className="composer-mention__group-title">{t(GROUP_TITLE_KEY[group])}</div>
+            ) : null}
             <ul className="composer-mention__list">
               {rows.map((item) => {
                 const idx = flatIndex++;
                 const active = idx === highlight;
+                const fileName = item.title ?? item.label;
                 return (
                   <li key={item.id}>
                     <button
@@ -133,14 +171,28 @@ export function ComposerMentionPopup({
                       onClick={() => onSelect(item)}
                     >
                       <span className="composer-mention__ico" aria-hidden>
-                        {groupIcon(item.group)}
+                        {kind === "at" ? (
+                          item.isDir ? (
+                            <IconFolder />
+                          ) : (
+                            <FileGlyph name={fileName.replace(/\/+$/, "")} />
+                          )
+                        ) : (
+                          groupIcon(item.group)
+                        )}
                       </span>
                       <span className="composer-mention__text">
-                        <span className="composer-mention__label">
-                          {kind === "slash" ? `/${item.label}` : item.label}
+                        <span className="composer-mention__label" title={item.label}>
+                          {kind === "slash" ? (
+                            `/${item.label}`
+                          ) : (
+                            <HighlightMatch text={fileName} query={item.query} />
+                          )}
                         </span>
                         {item.description ? (
-                          <span className="composer-mention__desc">{item.description}</span>
+                          <span className="composer-mention__desc" title={item.label}>
+                            {item.description}
+                          </span>
                         ) : null}
                       </span>
                     </button>
@@ -166,8 +218,7 @@ export function ComposerMentionPopup({
 }
 
 /**
- * 粗算 textarea 内 caret 的屏幕坐标（mirror 法）。
- */
+ * 粗算 textarea 内 caret 的屏幕坐标（mirror 法）。 */
 export function getTextareaCaretAnchor(
   el: HTMLTextAreaElement,
 ): { left: number; top: number; bottom: number } {

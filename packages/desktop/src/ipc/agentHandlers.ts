@@ -209,9 +209,13 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   });
 
   ipcMain.handle(IpcChannels.contextUsage, async (_evt, payload?: ContextUsageRequest) => {
+    const contextPaths = Array.isArray(payload?.contextPaths)
+      ? payload.contextPaths.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+      : undefined;
     const request: ContextUsageRequest = {
       messages: Array.isArray(payload?.messages) ? payload.messages : [],
       workspaceRoot: resolveWorkspaceRoot(payload?.workspaceRoot),
+      ...(contextPaths?.length ? { contextPaths } : {}),
     };
     return bridge.getContextUsage(request);
   });

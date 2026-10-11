@@ -31,6 +31,7 @@ Import from `@thinker-workbench/design/react`. Global chrome: `@thinker-workbenc
 | `Spinner` / `Progress` | Loading / progress |
 | `Separator` | Dividers |
 | `Masonry` | Waterfall / masonry grid (shortest-column packing) |
+| `Table` | Data tables (`Table.Head` / `Body` / `Row` / `Header` / `Cell`) |
 | `ThemeProvider` / `useDesignTheme` | Theme host (already wired in app) |
 
 ## Do

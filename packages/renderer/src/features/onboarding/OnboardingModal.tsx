@@ -1,5 +1,5 @@
 /**
- * 两步首次引导：① UI / AI 语言 + 根目录 ② 主题与字型。
+ * 两步首次引导：① UI / AI 语言 + 根目录；② 主题与字型。
  *
  * 选择过程中即时预览外观与语言；完成或跳过时写入通用设置并标记 `onboardingCompleted`。
  * 根目录（dataDir）不走 setGeneral，须经 applyDataDirChange。
@@ -24,8 +24,8 @@ import {
   pickDirectory,
   setGeneralSettings,
 } from "../../bridge/thinker";
-import { useI18n } from "../../i18n/I18nProvider";
-import { useAppearance } from "../../theme/AppearanceProvider";
+import { useI18n } from "../../i18n/useI18n";
+import { useAppearance } from "../../theme/useAppearance";
 import { ThemePicker } from "../settings/ThemePicker";
 
 type Step = 1 | 2;
@@ -152,7 +152,7 @@ export function OnboardingModal({ onDone }: Props) {
     }
   }
 
-  /** 跳过：恢复默认外观/语言/根目录后仍标记完成。 */
+  /** 跳过：恢复默认后仍标记完成。 */
   async function skip() {
     applyAppearance(DEFAULT_APP_THEME, DEFAULT_APP_TYPE_STYLE);
     setLocale(DEFAULT_APP_LOCALE);
@@ -167,7 +167,7 @@ export function OnboardingModal({ onDone }: Props) {
     );
   }
 
-  /** 完成：保存当前向导选择（含根目录草稿）。 */
+  /** 完成：保存当前向导选择。 */
   async function finish() {
     await persist({ uiTheme: themeId, uiTypeStyle: typeStyle, uiLocale, aiLocale }, dataDirDraft);
   }

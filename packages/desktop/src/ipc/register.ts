@@ -8,12 +8,13 @@ import type { IpcMain } from "electron";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { registerAgentHandlers } from "./agentHandlers";
 import { registerBrowserHandlers } from "./browserHandlers";
+import { registerCustomizeHandlers } from "./customizeHandlers";
 import { registerMcpHandlers } from "./mcpHandlers";
 import { registerSessionHandlers } from "./sessionHandlers";
 import { registerSettingsHandlers } from "./settingsHandlers";
-import { registerSkillsHandlers } from "./skillsHandlers";
 import { registerTerminalHandlers } from "./terminalHandlers";
 import { registerToolsHandlers } from "./toolsHandlers";
+import { registerTraceHandlers } from "./traceHandlers";
 import { registerWindowHandlers } from "./windowHandlers";
 import { registerWorkspaceFsHandlers } from "./workspaceFsHandlers";
 import { registerWorkspacesHandlers } from "./workspacesHandlers";
@@ -39,7 +40,8 @@ export function registerIpc(
   registerAgentHandlers(ipcMain, bridge);
   registerTerminalHandlers(ipcMain);
   registerBrowserHandlers(ipcMain);
-  registerSkillsHandlers(ipcMain);
+  // Customize 含 skillsList / listDetailed / rules / agents（替代旧 skillsHandlers）
+  registerCustomizeHandlers(ipcMain, bridge);
   registerMcpHandlers(ipcMain, bridge);
   registerSettingsHandlers(ipcMain, {
     onGeneralSaved: options?.onGeneralSaved,
@@ -47,4 +49,5 @@ export function registerIpc(
   });
   registerSessionHandlers(ipcMain);
   registerToolsHandlers(ipcMain);
+  registerTraceHandlers();
 }

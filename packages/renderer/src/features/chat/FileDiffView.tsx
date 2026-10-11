@@ -1,16 +1,16 @@
 /**
  * 文件变更卡片：图标 + 文件名 + +/- 统计；默认折叠 8 行，
  * 超出时底部渐隐 + 居中下箭头展开。点文件名在右侧打开文件。
- */
 
+ */
 import { highlightCode } from "@thinker-workbench/markdown";
 import { useMemo, useState } from "react";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 
 type Props = {
   path?: string;
   diff: string;
-  /** 在右侧 Files 面板打开该路径。 */
+ /** 在右侧 Files 面板打开该路径*/
   onOpenFile?: (path: string) => void;
 };
 
@@ -20,10 +20,10 @@ type DiffRow = {
   code: string;
 };
 
-/** 折叠时默认可见行数。 */
+/** 折叠时默认可见行数*/
 const COLLAPSED_LINES = 8;
 
-/** 扩展名 → highlight.js 语言 id。 */
+/** 扩展名 → highlight.js 语言 id*/
 function langFromPath(path?: string): string | undefined {
   const ext = fileExt(path);
   if (!ext) return undefined;
@@ -65,7 +65,7 @@ function fileName(path?: string): string {
   return path.split(/[/\\]/).pop() || path;
 }
 
-/** 文件类型图标上的简写。 */
+/** 文件类型图标上的简写*/
 function fileBadge(ext?: string): string {
   if (!ext) return "{}";
   if (ext === "ts" || ext === "tsx") return "TS";
@@ -80,7 +80,7 @@ function fileBadge(ext?: string): string {
   return ext.slice(0, 2).toUpperCase();
 }
 
-/** unified diff 文件头 / hunk 头等，对用户无信息量。 */
+/** unified diff 文件头 / hunk 头等，对用户无信息量*/
 function isMetaLine(line: string): boolean {
   return (
     line.startsWith("--- ") ||

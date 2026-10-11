@@ -19,7 +19,10 @@ import {
   type LogRecord,
   type McpServerRuntimeStatus,
   type McpServerUpsertInput,
-  type ModelSettingsPatch,
+  type ChatMode,
+  type ModelCatalogPatch,
+  type ModelProbeRequest,
+  type ModelSelection,
   type MoveSessionInput,
   type ReorderInput,
   type ShortcutsMap,
@@ -27,8 +30,15 @@ import {
   type LogsQuery,
   type BrowserBounds,
   type BrowserEvent,
+  type CustomizeScope,
+  type RuleUpsertInput,
+  type SkillUpsertInput,
+  type SubagentUpsertInput,
   type TerminalEvent,
   type ThinkerApi,
+  type TraceEndSpanRequest,
+  type TraceListSessionsQuery,
+  type TraceStartSpanRequest,
   type UiSessionSnapshot,
   type WindowRole,
   type WorkspaceCreateInput,
@@ -71,8 +81,18 @@ const api: ThinkerApi = {
   },
   settings: {
     getModel: () => ipcRenderer.invoke(IpcChannels.settingsGetModel),
-    setModel: (patch: ModelSettingsPatch) =>
+    setModel: (patch: ModelCatalogPatch) =>
       ipcRenderer.invoke(IpcChannels.settingsSetModel, patch),
+    probeModel: (request: ModelProbeRequest) =>
+      ipcRenderer.invoke(IpcChannels.settingsProbeModel, request),
+    getSessionModelSelection: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.settingsGetSessionModelSelection, sessionId),
+    setSessionModelSelection: (sessionId: string, selection: ModelSelection) =>
+      ipcRenderer.invoke(IpcChannels.settingsSetSessionModelSelection, sessionId, selection),
+    getSessionChatMode: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.settingsGetSessionChatMode, sessionId),
+    setSessionChatMode: (sessionId: string, chatMode: ChatMode) =>
+      ipcRenderer.invoke(IpcChannels.settingsSetSessionChatMode, sessionId, chatMode),
     getShortcuts: () => ipcRenderer.invoke(IpcChannels.settingsGetShortcuts),
     setShortcuts: (patch: Partial<ShortcutsMap>) =>
       ipcRenderer.invoke(IpcChannels.settingsSetShortcuts, patch),
@@ -235,6 +255,46 @@ const api: ThinkerApi = {
   skills: {
     list: (workspaceRoot?: string | null) =>
       ipcRenderer.invoke(IpcChannels.skillsList, workspaceRoot ?? null),
+    listDetailed: (workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(IpcChannels.skillsListDetailed, workspaceRoot ?? null),
+    upsert: (input: SkillUpsertInput) => ipcRenderer.invoke(IpcChannels.skillsUpsert, input),
+    remove: (scope: CustomizeScope, name: string) =>
+      ipcRenderer.invoke(IpcChannels.skillsRemove, scope, name),
+    copyToScope: (name: string, fromPath: string, scope: CustomizeScope) =>
+      ipcRenderer.invoke(IpcChannels.skillsCopyToScope, name, fromPath, scope),
+  },
+  rules: {
+    list: (workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(IpcChannels.rulesList, workspaceRoot ?? null),
+    upsert: (input: RuleUpsertInput) => ipcRenderer.invoke(IpcChannels.rulesUpsert, input),
+    remove: (scope: CustomizeScope, relPath: string) =>
+      ipcRenderer.invoke(IpcChannels.rulesRemove, scope, relPath),
+    copyToScope: (relPath: string, fromPath: string, scope: CustomizeScope) =>
+      ipcRenderer.invoke(IpcChannels.rulesCopyToScope, relPath, fromPath, scope),
+  },
+  agents: {
+    list: (workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(IpcChannels.agentsList, workspaceRoot ?? null),
+    upsert: (input: SubagentUpsertInput) =>
+      ipcRenderer.invoke(IpcChannels.agentsUpsert, input),
+    remove: (scope: CustomizeScope, name: string) =>
+      ipcRenderer.invoke(IpcChannels.agentsRemove, scope, name),
+    copyToScope: (name: string, fromPath: string, scope: CustomizeScope) =>
+      ipcRenderer.invoke(IpcChannels.agentsCopyToScope, name, fromPath, scope),
+  },
+  trace: {
+    listSessions: (query?: TraceListSessionsQuery) =>
+      ipcRenderer.invoke(IpcChannels.traceListSessions, query),
+    getSessionSpans: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceGetSessionSpans, sessionId),
+    getPayload: (sessionId: string, payloadId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceGetPayload, sessionId, payloadId),
+    startSpan: (req: TraceStartSpanRequest) =>
+      ipcRenderer.invoke(IpcChannels.traceStartSpan, req),
+    endSpan: (req: TraceEndSpanRequest) =>
+      ipcRenderer.invoke(IpcChannels.traceEndSpan, req),
+    deleteSession: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceDeleteSession, sessionId),
   },
   mcp: {
     list: () => ipcRenderer.invoke(IpcChannels.mcpList),
@@ -245,7 +305,7 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.mcpSetEnabled, id, enabled),
     test: (input: McpServerUpsertInput) =>
       ipcRenderer.invoke(IpcChannels.mcpTest, input),
-    importCursorFile: () => ipcRenderer.invoke(IpcChannels.mcpImportCursorFile),
+    importFile: () => ipcRenderer.invoke(IpcChannels.mcpImportFile),
     onStatus(cb: (status: McpServerRuntimeStatus) => void) {
       const handler = (_evt: unknown, status: McpServerRuntimeStatus) => cb(status);
       ipcRenderer.on(IpcChannels.mcpStatus, handler);

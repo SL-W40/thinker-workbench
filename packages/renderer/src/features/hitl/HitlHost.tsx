@@ -1,12 +1,11 @@
 /**
  * HITL 宿主：非 shell 类介入弹 Modal。
- * shell_approval 已内嵌到时间线 ShellCard，此处跳过以免重复。
  */
 import { Button, Modal } from "@thinker-workbench/design/react";
 import type { HitlRequest } from "@thinker-workbench/shared";
 import { useEffect, useId, useState } from "react";
 import { onAgentEvent, respondHitl } from "../../bridge/thinker";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import "./HitlHost.less";
 
 export function HitlHost() {

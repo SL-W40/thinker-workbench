@@ -10,6 +10,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
+    "types": ["vite/client"],
     "paths": {
       "@thinker-workbench/shared": ["../shared/src/index.ts"],
       "@thinker-workbench/design": ["../design/src/index.ts"],
@@ -25,3 +26,4 @@
   },
   "include": ["src"]
 }
+

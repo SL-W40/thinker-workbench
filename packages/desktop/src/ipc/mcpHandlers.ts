@@ -10,7 +10,7 @@ import { BrowserWindow, dialog, type IpcMain } from "electron";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { pushAgentHello } from "../utility/startAgentProcess";
 import {
-  importCursorMcpJson,
+  importMcpJsonFile,
   listEnabledMcpConfigs,
   listMcpConfigs,
   removeMcpConfig,
@@ -136,23 +136,23 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
     }
   });
 
-  ipcMain.handle(IpcChannels.mcpImportCursorFile, async () => {
+  ipcMain.handle(IpcChannels.mcpImportFile, async () => {
     const win = BrowserWindow.getFocusedWindow();
     const result = win
       ? await dialog.showOpenDialog(win, {
-          title: "Import Cursor mcp.json",
+          title: "Import mcp.json",
           filters: [{ name: "JSON", extensions: ["json"] }],
           properties: ["openFile"],
         })
       : await dialog.showOpenDialog({
-          title: "Import Cursor mcp.json",
+          title: "Import mcp.json",
           filters: [{ name: "JSON", extensions: ["json"] }],
           properties: ["openFile"],
         });
     if (result.canceled || !result.filePaths[0]) {
       return { imported: [] as string[], skipped: [] as string[] };
     }
-    const out = importCursorMcpJson(result.filePaths[0]);
+    const out = importMcpJsonFile(result.filePaths[0]);
     reloadMcpOnAgent(bridge);
     return out;
   });

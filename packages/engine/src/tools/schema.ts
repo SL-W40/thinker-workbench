@@ -9,6 +9,7 @@ import {
   getAllowAiShell,
 } from "../workspace";
 import { getMcpManager } from "../mcp/McpManager";
+import { isToolAllowedForChatMode } from "../chatMode";
 import { listTools } from "./registry";
 import type { ToolSpec } from "./types";
 
@@ -39,18 +40,31 @@ const BROWSER_TOOL_NAMES = new Set([
   "browser_screenshot",
 ]);
 
-/** 当前应对模型暴露的工具（按设置过滤 delete_file / shell / browser）。 */
-export function listChatTools(): ChatToolDefinition[] {
+/** 当前应对模型暴露的工具（按设置与 ChatMode 过滤）。 */
+export function listChatTools(options?: {
+  childReadonly?: boolean;
+  allowTask?: boolean;
+}): ChatToolDefinition[] {
   const allowDelete = getAllowAiDeleteFiles();
   const allowShell = getAllowAiShell();
   const allowBrowser = getAllowAiBrowser();
+  const modeOpts = {
+    childReadonly: options?.childReadonly,
+    allowTask: options?.allowTask,
+  };
   const builtin = listTools()
     .filter((spec) => {
+      if (!isToolAllowedForChatMode(spec.name, modeOpts)) return false;
       if (spec.name === "delete_file") return allowDelete;
       if (spec.name === "shell" || spec.name === "shell_await") return allowShell;
       if (BROWSER_TOOL_NAMES.has(spec.name)) return allowBrowser;
       return true;
     })
     .map(toChatTool);
-  return [...builtin, ...getMcpManager().listChatTools()];
+  return [
+    ...builtin,
+    ...getMcpManager()
+      .listChatTools()
+      .filter((t) => isToolAllowedForChatMode(t.function.name, modeOpts)),
+  ];
 }

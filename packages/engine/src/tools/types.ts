@@ -3,8 +3,11 @@
  * ToolSpec 是注册表里的完整条目；DefineToolInput 是 defineTool 的友好入参。
  */
 
+import type { ChatTimelineResultPathKind } from "@thinker-workbench/shared";
+
 /** 给 C 端时间线用的结构化附件（不替代 output 进模型上下文）。 */
 export type ToolUiPayload = {
+  taskId?: string;
   path?: string;
   /** unified diff 文本 */
   diff?: string;
@@ -16,6 +19,8 @@ export type ToolUiPayload = {
   command?: string;
   exitCode?: number | null;
   backgrounded?: boolean;
+  resultPaths?: string[];
+  resultPathKinds?: ChatTimelineResultPathKind[];
 };
 
 /** 工具执行结果：ok 表示业务成功，output 始终是给模型看的文本。 */
@@ -34,6 +39,8 @@ export type ToolExecuteResult =
 export type ToolContext = {
   workspaceRoot: string;
   signal: AbortSignal;
+  /** 与模型 tool_call.id 对齐（Task 预告等）。 */
+  callId?: string;
 };
 
 export type ToolParamType = "string" | "number" | "boolean";

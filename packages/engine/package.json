@@ -19,12 +19,15 @@
     "bundle:entry": "esbuild src/entry.ts --bundle --platform=node --format=cjs --outfile=artifacts/entry.js",
     "dev:tsc": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --watch --preserveWatchOutput",
     "dev:esbuild": "esbuild src/entry.ts --bundle --platform=node --format=cjs --outfile=artifacts/entry.js --watch --log-level=warning",
-    "dev": "npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:esbuild\""
+    "dev": "npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:esbuild\"",
+    "test": "pnpm -w exec vitest run packages/engine/tests"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@thinker-workbench/logger": "workspace:*",
-    "@thinker-workbench/shared": "workspace:*"
+    "@thinker-workbench/shared": "workspace:*",
+    "gpt-tokenizer": "^4.0.0",
+    "undici": "^6.29.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

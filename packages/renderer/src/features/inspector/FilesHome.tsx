@@ -1,13 +1,12 @@
 /**
  * Files 首页：搜索 + 新建文件 + 最近 / 搜索结果。
- * 不含文件树；变更 / 终端由 Tab「+」菜单打开。
  */
 import { useMemo, useState } from "react";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 
 type Props = {
   recents: string[];
-  /** 搜索非空时用于补全的全部工作空间文件路径。 */
+  /** 搜索非空时用于补全的全部工作空间文件路径。*/
   fileCandidates?: string[];
   onOpenFile: (path: string) => void;
   onNewFile?: () => void;

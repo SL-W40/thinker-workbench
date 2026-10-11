@@ -14,7 +14,8 @@
     "dev:tsc": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --noEmit --watch --preserveWatchOutput",
     "dev:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --external:node-pty --external:node-pty/* --outfile=artifacts/main.js --watch --log-level=warning",
     "dev:preload": "esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=artifacts/preload.js --watch --log-level=warning",
-    "dev": "node ../../scripts/copy-desktop-resources.mjs && npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:main\" \"pnpm:dev:preload\""
+    "dev": "node ../../scripts/copy-desktop-resources.mjs && npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:main\" \"pnpm:dev:preload\"",
+    "test": "pnpm -w exec vitest run packages/desktop/tests"
   },
   "dependencies": {
     "@thinker-workbench/logger": "workspace:*",

@@ -7,6 +7,7 @@ export type StageTab =
   | { key: string; kind: "files"; title: string }
   | { key: string; kind: "terminal"; title: string }
   | { key: string; kind: "browser"; title: string }
+  | { key: string; kind: "subagent"; title: string; taskId: string; subagent: string }
   | { key: string; kind: "file"; title: string; path: string };
 
 export const CHANGES_TAB_KEY = "changes";

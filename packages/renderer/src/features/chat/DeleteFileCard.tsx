@@ -1,15 +1,14 @@
 /**
- * delete_file 结果卡片：与 FileDiff 同量级表面，含状态徽章与「恢复」。
- */
+ * delete_file 结果卡片：与 FileDiff 同量级表面，含状态徽章与「恢复」。 */
 import { Badge, Button } from "@thinker-workbench/design/react";
 import { useState } from "react";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 
 type Props = {
   path?: string;
   running?: boolean;
   failed?: boolean;
-  /** 已成功写回。 */
+  /** 已成功写回*/
   restored?: boolean;
   canRestore?: boolean;
   onRestore?: () => void | Promise<void>;

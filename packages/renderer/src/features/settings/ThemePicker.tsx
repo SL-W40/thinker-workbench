@@ -1,6 +1,6 @@
 /**
  * 通用设置中的主题色卡片选择器（基础 / 创意 / 自定义）。
- * 先 `applyAppearance` 即时预览；`onSelect` 返回 false 时回滚到已保存主题。
+ * 用 `applyAppearance` 即时预览；`onSelect` 返回 false 时回滚到已保存主题。
  */
 import { useRef, useState } from "react";
 import {
@@ -23,8 +23,8 @@ import {
   type BuiltinAppThemeId,
   type CustomThemeRecord,
 } from "@thinker-workbench/shared";
-import { useAppearance } from "../../theme/AppearanceProvider";
-import { useI18n } from "../../i18n/I18nProvider";
+import { useAppearance } from "../../theme/useAppearance";
+import { useI18n } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
 import { CustomThemeEditor } from "./CustomThemeEditor";
 import { forkCustomTheme } from "./customThemeUtils";
@@ -66,7 +66,7 @@ type Props = {
   ) => boolean | Promise<boolean>;
   /** 是否显示标题与说明；引导页可关掉以免与步骤文案重复。默认 true。 */
   showIntro?: boolean;
-  /** 是否展示自定义主题管理。默认 true；引导页应 false。 */
+  /** 是否展示自定义主题管理。默认 true；引导页可 false。 */
   allowCustom?: boolean;
 };
 
@@ -166,7 +166,7 @@ export function ThemePicker({
     })),
   ];
 
-  /** 选中主题：即时预览 → 持久化；失败则回滚。 */
+  /** 选中主题：即时预览 → 持久化；失败则回滚。*/
   async function choose(id: AppThemeId) {
     if (id === activeId && id === savedTheme) return;
     const previous = savedTheme;
@@ -189,7 +189,7 @@ export function ThemePicker({
     return true;
   }
 
-  /** 从指定源克隆并打开编辑器（不先持久化）。 */
+  /** 从指定源克隆并打开编辑器（不先持久化）。*/
   function openForkedEditor(sourceId: string) {
     if (customs.length >= MAX_CUSTOM_THEMES) {
       setActionError(t("settings.general.theme.custom.limitReached", { n: String(MAX_CUSTOM_THEMES) }));
@@ -205,7 +205,7 @@ export function ThemePicker({
     setEditing(record);
   }
 
-  /** 直接新建：默认从 light 派生，无需选源。 */
+  /** 直接新建：默认从 light 派生，无需选源。*/
   function createNew() {
     openForkedEditor("light");
   }

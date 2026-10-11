@@ -21,7 +21,7 @@ pnpm install
 pnpm run dev            # Full stack: watchers + Electron
 ```
 
-Then open **Settings → Model** and set an OpenAI-compatible **API key**, **base URL**, and **model**. Keys are encrypted at rest with OS `safeStorage` under `~/.thinker/settings.json`.
+Then open **Settings → Model** and set an OpenAI-compatible **API key**, **base URL**, and **model**. Keys are encrypted at rest with OS `safeStorage` in `<dataDir>/settings.json` (default `~/.thinker/settings.json`).
 
 | Script | Purpose |
 |---|---|
@@ -31,8 +31,12 @@ Then open **Settings → Model** and set an OpenAI-compatible **API key**, **bas
 | `pnpm start` | Electron against the last build |
 | `pnpm run check` | Biome lint + format check |
 | `pnpm run format` / `pnpm run lint` | Format write / lint only |
+| `pnpm test` | Unit tests (Vitest) |
+| `pnpm test:report` | Same + Vitest HTML / JUnit / v8 coverage → `test-results/report/` |
 | `pnpm run dev:logger:web` | Standalone log viewer → http://127.0.0.1:5181 |
 | `pnpm run pack:zip` | Zip the repo (respects `.gitignore`) |
+
+Tests live under each package’s `tests/` tree (mirrors `src/`), named `*.test.ts`. Config: [`vitest.config.ts`](vitest.config.ts). Per-package: `pnpm --filter @thinker-workbench/<pkg> test`.
 
 **Dev ports**
 
@@ -80,15 +84,20 @@ Desktop (ipcMain) ── SQLite / settings / FS IPC
 
 ## Data layout
 
-Bootstrap settings always live at **`~/.thinker/settings.json`** (even if you move the data dir). Default data root is **`~/.thinker`** (`general.dataDir`):
+Default data root is **`~/.thinker`** (`general.dataDir`). Authoritative **`settings.json`** lives at the data root; when `dataDir` is customized, a mirror is also kept at **`~/.thinker/settings.json`** so the app can find `dataDir` on next launch.
 
 | Path | Contents |
 |---|---|
-| `catalog.db` | Workspace metadata |
+| `settings.json` | App settings (model keys, preferences, `dataDir`) |
+| `state/catalog.db` | Workspace metadata |
+| `state/session.json` | UI / window session |
+| `checkpoints/` | Agent resume checkpoints (migrated with the data root) |
 | `workspaces/<id>/chat.db` | Per-workspace chats |
 | `logs/` | SQLite log shards |
 | `skills/`, `mcps/`, `rules/` | Global skills / MCP / rules |
-| `workspace/` | Default on-disk workspace folder |
+| `workspace/` | Default on-disk workspace folder (under bootstrap `~/.thinker`) |
+
+Changing the root copies history into the new folder and always writes `settings.json` there; the previous root is left in place (copy, not delete). Older installs may still have checkpoints under Electron `userData/checkpoints` — those are moved into `<dataDir>/checkpoints` on startup.
 
 ## Rules & skills
 
@@ -96,19 +105,17 @@ Loaded at runtime into agent context (later roots override same skill name):
 
 | Kind | Search order |
 |---|---|
-| **Rules** | `<dataDir>/rules/` → `<workspace>/.thinker/rules/` → `<workspace>/.cursor/rules/` |
-| **Skills** | `<dataDir>/skills/` → `<workspace>/.thinker/skills/` → `<workspace>/.cursor/skills/` |
+| **Rules** | `<dataDir>/rules/` → `<workspace>/.thinker/rules/` |
+| **Skills** | `<dataDir>/skills/` → `<workspace>/.thinker/skills/` |
 
-Rules: `.md` / `.mdc` / `.txt`. Skills: Cursor-style `SKILL.md`.
-
-Repo `.cursor/rules/` files are **contributor conventions** for this monorepo (e.g. Chinese source comments, design-system usage); they are not the app’s runtime rule roots unless copied into the paths above.
+Rules: `.md` / `.mdc` / `.txt`. Skills: folder + `SKILL.md` with YAML frontmatter.
 
 ### Composer `/` and `@`
 
 In the chat composer:
 
 - Type `/` (after start of line or whitespace) to pick a **Skill**. Selecting inserts `/skill-name `; the engine already activates skills from that slash form.
-- Type `@` to mention a **workspace file** (recent files + searchable paths). Selecting inserts `@path/to/file` (quoted if the path has spaces). On send, paths become `contextPaths` and the engine injects file contents into the run context (size-capped; binary/oversize files are skipped with a note).
+- Type `@` to mention a **workspace file or folder** (recent + searchable paths, tree depth up to 12). Selecting inserts `@path` (folders keep a trailing `/`). On send, files are injected into context; folders contribute a listing plus a few small text files (size-capped). Esc or Space dismisses the picker and keeps a plain `@`.
 
 ## MCP (stdio)
 
@@ -116,7 +123,7 @@ Settings → **MCP** manages stdio servers. Config merge order (later wins same 
 
 1. `<dataDir>/mcps/*.json`
 2. `<workspace>/.thinker/mcps/*.json`
-3. Optional import from Cursor `mcp.json` (Settings → Import)
+3. Optional import from `mcp.json` (`mcpServers` map; Customize → Import)
 
 Per-server fields: `id`, `name`, `enabled`, `transport: "stdio"`, `command`, `args`, `env`, optional `cwd`. Desktop pushes an enabled snapshot to the utility process; the engine connects with `@modelcontextprotocol/sdk` and exposes tools as `mcp__{serverId}__{toolName}`.
 

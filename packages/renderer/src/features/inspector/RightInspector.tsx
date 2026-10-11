@@ -1,7 +1,6 @@
 /**
  * 右侧 agent inspector（对齐 v1 WorkspacePane agent 分支）：
  * 起始磁贴 → Tab 条（Changes / Files / file:*）→ 对应壳层。
- * 数据走 desktop IPC（workspaceFs），CTA 经 onSendPrompt 注入聊天。
  */
 import type { GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
 import {
@@ -29,7 +28,7 @@ import {
   workspaceTree,
   workspaceWriteFile,
 } from "../../bridge/workspaceFs";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import {
   CHANGES_ACTION_PROMPTS,
   ChangesPane,
@@ -47,9 +46,30 @@ import {
   type OpenBrowserDetail,
 } from "../../bridge/browser";
 import { OPEN_TERMINAL_EVENT, type OpenTerminalDetail } from "../../bridge/terminal";
+import {
+  CLEAR_SUBAGENT_TABS_EVENT,
+  OPEN_SUBAGENT_EVENT,
+  RESTORE_SUBAGENT_TABS_EVENT,
+  consumePendingOpenSubagent,
+  consumePendingRestoreSubagent,
+  forgetSubagentStep,
+  getSubagentStep,
+  peekOpenSubagents,
+  setActiveSubagentTask,
+  subagentTabKey,
+  subscribeSubagentSteps,
+} from "../../bridge/subagent";
 import { BrowserPane } from "../browser/BrowserPane";
 import { TerminalPane } from "../terminal/TerminalPane";
-import { BrowserStartIcon, FileStartIcon, GitIcon, TerminalStartIcon } from "./icons";
+import {
+  BrowserStartIcon,
+  FileStartIcon,
+  GitIcon,
+  SubagentStartIcon,
+  TerminalStartIcon,
+} from "./icons";
+import { subagentDisplayTitle } from "../chat/subagentTitle";
+import { SubagentInspectorPane } from "./SubagentInspectorPane";
 import {
   hydrateTabs,
   loadInspectorUi,
@@ -81,17 +101,17 @@ import "./inspector.less";
 
 type Props = {
   workspaceId: string | null;
-  /** Changes CTA：把固定英文 prompt 发给当前会话。 */
+  /** Changes CTA：把固定英文 prompt 发给当前会话。*/
   onSendPrompt?: (prompt: string) => void;
-  /** 外部请求打开的工作空间相对路径（如聊天 diff 点文件名）；消费后回调清空。 */
+ /** 外部请求打开的工作空间相对路径（如聊?diff 点文件名）；消费后回调清空。*/
   pendingOpenPath?: string | null;
   onPendingOpenPathConsumed?: () => void;
-  /** 外部请求打开 Terminal 并可选聚焦会话。 */
+  /** 外部请求打开 Terminal 并可选聚焦会话。*/
   pendingOpenTerminalSessionId?: string | null;
   onPendingOpenTerminalConsumed?: () => void;
 };
 
-/** 从树收集全部文件相对路径（供 Files 搜索）。 */
+/** 从树收集全部文件相对路径（供 Files 搜索）。*/
 function collectFilePaths(node: WorkspaceNode | null): string[] {
   if (!node) return [];
   if (node.type === "file") return [node.path === "." ? "" : node.path].filter(Boolean);
@@ -120,7 +140,7 @@ function langBadge(path: string): string {
   return (ext || "FILE").slice(0, 4).toUpperCase();
 }
 
-/** 规范化工作空间相对路径。 */
+/** 规范化工作空间相对路径。*/
 function normalizeRelPath(raw: string): string {
   return raw.trim().replace(/\\/g, "/").replace(/^\//, "");
 }
@@ -129,7 +149,7 @@ function isDraftTabKey(key: string): boolean {
   return key.startsWith("draft:");
 }
 
-/** 恢复会话时按路径读入缓冲，不切换 activeTab。 */
+/** 恢复会话时按路径读入缓冲，不切换 activeTab。*/
 async function loadFileBuffers(
   workspaceId: string,
   path: string,
@@ -202,18 +222,25 @@ export function RightInspector({
   const t = useT();
   const tabsRef = useRef<HTMLDivElement>(null);
   const draftSeq = useRef(0);
-  /** 跳过恢复后的首次写回，避免用空态覆盖 localStorage。 */
+ /** 跳过恢复后的首次写回，避免用空态覆?localStorage。*/
   const skipPersist = useRef(true);
 
   const restoredUi = useMemo(() => loadInspectorUi(workspaceId), [workspaceId]);
 
   const [tabs, setTabs] = useState<StageTab[]>([]);
   const [activeTab, setActiveTab] = useState<string>("");
-  /** TerminalPane 聚焦会话（打开面板后消费）。 */
+  /** TerminalPane 聚焦会话（打开面板后消费）。*/
   const [terminalFocusId, setTerminalFocusId] = useState<string | null>(null);
   const [browserPendingUrl, setBrowserPendingUrl] = useState<string | null>(null);
-  /** 未命名缓冲首次保存：填写相对路径。 */
-  const [saveAs, setSaveAs] = useState<{ key: string; draft: string } | null>(null);
+  /** 未命名缓冲首次保存：填写相对路径。*/
+  const [saveAs, setSaveAs] = useState<{
+    key: string;
+    draft: string;
+    /** 保存成功后关闭该标签（来自未保存关闭确认）。*/
+    closeAfter?: boolean;
+  } | null>(null);
+  /** 关闭脏文件标签时的确认弹窗（tab key）。*/
+  const [closeDirtyKey, setCloseDirtyKey] = useState<string | null>(null);
 
   const [tree, setTree] = useState<WorkspaceNode | null>(null);
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
@@ -226,7 +253,7 @@ export function RightInspector({
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [unsaved, setUnsaved] = useState<Record<string, boolean>>({});
   const [readOnlyByPath, setReadOnlyByPath] = useState<Record<string, boolean>>({});
-  /** 媒体 / 二进制预览缓存（按 file: tab key）。 */
+ /** 媒体 / 二进制预览缓存（?file: tab key）。*/
   const [mediaByKey, setMediaByKey] = useState<Record<string, MediaPreviewInfo>>({});
 
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -255,7 +282,7 @@ export function RightInspector({
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [addMenuAnchor, setAddMenuAnchor] = useState<DOMRect | null>(null);
   const addTabBtnRef = useRef<HTMLButtonElement>(null);
-  /** 侧栏文件树右键。 */
+  /** 侧栏文件树右键。*/
   const [treeCtxMenu, setTreeCtxMenu] = useState<{
     x: number;
     y: number;
@@ -302,13 +329,39 @@ export function RightInspector({
       terminal: t("inspector.section.terminal"),
       browser: t("inspector.section.browser"),
     });
-    const nextActive = resolveActiveKey(nextTabs, restoredUi.activeKey);
-    setTabs(nextTabs);
+ // 合并当前会话已打开?Task（按会话落盘，不?inspectorUi 里）
+    const openSub = peekOpenSubagents();
+    const subTabs: Extract<StageTab, { kind: "subagent" }>[] = [];
+    for (const taskId of openSub.taskIds) {
+      const step = getSubagentStep(taskId);
+      if (!step) continue;
+      const typeRaw = step.subagent.trim();
+      const typeName =
+        !typeRaw || typeRaw === "…"
+          ? t("chat.subagent.pendingName")
+          : typeRaw;
+      subTabs.push({
+        key: subagentTabKey(taskId),
+        kind: "subagent",
+        title: subagentDisplayTitle(step),
+        taskId,
+        subagent: typeName,
+      });
+    }
+    const mergedTabs = [...nextTabs, ...subTabs];
+    const preferSub =
+      openSub.activeTaskId &&
+      subTabs.some((tab) => tab.taskId === openSub.activeTaskId)
+        ? subagentTabKey(openSub.activeTaskId)
+        : "";
+    const nextActive = preferSub || resolveActiveKey(mergedTabs, restoredUi.activeKey);
+    setTabs(mergedTabs);
     setActiveTab(nextActive);
     setTree(null);
     setOpenDirs(new Set(restoredUi.openDirs));
     setTreeQuery("");
     setSaveAs(null);
+    setCloseDirtyKey(null);
     draftSeq.current = 0;
     setSelectedPaths(new Set());
     setDrafts({});
@@ -366,7 +419,7 @@ export function RightInspector({
     openDirs,
   ]);
 
-  // Git：聚焦 + 12s 轮询（有 Changes 标签或空起始屏时）
+ // Git：聚?+ 12s 轮询（有 Changes 标签或空起始屏时：
   useEffect(() => {
     if (!workspaceId) return;
     void refreshGit();
@@ -386,11 +439,10 @@ export function RightInspector({
     onPendingOpenPathConsumed?.();
     setFilesListOpen(true);
     void openFile(path);
-    // openFile 读最新 state；仅在 pending 变化时触发
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+ // openFile 读最?state；仅?pending 变化时触? // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenPath]);
 
-  // 外部 / 时间线：打开 Terminal 标签（细节由 TerminalPane 消费）
+  // 外部 / 时间线：打开 Terminal 标签（细节由 TerminalPane 消费：
   useEffect(() => {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<OpenTerminalDetail>).detail;
@@ -420,6 +472,113 @@ export function RightInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+ // Task 卡片 / 后台?/ 会话恢复：子代理时间?tab
+  useEffect(() => {
+    function tabFromTaskId(taskId: string): Extract<StageTab, { kind: "subagent" }> | null {
+      const step = getSubagentStep(taskId);
+      if (!step) return null;
+      const typeRaw = step.subagent.trim();
+      const typeName =
+        !typeRaw || typeRaw === "…"
+          ? t("chat.subagent.pendingName")
+          : typeRaw;
+      return {
+        key: subagentTabKey(taskId),
+        kind: "subagent",
+        title: subagentDisplayTitle(step),
+        taskId,
+        subagent: typeName,
+      };
+    }
+    function openByTaskId(taskId: string) {
+      const tab = tabFromTaskId(taskId);
+      if (tab) ensureTab(tab);
+    }
+    function onOpen(e: Event) {
+      const detail = (e as CustomEvent<{ taskId: string }>).detail;
+      if (detail?.taskId) openByTaskId(detail.taskId);
+    }
+    function onClear() {
+      setTabs((prev) => {
+        const next = prev.filter((tab) => tab.kind !== "subagent");
+        setActiveTab((current) =>
+          prev.some((tab) => tab.key === current && tab.kind === "subagent")
+            ? (next[0]?.key ?? "")
+            : current,
+        );
+        return next;
+      });
+    }
+ /** 刷新或切回会话：重建已打开?Task tab，并按需激活。*/
+    function onRestore(e: Event) {
+      const detail = (e as CustomEvent<{
+        taskIds: string[];
+        activeTaskId: string | null;
+      }>).detail;
+      const taskIds = detail?.taskIds ?? [];
+      const restored = taskIds
+        .map((id) => tabFromTaskId(id))
+        .filter((tab): tab is Extract<StageTab, { kind: "subagent" }> => Boolean(tab));
+      setTabs((prev) => {
+        const kept = prev.filter((tab) => tab.kind !== "subagent");
+        return [...kept, ...restored];
+      });
+      if (detail?.activeTaskId) {
+        const key = subagentTabKey(detail.activeTaskId);
+        if (restored.some((tab) => tab.key === key)) setActiveTab(key);
+      }
+    }
+    function syncTabTitles() {
+      setTabs((prev) => {
+        let changed = false;
+        const next = prev.map((tab) => {
+          if (tab.kind !== "subagent") return tab;
+          const step = getSubagentStep(tab.taskId);
+          if (!step) return tab;
+          const typeRaw = step.subagent.trim();
+          const typeName =
+            !typeRaw || typeRaw === "…"
+              ? t("chat.subagent.pendingName")
+              : typeRaw;
+          const title = subagentDisplayTitle(step);
+          if (tab.title === title && tab.subagent === typeName) return tab;
+          changed = true;
+          return { ...tab, title, subagent: typeName };
+        });
+        return changed ? next : prev;
+      });
+    }
+    window.addEventListener(OPEN_SUBAGENT_EVENT, onOpen);
+    window.addEventListener(CLEAR_SUBAGENT_TABS_EVENT, onClear);
+    window.addEventListener(RESTORE_SUBAGENT_TABS_EVENT, onRestore);
+    const unsubSteps = subscribeSubagentSteps(syncTabTitles);
+    const pendingRestore = consumePendingRestoreSubagent();
+    if (pendingRestore) {
+      onRestore(
+        new CustomEvent(RESTORE_SUBAGENT_TABS_EVENT, { detail: pendingRestore }),
+      );
+    }
+    const pending = consumePendingOpenSubagent();
+    if (pending?.taskId) openByTaskId(pending.taskId);
+    return () => {
+      unsubSteps();
+      window.removeEventListener(OPEN_SUBAGENT_EVENT, onOpen);
+      window.removeEventListener(CLEAR_SUBAGENT_TABS_EVENT, onClear);
+      window.removeEventListener(RESTORE_SUBAGENT_TABS_EVENT, onRestore);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+ // 激活非 Task 时清?activeTaskId，避免刷新后强行抢回 Task
+  useEffect(() => {
+    if (!activeTab) return; // 初始…?key，勿冲掉会话恢复…?activeTaskId
+    if (activeTab.startsWith("subagent:")) {
+      setActiveSubagentTask(activeTab.slice("subagent:".length));
+    } else {
+      setActiveSubagentTask(null);
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     if (pendingOpenTerminalSessionId == null) return;
     const id = pendingOpenTerminalSessionId;
@@ -428,7 +587,7 @@ export function RightInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenTerminalSessionId]);
 
-  // Tab 条：纵向滚轮 → 横向滚动
+  // Tab 条：纵向滚轮 →横向滚动
   useEffect(() => {
     const strip = tabsRef.current;
     if (!strip || inspectorEmpty) return;
@@ -444,8 +603,21 @@ export function RightInspector({
 
   function ensureTab(tab: StageTab) {
     setTabs((prev) => {
-      if (prev.some((t) => t.key === tab.key)) return prev;
-      return [...prev, tab];
+      const idx = prev.findIndex((t) => t.key === tab.key);
+      if (idx < 0) return [...prev, tab];
+      // 子代理标题可能从 draft 完善：已存在则合并更
+      if (tab.kind === "subagent") {
+        const cur = prev[idx]!;
+        if (
+          cur.kind === "subagent" &&
+          (cur.title !== tab.title || cur.subagent !== tab.subagent)
+        ) {
+          const next = [...prev];
+          next[idx] = { ...cur, title: tab.title, subagent: tab.subagent };
+          return next;
+        }
+      }
+      return prev;
     });
     setActiveTab(tab.key);
   }
@@ -500,7 +672,7 @@ export function RightInspector({
 
     ensureTab({ key, kind: "file", title, path });
 
-    // 已有草稿或媒体预览则不重新读盘
+    // 已有草稿或媒体预览则不重新读
     if (drafts[key] != null || saved[key] != null || mediaByKey[key] != null) return;
 
     await loadFileBuffers(workspaceId, path, {
@@ -535,7 +707,7 @@ export function RightInspector({
     });
   }
 
-  /** 将内容写入磁盘；未命名缓冲会迁到 `file:` 标签。 */
+  /** 将内容写入磁盘；未命名缓冲会迁到 `file:` 标签。*/
   async function writeFileAt(key: string, path: string) {
     if (!workspaceId) return;
     const content = drafts[key] ?? "";
@@ -579,7 +751,7 @@ export function RightInspector({
     if (!workspaceId || currentTab?.kind !== "file") return;
     const key = currentTab.key;
     if (currentTab.path && readOnlyByPath[currentTab.path]) return;
-    // 未命名：先弹路径再落盘（Electron 无 window.prompt）
+ // 未命名：先弹路径再落盘（Electron ?window.prompt：
     if (!currentTab.path || isDraftTabKey(key)) {
       setSaveAs({ key, draft: "untitled.ts" });
       return;
@@ -592,11 +764,13 @@ export function RightInspector({
     const path = normalizeRelPath(saveAs.draft);
     if (!path) return;
     const key = saveAs.key;
+    const closeAfter = Boolean(saveAs.closeAfter);
     setSaveAs(null);
     await writeFileAt(key, path);
+    if (closeAfter) forceCloseTab(fileTabKey(path));
   }
 
-  /** 新建：直接打开未命名编辑器，保存时再填路径。 */
+  /** 新建：直接打开未命名编辑器，保存时再填路径。*/
   function onNewFile() {
     draftSeq.current += 1;
     const n = draftSeq.current;
@@ -609,24 +783,58 @@ export function RightInspector({
     setUnsaved((d) => ({ ...d, [key]: true }));
   }
 
-  function closeTab(key: string) {
-    const tab = tabs.find((t) => t.key === key);
-    if (tab?.kind === "file" && unsaved[key]) {
-      const ok = window.confirm(t("inspector.files.discardConfirm"));
-      if (!ok) return;
-    }
+  /** 关闭标签（不经未保存确认）。*/
+  function forceCloseTab(key: string) {
     setTabs((prev) => {
-      const next = prev.filter((t) => t.key !== key);
-      if (activeTab === key) {
-        const idx = prev.findIndex((t) => t.key === key);
-        const fallback = next[Math.max(0, idx - 1)] ?? next[0];
-        setActiveTab(fallback?.key ?? "");
+      const closing = prev.find((t) => t.key === key);
+      if (closing?.kind === "subagent") {
+        forgetSubagentStep(closing.taskId);
       }
+      const next = prev.filter((t) => t.key !== key);
+      const idx = prev.findIndex((t) => t.key === key);
+      const fallback = next[Math.max(0, idx - 1)] ?? next[0];
+ // 用函数式读最?activeTab，避?save+close 草稿?key 后闭包过?
+      setActiveTab((current) => (current === key ? (fallback?.key ?? "") : current));
       return next;
     });
     if (key.startsWith("file:") || isDraftTabKey(key)) {
       clearTabBuffers(key);
     }
+  }
+
+  function closeTab(key: string) {
+    const tab = tabs.find((t) => t.key === key);
+    if (tab?.kind === "file" && unsaved[key]) {
+      setCloseDirtyKey(key);
+      return;
+    }
+    forceCloseTab(key);
+  }
+
+  /** 未保存关闭弹窗：保存后关闭。*/
+  async function saveAndCloseDirty() {
+    if (!closeDirtyKey) return;
+    const key = closeDirtyKey;
+    const tab = tabs.find((t) => t.key === key);
+    setCloseDirtyKey(null);
+    if (!tab || tab.kind !== "file") return;
+    if (!tab.path || isDraftTabKey(key)) {
+      setSaveAs({
+        key,
+        draft: tab.path || "untitled.ts",
+        closeAfter: true,
+      });
+      return;
+    }
+    await writeFileAt(key, tab.path);
+    forceCloseTab(key);
+  }
+
+  function discardAndCloseDirty() {
+    if (!closeDirtyKey) return;
+    const key = closeDirtyKey;
+    setCloseDirtyKey(null);
+    forceCloseTab(key);
   }
 
   function onFileDraftChange(value: string) {
@@ -777,7 +985,9 @@ export function RightInspector({
               <button
                 key={tab.key}
                 type="button"
-                className={`agent-inspector__tab${tab.key === activeTab ? " is-active" : ""}`}
+                className={`agent-inspector__tab${tab.key === activeTab ? " is-active" : ""}${
+                  unsaved[tab.key] ? " is-dirty" : ""
+                }`}
                 onClick={() => setActiveTab(tab.key)}
                 onMouseDown={(e: ReactMouseEvent) => {
                   if (e.button === 1) {
@@ -785,7 +995,11 @@ export function RightInspector({
                     closeTab(tab.key);
                   }
                 }}
-                title={tab.kind === "file" ? tab.path : tab.title}
+                title={
+                  tab.kind === "file"
+                    ? `${tab.path ?? tab.title}${unsaved[tab.key] ? ` · ${t("inspector.files.dirty")}` : ""}`
+                    : tab.title
+                }
               >
                 {tab.kind === "file" ? (
                   <span className="agent-inspector__lang">{langBadge(tab.path)}</span>
@@ -801,23 +1015,31 @@ export function RightInspector({
                   <span className="agent-inspector__tab-ico">
                     <BrowserStartIcon />
                   </span>
+                ) : tab.kind === "subagent" ? (
+                  <span className="agent-inspector__tab-ico">
+                    <SubagentStartIcon />
+                  </span>
                 ) : (
                   <span className="agent-inspector__tab-ico">
                     <FileStartIcon />
                   </span>
                 )}
                 <span className="agent-inspector__tab-title">{tab.title}</span>
-                {unsaved[tab.key] ? <span className="stage-tab-dirty" aria-label="unsaved" /> : null}
-                <span
-                  className="agent-inspector__tab-close"
-                  role="button"
-                  tabIndex={-1}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(tab.key);
-                  }}
-                >
-                  ×
+                <span className="agent-inspector__tab-trail">
+                  {unsaved[tab.key] ? (
+                    <span className="stage-tab-dirty" aria-label={t("inspector.files.dirty")} />
+                  ) : null}
+                  <span
+                    className="agent-inspector__tab-close"
+                    role="button"
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(tab.key);
+                    }}
+                  >
+                    ×
+                  </span>
                 </span>
               </button>
             ))}
@@ -909,6 +1131,14 @@ export function RightInspector({
               />
             ) : null}
 
+            {currentTab?.kind === "subagent" ? (
+              <SubagentInspectorPane
+                taskId={currentTab.taskId}
+                subagent={currentTab.subagent}
+                onOpenFile={(path) => void openFile(path)}
+              />
+            ) : null}
+
             {showFileShell ? (
               <div
                 ref={filesPaneRef}
@@ -936,7 +1166,6 @@ export function RightInspector({
                           path={currentTab.path || null}
                           modelPath={currentTab.key}
                           value={drafts[currentTab.key] ?? ""}
-                          dirty={Boolean(unsaved[currentTab.key])}
                           readOnly={Boolean(
                             currentTab.path && readOnlyByPath[currentTab.path],
                           )}
@@ -1074,6 +1303,36 @@ export function RightInspector({
           </div>
         </>
       )}
+
+      <Modal
+        open={Boolean(closeDirtyKey)}
+        onClose={() => setCloseDirtyKey(null)}
+        closeOnBackdrop
+        closeOnEscape
+        aria-labelledby="inspector-discard-title"
+      >
+        <h2 id="inspector-discard-title" className="components-modal-title">
+          {t("inspector.files.discardConfirm")}
+        </h2>
+        <p className="components-modal-body">
+          {t("inspector.files.discardConfirmBody", {
+            name:
+              tabs.find((tab) => tab.key === closeDirtyKey)?.title ||
+              t("inspector.files.untitled"),
+          })}
+        </p>
+        <div className="components-row components-row--end">
+          <Button variant="ghost" onClick={() => setCloseDirtyKey(null)}>
+            {t("inspector.files.discardCancel")}
+          </Button>
+          <Button variant="danger" onClick={discardAndCloseDirty}>
+            {t("inspector.files.discardDontSave")}
+          </Button>
+          <Button variant="primary" onClick={() => void saveAndCloseDirty()}>
+            {t("inspector.files.save")}
+          </Button>
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(saveAs)}

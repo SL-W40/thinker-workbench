@@ -21,6 +21,7 @@ import type { CompiledGraph, GraphState } from "../graph/types";
 import { agentLog } from "../log/setup";
 import { formatErrorMessage } from "../model/retry";
 import { ThreadStore } from "../session/ThreadStore";
+import { agentEndSpan, agentStartSpan, configureAgentTrace } from "../trace/emit";
 import { setWorkspaceRoot } from "../workspace";
 import { EventBus } from "./EventBus";
 import { RunController } from "./RunController";
@@ -114,6 +115,12 @@ export class AgentRuntime {
 
     const controller = new RunController(runId, threadId);
     this.active.set(runId, controller);
+    const runSpanId = agentStartSpan({
+      name: "run",
+      kind: "graph",
+      summary: "resume",
+      input: { fromNode: checkpoint.nodeId, startNode: startNodeId },
+    });
 
     try {
       const text = await withLogContextAsync({ source: "agent", traceId, threadId, runId }, () =>
@@ -139,6 +146,10 @@ export class AgentRuntime {
       );
 
       await this.checkpointer.clear?.(threadId);
+      agentEndSpan(runSpanId, {
+        status: "ok",
+        output: { replyPreview: text.slice(0, 200) },
+      });
       this.emit({
         type: "done",
         threadId,
@@ -149,6 +160,10 @@ export class AgentRuntime {
     } catch (err) {
       const error = formatErrorMessage(err);
       log.error("failed", { ...ids, meta: { error } });
+      agentEndSpan(runSpanId, {
+        status: /cancel/i.test(error) ? "cancelled" : "error",
+        error,
+      });
       // 取消保留 checkpoint，供 UI「继续」/ Resume；其它失败仍清掉
       if (!/cancel/i.test(error)) {
         await this.checkpointer.clear?.(threadId);
@@ -221,6 +236,13 @@ export class AgentRuntime {
     const controller = new RunController(runId, threadId);
     this.active.set(runId, controller);
 
+    const runSpanId = agentStartSpan({
+      name: "run",
+      kind: "graph",
+      summary: message.slice(0, 80) || "run",
+      input: { message, historyTurns: command.history?.length ?? 0 },
+    });
+
     try {
       const text = await withLogContextAsync({ source: "agent", traceId, threadId, runId }, () =>
         withRunEmitter(
@@ -249,6 +271,10 @@ export class AgentRuntime {
       );
 
       await this.checkpointer.clear?.(threadId);
+      agentEndSpan(runSpanId, {
+        status: "ok",
+        output: { replyPreview: text.slice(0, 200) },
+      });
       this.emit({
         type: "done",
         threadId,
@@ -259,6 +285,10 @@ export class AgentRuntime {
     } catch (err) {
       const error = formatErrorMessage(err);
       log.error("failed", { ...ids, meta: { error } });
+      agentEndSpan(runSpanId, {
+        status: /cancel/i.test(error) ? "cancelled" : "error",
+        error,
+      });
       // 取消保留 checkpoint，供 UI「继续」/ Resume；其它失败仍清掉
       if (!/cancel/i.test(error)) {
         await this.checkpointer.clear?.(threadId);
@@ -300,30 +330,51 @@ export class AgentRuntime {
         throw new Error(`Unknown node: ${nodeId}`);
       }
       const current = nodeId;
+      const nodeSpanId = agentStartSpan({
+        name: `graph.${current}`,
+        kind: "graph",
+        summary: `graph.${current}`,
+        attrs: { step: state.step },
+      });
+      configureAgentTrace({ nodeSpanId });
       log.info("node enter", { ...ids, spanId: current, meta: { step: state.step } });
-      const patch = await node(state, controller.signal);
-      state = { ...state, ...patch };
+      try {
+        const patch = await node(state, controller.signal);
+        state = { ...state, ...patch };
 
-      await this.checkpointer.save({
-        threadId,
-        nodeId: current,
-        state,
-        updatedAt: Date.now(),
-      });
+        await this.checkpointer.save({
+          threadId,
+          nodeId: current,
+          state,
+          updatedAt: Date.now(),
+        });
 
-      const edge = this.graph.edges[current] as
-        | string
-        | ((s: GraphState) => string | null)
-        | undefined;
-      if (edge === undefined) {
-        throw new Error(`Missing edge for node: ${current}`);
+        const edge = this.graph.edges[current] as
+          | string
+          | ((s: GraphState) => string | null)
+          | undefined;
+        if (edge === undefined) {
+          throw new Error(`Missing edge for node: ${current}`);
+        }
+        nodeId = typeof edge === "string" ? edge : edge(state);
+        log.info("node exit", {
+          ...ids,
+          spanId: current,
+          meta: { next: nodeId, pendingTools: state.pendingToolCalls.length },
+        });
+        agentEndSpan(nodeSpanId, {
+          status: "ok",
+          attrs: { next: nodeId, pendingTools: state.pendingToolCalls.length },
+        });
+      } catch (err) {
+        agentEndSpan(nodeSpanId, {
+          status: /cancel/i.test(formatErrorMessage(err)) ? "cancelled" : "error",
+          error: formatErrorMessage(err),
+        });
+        throw err;
+      } finally {
+        configureAgentTrace({ nodeSpanId: undefined });
       }
-      nodeId = typeof edge === "string" ? edge : edge(state);
-      log.info("node exit", {
-        ...ids,
-        spanId: current,
-        meta: { next: nodeId, pendingTools: state.pendingToolCalls.length },
-      });
     }
 
     const reply = state.reply || state.message;

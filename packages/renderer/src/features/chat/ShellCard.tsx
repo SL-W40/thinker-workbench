@@ -1,15 +1,13 @@
 /**
- * shell / shell_await 时间线卡片：命令、轻量状态、去 ANSI 输出、HITL、「打开终端」。
- * 输出默认 4 行，超出底部渐隐 + 居中下箭头展开。
- */
+ * shell / shell_await 时间线卡片：命令、轻量状态、去 ANSI 输出、HITL、「打开终端」。 * 输出默认 4 行，超出底部渐隐 + 居中下箭头展开。 */
 import { Badge, Button } from "@thinker-workbench/design/react";
 import type { ChatTimelineToolStep } from "@thinker-workbench/shared";
 import { useLayoutEffect, useRef, useState } from "react";
 import { respondHitl } from "../../bridge/thinker";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import { stripAnsi } from "./stripAnsi";
 
-/** 折叠时可见行数。 */
+/** 折叠时可见行数*/
 const COLLAPSED_LINES = 4;
 
 type Props = {
@@ -44,7 +42,7 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
   const backgrounded = Boolean(step.backgrounded);
   const command = step.command?.trim() || step.summary?.trim() || step.name;
   const displayOut = stripAnsi(step.liveOutput ?? "").trim();
-  // 仅挂起会话保留「打开终端」；一次跑完的会话已自动关闭
+  // 仅挂起会话保留「打开终端」；一次跑完的会话已自动关
   const canOpenTerminal = Boolean(onOpenTerminal && backgrounded && step.sessionId);
 
   const hitlBody = hitl?.body?.trim() ?? "";

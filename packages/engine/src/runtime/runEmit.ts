@@ -7,7 +7,13 @@
  *
  * 用模块级 current 做「当前 run」上下文，避免每个节点都显式传 emit。
  */
-import type { AgentEvent } from "@thinker-workbench/shared";
+import type {
+  AgentEvent,
+  AgentEventBase,
+  AgentModelHealthEvent,
+  AgentModelSwitchEvent,
+  AgentSubagentEvent,
+} from "@thinker-workbench/shared";
 
 /** 节点可发的事件（id / 时间戳由 runtime 填充）。 */
 export type RunEmitEvent =
@@ -38,7 +44,10 @@ export type RunEmitEvent =
         cacheWriteTokens: number;
         reasoningTokens: number;
       };
-    };
+    }
+  | Omit<AgentModelSwitchEvent, keyof AgentEventBase>
+  | Omit<AgentModelHealthEvent, keyof AgentEventBase>
+  | Omit<AgentSubagentEvent, keyof AgentEventBase>;
 
 export type RunEmitter = (event: RunEmitEvent) => void;
 

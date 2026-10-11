@@ -21,3 +21,24 @@ for (const name of [
   if (!fs.existsSync(from)) continue;
   fs.copyFileSync(from, path.join(destDir, name));
 }
+
+/** 递归复制内置 skills 到 artifacts/skills，供主进程打包/开发旁路读取。 */
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+    if (ent.name.startsWith(".")) continue;
+    const from = path.join(src, ent.name);
+    const to = path.join(dest, ent.name);
+    if (ent.isDirectory()) copyDir(from, to);
+    else if (ent.isFile()) fs.copyFileSync(from, to);
+  }
+}
+
+/** 内置目录：skills + Customize 默认资源。 */
+for (const folder of ["skills", "rules", "agents", "mcps"]) {
+  const from = path.join(srcDir, folder);
+  const to = path.join(destDir, folder);
+  if (!fs.existsSync(from)) continue;
+  fs.rmSync(to, { recursive: true, force: true });
+  copyDir(from, to);
+}

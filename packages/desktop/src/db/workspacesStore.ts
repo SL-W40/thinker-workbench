@@ -6,11 +6,16 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   type ChatMessage,
+  type ChatMode,
   type ChatSessionRecord,
   createSessionId,
   createThreadId,
   createWorkspaceId,
+  isChatMode,
+  type ModelSelection,
   type MoveSessionInput,
+  normalizeChatMode,
+  normalizeModelSelection,
   type ReorderInput,
   type SessionRunStatus,
   type ThreadMeta,
@@ -65,6 +70,10 @@ type MsgRow = {
 const KV_ACTIVE = "activeSessionId";
 const KV_LAST_WORKSPACE = "lastWorkspaceId";
 const KV_COLLAPSED = "collapsedWorkspaceIds";
+/** 会话级模型选用覆盖，后缀为 sessionId。 */
+const KV_SESSION_MODEL_PREFIX = "sessionModelSelection:";
+/** 会话级 ChatMode，后缀为 sessionId。 */
+const KV_SESSION_CHAT_MODE_PREFIX = "sessionChatMode:";
 
 function catalog(): Database.Database {
   return openCatalogDb();
@@ -727,6 +736,8 @@ export function removeSession(sessionId: string): void {
   chatDb(session.workspaceId).prepare("DELETE FROM chat_sessions WHERE id = ?").run(sessionId);
   unindexSession(sessionId);
   if (getKv(KV_ACTIVE) === sessionId) setKv(KV_ACTIVE, "");
+  clearSessionModelSelection(sessionId);
+  clearSessionChatMode(sessionId);
 }
 
 function saveMessagesToDb(workspaceId: string, sessionId: string, messages: ChatMessage[]): void {
@@ -899,6 +910,63 @@ export function getCollapsedWorkspaceIds(): string[] {
 
 export function setCollapsedWorkspaceIds(ids: string[]): void {
   setKv(KV_COLLAPSED, JSON.stringify(ids));
+}
+
+/** 读取会话级模型选用覆盖；无覆盖时返回 null（继承全局）。 */
+export function getSessionModelSelection(sessionId: string): ModelSelection | null {
+  const id = sessionId?.trim();
+  if (!id) return null;
+  const raw = getKv(`${KV_SESSION_MODEL_PREFIX}${id}`);
+  if (!raw) return null;
+  try {
+    return normalizeModelSelection(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+/** 写入会话级模型选用覆盖。 */
+export function setSessionModelSelection(sessionId: string, selection: ModelSelection): void {
+  const id = sessionId?.trim();
+  if (!id) throw new Error("Session id required.");
+  setKv(`${KV_SESSION_MODEL_PREFIX}${id}`, JSON.stringify(normalizeModelSelection(selection)));
+}
+
+/** 清除会话级模型选用覆盖。 */
+export function clearSessionModelSelection(sessionId: string): void {
+  const id = sessionId?.trim();
+  if (!id) return;
+  catalog().prepare("DELETE FROM app_kv WHERE key = ?").run(`${KV_SESSION_MODEL_PREFIX}${id}`);
+}
+
+/** 读取会话级 ChatMode（无则 null）。 */
+export function getSessionChatMode(sessionId: string): ChatMode | null {
+  const id = sessionId?.trim();
+  if (!id) return null;
+  const raw = getKv(`${KV_SESSION_CHAT_MODE_PREFIX}${id}`);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return isChatMode(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入会话级 ChatMode。 */
+export function setSessionChatMode(sessionId: string, chatMode: ChatMode): ChatMode {
+  const id = sessionId?.trim();
+  if (!id) throw new Error("Session id required.");
+  const next = normalizeChatMode(chatMode);
+  setKv(`${KV_SESSION_CHAT_MODE_PREFIX}${id}`, JSON.stringify(next));
+  return next;
+}
+
+/** 清除会话级 ChatMode。 */
+export function clearSessionChatMode(sessionId: string): void {
+  const id = sessionId?.trim();
+  if (!id) return;
+  catalog().prepare("DELETE FROM app_kv WHERE key = ?").run(`${KV_SESSION_CHAT_MODE_PREFIX}${id}`);
 }
 
 /** 活动会话所属工作空间的 root；无活动会话或不存在时返回 null（不再回落首个工作空间）。 */

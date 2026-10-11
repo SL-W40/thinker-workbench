@@ -35,3 +35,8 @@ export function createWorkspaceId(): string {
 export function createSessionId(): string {
   return createId("session");
 }
+
+/** 生成 Trace span id（前缀 `span`）。 */
+export function createSpanId(): string {
+  return createId("span");
+}

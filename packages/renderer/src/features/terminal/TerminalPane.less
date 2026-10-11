@@ -92,7 +92,19 @@
   background-color: transparent !important;
 }
 
-/* xterm 6 自绘条：圆角对齐全局胶囊；颜色由 ITheme.scrollbarSlider* 注入 */
+/* xterm 6 自绘条：圆角对齐全局胶囊；颜色由 ITheme.scrollbarSlider* 注入；
+ * 相对视口边缘内缩，与全局 --scrollbar-gap 一致。 */
+.terminal-pane__xterm .xterm-scrollable-element > .scrollbar {
+  right: var(--scrollbar-gap, 4px) !important;
+  width: var(--scrollbar-size, 7px) !important;
+}
+
+.terminal-pane__xterm .xterm-scrollable-element > .scrollbar.horizontal {
+  right: auto !important;
+  bottom: var(--scrollbar-gap, 4px) !important;
+  height: var(--scrollbar-size, 7px) !important;
+}
+
 .terminal-pane__xterm .xterm-scrollable-element > .scrollbar > .slider {
   border-radius: 999px !important;
 }

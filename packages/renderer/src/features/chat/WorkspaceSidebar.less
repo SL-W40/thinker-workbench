@@ -217,10 +217,16 @@
 
 /* 状态槽固定 14px，避免 running↔完成 时标题横向跳动 */
 .ws-session__dot {
-  --ws-dot-g: 3.5px;
-  --ws-dot-g2: 7px;
-  --ws-dot-g3: 10.5px;
-  --ws-dot-r: 0.7px;
+  /*
+   * 圆形彗星：8 点外环 + 中心一点。
+   * --ws-a 环半径，--ws-q ≈ a/√2（对角），--ws-r 点半径。
+   */
+  --ws-a: 4.2px;
+  --ws-q: 2.97px;
+  --ws-r: 0.55px;
+  --ws-soft: color-mix(in srgb, currentColor 55%, transparent);
+  --ws-faint: color-mix(in srgb, currentColor 18%, transparent);
+  --ws-core: color-mix(in srgb, currentColor 32%, transparent);
   position: relative;
   width: 14px;
   height: 14px;
@@ -246,8 +252,8 @@
   }
 
   /*
-   * 进行中：子 agent 同款 3×3 点阵（css-loaders l26）。
-   * 仅画高亮点；间距略疏、点略小，减轻拥挤。
+   * 进行中：整圈淡底常在；亮头 + 次亮尾阶跃绕圈；
+   * 中心一点更弱，作内层呼吸感（不另开追逐）。
    */
   &.is-running {
     color: var(--tw-accent-strong, #3d6b4f);
@@ -266,101 +272,124 @@
     height: 1px;
     margin: auto;
     border-radius: 50%;
-    background: transparent;
-    box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g2) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+    /* 中心弱点 */
+    background: var(--ws-core);
     color: inherit;
-    transform: translateX(calc(-1 * var(--ws-dot-g2)));
-    animation: ws-session-matrix 2s infinite linear;
+    /*
+     * 阴影顺序固定为环上 8 点（上起顺时针），
+     * 每帧只改哪几颗用 head / soft / faint。
+     */
+    box-shadow:
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) currentColor,
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-soft),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
+    animation: ws-session-orbit 0.96s infinite steps(1, end);
     pointer-events: none;
   }
 }
 
-@keyframes ws-session-matrix {
+/* 亮头顺时针挪一格；尾随一格略弱；其余保持淡底 */
+@keyframes ws-session-orbit {
+  0%,
+  100% {
+    box-shadow:
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) currentColor,
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-soft),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
+  }
+
   12.5% {
     box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g2) 0 0 0 transparent,
-      var(--ws-dot-g3) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) currentColor,
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-soft),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
   }
 
   25% {
     box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g) 0 0 0 transparent,
-      var(--ws-dot-g2) 0 0 0 transparent,
-      var(--ws-dot-g3) 0 0 0 transparent,
-      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-a) 0 0 var(--ws-r) currentColor,
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-soft),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
+  }
+
+  37.5% {
+    box-shadow:
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) currentColor,
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-soft),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
   }
 
   50% {
     box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g) 0 0 0 transparent,
-      var(--ws-dot-g2) 0 0 0 transparent,
-      var(--ws-dot-g3) 0 0 0 transparent,
-      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor;
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) currentColor,
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-soft),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
   }
 
   62.5% {
     box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g2) 0 0 0 transparent,
-      var(--ws-dot-g3) 0 0 0 transparent,
-      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor;
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) currentColor,
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-soft),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint);
   }
 
   75% {
     box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g) 0 0 0 transparent,
-      var(--ws-dot-g2) 0 0 0 transparent,
-      var(--ws-dot-g3) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor;
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) currentColor,
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-soft);
   }
 
   87.5% {
     box-shadow:
-      var(--ws-dot-g) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g2) calc(-1 * var(--ws-dot-g)) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) calc(-1 * var(--ws-dot-g)) 0 0 transparent,
-      var(--ws-dot-g) 0 0 0 transparent,
-      var(--ws-dot-g2) 0 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g3) 0 0 0 transparent,
-      var(--ws-dot-g) var(--ws-dot-g) 0 var(--ws-dot-r) currentColor,
-      var(--ws-dot-g2) var(--ws-dot-g) 0 0 transparent,
-      var(--ws-dot-g3) var(--ws-dot-g) 0 0 transparent;
+      0 calc(-1 * var(--ws-a)) 0 var(--ws-r) var(--ws-soft),
+      var(--ws-q) calc(-1 * var(--ws-q)) 0 var(--ws-r) var(--ws-faint),
+      var(--ws-a) 0 0 var(--ws-r) var(--ws-faint),
+      var(--ws-q) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      0 var(--ws-a) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) var(--ws-q) 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-a)) 0 0 var(--ws-r) var(--ws-faint),
+      calc(-1 * var(--ws-q)) calc(-1 * var(--ws-q)) 0 var(--ws-r) currentColor;
   }
 }
 

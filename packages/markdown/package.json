@@ -22,7 +22,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "test": "tsc -p tsconfig.json && tsx --test src/parse/syntax.test.ts"
+    "test": "pnpm -w exec vitest run packages/markdown/tests",
+    "test:types": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "highlight.js": "^11.11.1",

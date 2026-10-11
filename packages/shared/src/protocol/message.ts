@@ -30,6 +30,9 @@ export type ChatTimelineStatusStep = {
   durationMs?: number;
 };
 
+/** 探索工具结果路径类型（与 list_dir 等 UI 标签对齐）。 */
+export type ChatTimelineResultPathKind = "dir" | "file" | "link";
+
 /** 时间线：工具调用行（可含文件 diff）。 */
 export type ChatTimelineToolStep = {
   id: string;
@@ -41,6 +44,10 @@ export type ChatTimelineToolStep = {
   phase: "start" | "end";
   ok?: boolean;
   diff?: string;
+  /** 工具返回的路径列表（如 search / list；供探索行展开）。 */
+  resultPaths?: string[];
+  /** 与 resultPaths 对齐的路径类型标签。 */
+  resultPathKinds?: ChatTimelineResultPathKind[];
   /**
    * `delete_file` 成功时缓存的正文，供时间线「恢复」写回。
    * 恢复后或超过设置 TTL 后清空；目录 / 过大文件可能无此字段。
@@ -100,12 +107,46 @@ export type ChatTimelineErrorStep = {
   message: string;
 };
 
+/**
+ * 时间线：Auto 故障切换说明（info 行，非硬错误）。
+ */
+export type ChatTimelineModelSwitchStep = {
+  id: string;
+  kind: "model_switch";
+  fromModelId?: string;
+  fromLabel: string;
+  toModelId: string;
+  toLabel: string;
+  reason: "auth" | "not_found" | "rate_limit" | "network" | "server" | "other";
+  /** 简短错误摘要。 */
+  detail?: string;
+};
+
+/** 子代理 Task 卡片时间线。 */
+export type ChatTimelineSubagentStep = {
+  id: string;
+  kind: "subagent";
+  taskId: string;
+  subagent: string;
+  title?: string;
+  phase: "started" | "progress" | "finished" | "failed" | "cancelled";
+  background?: boolean;
+  summary?: string;
+  liveLine?: string;
+  error?: string;
+  entries?: Array<{ ts: number; kind: string; summary: string }>;
+  childTimeline?: ChatTimelineStep[];
+  active: boolean;
+};
+
 /** 助手气泡内嵌的运行时间线条目。 */
 export type ChatTimelineStep =
   | ChatTimelineStatusStep
   | ChatTimelineToolStep
   | ChatTimelineTextStep
-  | ChatTimelineErrorStep;
+  | ChatTimelineErrorStep
+  | ChatTimelineModelSwitchStep
+  | ChatTimelineSubagentStep;
 
 /** 单条聊天消息（序列化友好，可写入会话快照）。 */
 export type ChatMessage = {

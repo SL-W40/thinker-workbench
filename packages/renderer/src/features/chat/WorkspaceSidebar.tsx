@@ -1,6 +1,5 @@
 /**
  * 左侧 Workspaces 侧栏：新建、悬停+/右键、重命名、拖拽排序、置顶、More。
- * 会话列表唯一来源：`agent:listThreads`（SQLite）。
  */
 import {
   Button,
@@ -40,13 +39,13 @@ import {
   setWorkspacePinned,
   showWorkspaceInFolder,
 } from "../../bridge/workspaces";
-import { useT } from "../../i18n/I18nProvider";
+import { useT } from "../../i18n/useI18n";
 import { formatRelativeTime } from "./formatRelativeTime";
 import "./WorkspaceSidebar.less";
 
 const MORE_LIMIT = 8;
 
-/** 从绝对路径取文件夹名（跨平台分隔符）。 */
+/** 从绝对路径取文件夹名（跨平台分隔符）*/
 function folderBasename(rootPath: string): string {
   const cleaned = rootPath.replace(/[\\/]+$/, "");
   const parts = cleaned.split(/[/\\]/);
@@ -90,7 +89,7 @@ export function WorkspaceSidebar({
   const [expandedMore, setExpandedMore] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
-  /** 会话重命名弹窗 */
+ /** 会话重命名弹窗*/
   const [renameEdit, setRenameEdit] = useState<{ id: string; draft: string } | null>(null);
   /** 工作空间别名弹窗（不改磁盘目录） */
   const [aliasEdit, setAliasEdit] = useState<{ id: string; draft: string } | null>(null);
@@ -121,7 +120,7 @@ export function WorkspaceSidebar({
       u1();
       u2();
     };
-    // 挂载时订阅变更；refresh 闭包读最新 setState
+ // 挂载时订阅变更；refresh 闭包读取最新 setState
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -139,7 +138,13 @@ export function WorkspaceSidebar({
   const grouped = useMemo(() => {
     return workspaces.map((w) => ({
       workspace: w,
-      sessions: threads.filter((th) => th.workspaceId === w.id),
+ // 与 listThreads 一致：置顶优先，再按末条消息时间降序
+      sessions: threads
+        .filter((th) => th.workspaceId === w.id)
+        .sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          return b.updatedAt - a.updatedAt;
+        }),
     }));
   }, [workspaces, threads]);
 
@@ -204,10 +209,7 @@ export function WorkspaceSidebar({
   }
 
   function selectSession(sessionId: string, threadId: string) {
-    if (busy && sessionId !== activeSessionId) {
-      setToast(t("chat.busySwitchBlocked"));
-      return;
-    }
+    // 忙碌时也允许点选：会话 hook 内会静默中断当前跑并重载，避免空态+转圈锁死
     onSelectSession(sessionId, threadId);
   }
 
@@ -385,7 +387,7 @@ export function WorkspaceSidebar({
                     </span>
                   </span>
                   <span className="ws-workspace__name">{w.name}</span>
-                  {w.pinned ? <span className="ws-workspace__pin">▴</span> : null}
+                  {w.pinned ? <span className="ws-workspace__pin" aria-hidden>📌</span> : null}
                   <IconButton
                     aria-label={t("workspaces.newSession")}
                     size="sm"
@@ -447,13 +449,14 @@ export function WorkspaceSidebar({
                             className={`ws-session__dot${
                               th.runStatus === "cancelled" || th.runStatus === "crashed"
                                 ? " is-interrupted"
-                                : th.runStatus === "running"
+                                : th.runStatus === "running" ||
+                                    (busy && th.sessionId === activeSessionId)
                                   ? " is-running"
                                   : ""
                             }`}
                           />
                           <span className="ws-session__title">{th.title}</span>
-                          {th.pinned ? <span className="ws-session__pin">▴</span> : null}
+                          {th.pinned ? <span className="ws-session__pin" aria-hidden>📌</span> : null}
                           <span className="ws-session__meta">
                             {formatRelativeTime(th.updatedAt, now)}
                           </span>
@@ -607,7 +610,7 @@ export function WorkspaceSidebar({
                 if (c.kind === "delete-workspace") await removeWorkspace(c.id);
                 else if (c.kind === "clear-workspace") await clearWorkspace(c.id);
                 else await removeSession(c.id);
-                // 主区由 useChatSession 监听 onThreadsChanged 做 reconcile
+ // 主区域 useChatSession 监听 onThreadsChanged 做 reconcile
                 await refresh();
                 onSessionsMutated?.();
               })();

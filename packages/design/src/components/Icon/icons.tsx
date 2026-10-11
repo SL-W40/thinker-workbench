@@ -258,3 +258,126 @@ export const InfoIcon = createIcon(
   </>,
   VB,
 );
+
+// —— ChatMode ——
+
+/** Agent：自主执行（星芒）。 */
+export const AgentModeIcon = createIcon(
+  "AgentModeIcon",
+  <path d="M8 2.75 9.1 6.1 12.5 6.4 10 8.85l.7 3.4L8 10.55 5.3 12.25l.7-3.4L3.5 6.4l3.4-.3L8 2.75z" />,
+  VB,
+);
+
+/** Plan：清单方案。 */
+export const PlanModeIcon = createIcon(
+  "PlanModeIcon",
+  <>
+    <rect x="3.25" y="2.75" width="9.5" height="10.5" rx="1.35" />
+    <path d="M5.5 6h5M5.5 8.25h5M5.5 10.5h3.25" />
+  </>,
+  VB,
+);
+
+/** Debug：缺陷定位。 */
+export const DebugModeIcon = createIcon(
+  "DebugModeIcon",
+  <>
+    <path d="M5.25 6.5c0-1.66 1.23-3 2.75-3s2.75 1.34 2.75 3v4.25c0 1.1-.9 2-2 2h-1.5c-1.1 0-2-.9-2-2V6.5z" />
+    <path d="M5.25 7.5H3.5M10.75 7.5H12.5M5.25 10H3.75M10.75 10H12.25M8 3.5V2.5M6.1 4.35 5.1 3.35M9.9 4.35l1-1" />
+  </>,
+  VB,
+);
+
+/** Ask：只读问答。 */
+export const AskModeIcon = createIcon(
+  "AskModeIcon",
+  <>
+    <path d="M3.5 4.25A1.75 1.75 0 0 1 5.25 2.5h5.5A1.75 1.75 0 0 1 12.5 4.25v4A1.75 1.75 0 0 1 10.75 10H8.1L5.6 12.1V10H5.25A1.75 1.75 0 0 1 3.5 8.25v-4z" />
+    <path d="M6.35 5.35c.2-.55.7-.9 1.4-.9.85 0 1.4.5 1.4 1.15 0 .7-.55 1.05-1.1 1.35-.35.2-.55.4-.55.75V7.7M7.75 9.15h.01" />
+  </>,
+  VB,
+);
+
+/** Multitask：并行多线。 */
+export const MultitaskModeIcon = createIcon(
+  "MultitaskModeIcon",
+  <>
+    <path d="M3.25 4.5h4.5M3.25 8h4.5M3.25 11.5h4.5" />
+    <path d="M9.25 4.5h3.5M11 3l1.75 1.5L11 6M9.25 11.5h3.5M11 10l1.75 1.5L11 13" />
+  </>,
+  VB,
+);
+
+// —— 设置分区 ——
+
+/** 外观 / 主题色板。 */
+export const PaletteIcon = createIcon(
+  "PaletteIcon",
+  <>
+    <path d="M8 2.75a5.25 5.25 0 1 0 0 10.5c.85 0 1.35-.65 1.35-1.35 0-.4-.18-.75-.48-1-.28-.22-.42-.55-.42-.95a1.55 1.55 0 0 1 1.55-1.55h.35A3.9 3.9 0 0 0 8 2.75z" />
+    <circle cx="6" cy="6.1" r="0.85" />
+    <circle cx="8.35" cy="5.15" r="0.85" />
+    <circle cx="5.35" cy="8.35" r="0.85" />
+  </>,
+  VB,
+);
+
+/** 通知铃铛。 */
+export const BellIcon = createIcon(
+  "BellIcon",
+  <>
+    <path d="M5.1 7.1a2.9 2.9 0 0 1 5.8 0c0 2.35 1.05 3.15 1.05 3.15H4.05S5.1 9.45 5.1 7.1" />
+    <path d="M7.05 13.1a1.15 1.15 0 0 0 1.9 0" />
+    <path d="M8 3.1v1.05" />
+  </>,
+  VB,
+);
+
+/** 权限 / 盾牌。 */
+export const ShieldIcon = createIcon(
+  "ShieldIcon",
+  <path d="M8 2.75 12.5 4.6v3.45c0 2.7-1.9 4.65-4.5 5.55-2.6-.9-4.5-2.85-4.5-5.55V4.6L8 2.75z" />,
+  VB,
+);
+
+/** 浏览器 / 地球。 */
+export const GlobeIcon = createIcon(
+  "GlobeIcon",
+  <>
+    <circle cx="8" cy="8" r="5.25" />
+    <path d="M2.75 8h10.5" />
+    <path d="M8 2.75c1.85 1.85 2.75 3.7 2.75 5.25S9.85 11.4 8 13.25M8 2.75C6.15 4.6 5.25 6.45 5.25 8S6.15 11.4 8 13.25" />
+  </>,
+  VB,
+);
+
+/** 快捷键 / 键盘。 */
+export const KeyboardIcon = createIcon(
+  "KeyboardIcon",
+  <>
+    <rect x="2.5" y="4.25" width="11" height="7.5" rx="1.35" />
+    <path d="M4.5 6.6h1.1M7.1 6.6h1.8M10.4 6.6h1.1M5.1 9.15h5.8" />
+  </>,
+  VB,
+);
+
+/** 模型 / 等距立方体。 */
+export const CubeIcon = createIcon(
+  "CubeIcon",
+  <>
+    <path d="M8 2.75 13 5.5v5L8 13.25 3 10.5v-5L8 2.75z" />
+    <path d="M8 2.75v5.25M3 5.5l5 2.5 5-2.5M8 8v5.25" />
+  </>,
+  VB,
+);
+
+/** 删除 / 垃圾桶。 */
+export const TrashIcon = createIcon(
+  "TrashIcon",
+  <>
+    <path d="M3.5 4.75h9" />
+    <path d="M6 4.75V3.6A.85.85 0 0 1 6.85 2.75h2.3A.85.85 0 0 1 10 3.6v1.15" />
+    <path d="M5.25 4.75 5.7 12.4A1.1 1.1 0 0 0 6.8 13.4h2.4a1.1 1.1 0 0 0 1.1-1L10.75 4.75" />
+  </>,
+  VB,
+);

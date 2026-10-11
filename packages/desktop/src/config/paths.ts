@@ -53,6 +53,17 @@ export function getCatalogDbPath(): string {
   return path.join(getDataDir(), "catalog.db");
 }
 
+/** 会话 Trace 根目录（trace.db + sessions jsonl）。 */
+export function getTraceDir(): string {
+  return path.join(getDataDir(), "trace");
+}
+
+/** 打包内置 skills 资源目录；不存在时返回 null。 */
+export function getBundledSkillsDir(): string | null {
+  const dir = path.join(__dirname, "..", "resources", "skills");
+  return fs.existsSync(dir) ? dir : null;
+}
+
 /**
  * 首次空目录时默认工作空间根：`~/.thinker/workspace`（固定在引导根下）。
  * 可删除；删光后不会自动再创建，除非换到空的 dataDir。

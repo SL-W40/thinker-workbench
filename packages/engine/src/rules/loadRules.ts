@@ -4,7 +4,6 @@
  * 路径（后者同名文件按遍历顺序追加，不覆盖）：
  * 1. `<dataDir>/rules/`
  * 2. `<workspaceRoot>/.thinker/rules/`
- * 3. `<workspaceRoot>/.cursor/rules/`（兼容 Cursor 项目）
  * 递归读取 `.md` / `.mdc` / `.txt`，按相对路径排序拼接。
  */
 import fs from "node:fs";
@@ -77,8 +76,6 @@ export function loadRules(
   if (workspaceRoot?.trim()) {
     const ws = workspaceRoot.trim();
     roots.push({ label: "thinker", root: path.join(ws, ".thinker", "rules") });
-    // 与 loadSkills 一致：兼容 Cursor 项目规则目录
-    roots.push({ label: "cursor", root: path.join(ws, ".cursor", "rules") });
   }
 
   for (const { label, root } of roots) {

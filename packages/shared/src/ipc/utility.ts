@@ -11,7 +11,11 @@ import type { HitlRequest, HitlResponse } from "./hitl";
 import type { AiLocale } from "./locale";
 import type { LogRecord } from "./log";
 import type { McpServerConfig, McpServerRuntimeStatus } from "./mcp";
-import type { ModelSettings } from "./settings";
+import type { ChatMode } from "./chatMode";
+import type { HttpCompatibilityMode } from "./general";
+import type { SubagentDefinition } from "./agents";
+import type { ModelCatalog, ModelSelection, ModelSettings } from "./settings";
+import type { TraceSpanMessage } from "./trace";
 import type { ShellProfile } from "./terminal";
 
 /** 主进程 → 子进程：握手，下发检查点目录与初始模型 / 语言。 */
@@ -24,7 +28,11 @@ export type UtilityHello = {
   logTruncateLongContent?: boolean;
   /** 是否产出 agent 日志。 */
   loggingEnabled?: boolean;
-  /** 初始模型凭据（完整，仅主进程 / utility）。 */
+  /** 完整模型目录（含明文 key）。 */
+  catalog?: ModelCatalog;
+  /** 本轮生效的选用（会话覆盖或全局）。 */
+  selection?: ModelSelection;
+  /** @deprecated 旧单模型；无 catalog 时回退。 */
   model?: ModelSettings;
   /** AI 回复偏好语言。 */
   aiLocale?: AiLocale;
@@ -40,6 +48,12 @@ export type UtilityHello = {
   shellApprovalMode?: ShellApprovalMode;
   /** 免审命令白名单。 */
   shellAllowlist?: string[];
+  /** 禁止执行的命令黑名单。 */
+  shellBlocklist?: string[];
+  /** 模型 HTTP 兼容模式。 */
+  httpCompatibilityMode?: HttpCompatibilityMode;
+  /** 是否采集 Trace。 */
+  traceEnabled?: boolean;
   /** 解析后的当前 shell（供 environment_context）。 */
   shell?: ShellProfile;
   /** 默认工作区根（无 active workspace 时回退）。 */
@@ -48,6 +62,8 @@ export type UtilityHello = {
   dataDir?: string;
   /** 当前启用的 MCP server 配置快照（engine 不扫盘）。 */
   mcpServers?: McpServerConfig[];
+  /** 可见子代理定义（Customize / Task 工具）。 */
+  subagents?: SubagentDefinition[];
 };
 
 /** 子进程 → 主进程：已就绪，可接受 run / cancel / resume。 */
@@ -66,10 +82,22 @@ export type UtilityRun = {
   threadId: string;
   /** 端到端追踪 id（与 command.traceId 一致，便于子进程早读）。 */
   traceId: string;
+  /** 聊天会话 id（Trace 索引键）。 */
+  sessionId?: string;
+  /** 工作空间 id（Trace 会话元数据）。 */
+  workspaceId?: string;
+  /** 会话标题（Trace 列表展示）。 */
+  sessionTitle?: string;
   /** 用户消息等运行命令。 */
   command: AgentRunCommand;
-  /** 最新模型设置；本轮生效，无需重启进程。 */
+  /** 完整模型目录（含明文 key）。 */
+  catalog?: ModelCatalog;
+  /** 本轮生效的选用。 */
+  selection?: ModelSelection;
+  /** @deprecated 旧单模型；无 catalog 时回退。 */
   model?: ModelSettings;
+  /** 本轮 ChatMode。 */
+  chatMode?: ChatMode;
   /** 本轮回复偏好语言。 */
   aiLocale?: AiLocale;
   /** 本轮文件工具工作区外访问档位。 */
@@ -80,6 +108,9 @@ export type UtilityRun = {
   allowAiBrowser?: boolean;
   shellApprovalMode?: ShellApprovalMode;
   shellAllowlist?: string[];
+  shellBlocklist?: string[];
+  httpCompatibilityMode?: HttpCompatibilityMode;
+  traceEnabled?: boolean;
   shell?: ShellProfile;
   /** 本轮起是否截断日志长文本（与通用设置同步）。 */
   logTruncateLongContent?: boolean;
@@ -91,6 +122,8 @@ export type UtilityRun = {
   dataDir?: string;
   /** 本轮 MCP 配置快照（可选；省略则沿用 hello / 上次 reload）。 */
   mcpServers?: McpServerConfig[];
+  /** 本轮子代理定义快照（可选；省略则沿用 hello）。 */
+  subagents?: SubagentDefinition[];
 };
 
 /** 主进程 → 子进程：取消运行。 */
@@ -107,9 +140,20 @@ export type UtilityResume = {
   /** 与中断对应的运行 id。 */
   runId: string;
   command: AgentResumeCommand;
+  /** 聊天会话 id（Trace 索引键）。 */
+  sessionId?: string;
+  /** 工作空间 id（Trace 会话元数据）。 */
+  workspaceId?: string;
+  /** 会话标题（Trace 列表展示）。 */
+  sessionTitle?: string;
   /** 本轮工作区根。 */
   workspaceRoot?: string;
+  catalog?: ModelCatalog;
+  selection?: ModelSelection;
+  /** @deprecated 旧单模型。 */
   model?: ModelSettings;
+  /** 本轮 ChatMode。 */
+  chatMode?: ChatMode;
   aiLocale?: AiLocale;
   /** 本轮文件工具工作区外访问档位。 */
   workspaceAccess?: WorkspaceAccess;
@@ -119,6 +163,9 @@ export type UtilityResume = {
   allowAiBrowser?: boolean;
   shellApprovalMode?: ShellApprovalMode;
   shellAllowlist?: string[];
+  shellBlocklist?: string[];
+  httpCompatibilityMode?: HttpCompatibilityMode;
+  traceEnabled?: boolean;
   shell?: ShellProfile;
   /** 本轮起是否截断日志长文本（与通用设置同步）。 */
   logTruncateLongContent?: boolean;
@@ -126,6 +173,8 @@ export type UtilityResume = {
   loggingEnabled?: boolean;
   /** 本轮数据根（rules / skills）。 */
   dataDir?: string;
+  /** 本轮子代理定义快照（可选；省略则沿用 hello）。 */
+  subagents?: SubagentDefinition[];
 };
 
 /** 主进程 → 子进程：估算上下文占用（与 assembleContext 同源）。 */
@@ -135,6 +184,9 @@ export type UtilityContextUsage = {
   /** 关联请求 id，响应用同一值回传。 */
   requestId: string;
   request: ContextUsageRequest;
+  catalog?: ModelCatalog;
+  selection?: ModelSelection;
+  /** @deprecated 旧单模型。 */
   model?: ModelSettings;
   aiLocale?: AiLocale;
   workspaceAccess?: WorkspaceAccess;
@@ -318,4 +370,5 @@ export type UtilityToParent =
   | UtilityPtyRequest
   | UtilityBrowserRequest
   | UtilityHitlRequestMessage
-  | UtilityMcpStatus;
+  | UtilityMcpStatus
+  | TraceSpanMessage;

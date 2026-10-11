@@ -135,10 +135,10 @@ export function setMcpEnabled(id: string, enabled: boolean): McpServerConfig {
 }
 
 /**
- * 从 Cursor `mcp.json`（`{ mcpServers: { id: { command, args, env } } }`）导入。
+ * 从 `mcp.json`（`{ mcpServers: { id: { command, args, env } } }`）导入。
  * 冲突跳过（不覆盖）。
  */
-export function importCursorMcpJson(filePath: string): {
+export function importMcpJsonFile(filePath: string): {
   imported: string[];
   skipped: string[];
 } {

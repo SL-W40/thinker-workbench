@@ -20,7 +20,8 @@ export function isUtilityToParent(value: unknown): value is UtilityToParent {
       msg.kind === "ptyRequest" ||
       msg.kind === "browserRequest" ||
       msg.kind === "hitl" ||
-      msg.kind === "mcpStatus")
+      msg.kind === "mcpStatus" ||
+      msg.kind === "span")
   );
 }
 

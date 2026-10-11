@@ -1,0 +1,1159 @@
+.trace-pane {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) minmax(180px, 280px);
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-top: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
+
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(120px, 168px) minmax(0, 1fr) minmax(160px, 220px);
+  }
+
+  @media (max-width: 860px) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+
+  /* 空状态 / 加载：单栏居中 */
+  &--solo {
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    padding: 24px;
+  }
+}
+
+.trace-pane__sessions,
+.trace-pane__detail {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px;
+  background: color-mix(in srgb, var(--panel, #fff) 92%, transparent);
+}
+
+.trace-pane__sessions {
+  border-right: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
+}
+
+.trace-pane__detail {
+  border-left: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
+  display: flex;
+  flex-direction: column;
+}
+
+.trace-pane__main {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trace-pane__sessions-head {
+  margin-bottom: 8px;
+}
+
+.trace-pane__session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.trace-pane__session-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  &:hover,
+  &.is-active {
+    background: color-mix(in srgb, var(--accent, #6b8cae) 8%, transparent);
+  }
+
+  &.is-active {
+    border-color: color-mix(in srgb, var(--accent, #6b8cae) 40%, var(--line));
+    background: color-mix(in srgb, var(--accent, #6b8cae) 10%, transparent);
+  }
+
+  &:hover .trace-pane__session-del,
+  &:focus-within .trace-pane__session-del,
+  &.is-active .trace-pane__session-del {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.trace-pane__session {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 6px 8px 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+
+  strong {
+    font-size: 0.84rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+}
+
+.trace-pane__session-del {
+  margin: 4px 4px 0 0;
+  opacity: 0;
+  pointer-events: none;
+  color: var(--muted);
+  transition: opacity 0.14s ease, color 0.14s ease;
+
+  &:hover {
+    color: var(--danger, #9b3b2e);
+  }
+}
+
+.trace-pane__meta {
+  opacity: 0.85;
+}
+
+.trace-pane__hint {
+  margin: 16px 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+/* 主区 / 详情区加载：在可用区域内水平垂直居中 */
+.trace-pane__loading {
+  flex: 1 1 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  width: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.trace-pane__toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  min-width: 0;
+}
+
+.trace-pane__toolbar-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.trace-pane__toolbar-hint {
+  margin: 0;
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.trace-pane__tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.trace-pane__tree-group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+
+  > ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+  }
+}
+
+.trace-pane__tree-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+
+  &.is-main {
+    background: color-mix(in srgb, var(--seq-main, #8a7355) 12%, transparent);
+  }
+  &.is-task--0 {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  &.is-task--1 {
+    background: color-mix(in srgb, var(--seq-task, #5a8f7b) 14%, transparent);
+  }
+  &.is-task--2 {
+    background: color-mix(in srgb, var(--seq-par, #6b7c9c) 14%, transparent);
+  }
+
+  strong {
+    flex: 1;
+    min-width: 0;
+    font-weight: 650;
+  }
+}
+
+.trace-pane__tree-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--panel, #fff);
+  background: color-mix(in srgb, var(--accent) 75%, var(--ink));
+}
+
+.trace-pane__tree-item {
+  appearance: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+
+  &:hover,
+  &.is-active {
+    background: color-mix(in srgb, var(--accent, #6b8cae) 10%, transparent);
+  }
+}
+
+.trace-pane__kind {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.trace-pane__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+}
+
+.trace-pane__src,
+.trace-pane__status {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.trace-pane__detail-body {
+  display: grid;
+  gap: 12px;
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    word-break: break-all;
+  }
+}
+
+.trace-pane__facts {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.78rem;
+
+  div {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr;
+    gap: 8px;
+  }
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+    word-break: break-word;
+  }
+}
+
+.trace-pane__payload {
+  border: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 85%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+
+  pre {
+    margin: 0;
+    padding: 8px 10px;
+    max-height: 240px;
+    overflow: auto;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: color-mix(in srgb, var(--ink) 3%, transparent);
+  }
+}
+
+.trace-pane__payload-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.74rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
+
+  span {
+    color: var(--muted);
+  }
+}
+
+/* 时序图：泳道色 + 语义色（仍基于 token，各泳道区分明显） */
+.trace-seq {
+  --seq-main: var(--accent, #6b8cae);
+  --seq-task: color-mix(in srgb, var(--accent, #6b8cae) 35%, var(--danger, #9b3b2e));
+  --seq-par: color-mix(in srgb, var(--accent, #6b8cae) 55%, var(--ink));
+  --lane-renderer: color-mix(in srgb, var(--accent) 70%, #5b8fd4);
+  --lane-desktop: color-mix(in srgb, var(--accent) 40%, #3d9a6a);
+  --lane-runtime: color-mix(in srgb, var(--ink) 55%, #c4a35a);
+  --lane-graph: color-mix(in srgb, var(--accent) 50%, #8b6bb8);
+  --lane-model: color-mix(in srgb, var(--accent) 35%, #d0894a);
+  --lane-tool: color-mix(in srgb, var(--accent) 45%, #2a9d8f);
+  --lane-subagent: color-mix(in srgb, var(--danger, #9b3b2e) 55%, var(--accent));
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.trace-seq__rail-bg {
+  fill: color-mix(in srgb, var(--panel) 94%, var(--ink));
+}
+
+.trace-seq__gantt-panel {
+  fill: color-mix(in srgb, var(--ink) 3.5%, var(--panel));
+}
+
+.trace-seq__gantt-row {
+  fill: transparent;
+
+  &.is-main {
+    fill: color-mix(in srgb, var(--seq-main) 6%, transparent);
+  }
+
+  &.is-task {
+    fill: color-mix(in srgb, var(--seq-task) 6%, transparent);
+  }
+}
+
+/* 并行横幅内嵌控件（foreignObject），与泳道色块同宽 */
+.trace-seq__par-bar {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 4px;
+  font-size: 11px;
+  color: var(--ink);
+  touch-action: pan-y;
+  user-select: none;
+  cursor: default;
+}
+
+.trace-seq__par-bar-toggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.trace-seq__par-bar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--seq-par, var(--accent)) 50%, var(--ink));
+}
+
+.trace-seq__par-bar-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.trace-seq__par-bar-mode {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+
+  button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 10px;
+    padding: 2px 7px;
+    cursor: pointer;
+    line-height: 1.4;
+
+    &.is-active {
+      background: color-mix(in srgb, var(--seq-par, var(--accent)) 18%, transparent);
+      color: color-mix(in srgb, var(--seq-par, var(--accent)) 55%, var(--ink));
+      font-weight: 650;
+    }
+  }
+}
+
+.trace-seq__gantt-caption {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.trace-seq__gantt-label {
+  font-size: 9px;
+  fill: var(--ink);
+  &.is-main {
+    fill: var(--seq-main);
+  }
+  &.is-task {
+    fill: var(--seq-task);
+  }
+}
+
+.trace-seq__gantt-track {
+  fill: color-mix(in srgb, var(--ink) 8%, var(--panel));
+}
+
+.trace-seq__gantt-bar {
+  &.is-main {
+    fill: color-mix(in srgb, var(--seq-main) 72%, transparent);
+  }
+  &.is-task {
+    fill: color-mix(in srgb, var(--seq-task) 78%, transparent);
+  }
+}
+
+.trace-seq__rail-tick {
+  &.is-main {
+    fill: color-mix(in srgb, var(--seq-main) 55%, transparent);
+  }
+  &.is-task {
+    fill: color-mix(in srgb, var(--seq-task) 60%, transparent);
+  }
+  &.is-par {
+    fill: color-mix(in srgb, var(--seq-par) 70%, transparent);
+  }
+}
+
+.trace-seq__scope-rail {
+  stroke: none;
+  &.is-main {
+    fill: color-mix(in srgb, var(--seq-main) 12%, var(--panel));
+  }
+  &.is-task {
+    fill: color-mix(in srgb, var(--seq-task) 12%, var(--panel));
+  }
+  &.is-par {
+    fill: color-mix(in srgb, var(--seq-par) 12%, var(--panel));
+  }
+}
+
+/* 整个并行区底色（含横幅与内部消息行） */
+.trace-seq__par-band {
+  fill: color-mix(in srgb, var(--seq-par) 9%, transparent);
+  stroke: color-mix(in srgb, var(--seq-par) 28%, transparent);
+  stroke-width: 1;
+}
+
+/* 并行块内各 Task / 子 agent 消息行分色 */
+.trace-seq__par-task-band {
+  stroke: none;
+  &.is-par-task--0 {
+    fill: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  &.is-par-task--1 {
+    fill: color-mix(in srgb, var(--seq-task) 12%, transparent);
+  }
+  &.is-par-task--2 {
+    fill: color-mix(in srgb, var(--seq-par) 12%, transparent);
+  }
+}
+
+.trace-seq__scope-rail-text {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  &.is-main {
+    fill: var(--seq-main);
+  }
+  &.is-task {
+    fill: var(--seq-task);
+  }
+  &.is-par {
+    fill: var(--seq-par);
+  }
+}
+
+.trace-seq__scope-banner {
+  stroke: none;
+  &.is-main {
+    fill: color-mix(in srgb, var(--seq-main) 10%, transparent);
+  }
+  &.is-task {
+    fill: color-mix(in srgb, var(--seq-task) 10%, transparent);
+  }
+  &.is-par {
+    fill: color-mix(in srgb, var(--seq-par) 16%, transparent);
+  }
+  &.is-par-task {
+    fill: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+  &.is-par-task--0 {
+    fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  &.is-par-task--1 {
+    fill: color-mix(in srgb, var(--seq-task) 14%, transparent);
+  }
+  &.is-par-task--2 {
+    fill: color-mix(in srgb, var(--seq-par) 14%, transparent);
+  }
+}
+
+.trace-seq__scope-title {
+  font-size: 11px;
+  font-weight: 650;
+  fill: var(--ink);
+  &.is-main {
+    fill: var(--seq-main);
+  }
+  &.is-task {
+    fill: var(--seq-task);
+  }
+  &.is-par {
+    fill: var(--seq-par);
+  }
+  &.is-par-task {
+    font-size: 10px;
+    font-weight: 600;
+    fill: var(--ink);
+  }
+}
+
+.trace-seq__scope-row.is-task:hover .trace-seq__scope-banner,
+.trace-seq__scope-row.is-par:hover .trace-seq__scope-banner,
+.trace-seq__scope-row.is-par-task:hover .trace-seq__scope-banner {
+  fill: color-mix(in srgb, var(--accent) 14%, var(--panel));
+}
+
+.trace-seq__task-tag {
+  pointer-events: none;
+  circle {
+    stroke-width: 1;
+  }
+  text {
+    font-size: 9px;
+    font-weight: 700;
+    fill: var(--panel);
+  }
+  &--0 circle {
+    fill: color-mix(in srgb, var(--accent) 75%, var(--ink));
+    stroke: var(--accent);
+  }
+  &--1 circle {
+    fill: color-mix(in srgb, var(--seq-task) 80%, var(--ink));
+    stroke: var(--seq-task);
+  }
+  &--2 circle {
+    fill: color-mix(in srgb, var(--seq-par) 80%, var(--ink));
+    stroke: var(--seq-par);
+  }
+}
+
+.trace-seq__svg {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  vertical-align: top;
+}
+
+.trace-seq__lane-head-bg {
+  fill: color-mix(in srgb, var(--panel) 88%, var(--ink));
+  stroke: color-mix(in srgb, var(--line) 70%, transparent);
+  stroke-width: 1;
+}
+
+.trace-seq__lane-sep {
+  stroke: color-mix(in srgb, var(--line) 75%, transparent);
+  stroke-width: 1;
+
+  &.is-rail {
+    stroke: color-mix(in srgb, var(--line) 90%, transparent);
+    stroke-width: 1.25;
+  }
+}
+
+.trace-seq__band {
+  fill: transparent;
+}
+
+.trace-seq__band--renderer {
+  fill: color-mix(in srgb, var(--lane-renderer) 14%, transparent);
+}
+.trace-seq__band--desktop {
+  fill: color-mix(in srgb, var(--lane-desktop) 12%, transparent);
+}
+.trace-seq__band--runtime {
+  fill: color-mix(in srgb, var(--lane-runtime) 13%, transparent);
+}
+.trace-seq__band--graph {
+  fill: color-mix(in srgb, var(--lane-graph) 12%, transparent);
+}
+.trace-seq__band--model {
+  fill: color-mix(in srgb, var(--lane-model) 14%, transparent);
+}
+.trace-seq__band--tool {
+  fill: color-mix(in srgb, var(--lane-tool) 13%, transparent);
+}
+.trace-seq__band--subagent {
+  fill: color-mix(in srgb, var(--lane-subagent) 13%, transparent);
+}
+
+.trace-seq__lane-pill {
+  stroke-width: 1.5;
+}
+
+.trace-seq__lane-pill--renderer {
+  fill: color-mix(in srgb, var(--lane-renderer) 22%, var(--panel));
+  stroke: var(--lane-renderer);
+}
+.trace-seq__lane-pill--desktop {
+  fill: color-mix(in srgb, var(--lane-desktop) 22%, var(--panel));
+  stroke: var(--lane-desktop);
+}
+.trace-seq__lane-pill--runtime {
+  fill: color-mix(in srgb, var(--lane-runtime) 22%, var(--panel));
+  stroke: var(--lane-runtime);
+}
+.trace-seq__lane-pill--graph {
+  fill: color-mix(in srgb, var(--lane-graph) 22%, var(--panel));
+  stroke: var(--lane-graph);
+}
+.trace-seq__lane-pill--model {
+  fill: color-mix(in srgb, var(--lane-model) 22%, var(--panel));
+  stroke: var(--lane-model);
+}
+.trace-seq__lane-pill--tool {
+  fill: color-mix(in srgb, var(--lane-tool) 22%, var(--panel));
+  stroke: var(--lane-tool);
+}
+.trace-seq__lane-pill--subagent {
+  fill: color-mix(in srgb, var(--lane-subagent) 22%, var(--panel));
+  stroke: var(--lane-subagent);
+}
+
+.trace-seq__lane-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  fill: var(--ink);
+}
+
+.trace-seq__lane-label--renderer {
+  fill: color-mix(in srgb, var(--lane-renderer) 70%, var(--ink));
+}
+.trace-seq__lane-label--desktop {
+  fill: color-mix(in srgb, var(--lane-desktop) 70%, var(--ink));
+}
+.trace-seq__lane-label--runtime {
+  fill: color-mix(in srgb, var(--lane-runtime) 70%, var(--ink));
+}
+.trace-seq__lane-label--graph {
+  fill: color-mix(in srgb, var(--lane-graph) 70%, var(--ink));
+}
+.trace-seq__lane-label--model {
+  fill: color-mix(in srgb, var(--lane-model) 70%, var(--ink));
+}
+.trace-seq__lane-label--tool {
+  fill: color-mix(in srgb, var(--lane-tool) 70%, var(--ink));
+}
+.trace-seq__lane-label--subagent {
+  fill: color-mix(in srgb, var(--lane-subagent) 70%, var(--ink));
+}
+
+.trace-seq__lifeline {
+  stroke-width: 2;
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+
+.trace-seq__lifeline--renderer {
+  stroke: color-mix(in srgb, var(--lane-renderer) 65%, var(--line));
+}
+.trace-seq__lifeline--desktop {
+  stroke: color-mix(in srgb, var(--lane-desktop) 65%, var(--line));
+}
+.trace-seq__lifeline--runtime {
+  stroke: color-mix(in srgb, var(--lane-runtime) 65%, var(--line));
+}
+.trace-seq__lifeline--graph {
+  stroke: color-mix(in srgb, var(--lane-graph) 65%, var(--line));
+}
+.trace-seq__lifeline--model {
+  stroke: color-mix(in srgb, var(--lane-model) 65%, var(--line));
+}
+.trace-seq__lifeline--tool {
+  stroke: color-mix(in srgb, var(--lane-tool) 65%, var(--line));
+}
+.trace-seq__lifeline--subagent {
+  stroke: color-mix(in srgb, var(--lane-subagent) 65%, var(--line));
+}
+
+.trace-seq__activation {
+  fill: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  stroke: color-mix(in srgb, var(--accent) 40%, transparent);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.trace-seq__label-bg {
+  fill: color-mix(in srgb, var(--panel) 92%, transparent);
+  stroke: none;
+  pointer-events: none;
+}
+
+.trace-seq__arrow {
+  stroke: color-mix(in srgb, var(--ink) 50%, var(--accent));
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.trace-seq__arrowhead {
+  fill: color-mix(in srgb, var(--ink) 50%, var(--accent));
+
+  &.is-selected {
+    fill: var(--accent);
+  }
+}
+
+.trace-seq__seq-badge {
+  fill: var(--panel);
+  stroke: color-mix(in srgb, var(--ink) 40%, var(--accent));
+  stroke-width: 1.25;
+}
+
+.trace-seq__seq-num {
+  fill: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  pointer-events: none;
+}
+
+.trace-seq__msg-label {
+  fill: var(--ink);
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  pointer-events: none;
+}
+
+.trace-seq__hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.trace-seq__msg {
+  cursor: pointer;
+
+  &:hover .trace-seq__arrow {
+    stroke: var(--accent);
+    stroke-width: 2.25;
+  }
+
+  &:hover .trace-seq__msg-label {
+    font-weight: 600;
+  }
+
+  &.is-related .trace-seq__arrow {
+    stroke: color-mix(in srgb, var(--accent) 75%, var(--ink));
+    stroke-width: 2.1;
+  }
+
+  &.is-selected .trace-seq__arrow {
+    stroke: var(--accent);
+    stroke-width: 2.5;
+  }
+
+  &.is-selected .trace-seq__activation {
+    fill: color-mix(in srgb, var(--accent) 45%, var(--panel));
+    stroke: var(--accent);
+  }
+
+  &.is-selected .trace-seq__label-bg {
+    fill: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  }
+
+  &.is-selected .trace-seq__seq-badge {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+
+  &.is-selected .trace-seq__seq-num {
+    fill: var(--panel);
+  }
+
+  &.is-selected .trace-seq__msg-label {
+    font-weight: 700;
+    fill: var(--accent);
+  }
+
+  &.is-error .trace-seq__arrow,
+  &.is-error .trace-seq__seq-badge {
+    stroke: var(--danger);
+  }
+
+  &.is-error .trace-seq__arrow {
+    stroke: var(--danger);
+  }
+
+  &.is-cancelled .trace-seq__arrow {
+    stroke-dasharray: 4 3;
+    opacity: 0.75;
+  }
+
+  &.is-in-task .trace-seq__arrow {
+    stroke: color-mix(in srgb, var(--seq-task) 55%, var(--ink));
+  }
+
+  &.is-in-task .trace-seq__seq-badge {
+    stroke: color-mix(in srgb, var(--seq-task) 55%, var(--line));
+  }
+
+  &.is-in-par .trace-seq__arrow {
+    stroke: color-mix(in srgb, var(--seq-par) 50%, var(--ink));
+  }
+}
+
+/* ---- 追踪树（调用链 + 时间条） ---- */
+.trace-calltree {
+  /* 标签 / 时间条按比例分宽，两侧均可压缩（文案 ellipsis） */
+  --seq-main: #8a7355;
+  --seq-task: #5a8f7b;
+  --seq-par: #6b7c9c;
+  min-width: 0;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.trace-calltree__ruler {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 22px;
+  margin-bottom: 4px;
+  background: color-mix(in srgb, var(--panel, #fff) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 80%, transparent);
+  font-size: 0.68rem;
+  color: var(--muted);
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.trace-calltree__ruler-inner {
+  position: relative;
+  grid-column: 2;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.trace-calltree__ruler-inner span {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+
+  &.is-start {
+    transform: none;
+  }
+
+  &.is-end {
+    transform: translateX(-100%);
+  }
+}
+
+.trace-calltree__body {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+/* 并行区：外框 + 横幅；各 agent 子块单独铺色（不要整块同色） */
+.trace-calltree__par-band {
+  margin: 4px 2px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--seq-par) 32%, transparent);
+  overflow: hidden;
+}
+
+.trace-calltree__par-banner {
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--seq-par) 55%, var(--ink));
+  background: color-mix(in srgb, var(--seq-par) 14%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--seq-par) 22%, transparent);
+}
+
+/* 同一 par 内不同 Task / 子 agent：色块必须一眼可分 */
+.trace-calltree__par-task {
+  border-top: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
+
+  &:first-of-type {
+    border-top: none;
+  }
+
+  &.is-par-task--0 {
+    background: color-mix(in srgb, var(--accent, #6b8cae) 20%, var(--panel));
+    box-shadow: inset 4px 0 0 color-mix(in srgb, var(--accent, #6b8cae) 75%, transparent);
+  }
+  &.is-par-task--1 {
+    background: color-mix(in srgb, var(--seq-task, #5a8f7b) 22%, var(--panel));
+    box-shadow: inset 4px 0 0 var(--seq-task, #5a8f7b);
+  }
+  &.is-par-task--2 {
+    background: color-mix(in srgb, #8b6bb8 20%, var(--panel));
+    box-shadow: inset 4px 0 0 color-mix(in srgb, #8b6bb8 80%, transparent);
+  }
+}
+
+.trace-calltree__row {
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line, #e4e0d8) 55%, transparent);
+  cursor: pointer;
+}
+
+.trace-calltree__par-task .trace-calltree__row:last-child {
+  border-bottom: none;
+}
+
+.trace-calltree__row:hover,
+.trace-calltree__row.is-selected {
+  background: color-mix(in srgb, var(--accent, #6b8cae) 10%, transparent);
+}
+
+.trace-calltree__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 0;
+  font-size: 0.74rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.trace-calltree__twisty {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+  line-height: 1;
+
+  &.is-expandable {
+    cursor: pointer;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.trace-calltree__kind-icon,
+.trace-calltree__chevron {
+  display: block;
+  width: 14px;
+  height: 14px;
+  transition: opacity 120ms ease;
+}
+
+.trace-calltree__kind-icon {
+  opacity: 1;
+}
+
+.trace-calltree__chevron {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 可展开：悬停行或按钮时 icon → 箭头 */
+.trace-calltree__row.is-expandable:hover .trace-calltree__kind-icon,
+.trace-calltree__twisty.is-expandable:focus-visible .trace-calltree__kind-icon {
+  opacity: 0;
+}
+
+.trace-calltree__row.is-expandable:hover .trace-calltree__chevron,
+.trace-calltree__twisty.is-expandable:focus-visible .trace-calltree__chevron {
+  opacity: 1;
+}
+
+.trace-calltree__kind {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.trace-calltree__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-calltree__dur {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+}
+
+.trace-calltree__track {
+  position: relative;
+  min-width: 0;
+  min-height: 22px;
+  overflow: hidden;
+}
+
+.trace-calltree__bar {
+  position: absolute;
+  top: 4px;
+  height: 14px;
+  border-radius: 3px;
+  min-width: 2px;
+  opacity: 0.9;
+}
+
+.trace-calltree__bar--ipc {
+  background: color-mix(in srgb, var(--seq-main) 70%, transparent);
+}
+.trace-calltree__bar--graph {
+  background: color-mix(in srgb, var(--seq-par) 75%, transparent);
+}
+.trace-calltree__bar--model {
+  background: color-mix(in srgb, #c47a2a 80%, transparent);
+}
+.trace-calltree__bar--tool {
+  background: color-mix(in srgb, #3a7a8c 78%, transparent);
+}
+.trace-calltree__bar--subagent {
+  background: color-mix(in srgb, var(--seq-task) 80%, transparent);
+}
+.trace-calltree__bar--other {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.trace-calltree__bar-task--0 {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 80%, transparent);
+}
+.trace-calltree__bar-task--1 {
+  box-shadow: inset 3px 0 0 var(--seq-task);
+}
+.trace-calltree__bar-task--2 {
+  box-shadow: inset 3px 0 0 var(--seq-par);
+}

@@ -4,6 +4,49 @@
 
 export const CATALOG_SCHEMA_VERSION = 1;
 export const CHAT_SCHEMA_VERSION = 1;
+export const TRACE_SCHEMA_VERSION = 1;
+
+/** 会话 Trace 索引库（trace.db）。 */
+export const TRACE_SCHEMA_SQL = `
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE IF NOT EXISTS schema_meta (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  session_id TEXT PRIMARY KEY NOT NULL,
+  workspace_id TEXT,
+  thread_id TEXT,
+  title TEXT,
+  first_ts INTEGER NOT NULL,
+  last_ts INTEGER NOT NULL,
+  run_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS spans (
+  span_id TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL,
+  run_id TEXT,
+  trace_id TEXT,
+  parent_span_id TEXT,
+  task_id TEXT,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL,
+  status TEXT,
+  start_ts INTEGER NOT NULL,
+  end_ts INTEGER,
+  summary TEXT,
+  input_ref TEXT,
+  output_ref TEXT,
+  attrs_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_spans_session ON spans(session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_last ON sessions(last_ts DESC);
+`;
 
 /** 全局目录库：工作空间列表 + app_kv。 */
 export const CATALOG_SCHEMA_SQL = `

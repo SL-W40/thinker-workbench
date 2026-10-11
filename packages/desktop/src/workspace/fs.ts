@@ -152,23 +152,38 @@ export function readWorkspaceFile(root: string, relPath: string): WorkspaceFile 
       previewDataUrl: null,
     };
   }
+
+  // 文本一律按 UTF-8；非法字节则只读预览（避免保存时用 U+FFFD 写回污染文件）
+  let content: string;
+  let editable = true;
+  try {
+    content = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    content = new TextDecoder("utf-8").decode(buf);
+    editable = false;
+  }
+  // 去掉 UTF-8 BOM，避免编辑器里多出不可见字符
+  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
+
   return {
     path: posix,
-    content: buf.toString("utf8"),
+    content,
     size: st.size,
     binary: false,
-    editable: true,
+    editable,
     mediaKind: null,
     mimeType: null,
     previewDataUrl: null,
   };
 }
 
-/** 写入工作空间内文本文件（父目录不存在则创建）。 */
+/** 写入工作空间内文本文件（父目录不存在则创建）；始终 UTF-8，无 BOM。 */
 export function writeWorkspaceFile(root: string, relPath: string, content: string): void {
   const rel = (relPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
   if (!rel || rel === ".") throw new Error("Invalid file path.");
   const abs = assertInside(root, path.join(root, rel));
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, content, "utf8");
+  // 显式 Buffer，避免 Electron/Node 在部分环境下按系统代码页写盘
+  const body = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+  fs.writeFileSync(abs, Buffer.from(body, "utf8"));
 }

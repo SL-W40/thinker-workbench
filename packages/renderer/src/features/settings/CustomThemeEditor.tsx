@@ -1,6 +1,5 @@
 /**
- * 自定义主题编辑器：Meta / UI / Markdown / Mermaid token，实时预览。
- */
+ * 自定义主题编辑器：Meta / UI / Markdown / Mermaid token，实时预览。 */
 import { useEffect, useMemo, useState } from "react";
 import { UI_TOKEN_KEYS } from "@thinker-workbench/design";
 import {
@@ -14,8 +13,8 @@ import {
 } from "@thinker-workbench/design/react";
 import { MD_TOKEN_KEYS } from "@thinker-workbench/markdown";
 import type { CustomThemeRecord } from "@thinker-workbench/shared";
-import { useAppearance } from "../../theme/AppearanceProvider";
-import { useT } from "../../i18n/I18nProvider";
+import { useAppearance } from "../../theme/useAppearance";
+import { useT } from "../../i18n/useI18n";
 import { cloneCustomThemeRecord, looksLikeColor, toColorInputValue } from "./customThemeUtils";
 import "./CustomThemeEditor.less";
 
@@ -23,9 +22,9 @@ type EditorTab = "meta" | "ui" | "markdown" | "mermaid";
 
 type Props = {
   open: boolean;
-  /** 编辑中的记录（打开时克隆进本地 state）。 */
+  /** 编辑中的记录（打开时克隆进本地 state）。*/
   record: CustomThemeRecord | null;
-  /** 预览时合并用的完整目录（不含正在编辑的旧版时由父级提供）。 */
+  /** 预览时坈并用的完整目录（丝坫正在编辑的旧版时由父级杝供）。*/
   customsBaseline: readonly CustomThemeRecord[];
   onClose: () => void;
   onSave: (record: CustomThemeRecord) => void | Promise<void>;
@@ -34,7 +33,7 @@ type Props = {
 const MERMAID_THEME_OPTS = ["default", "dark", "forest", "neutral", "base"] as const;
 const MERMAID_LOOK_OPTS = ["classic", "handDrawn", "neo"] as const;
 
-/** 单行 token 编辑：颜色则附带 color input。 */
+/** 坕行 token 编辑：颜色则附带 color input。*/
 function TokenRow({
   tokenKey,
   value,
@@ -86,7 +85,7 @@ export function CustomThemeEditor({
   const [busy, setBusy] = useState(false);
   const [varsText, setVarsText] = useState("{}");
 
-  // 打开时克隆进草稿，并即时预览
+  // 打开时克隆进蝉稿，并坳时预览
   useEffect(() => {
     if (!open || !record) {
       setDraft(null);
@@ -161,7 +160,7 @@ export function CustomThemeEditor({
           }
         }
       } catch {
-        /* 保留原 themeVariables */
+ /* 保留?themeVariables */
       }
       const toSave: CustomThemeRecord = {
         ...draft,
@@ -175,7 +174,7 @@ export function CustomThemeEditor({
         },
       };
       await onSave(toSave);
-      // 由父级关闭；勿走 onClose，以免把预览回滚到保存前主题
+      // 由父级关闭；勿走 onClose，以兝把预览回滚到保存剝主题
     } finally {
       setBusy(false);
     }

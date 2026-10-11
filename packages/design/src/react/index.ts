@@ -33,30 +33,42 @@ export {
   type DesignIconEntry,
   type IconProps,
   type IconSize,
+  AgentModeIcon,
+  AskModeIcon,
+  BellIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
   CloseIcon,
   CodeIcon,
   ConsoleIcon,
+  CubeIcon,
   DatabaseIcon,
+  DebugModeIcon,
   FilterIcon,
   FolderIcon,
   FolderPlusIcon,
+  GlobeIcon,
   GridIcon,
   InfoIcon,
+  KeyboardIcon,
   LanesIcon,
   LogsIcon,
   MaximizeIcon,
   MinimizeIcon,
+  MultitaskModeIcon,
+  PaletteIcon,
+  PlanModeIcon,
   PlayIcon,
   PlusIcon,
   RestartIcon,
   RestoreIcon,
   SettingsIcon,
+  ShieldIcon,
   SidebarLeftIcon,
   SidebarRightIcon,
   StopIcon,
+  TrashIcon,
 } from "../components/Icon";
 export { Input, type InputProps } from "../components/Input/Input";
 export { Kbd, type KbdProps } from "../components/Kbd/Kbd";
@@ -82,6 +94,18 @@ export { Separator, type SeparatorProps } from "../components/Separator/Separato
 export { SideNavItem, type SideNavItemProps } from "../components/SideNavItem/SideNavItem";
 export { Spinner, type SpinnerProps, type SpinnerSize } from "../components/Spinner/Spinner";
 export { Switch, type SwitchProps } from "../components/Switch/Switch";
+export {
+  Table,
+  reorderTableRows,
+  type TableCellOverflow,
+  type TableCellProps,
+  type TableDensity,
+  type TableHeaderProps,
+  type TableProps,
+  type TableRowProps,
+  type TableScroll,
+  type TableSectionProps,
+} from "../components/Table/Table";
 export { TextArea, type TextAreaProps } from "../components/TextArea/TextArea";
 export { TitleTooltipHost } from "../components/TitleTooltipHost/TitleTooltipHost";
 export {

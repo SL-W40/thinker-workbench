@@ -1,11 +1,11 @@
 /**
- * Markdown 语法解析冒烟测试（node:test）。
+ * Markdown 语法解析冒烟测试（Vitest）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { parseMarkdownStreaming } from "../stream";
-import { parseInline } from "./inline";
-import { parseMarkdown, parseMarkdownDocument } from "./blocks";
+import { describe, it } from "vitest";
+import { parseMarkdownStreaming } from "../../src/stream";
+import { parseInline } from "../../src/parse/inline";
+import { parseMarkdown, parseMarkdownDocument } from "../../src/parse/blocks";
 
 describe("parseInline", () => {
   it("strips backslash escapes", () => {

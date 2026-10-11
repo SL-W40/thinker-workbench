@@ -34,6 +34,13 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5179,
     strictPort: true,
+    // Electron 加载固定端口；显式 HMR 避免偶发连错导致更新后白屏
+    hmr: {
+      protocol: "ws",
+      host: "127.0.0.1",
+      port: 5179,
+      clientPort: 5179,
+    },
     fs: { allow: [path.resolve(__dirname, "../..")] },
   },
   build: {

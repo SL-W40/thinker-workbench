@@ -1,6 +1,7 @@
 /**
  * 把设计体系 CSS token 同步成 Monaco 主题（颜色 / 语法着色）。
  * Monaco 不接受 var()，须读 computed 后写成具体色值。
+ * 语法色统一走 `--md-hl-*`，与聊天代码块 / FileDiff 一致。
  */
 import type * as Monaco from "monaco-editor";
 
@@ -48,7 +49,7 @@ function ruleFg(hex: string): string {
 
 /**
  * 按当前 document 上的主题 token 定义并激活 `tw-theme`。
- * 浅色用 UI 语义色；深色优先用 markdown 高亮 token（面向深色代码块）。
+ * 语法着色优先 `--md-hl-*`（浅/深色同一套映射）。
  */
 export function applyMonacoTheme(
   monaco: typeof Monaco,
@@ -60,22 +61,22 @@ export function applyMonacoTheme(
   const muted = readColor("--tw-fg-muted", dark ? "#9a9a9a" : "#666666");
   const accent = readColor("--tw-accent", dark ? "#c8c8c8" : "#333333");
   const accentStrong = readColor("--tw-accent-strong", accent);
-  const danger = readColor("--tw-danger", dark ? "#ff8a80" : "#9b3b2e");
   const hover = readColor("--tw-hover", dark ? "#ffffff14" : "#0000000f");
   const panel = readColor("--tw-panel", bg);
   const border = readColor("--tw-border", dark ? "#ffffff22" : "#00000022");
   const codeBg = readColor("--tw-code-bg", hover);
 
-  const keyword = dark
-    ? readColor("--md-hl-keyword", accent)
-    : accentStrong;
-  const string = dark
-    ? readColor("--md-hl-string", muted)
-    : readColor("--tw-accent", "#3d6b4f");
-  const number = dark ? readColor("--md-hl-number", danger) : danger;
-  const comment = dark ? readColor("--md-hl-comment", muted) : muted;
-  const type = dark ? readColor("--md-hl-type", fg) : accent;
-  const literal = dark ? readColor("--md-hl-literal", keyword) : accentStrong;
+  // 语义高亮：与 markdown / FileDiff 共用 --md-hl-*，fallback 保证未注入时仍有区分度
+  const keyword = readColor("--md-hl-keyword", dark ? "#569cd6" : "#0550ae");
+  const string = readColor("--md-hl-string", dark ? "#ce9178" : "#116329");
+  const number = readColor("--md-hl-number", dark ? "#b5cea8" : "#cf222e");
+  const comment = readColor("--md-hl-comment", dark ? "#6a9955" : "#6e7781");
+  const title = readColor("--md-hl-title", dark ? "#dcdcaa" : "#0550ae");
+  const attr = readColor("--md-hl-attr", dark ? "#9cdcfe" : "#953800");
+  const builtIn = readColor("--md-hl-built-in", dark ? "#4ec9b0" : "#0e7490");
+  const literal = readColor("--md-hl-literal", keyword);
+  const type = readColor("--md-hl-type", dark ? "#4ec9b0" : "#0e7490");
+  const meta = readColor("--md-hl-meta", muted);
 
   monaco.editor.defineTheme(TW_MONACO_THEME, {
     base: dark ? "vs-dark" : "vs",
@@ -83,17 +84,39 @@ export function applyMonacoTheme(
     rules: [
       { token: "comment", foreground: ruleFg(comment), fontStyle: "italic" },
       { token: "string", foreground: ruleFg(string) },
+      { token: "string.escape", foreground: ruleFg(meta) },
       { token: "number", foreground: ruleFg(number) },
+      { token: "regexp", foreground: ruleFg(string) },
       { token: "keyword", foreground: ruleFg(keyword), fontStyle: "bold" },
+      { token: "FAKESECRET_q3r4s5t6u7v8w9x0y1z2", foreground: ruleFg(keyword), fontStyle: "bold" },
+      { token: "FAKESECRET_w4x5y6z7a8b9c0d1e2f3", foreground: ruleFg(literal), fontStyle: "bold" },
       { token: "type", foreground: ruleFg(type) },
+      { token: "FAKESECRET_e1f2g3h4i5j6k7l8m9n0", foreground: ruleFg(type) },
+      { token: "FAKESECRET_w4x5y6z7a8b9c0d1e2f3", foreground: ruleFg(type) },
+      { token: "FAKESECRET_c2d3e4f5g6h7i8j9k0l1", foreground: ruleFg(title) },
+      { token: "FAKESECRET_s2t3u4v5w6x7y8z9a0b1", foreground: ruleFg(attr) },
+      { token: "FAKESECRET_m3n4o5p6q7r8s9t0u1v2", foreground: ruleFg(builtIn) },
+      { token: "FAKESECRET_a1b2c3d4e5f6g7h8i9j0", foreground: ruleFg(title) },
+      { token: "FAKESECRET_q2r3s4t5u6v7w8x9y0z1", foreground: ruleFg(meta) },
+      { token: "FAKESECRET_o4p5q6r7s8t9u0v1w2x3", foreground: ruleFg(meta) },
       { token: "delimiter", foreground: ruleFg(muted) },
-      { token: "FAKESECRET_q1r2s3t4u5v6w7x8y9z0", foreground: ruleFg(muted) },
-      { token: "FAKESECRET_u4v5w6x7y8z9a0b1c2d3", foreground: ruleFg(accent) },
+      { token: "FAKESECRET_q1r2s3t4u5v6w7x8y9z0", foreground: ruleFg(fg) },
+      { token: "tag", foreground: ruleFg(keyword) },
+      { token: "FAKESECRET_u4v5w6x7y8z9a0b1c2d3", foreground: ruleFg(attr) },
       { token: "FAKESECRET_k1l2m3n4o5p6q7r8s9t0", foreground: ruleFg(string) },
       { token: "FAKESECRET_i3j4k5l6m7n8o9p0q1r2", foreground: ruleFg(literal) },
       { token: "FAKESECRET_u3v4w5x6y7z8a9b0c1d2", foreground: ruleFg(number) },
       { token: "FAKESECRET_k3l4m5n6o7p8q9r0s1t2", foreground: ruleFg(keyword) },
       { token: "FAKESECRET_i1j2k3l4m5n6o7p8q9r0", foreground: ruleFg(comment), fontStyle: "italic" },
+      { token: "FAKESECRET_k2l3m4n5o6p7q8r9s0t1", foreground: ruleFg(keyword) },
+      { token: "FAKESECRET_i1j2k3l4m5n6o7p8q9r0", foreground: ruleFg(attr) },
+      { token: "FAKESECRET_u1v2w3x4y5z6a7b8c9d0", foreground: ruleFg(string) },
+      { token: "FAKESECRET_i2j3k4l5m6n7o8p9q0r1", foreground: ruleFg(keyword) },
+      { token: "FAKESECRET_e1f2g3h4i5j6k7l8m9n0", foreground: ruleFg(attr) },
+      { token: "FAKESECRET_y3z4a5b6c7d8e9f0g1h2", foreground: ruleFg(string) },
+      { token: "FAKESECRET_k4l5m6n7o8p9q0r1s2t3", foreground: ruleFg(keyword) },
+      { token: "FAKESECRET_i3j4k5l6m7n8o9p0q1r2", foreground: ruleFg(attr) },
+      { token: "FAKESECRET_m4n5o6p7q8r9s0t1u2v3", foreground: ruleFg(string) },
     ],
     colors: {
       "editor.background": bg,

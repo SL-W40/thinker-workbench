@@ -3,6 +3,7 @@
  * utility → main → renderer 推送的时间线条目；与 `RunResult` 互补（流式过程 vs 同步收尾）。
  */
 
+import type { ChatTimelineResultPathKind } from "../protocol/message";
 import type { HitlKind, HitlRequest, HitlResponse } from "./hitl";
 
 /** 所有 AgentEvent 共有字段。 */
@@ -66,6 +67,10 @@ export type AgentToolEvent = AgentEventBase & {
   exitCode?: number | null;
   /** shell 因 block_until 超时挂起（end）；仅此类保留「打开终端」。 */
   backgrounded?: boolean;
+  /** 工具返回的路径列表（如 search / list）。 */
+  resultPaths?: string[];
+  /** 与 resultPaths 对齐的路径类型标签。 */
+  resultPathKinds?: ChatTimelineResultPathKind[];
 };
 
 /** HITL 生命周期（请求用户介入或已解决）。 */
@@ -117,6 +122,57 @@ export type AgentUsageEvent = AgentEventBase & {
   usage: ModelUsage;
 };
 
+/** Auto 故障切换：通知 UI 时间线，并携带需持久化的 health。 */
+export type AgentModelSwitchEvent = AgentEventBase & {
+  type: "model_switch";
+  fromModelId?: string;
+  fromLabel: string;
+  toModelId: string;
+  toLabel: string;
+  reason: "auth" | "not_found" | "rate_limit" | "network" | "server" | "other";
+  detail?: string;
+  /** 本轮标记为异常的模型条目 id。 */
+  failedModelId?: string;
+  /** 失败摘要（写入 settings.lastError）。 */
+  failedError?: string;
+};
+
+/** 模型健康回写（无切换时的最终失败等）。 */
+export type AgentModelHealthEvent = AgentEventBase & {
+  type: "model_health";
+  modelId: string;
+  health: "ok" | "error";
+  error?: string;
+};
+
+/** 子代理 Task 卡片内嵌的精简事件（无 threadId/runId）。 */
+export type SubagentChildEvent =
+  | { type: "status"; status: "planning" | "thinking" }
+  | { type: "token"; text: string; channel?: "reply" | "thinking" }
+  | (Omit<AgentToolEvent, keyof AgentEventBase> & { type: "tool" });
+
+/** 子代理卡片上的结构化日志行（可选）。 */
+export type SubagentTimelineEntry = {
+  ts: number;
+  kind: string;
+  summary: string;
+};
+
+/** Task 子代理生命周期。 */
+export type AgentSubagentEvent = AgentEventBase & {
+  type: "subagent";
+  phase: "started" | "progress" | "finished" | "failed" | "cancelled";
+  taskId: string;
+  subagent: string;
+  title?: string;
+  background?: boolean;
+  summary?: string;
+  liveLine?: string;
+  error?: string;
+  childEvent?: SubagentChildEvent;
+  timelineEntry?: SubagentTimelineEntry;
+};
+
 /** 推送给 UI 的全部 agent 事件联合类型。 */
 export type AgentEvent =
   | AgentTokenEvent
@@ -125,4 +181,7 @@ export type AgentEvent =
   | AgentHitlEvent
   | AgentDoneEvent
   | AgentErrorEvent
-  | AgentUsageEvent;
+  | AgentUsageEvent
+  | AgentModelSwitchEvent
+  | AgentModelHealthEvent
+  | AgentSubagentEvent;

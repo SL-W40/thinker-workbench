@@ -27,6 +27,16 @@ export const IpcChannels = {
   settingsGetModel: "settings:getModel",
   /** 写入模型设置补丁。 */
   settingsSetModel: "settings:setModel",
+  /** 对指定模型做连通性测试。 */
+  settingsProbeModel: "settings:probeModel",
+  /** 读取会话级模型选择覆盖。 */
+  settingsGetSessionModelSelection: "settings:getSessionModelSelection",
+  /** 写入会话级模型选择覆盖。 */
+  settingsSetSessionModelSelection: "settings:setSessionModelSelection",
+  /** 读取会话级 ChatMode。 */
+  settingsGetSessionChatMode: "settings:getSessionChatMode",
+  /** 写入会话级 ChatMode。 */
+  settingsSetSessionChatMode: "settings:setSessionChatMode",
   /** 读取快捷键映射。 */
   settingsGetShortcuts: "settings:getShortcuts",
   /** 写入快捷键映射补丁。 */
@@ -185,6 +195,24 @@ export const IpcChannels = {
 
   /** 列出 skills 摘要（Composer `/`）。 */
   skillsList: "skills:list",
+  skillsListDetailed: "skills:listDetailed",
+  skillsUpsert: "skills:upsert",
+  skillsRemove: "skills:remove",
+  skillsCopyToScope: "skills:copyToScope",
+  rulesList: "rules:list",
+  rulesUpsert: "rules:upsert",
+  rulesRemove: "rules:remove",
+  rulesCopyToScope: "rules:copyToScope",
+  agentsList: "agents:list",
+  agentsUpsert: "agents:upsert",
+  agentsRemove: "agents:remove",
+  agentsCopyToScope: "agents:copyToScope",
+  traceListSessions: "trace:listSessions",
+  traceGetSessionSpans: "trace:getSessionSpans",
+  traceGetPayload: "trace:getPayload",
+  traceStartSpan: "trace:startSpan",
+  traceEndSpan: "trace:endSpan",
+  traceDeleteSession: "trace:deleteSession",
 
   /** 列出 MCP server 配置与状态。 */
   mcpList: "mcp:list",
@@ -196,8 +224,8 @@ export const IpcChannels = {
   mcpSetEnabled: "mcp:setEnabled",
   /** 临时测试连接。 */
   mcpTest: "mcp:test",
-  /** 从 Cursor mcp.json 导入。 */
-  mcpImportCursorFile: "mcp:importCursorFile",
+  /** 从 mcp.json 导入。 */
+  mcpImportFile: "mcp:importFile",
   /** 主进程推送 MCP 运行时状态。 */
   mcpStatus: "mcp:status",
 } as const;

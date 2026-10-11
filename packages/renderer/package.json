@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "pnpm -w exec vitest run packages/renderer/tests"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -21,10 +22,12 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "less": "^4.9.1",
+    "tsx": "^4.23.15",
     "vite": "^6.0.7"
   }
 }

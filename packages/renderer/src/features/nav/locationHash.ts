@@ -8,7 +8,7 @@
 import type { PageId } from "./usePageStack";
 import {
   DEFAULT_SETTINGS_SECTION,
-  isSettingsSection,
+  normalizeSettingsSection,
   type SettingsSectionId,
 } from "../settings/sections";
 import { isToolTabId, type ToolTabId } from "../tools/ToolsPane";
@@ -33,14 +33,21 @@ export function parseHash(raw: string = location.hash): AppLocation {
   const page = PAGE_IDS.includes(pageRaw as PageId) ? (pageRaw as PageId) : "chat";
 
   if (page === "settings") {
-    const section = isSettingsSection(parts[1]) ? parts[1] : DEFAULT_SETTINGS_SECTION;
+    // 旧 MCP 设置 → Customize
+    if (parts[1] === "mcp") {
+      return { page: "tools", tab: "customize", section: DEFAULT_SETTINGS_SECTION };
+    }
+    const section = normalizeSettingsSection(parts[1]);
     return { page: "tools", tab: "settings", section };
   }
 
   if (page === "tools") {
     const tabRaw = parts[1];
     if (tabRaw === "settings") {
-      const section = isSettingsSection(parts[2]) ? parts[2] : DEFAULT_SETTINGS_SECTION;
+      if (parts[2] === "mcp") {
+        return { page: "tools", tab: "customize", section: DEFAULT_SETTINGS_SECTION };
+      }
+      const section = normalizeSettingsSection(parts[2]);
       return { page: "tools", tab: "settings", section };
     }
     if (isToolTabId(tabRaw)) {
@@ -55,7 +62,7 @@ export function parseHash(raw: string = location.hash): AppLocation {
 /**
  * 为当前视图写入 hash。
  * 使用 `location.replace`（而非 push），以便 Electron 把 URL 写入
- * `~/.thinker/session.json` 时不会膨胀浏览器历史。
+ * `<dataDir>/state/session.json` 时不会膨胀浏览器历史。
  */
 export function writeHash(
   page: PageId,

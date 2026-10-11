@@ -1,11 +1,16 @@
 /**
  * 扫描 skills 目录，返回 Composer `/` 菜单用的摘要（不读正文）。
- * 路径顺序与 engine loadSkills 一致：dataDir → .thinker → .cursor。
+ * 路径顺序与 engine loadSkills 一致：dataDir → .thinker。
  */
 import fs from "node:fs";
 import path from "node:path";
 import type { SkillListItem } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/paths";
+import {
+  metaString,
+  parseFrontmatter,
+  sanitizeKebabName,
+} from "../customize/frontmatter";
 
 function walkSkillMd(root: string): string[] {
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
@@ -28,23 +33,7 @@ function walkSkillMd(root: string): string[] {
   return out;
 }
 
-function stripQuotes(s: string): string {
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
-    return s.slice(1, -1);
-  }
-  return s;
-}
-
-function normalizeSkillName(name: string, folderName: string): string {
-  const raw = (name || folderName).trim().toLowerCase();
-  const cleaned = raw.replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  return cleaned || folderName.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-}
-
-/** 只解析 name / description。 */
+/** 只解析 name / description（支持 `>-` 等块标量）。 */
 function parseSkillSummary(absPath: string, source: string): SkillListItem | null {
   let raw: string;
   try {
@@ -53,25 +42,11 @@ function parseSkillSummary(absPath: string, source: string): SkillListItem | nul
     return null;
   }
   const folderName = path.basename(path.dirname(absPath));
-  let name = folderName;
-  let description = "";
-  const trimmed = raw.replace(/^\uFEFF/, "");
-  if (trimmed.startsWith("---")) {
-    const end = trimmed.indexOf("\n---", 3);
-    if (end >= 0) {
-      const fm = trimmed.slice(3, end).replace(/^\r?\n/, "");
-      for (const line of fm.split(/\r?\n/)) {
-        const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
-        if (!m) continue;
-        const key = m[1]!;
-        const value = stripQuotes(m[2]!.trim());
-        if (key === "name" && value) name = value;
-        if (key === "description" && value) description = value;
-      }
-    }
-  }
+  const { meta } = parseFrontmatter(raw);
+  const name = sanitizeKebabName(metaString(meta, "name", folderName), folderName);
+  const description = metaString(meta, "description");
   return {
-    name: normalizeSkillName(name, folderName),
+    name,
     description: description.slice(0, 200),
     source,
   };
@@ -88,7 +63,6 @@ export function listSkillSummaries(workspaceRoot?: string | null): SkillListItem
   if (workspaceRoot?.trim()) {
     const ws = workspaceRoot.trim();
     roots.push({ source: "thinker", root: path.join(ws, ".thinker", "skills") });
-    roots.push({ source: "cursor", root: path.join(ws, ".cursor", "skills") });
   }
   for (const { source, root } of roots) {
     for (const file of walkSkillMd(root)) {

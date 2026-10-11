@@ -1,14 +1,11 @@
 /**
- * UI 语言上下文：从通用设置加载 `uiLocale`，并提供 `t()` 翻译函数。
+ * UI 语言 Provider：从通用设置加载 `uiLocale`，并提供 `t()`。
  *
- * - 挂载后异步拉取 `getGeneralSettings`（无 API 则保持默认英文）
- * - 同步 `document.documentElement.lang`，便于无障碍与浏览器行为
- * - `applyGeneral` 供设置保存后批量对齐 locale
+ * 注意：本文件只导出组件。hooks 见 `useI18n.ts`——同文件混导出会让
+ * Vite Fast Refresh 失败并触发整页 reload，Electron 下常表现为白屏。
  */
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -21,17 +18,8 @@ import {
   type GeneralSettings,
 } from "@thinker-workbench/shared";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings } from "../bridge/thinker";
-import { translate, type MessageKey } from "./translate";
-
-type I18nContextValue = {
-  locale: AppLocale;
-  setLocale: (locale: AppLocale) => void;
-  t: (key: MessageKey, vars?: Record<string, string>) => string;
-  /** 应用完整通用设置快照（例如设置保存成功后）。 */
-  applyGeneral: (general: GeneralSettings) => void;
-};
-
-const I18nContext = createContext<I18nContextValue | null>(null);
+import { I18nContext, type I18nContextValue } from "./context";
+import { translate } from "./translate";
 
 /** 提供 locale / t / applyGeneral；应包裹在 AppearanceProvider 内侧。 */
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -83,16 +71,4 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-}
-
-/** 读取完整 i18n 上下文；必须在 I18nProvider 内使用。 */
-export function useI18n(): I18nContextValue {
-  const ctx = useContext(I18nContext);
-  if (!ctx) throw new Error("useI18n must be used within I18nProvider");
-  return ctx;
-}
-
-/** 仅取翻译函数 `t` 的便捷 hook。 */
-export function useT() {
-  return useI18n().t;
 }

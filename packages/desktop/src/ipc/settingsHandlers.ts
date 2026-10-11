@@ -7,10 +7,12 @@
  */
 import {
   type AttentionPreviewKind,
+  type ChatMode,
   type DataDirChangeRequest,
   type GeneralSettings,
   IpcChannels,
-  type ModelSettingsPatch,
+  type ModelCatalogPatch,
+  type ModelSelection,
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
 import fs from "node:fs";
@@ -24,10 +26,17 @@ import {
   saveModelSettings,
   saveShortcutsSettings,
 } from "../config/settingsStore";
+import { probeModel } from "../config/probeModel";
 import {
   clearShortcutRecording,
   setShortcutRecording,
 } from "../config/shortcutRecording";
+import {
+  getSessionChatMode,
+  getSessionModelSelection,
+  setSessionChatMode,
+  setSessionModelSelection,
+} from "../db/workspacesStore";
 import { previewAttention } from "../notify/agentAttention";
 
 /** 已挂过 destroyed 清理的 webContents，避免重复 once。 */
@@ -46,9 +55,38 @@ export function registerSettingsHandlers(
   },
 ): void {
   ipcMain.handle(IpcChannels.settingsGetModel, () => getPublicModelSettings());
-  ipcMain.handle(IpcChannels.settingsSetModel, (_evt, patch: ModelSettingsPatch) => {
+  ipcMain.handle(IpcChannels.settingsSetModel, (_evt, patch: ModelCatalogPatch) => {
     return saveModelSettings(patch ?? {});
   });
+  ipcMain.handle(IpcChannels.settingsProbeModel, (_evt, request) => probeModel(request ?? {}));
+  ipcMain.handle(
+    IpcChannels.settingsGetSessionModelSelection,
+    (_evt, sessionId: string) =>
+      getSessionModelSelection(typeof sessionId === "string" ? sessionId : ""),
+  );
+  ipcMain.handle(
+    IpcChannels.settingsSetSessionModelSelection,
+    (_evt, sessionId: string, selection: ModelSelection) => {
+      setSessionModelSelection(
+        typeof sessionId === "string" ? sessionId : "",
+        selection ?? { mode: "auto" },
+      );
+      return getSessionModelSelection(typeof sessionId === "string" ? sessionId : "");
+    },
+  );
+  ipcMain.handle(
+    IpcChannels.settingsGetSessionChatMode,
+    (_evt, sessionId: string) =>
+      getSessionChatMode(typeof sessionId === "string" ? sessionId : ""),
+  );
+  ipcMain.handle(
+    IpcChannels.settingsSetSessionChatMode,
+    (_evt, sessionId: string, chatMode: ChatMode) =>
+      setSessionChatMode(
+        typeof sessionId === "string" ? sessionId : "",
+        chatMode ?? "agent",
+      ),
+  );
   ipcMain.handle(IpcChannels.settingsGetShortcuts, () => getShortcutsSettings());
   ipcMain.handle(IpcChannels.settingsSetShortcuts, (_evt, patch: Partial<ShortcutsMap>) => {
     return saveShortcutsSettings(patch ?? {});
