@@ -26,25 +26,67 @@ export type FileEditorProps = {
 
 function langFromPath(path?: string | null) {
   if (!path) return "plaintext";
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  const base = path.replace(/\\/g, "/").split("/").pop() ?? path;
+  const ext = base.includes(".") ? base.split(".").pop()?.toLowerCase() ?? "" : "";
   const map: Record<string, string> = {
     ts: "typescript",
     tsx: "typescript",
+    mts: "typescript",
+    cts: "typescript",
     js: "javascript",
     jsx: "javascript",
     cjs: "javascript",
     mjs: "javascript",
     json: "json",
+    jsonc: "json",
     md: "markdown",
+    mdx: "markdown",
     py: "python",
     css: "css",
+    scss: "scss",
     less: "less",
     html: "html",
+    htm: "html",
+    xml: "xml",
+    svg: "xml",
     sql: "sql",
     yml: "yaml",
     yaml: "yaml",
+    sh: "shell",
+    bash: "shell",
+    zsh: "shell",
+    ps1: "powershell",
+    rs: "rust",
+    go: "go",
+    java: "java",
+    kt: "kotlin",
+    toml: "ini",
+    ini: "ini",
+    conf: "ini",
+    dockerfile: "dockerfile",
   };
+  if (!ext && base.toLowerCase() === "dockerfile") return "dockerfile";
   return map[ext] ?? "plaintext";
+}
+
+/**
+ * 把工作区绝对路径转成 Monaco 可识别的 URI 字符串。
+ * Windows `C:\...` 若直接当 path，会被当成 scheme=`C`，TS 语言服务挂不上。
+ */
+function toMonacoModelPath(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "inmemory:///untitled";
+  if (/^(inmemory|file|untitled):/i.test(trimmed)) return trimmed;
+  // Windows 盘符路径
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed)) {
+    const normalized = trimmed.replace(/\\/g, "/");
+    return `file:///${normalized}`;
+  }
+  // POSIX 绝对路径
+  if (trimmed.startsWith("/")) {
+    return `file://${trimmed}`;
+  }
+  return trimmed;
 }
 
 function readCssPx(name: string): number | null {
@@ -65,8 +107,8 @@ export function FileEditor({
 }: FileEditorProps) {
   const { theme, themeId } = useDesignTheme();
   const colorScheme = theme.colorScheme === "dark" ? "dark" : "light";
-  const lang = language ?? langFromPath(path);
-  const monacoPath = path || modelPath || "inmemory:///untitled";
+  const lang = language ?? langFromPath(path ?? modelPath);
+  const monacoPath = toMonacoModelPath(path || modelPath || "inmemory:///untitled");
 
   const [type, setType] = useState(() => ({
     fontSize: 13,
@@ -95,6 +137,10 @@ export function FileEditor({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       saveRef.current?.();
     });
+    // Ctrl+Space 显式触发补全
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => {
+      void editor.getAction("editor.action.triggerSuggest")?.run();
+    });
   };
 
   return (
@@ -118,10 +164,20 @@ export function FileEditor({
             renderLineHighlight: "all",
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
-            hover: { enabled: "off" },
-            renderValidationDecorations: "off",
+            // 语法提示：补全 / 参数提示 / 悬停说明 / 波浪线
+            quickSuggestions: { other: true, comments: false, strings: true },
+            suggestOnTriggerCharacters: true,
+            acceptSuggestionOnCommitCharacter: true,
+            acceptSuggestionOnEnter: "on",
+            tabCompletion: "on",
+            wordBasedSuggestions: "currentDocument",
+            parameterHints: { enabled: true },
+            hover: { enabled: true, delay: 300 },
+            renderValidationDecorations: readOnly ? "off" : "on",
             wordWrap: "on",
             automaticLayout: true,
+            // 补全 / 悬停用 fixed，避免被右侧面板 overflow:hidden 裁切
+            fixedOverflowWidgets: true,
             padding: { top: 12 },
             scrollbar: {
               vertical: "auto",

@@ -33,7 +33,6 @@ export function resolveDesignTheme(input?: DesignThemeInput | null): DesignTheme
     ...base,
     ...input,
     colorScheme: input.colorScheme ?? base.colorScheme,
-    typeStyle: input.typeStyle ?? base.typeStyle,
     ui: { ...base.ui, ...input.ui },
     markdown: { ...base.markdown, ...input.markdown },
     mermaid: {
@@ -74,7 +73,6 @@ export function createDesignTheme(
   return {
     id: overrides.id ?? resolved.id,
     colorScheme: overrides.colorScheme ?? resolved.colorScheme,
-    typeStyle: overrides.typeStyle ?? resolved.typeStyle,
     ui: { ...resolved.ui, ...overrides.ui },
     markdown: { ...resolved.markdown, ...overrides.markdown },
     mermaid: {
@@ -123,26 +121,14 @@ export function applyDesignTheme(
     }
   }
 
-  const typeStyle = resolved.typeStyle ?? "regular";
-  el.dataset.twType = typeStyle;
-  if (typeStyle === "regular") {
-    const body =
-      resolved.ui["--tw-font-body"] ||
-      '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
-    el.style.setProperty("--tw-font-hand", body);
-    el.style.setProperty("--tw-font-ui", body);
-    el.style.setProperty("--md-font-hand", body);
-    el.style.setProperty("--font-hand", body);
-    el.style.setProperty("--font", body);
-    el.style.setProperty("--display", body);
-  } else {
-    const ui =
-      resolved.ui["--tw-font-ui"] ||
-      resolved.ui["--tw-font-hand"] ||
-      '"Segoe Print", "Bradley Hand", "Apple Chancery", "TW Hand", cursive';
-    el.style.setProperty("--tw-font-ui", ui);
-    el.style.setProperty("--font", ui);
-  }
+  // UI / markdown 正文字体与 body 对齐，并写入 `--font` / `--display` 等遗留别名。
+  const body =
+    resolved.ui["--tw-font-body"] ||
+    '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
+  el.style.setProperty("--tw-font-ui", body);
+  el.style.setProperty("--md-font", body);
+  el.style.setProperty("--font", body);
+  el.style.setProperty("--display", body);
 
   // 文档 iframe 等仍读取 `--paper` 的表面。
   const bg = resolved.ui["--tw-bg"];

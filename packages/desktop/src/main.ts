@@ -19,6 +19,7 @@ import { broadcastThreadsChanged } from "./ipc/workspacesHandlers";
 import { closeLogsDb } from "./log/logsDb";
 import { pruneExpiredLogs } from "./log/retention";
 import { configureDesktopLog } from "./log/setup";
+import { pruneTraceStore } from "./trace/retention";
 import { ensureWindowsToastShortcut } from "./notify/windowsToastShortcut";
 import { applyContentSecurityPolicy } from "./security/csp";
 import { pushAgentHello, startAgentProcess } from "./utility/startAgentProcess";
@@ -82,6 +83,11 @@ app.whenReady().then(() => {
   });
   configureDesktopLog();
   pruneExpiredLogs(getGeneralSettings().logRetentionDays);
+  try {
+    pruneTraceStore();
+  } catch {
+    /* Trace 清理失败不拖垮启动 */
+  }
   // 跟随系统主题：OS 深浅色变化时同步原生窗口底色
   nativeTheme.on("updated", () => {
     if (getGeneralSettings().uiTheme === "system") {
@@ -97,6 +103,11 @@ app.whenReady().then(() => {
       // 日志策略（开关 / 保留天数 / 截断）即时生效；dataDir 不走此回调切换
       configureDesktopLog();
       pruneExpiredLogs(getGeneralSettings().logRetentionDays);
+      try {
+        pruneTraceStore();
+      } catch {
+        /* ignore */
+      }
       try {
         const { browserSessionManager } = require("./browser/BrowserSessionManager") as typeof import("./browser/BrowserSessionManager");
         void browserSessionManager.refreshOverlayTheme();
@@ -131,6 +142,11 @@ app.whenReady().then(() => {
       configureDesktopLog();
       pruneExpiredLogs(getGeneralSettings().logRetentionDays);
       try {
+        pruneTraceStore();
+      } catch {
+        /* ignore */
+      }
+      try {
         pushAgentHello(bridge);
       } catch {
         /* ignore */
@@ -147,13 +163,18 @@ app.whenReady().then(() => {
   startDevToolsPrefsBridge();
   syncTrayFromSettings();
 
-  // 每天再扫一次过期日志
+  // 每天再扫一次过期日志与 Trace
   setInterval(
     () => {
       try {
         pruneExpiredLogs(getGeneralSettings().logRetentionDays);
       } catch {
         /* 清理失败不拖垮主进程 */
+      }
+      try {
+        pruneTraceStore();
+      } catch {
+        /* ignore */
       }
     },
     24 * 60 * 60 * 1000,

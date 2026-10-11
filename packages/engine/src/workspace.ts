@@ -152,6 +152,3 @@ export function setShellProfile(profile: ShellProfile | undefined | null): void 
 export function getShellProfile(): ShellProfile | null {
   return currentShell;
 }
-
-/** @deprecated 兼容旧引用；请用 getWorkspaceRoot()。 */
-export const WORKSPACE_ROOT = "";

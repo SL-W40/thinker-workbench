@@ -14,7 +14,7 @@ export type MarkdownTheme = {
   vars: MarkdownThemeVars;
   mermaid: {
     theme: MermaidThemeName;
-    /** Mermaid 11 草图风格；默认 `handDrawn`。 */
+    /** Mermaid 11 图表外观；默认 `classic`。 */
     look?: MermaidLook;
     /** 叠在由 CSS token 推导的 mermaid 变量之上的可选覆盖。 */
     themeVariables?: Record<string, string>;

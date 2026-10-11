@@ -5,7 +5,7 @@ import { notesTheme as mdNotes } from "@thinker-workbench/markdown";
 import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
 
-const HAND = mdNotes.vars["--md-font-hand"] ?? "";
+const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdNotes.vars["--md-font-mono"] ?? "";
 
 /** Notes——暖色笔记纸面。 */
@@ -29,8 +29,7 @@ export const notesTheme: DesignTheme = {
     "--tw-code-bg": "#efe2cc",
     "--tw-placeholder": "rgba(107, 83, 68, 0.7)",
     "--tw-hover": "rgba(42, 34, 24, 0.06)",
-    "--tw-font-body": '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif',
-    "--tw-font-hand": HAND,
+    "--tw-font-body": SANS,
     "--tw-font-mono": MONO,
     "--tw-radius": "14px",
     "--tw-radius-control": "10px",

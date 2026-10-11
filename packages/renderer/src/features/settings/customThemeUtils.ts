@@ -13,7 +13,6 @@ export function designThemeToSnapshot(theme: DesignTheme, id: string): CustomThe
   return {
     id,
     ...(theme.colorScheme ? { colorScheme: theme.colorScheme } : {}),
-    ...(theme.typeStyle ? { typeStyle: theme.typeStyle } : {}),
     ui: { ...theme.ui },
     markdown: { ...theme.markdown },
     mermaid: {
@@ -86,7 +85,6 @@ export function cloneCustomThemeRecord(record: CustomThemeRecord): CustomThemeRe
       {
         id: record.theme.id,
         colorScheme: record.theme.colorScheme,
-        typeStyle: record.theme.typeStyle,
         ui: { ...record.theme.ui },
         markdown: { ...record.theme.markdown },
         mermaid: {

@@ -34,6 +34,7 @@ import {
   configureFromLegacyModel,
   configureModelCatalog,
 } from "../model/catalog";
+import { configureHttpCompatibilityMode } from "../model/httpFetch";
 import {
   configureAiLocale,
   getAiLocale,
@@ -43,6 +44,7 @@ import {
 import type { ChatMessage } from "../model/types";
 import { createAgentRuntime, type AgentRuntime } from "../runtime/AgentRuntime";
 import { setSubagentDefinitions } from "../subagents/registry";
+import { cancelRunningBackgroundTasks } from "../tools/task/execute";
 import { setAllowAiDeleteFiles, setWorkspaceAccess, setWorkspaceRoot } from "../workspace";
 import { handleBrowserEvent } from "./browserClient";
 import { handlePtyEvent } from "./ptyClient";
@@ -241,6 +243,7 @@ export class UtilityHost {
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
+    configureHttpCompatibilityMode(message.httpCompatibilityMode);
     this.applyDataDir(message.dataDir);
     void this.applyMcpServers(message.mcpServers);
     if (message.subagents) setSubagentDefinitions(message.subagents);
@@ -287,6 +290,7 @@ export class UtilityHost {
     this.applyWorkspaceAccess(message.workspaceAccess);
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
+    configureHttpCompatibilityMode(message.httpCompatibilityMode);
     this.applyDataDir(message.dataDir);
     this.applyTrace({
       traceEnabled: message.traceEnabled,
@@ -342,6 +346,7 @@ export class UtilityHost {
   private onCancel(message: UtilityCancel): void {
     agentLog("host").info("cancel", { runId: message.command.runId });
     rejectAllHitl("Run cancelled.");
+    cancelRunningBackgroundTasks("Cancelled.");
     this.runtime?.cancel(message.command.runId);
   }
 
@@ -367,6 +372,7 @@ export class UtilityHost {
       this.applyWorkspaceAccess(message.workspaceAccess);
       this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
       applyShellConfig(message);
+      configureHttpCompatibilityMode(message.httpCompatibilityMode);
       this.applyDataDir(message.dataDir);
       this.applyTrace({
         traceEnabled: message.traceEnabled,

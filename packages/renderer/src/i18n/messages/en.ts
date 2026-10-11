@@ -240,7 +240,7 @@ export const en = {
       disabled: "Disabled",
       loading: "Loading",
       locale: "Locale",
-      segmented: "Type style",
+      segmented: "Choice",
       switch: "Notifications",
       checkbox: "Remember this choice",
       radio: "Radio group",
@@ -525,7 +525,7 @@ export const en = {
       },
       appearance: {
         title: "Appearance",
-        description: "Theme, type style, and UI / AI language.",
+        description: "Theme and UI / AI language.",
       },
       notifications: {
         title: "Notifications",
@@ -699,12 +699,6 @@ export const en = {
           mermaidVarsHint: "Object of string values merged into Mermaid themeVariables.",
           limitReached: "You can keep at most {n} custom themes.",
         },
-      },
-      typeStyle: {
-        title: "Type style",
-        description: "Handwriting fonts and sketch diagrams, or regular sans and classic Mermaid.",
-        hand: "Notes",
-        regular: "Regular",
       },
       uiLocale: {
         title: "Interface language",
@@ -986,10 +980,9 @@ export const en = {
     stepAppearance: "Appearance",
     stepLanguage: "Language",
     stepOf: "Step {current} of {total}",
-    appearanceLead: "Pick a color theme and type style. Changes preview live.",
+    appearanceLead: "Pick a color theme. Changes preview live.",
     languageLead:
       "Choose the interface language, AI reply language, and where Thinker stores local data (~/.thinker by default).",
-    typeStyleTitle: "Type style",
     dataDirTitle: "Root directory",
     dataDirDescription:
       "App data root (settings.json, chats, logs, skills, …). Default ~/.thinker.",

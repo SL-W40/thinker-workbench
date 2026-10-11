@@ -79,7 +79,7 @@ export function CustomThemeEditor({
   onSave,
 }: Props) {
   const t = useT();
-  const { typeStyle, applyAppearance } = useAppearance();
+  const { applyAppearance } = useAppearance();
   const [draft, setDraft] = useState<CustomThemeRecord | null>(null);
   const [tab, setTab] = useState<EditorTab>("meta");
   const [busy, setBusy] = useState(false);
@@ -99,7 +99,7 @@ export function CustomThemeEditor({
       ...customsBaseline.filter((c) => c.id !== next.id),
       next,
     ];
-    applyAppearance(next.id, typeStyle, merged);
+    applyAppearance(next.id, merged);
   }, [open, record?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabOptions = useMemo(
@@ -120,7 +120,7 @@ export function CustomThemeEditor({
       ...customsBaseline.filter((c) => c.id !== next.id),
       next,
     ];
-    applyAppearance(next.id, typeStyle, merged);
+    applyAppearance(next.id, merged);
   }
 
   function patchDraft(updater: (prev: CustomThemeRecord) => CustomThemeRecord) {

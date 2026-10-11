@@ -18,7 +18,9 @@ License: [Apache-2.0](./LICENSE).
 
 ```bash
 pnpm install
-pnpm run dev            # Full stack: watchers + Electron
+pnpm run dev                 # Full stack: watchers + Electron
+pnpm run dev -- --no-hot     # No Vite HMR / Electron auto-restart
+pnpm run dev -- --devtools   # Open DevTools on launch (can combine with --no-hot)
 ```
 
 Then open **Settings → Model** and set an OpenAI-compatible **API key**, **base URL**, and **model**. Keys are encrypted at rest with OS `safeStorage` in `<dataDir>/settings.json` (default `~/.thinker/settings.json`).
@@ -26,6 +28,8 @@ Then open **Settings → Model** and set an OpenAI-compatible **API key**, **bas
 | Script | Purpose |
 |---|---|
 | `pnpm run dev` | Product desktop stack (shared → logger → engine → desktop → renderer → Electron) |
+| `pnpm run dev -- --no-hot` | Dev without hot reload (UI HMR off; Electron starts once). Env: `TW_DEV_NO_HOT=1` |
+| `pnpm run dev -- --devtools` | Open main-window DevTools on launch. Env: `THINKER_OPEN_DEVTOOLS=1` |
 | `pnpm run build` | Build all packages (including renderer) |
 | `pnpm run build:node` | Build without renderer |
 | `pnpm start` | Electron against the last build |
@@ -45,7 +49,7 @@ Tests live under each package’s `tests/` tree (mirrors `src/`), named `*.test.
 | http://127.0.0.1:5179 | Renderer (Vite) |
 | http://127.0.0.1:5181 | Logger web UI |
 
-Optional: `THINKER_OPEN_DEVTOOLS=1` opens DevTools on launch.
+Optional: `pnpm run dev -- --devtools` or `THINKER_OPEN_DEVTOOLS=1` opens DevTools on launch.
 
 Renderer-only (`pnpm --filter @thinker-workbench/renderer dev`) has no `window.thinker` bridge — chat will echo a hint to run full `pnpm run dev`.
 

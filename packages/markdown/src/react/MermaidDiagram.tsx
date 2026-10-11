@@ -109,7 +109,7 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
   const [previewSvg, setPreviewSvg] = useState("");
   const [busy, setBusy] = useState(true);
 
-  const look = theme.mermaid.look ?? "handDrawn";
+  const look = theme.mermaid.look ?? "classic";
 
   useEffect(() => {
     if (incomplete) return;

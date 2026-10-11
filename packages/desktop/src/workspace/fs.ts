@@ -114,16 +114,23 @@ export function listTree(root: string, maxDepth = 6): WorkspaceNode {
   return walk(abs, 0);
 }
 
-/** 读取工作空间内文件；媒体附带 data URL 预览。 */
+/** 读取工作空间内文件；媒体附带 data URL 预览。缺失时返回 `missing: true`（不抛错）。 */
 export function readWorkspaceFile(root: string, relPath: string): WorkspaceFile {
   const rel = (relPath || ".").replace(/\\/g, "/").replace(/^\.\//, "");
   const abs = assertInside(root, path.join(root, rel));
+  const posix = rel.replace(/\\/g, "/");
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-    throw new Error("File not found.");
+    return {
+      path: posix,
+      content: "",
+      size: 0,
+      binary: false,
+      editable: false,
+      missing: true,
+    };
   }
   const st = fs.statSync(abs);
   const buf = fs.readFileSync(abs);
-  const posix = rel.replace(/\\/g, "/");
   const media = detectMedia(abs);
 
   if (media) {

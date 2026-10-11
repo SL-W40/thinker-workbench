@@ -23,6 +23,11 @@ export type WorkspaceFile = {
   size: number;
   binary: boolean;
   editable: boolean;
+  /**
+   * 路径不存在或不是文件时为 true（不抛错，避免恢复已删标签时刷主进程错误日志）。
+   * 此时 content 为空，勿当可读文件处理。
+   */
+  missing?: boolean;
   /** 媒体预览类型；非媒体为 null/省略。 */
   mediaKind?: WorkspaceMediaKind | null;
   /** MIME（媒体预览用）。 */

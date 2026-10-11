@@ -28,7 +28,7 @@ export const lightTheme: MarkdownTheme = {
     "--md-shadow-soft": "rgba(0, 0, 0, 0.08)",
     "--md-stream-glow": "rgba(0, 0, 0, 0.08)",
     "--md-font-mono": MONO,
-    "--md-font-hand": SANS,
+    "--md-font": SANS,
     "--md-hl-keyword": "#111111",
     "--md-hl-string": "#1a7f37",
     "--md-hl-number": "#b00020",

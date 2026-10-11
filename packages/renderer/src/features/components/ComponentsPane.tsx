@@ -98,7 +98,7 @@ export function ComponentsPane({ active }: Props) {
   const [ctxAnchor, setCtxAnchor] = useState<{ x: number; y: number } | null>(null);
  /** 切换 Input ?invalid 态，演示错误描边。*/
   const [invalid, setInvalid] = useState(false);
-  const [segment, setSegment] = useState("regular");
+  const [segment, setSegment] = useState("one");
   const [choice, setChoice] = useState("a");
   const [nav, setNav] = useState("general");
   const [radio, setRadio] = useState("one");
@@ -271,8 +271,8 @@ export function ComponentsPane({ active }: Props) {
               <SegmentedControl
                 value={segment}
                 options={[
-                  { value: "regular", label: t("settings.general.typeStyle.regular") },
-                  { value: "hand", label: t("settings.general.typeStyle.hand") },
+                  { value: "one", label: t("components.demo.radioOne") },
+                  { value: "two", label: t("components.demo.radioTwo") },
                 ]}
                 onChange={setSegment}
                 aria-label={t("components.demo.segmented")}

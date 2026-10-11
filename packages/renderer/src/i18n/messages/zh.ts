@@ -242,7 +242,7 @@ export const zh: MessageTree = {
       disabled: "禁用",
       loading: "加载中",
       locale: "语言",
-      segmented: "字体风格",
+      segmented: "选择",
       switch: "系统通知",
       checkbox: "记住此选择",
       radio: "单选组",
@@ -516,7 +516,7 @@ export const zh: MessageTree = {
       },
       appearance: {
         title: "外观",
-        description: "主题、字型与界面 / AI 语言。",
+        description: "主题与界面 / AI 语言。",
       },
       notifications: {
         title: "通知",
@@ -690,12 +690,6 @@ export const zh: MessageTree = {
           mermaidVarsHint: "字符串键值对象，会合并进 Mermaid themeVariables。",
           limitReached: "自定义主题最多 {n} 个。",
         },
-      },
-      typeStyle: {
-        title: "字体风格",
-        description: "手写字体与草图风格图表，或常规无衬线与经典 Mermaid。",
-        hand: "笔记",
-        regular: "常规",
       },
       uiLocale: {
         title: "界面语言",
@@ -962,9 +956,8 @@ export const zh: MessageTree = {
     stepAppearance: "外观",
     stepLanguage: "语言",
     stepOf: "第 {current} / {total} 步",
-    appearanceLead: "选择配色主题与字体风格，可即时预览。",
+    appearanceLead: "选择配色主题，可即时预览。",
     languageLead: "选择界面语言、Agent 回复语言，以及本机数据根目录（默认 ~/.thinker）。",
-    typeStyleTitle: "字体风格",
     dataDirTitle: "根目录",
     dataDirDescription:
       "本机数据根（settings.json、会话、日志、skills 等）。默认 ~/.thinker。",

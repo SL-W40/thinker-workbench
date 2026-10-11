@@ -4,7 +4,6 @@
 import type {
   AiLocale,
   AppLocale,
-  AppTypeStyle,
   ShellApprovalMode,
   WorkspaceAccess,
 } from "@thinker-workbench/shared";
@@ -45,12 +44,6 @@ export function shellApprovalLabel(
 export function deleteRestoreTtlLabel(days: number, t: (key: MessageKey) => string): string {
   if (days <= 0) return t("settings.general.deleteFileRestoreTtl.never");
   return t("settings.general.deleteFileRestoreTtl.days").replace("{n}", String(days));
-}
-
-export function typeStyleLabel(style: AppTypeStyle, t: (key: MessageKey) => string): string {
-  return style === "regular"
-    ? t("settings.general.typeStyle.regular")
-    : t("settings.general.typeStyle.hand");
 }
 
 export function formatBytes(n: number): string {

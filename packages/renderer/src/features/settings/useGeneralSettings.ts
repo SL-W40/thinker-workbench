@@ -92,7 +92,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
           setGeneral(next);
           setDataDirDraft(next.dataDir);
           applyGeneralRef.current(next);
-          applyAppearanceRef.current(next.uiTheme, next.uiTypeStyle, next.customThemes);
+          applyAppearanceRef.current(next.uiTheme, next.customThemes);
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -118,7 +118,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
         return saved;
       });
       applyGeneralRef.current(saved);
-      applyAppearanceRef.current(saved.uiTheme, saved.uiTypeStyle, saved.customThemes);
+      applyAppearanceRef.current(saved.uiTheme, saved.customThemes);
       setError(null);
     }
     window.addEventListener(GENERAL_SETTINGS_CHANGED, onChanged);
@@ -149,7 +149,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
         setGeneral(next);
         setDataDirDraft(next.dataDir);
         applyGeneral(next);
-        applyAppearance(next.uiTheme, next.uiTypeStyle, next.customThemes);
+        applyAppearance(next.uiTheme, next.customThemes);
       }
       setError(err instanceof Error ? err.message : String(err));
       return false;

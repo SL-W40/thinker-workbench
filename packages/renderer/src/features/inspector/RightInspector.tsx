@@ -149,7 +149,10 @@ function isDraftTabKey(key: string): boolean {
   return key.startsWith("draft:");
 }
 
-/** 恢复会话时按路径读入缓冲，不切换 activeTab。*/
+/**
+ * 按路径读入编辑缓冲。
+ * @returns 文件存在且已写入缓冲为 true；缺失 / 读失败为 false（调用方应关掉对应 tab）。
+ */
 async function loadFileBuffers(
   workspaceId: string,
   path: string,
@@ -160,7 +163,7 @@ async function loadFileBuffers(
     setMediaByKey: Dispatch<SetStateAction<Record<string, MediaPreviewInfo>>>;
     setReadOnlyByPath: Dispatch<SetStateAction<Record<string, boolean>>>;
   },
-): Promise<void> {
+): Promise<boolean> {
   const key = fileTabKey(path);
   const {
     setDrafts,
@@ -171,6 +174,7 @@ async function loadFileBuffers(
   } = setters;
   try {
     const file = await workspaceReadFile(workspaceId, path);
+    if (file.missing) return false;
     if (file.mediaKind) {
       setMediaByKey((d) => ({
         ...d,
@@ -205,9 +209,9 @@ async function loadFileBuffers(
       setReadOnlyByPath((d) => ({ ...d, [path]: false }));
       setUnsaved((d) => ({ ...d, [key]: false }));
     }
+    return true;
   } catch {
-    setDrafts((d) => ({ ...d, [key]: "" }));
-    setSaved((d) => ({ ...d, [key]: "" }));
+    return false;
   }
 }
 
@@ -381,17 +385,32 @@ export function RightInspector({
       .map((tab) => tab.path);
     let cancelled = false;
     void (async () => {
+      const missing = new Set<string>();
       for (const path of filePaths) {
         if (cancelled) return;
-        await loadFileBuffers(workspaceId, path, {
+        const ok = await loadFileBuffers(workspaceId, path, {
           setDrafts,
           setSaved,
           setUnsaved,
           setMediaByKey,
           setReadOnlyByPath,
         });
+        if (!ok) missing.add(path);
       }
-      if (!cancelled) skipPersist.current = false;
+      if (cancelled) return;
+      // 会话里记下的文件若已删，丢掉对应 tab，避免空壳与反复读失败
+      if (missing.size > 0) {
+        setTabs((prev) => {
+          const kept = prev.filter(
+            (tab) => !(tab.kind === "file" && missing.has(tab.path)),
+          );
+          queueMicrotask(() => {
+            setActiveTab((cur) => resolveActiveKey(kept, cur));
+          });
+          return kept;
+        });
+      }
+      skipPersist.current = false;
     })();
     if (filePaths.length === 0) skipPersist.current = false;
 
@@ -675,13 +694,22 @@ export function RightInspector({
     // 已有草稿或媒体预览则不重新读
     if (drafts[key] != null || saved[key] != null || mediaByKey[key] != null) return;
 
-    await loadFileBuffers(workspaceId, path, {
+    const ok = await loadFileBuffers(workspaceId, path, {
       setDrafts,
       setSaved,
       setUnsaved,
       setMediaByKey,
       setReadOnlyByPath,
     });
+    if (!ok) {
+      setTabs((prev) => {
+        const kept = prev.filter((tab) => tab.key !== key);
+        queueMicrotask(() => {
+          setActiveTab((cur) => (cur === key ? resolveActiveKey(kept, cur) : cur));
+        });
+        return kept;
+      });
+    }
   }
 
   function clearTabBuffers(key: string) {

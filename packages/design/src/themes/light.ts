@@ -5,8 +5,7 @@ import { lightTheme as mdLight } from "@thinker-workbench/markdown";
 import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
 
-const SANS =
-  mdLight.vars["--md-font-hand"] ?? '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
+const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdLight.vars["--md-font-mono"] ?? "";
 
 /** 基础浅色——黑白灰极简。 */
@@ -31,7 +30,6 @@ export const lightTheme: DesignTheme = {
     "--tw-placeholder": "rgba(0, 0, 0, 0.4)",
     "--tw-hover": "rgba(0, 0, 0, 0.05)",
     "--tw-font-body": SANS,
-    "--tw-font-hand": SANS,
     "--tw-font-mono": MONO,
     "--tw-radius": "10px",
     "--tw-radius-control": "8px",

@@ -19,7 +19,6 @@ import {
   parseCustomThemeExport,
   toCustomThemeExport,
   type AppThemeId,
-  type AppTypeStyle,
   type BuiltinAppThemeId,
   type CustomThemeRecord,
 } from "@thinker-workbench/shared";
@@ -50,8 +49,6 @@ const THEME_DESC: Record<BuiltinAppThemeId, MessageKey> = {
 type Props = {
   /** 当前已持久化的主题。 */
   savedTheme: AppThemeId;
-  /** 与主题一并 compose 的字型（预览时保持不变）。 */
-  typeStyle: AppTypeStyle;
   /** 自定义主题目录。 */
   customThemes?: CustomThemeRecord[];
   /** 返回 `false` 时将实时主题回滚。 */
@@ -130,7 +127,6 @@ function readPrefersDark(): boolean {
 
 export function ThemePicker({
   savedTheme,
-  typeStyle,
   customThemes = [],
   onSelect,
   onCustomThemesChange,
@@ -170,20 +166,20 @@ export function ThemePicker({
   async function choose(id: AppThemeId) {
     if (id === activeId && id === savedTheme) return;
     const previous = savedTheme;
-    applyAppearance(id, typeStyle, customs);
+    applyAppearance(id, customs);
     const ok = await onSelect(id);
-    if (!ok) applyAppearance(previous, typeStyle, customs);
+    if (!ok) applyAppearance(previous, customs);
   }
 
   async function persistCustoms(next: CustomThemeRecord[], selectId?: AppThemeId) {
     if (!onCustomThemesChange) return false;
     const previousTheme = savedTheme;
     const previousCustoms = customs;
-    if (selectId) applyAppearance(selectId, typeStyle, next);
-    else applyAppearance(themeId, typeStyle, next);
+    if (selectId) applyAppearance(selectId, next);
+    else applyAppearance(themeId, next);
     const ok = await onCustomThemesChange(next, selectId);
     if (!ok) {
-      applyAppearance(previousTheme, typeStyle, previousCustoms);
+      applyAppearance(previousTheme, previousCustoms);
       return false;
     }
     return true;
@@ -471,7 +467,7 @@ export function ThemePicker({
         customsBaseline={customs}
         onClose={() => {
           setEditing(null);
-          applyAppearance(savedTheme, typeStyle, customs);
+          applyAppearance(savedTheme, customs);
         }}
         onSave={async (record) => {
           await saveEdited(record);

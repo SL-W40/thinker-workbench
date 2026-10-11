@@ -2,10 +2,7 @@
  * 外观 hooks：与 AppearanceProvider 分文件，保证 Vite Fast Refresh 兼容。
  */
 import { useContext } from "react";
-import {
-  DEFAULT_APP_THEME,
-  DEFAULT_APP_TYPE_STYLE,
-} from "@thinker-workbench/shared";
+import { DEFAULT_APP_THEME } from "@thinker-workbench/shared";
 import {
   AppearanceContext,
   type AppearanceContextValue,
@@ -19,7 +16,6 @@ export function useAppearance(): AppearanceContextValue {
   if (!ctx) {
     return {
       themeId: DEFAULT_APP_THEME,
-      typeStyle: DEFAULT_APP_TYPE_STYLE,
       customThemes: [],
       applyAppearance: () => undefined,
     };

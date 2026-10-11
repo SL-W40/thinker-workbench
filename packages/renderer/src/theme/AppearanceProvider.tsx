@@ -1,8 +1,8 @@
 /**
- * 应用外观上下文：主题偏好（含跟随系统 / 自定义）+ 字型风格（regular/hand）。
+ * 应用外观上下文：主题偏好（含跟随系统 / 自定义）。
  *
  * - 初始值来自 boot 同步绘制，避免与闪屏 / ThemeProvider 不一致
- * - 若存在 `getGeneralSync`，不再异步覆盖（曾与设置页竞态导致字型「像坏了」）
+ * - 若存在 `getGeneralSync`，不再异步覆盖（曾与设置页竞态导致主题闪动）
  * - 就绪后派发 `tw-appearance-ready`，供 main.tsx 关闭闪屏
  *
  * 注意：本文件只导出组件。hooks 见 `useAppearance.ts`——同文件混导出会让
@@ -16,14 +16,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { applyTypeStyle, resolveUiTheme } from "@thinker-workbench/design";
+import { resolveUiTheme } from "@thinker-workbench/design";
 import { useDesignTheme } from "@thinker-workbench/design/react";
 import {
   DEFAULT_APP_THEME,
-  DEFAULT_APP_TYPE_STYLE,
   normalizeUiTheme,
   type AppThemeId,
-  type AppTypeStyle,
   type CustomThemeRecord,
 } from "@thinker-workbench/shared";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings } from "../bridge/thinker";
@@ -74,7 +72,6 @@ type Props = {
   children: ReactNode;
   /** 来自同步 boot，使闪屏 / ThemeProvider 已与设置一致。 */
   initialThemeId?: AppThemeId;
-  initialTypeStyle?: AppTypeStyle;
   initialCustomThemes?: CustomThemeRecord[];
 };
 
@@ -84,37 +81,29 @@ type Props = {
 export function AppearanceProvider({
   children,
   initialThemeId = DEFAULT_APP_THEME,
-  initialTypeStyle = DEFAULT_APP_TYPE_STYLE,
   initialCustomThemes = [],
 }: Props) {
   const { setTheme } = useDesignTheme();
   const [themeId, setThemeId] = useState<AppThemeId>(initialThemeId);
-  const [typeStyle, setTypeStyle] = useState<AppTypeStyle>(initialTypeStyle);
   const [customThemes, setCustomThemes] = useState<CustomThemeRecord[]>(initialCustomThemes);
   const [prefersDark, setPrefersDark] = useState(readPrefersDark);
   const booted = useRef(false);
   const themeIdRef = useRef(themeId);
-  const typeStyleRef = useRef(typeStyle);
   const customsRef = useRef(customThemes);
   themeIdRef.current = themeId;
-  typeStyleRef.current = typeStyle;
   customsRef.current = customThemes;
 
   const applyAppearance = useCallback(
     (
       theme: AppThemeId,
-      style: AppTypeStyle,
       customs: readonly CustomThemeRecord[] = customsRef.current,
       dark = prefersDark,
     ) => {
       const list = [...customs];
       setThemeId(theme);
-      setTypeStyle(style);
       // 内容未变则保留原引用，避免上下文 applyAppearance 包装函数身份抖动
       setCustomThemes((prev) => (sameCustomThemes(prev, list) ? prev : list));
-      document.documentElement.dataset.twType = style;
-      const visual = resolveUiTheme(theme, list, dark);
-      setTheme(applyTypeStyle(visual, style));
+      setTheme(resolveUiTheme(theme, list, dark));
     },
     [prefersDark, setTheme],
   );
@@ -127,7 +116,7 @@ export function AppearanceProvider({
       const dark = mq.matches;
       setPrefersDark(dark);
       if (themeIdRef.current === "system") {
-        applyAppearance("system", typeStyleRef.current, customsRef.current, dark);
+        applyAppearance("system", customsRef.current, dark);
       }
     };
     mq.addEventListener("change", onChange);
@@ -137,7 +126,7 @@ export function AppearanceProvider({
   // 其它窗口改了通用设置：对齐本窗外观，并派发事件给设置表单 / 语言
   useEffect(() => {
     const off = window.thinker?.settings?.onGeneralChanged?.((general) => {
-      applyAppearance(general.uiTheme, general.uiTypeStyle, general.customThemes);
+      applyAppearance(general.uiTheme, general.customThemes);
       window.dispatchEvent(new CustomEvent(GENERAL_SETTINGS_CHANGED, { detail: general }));
     });
     return off;
@@ -167,13 +156,11 @@ export function AppearanceProvider({
           general.customThemes,
           DEFAULT_APP_THEME,
         );
-        const nextStyle = general.uiTypeStyle ?? DEFAULT_APP_TYPE_STYLE;
         if (
           nextTheme !== themeIdRef.current ||
-          nextStyle !== typeStyleRef.current ||
           general.customThemes.length !== customsRef.current.length
         ) {
-          applyAppearance(nextTheme, nextStyle, general.customThemes);
+          applyAppearance(nextTheme, general.customThemes);
         }
       } catch {
         /* 保持默认 */
@@ -186,11 +173,10 @@ export function AppearanceProvider({
   const value = useMemo<AppearanceContextValue>(
     () => ({
       themeId: normalizeUiTheme(themeId, customThemes, DEFAULT_APP_THEME),
-      typeStyle,
       customThemes,
       applyAppearance,
     }),
-    [themeId, typeStyle, customThemes, applyAppearance],
+    [themeId, customThemes, applyAppearance],
   );
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;

@@ -1,6 +1,6 @@
 /**
  * 开发态：按环境变量打开主窗 DevTools。
- * `THINKER_OPEN_DEVTOOLS=1` 时启动后自动打开（detach）。
+ * `THINKER_OPEN_DEVTOOLS=1` 时在页面首次加载完成后再打开（detach），避免抢首屏。
  */
 import { app } from "electron";
 import { getMainWindow } from "./createWindow";
@@ -18,8 +18,19 @@ export function applyProductDevTools(enabled: boolean): void {
   }
 }
 
-/** 启动时按环境变量应用一次；仅开发态有效。 */
+/** 启动时按环境变量应用一次；等 did-finish-load，仅开发态有效。 */
 export function startDevToolsPrefsBridge(): void {
   if (app.isPackaged) return;
-  applyProductDevTools(process.env.THINKER_OPEN_DEVTOOLS === "1");
+  if (process.env.THINKER_OPEN_DEVTOOLS !== "1") return;
+
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return;
+
+  const open = () => applyProductDevTools(true);
+  if (!win.webContents.isLoading()) {
+    // 已加载完（或尚未开始）时下一 tick 再开，让 loadURL 有机会排队
+    setImmediate(open);
+    return;
+  }
+  win.webContents.once("did-finish-load", open);
 }

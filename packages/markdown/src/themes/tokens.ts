@@ -20,7 +20,7 @@ export const MD_TOKEN_KEYS = [
   "--md-shadow-soft",
   "--md-stream-glow",
   "--md-font-mono",
-  "--md-font-hand",
+  "--md-font",
   "--md-hl-keyword",
   "--md-hl-string",
   "--md-hl-number",
@@ -82,14 +82,14 @@ export function mermaidVariablesFromCss(host: Element): Record<string, string> {
   const noteBorder = v("--md-mermaid-note-border");
   const activation = v("--md-mermaid-activation");
   const actorLine = v("--md-mermaid-actor-line");
-  const fontHand = v("--md-font-hand");
+  const mdFont = v("--md-font");
   const fontSize = v("--md-mermaid-font-size") || "16px";
   const darkMode = v("--md-mermaid-dark") || "false";
 
   return {
     darkMode,
     background: paper,
-    fontFamily: fontHand,
+    fontFamily: mdFont,
     fontSize,
     primaryColor: primary,
     primaryTextColor: primaryText,

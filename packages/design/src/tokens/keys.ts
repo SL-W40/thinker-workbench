@@ -22,8 +22,7 @@ export const UI_TOKEN_KEYS = [
   "--tw-placeholder",
   "--tw-hover",
   "--tw-font-body",
-  "--tw-font-hand",
-  /** 解析后的 UI 正文字体——手写栈或 body，由 `applyTypeStyle` 写入。 */
+  /** 解析后的 UI 正文字体（与 body 一致）。 */
   "--tw-font-ui",
   "--tw-font-mono",
   "--tw-radius",
@@ -55,9 +54,8 @@ export const LEGACY_UI_ALIASES: Record<string, UiTokenKey> = {
   "--placeholder": "--tw-placeholder",
   "--hover-wash": "--tw-hover",
   "--font-body": "--tw-font-body",
-  "--font-hand": "--tw-font-hand",
   "--mono": "--tw-font-mono",
   "--font": "--tw-font-ui",
-  "--display": "--tw-font-hand",
+  "--display": "--tw-font-ui",
   "--radius": "--tw-radius",
 };

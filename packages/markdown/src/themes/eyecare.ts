@@ -3,7 +3,7 @@
  */
 import type { MarkdownTheme } from "./types";
 
-const HAND = '"Segoe Print", "Bradley Hand", "Apple Chancery", "TW Hand", cursive';
+const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = 'ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace';
 
 /** 护眼——柔和灰绿。 */
@@ -28,7 +28,7 @@ export const eyecareTheme: MarkdownTheme = {
     "--md-shadow-soft": "rgba(47, 58, 44, 0.08)",
     "--md-stream-glow": "rgba(79, 111, 82, 0.22)",
     "--md-font-mono": MONO,
-    "--md-font-hand": HAND,
+    "--md-font": SANS,
     "--md-hl-keyword": "#3d5a40",
     "--md-hl-string": "#1a7f37",
     "--md-hl-number": "#9b3b2e",
@@ -65,6 +65,6 @@ export const eyecareTheme: MarkdownTheme = {
   },
   mermaid: {
     theme: "base",
-    look: "handDrawn",
+    look: "classic",
   },
 };

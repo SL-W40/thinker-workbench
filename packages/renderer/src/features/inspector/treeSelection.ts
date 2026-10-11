@@ -154,14 +154,3 @@ export function applyTreeSelection(input: {
   }
   return { selected: [path], anchor: path };
 }
-
-/** 若已选祖先目录覆盖该路径，则丢掉子路径。 */
-export function collapseNestedPaths(paths: readonly string[]): string[] {
-  const sorted = [...paths].sort();
-  const kept: string[] = [];
-  for (const path of sorted) {
-    const covered = kept.some((parent) => path === parent || path.startsWith(`${parent}/`));
-    if (!covered) kept.push(path);
-  }
-  return kept;
-}

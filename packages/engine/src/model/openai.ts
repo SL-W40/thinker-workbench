@@ -1,5 +1,5 @@
 /**
- * OpenAI 兼容 Chat Completions 客户端（基于 fetch）。
+ * OpenAI 兼容 Chat Completions 客户端（经 modelFetch，尊重 HTTP 兼容模式）。
  *
  * - 配置来自主进程 hello / 每次 run 的 ModelSettings
  * - 有 onToken 时走 SSE 流式；部分网关忽略 stream 时回退解析普通 JSON
@@ -15,6 +15,7 @@ import {
 } from "@thinker-workbench/shared";
 import { agentLog } from "../log/setup";
 import { buildSystemPrompt } from "../prompts/system";
+import { modelFetch } from "./httpFetch";
 import {
   formatErrorMessage,
   isRetryableError,
@@ -376,7 +377,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
         try {
           let res: Response;
           try {
-            res = await fetch(`${baseUrl}/chat/completions`, {
+            res = await modelFetch(`${baseUrl}/chat/completions`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",

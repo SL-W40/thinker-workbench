@@ -9,8 +9,6 @@ import {
 } from "@thinker-workbench/logger";
 import { installLogAls } from "@thinker-workbench/logger/node";
 
-let configured = false;
-
 export type ConfigureAgentLogOptions = {
   /** 是否产出日志；省略则沿用当前进程开关。 */
   enabled?: boolean;
@@ -25,14 +23,9 @@ export function configureAgentLog(options: ConfigureAgentLogOptions): void {
     minLevel: "debug",
     ...(typeof options.enabled === "boolean" ? { enabled: options.enabled } : {}),
   });
-  configured = true;
   createLogger({ scope: "agent", source: "agent" }).info("log ready", {
     meta: { backend: "parent-sqlite", loggingEnabled: options.enabled ?? null },
   });
-}
-
-export function isAgentLogConfigured(): boolean {
-  return configured;
 }
 
 export function agentLog(scope: string) {

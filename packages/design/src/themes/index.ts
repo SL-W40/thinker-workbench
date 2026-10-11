@@ -1,5 +1,5 @@
 /**
- * 设计主题聚合导出：内置色板、apply、字型风格。
+ * 设计主题聚合导出：内置色板与 apply。
  */
 export type { DesignTheme, DesignThemeId, DesignThemeInput } from "./types";
 export { lightTheme } from "./light";
@@ -16,7 +16,6 @@ export {
   toMarkdownTheme,
   type ApplyThemeOptions,
 } from "./apply";
-export { applyTypeStyle, type DesignTypeStyle } from "./typeStyle";
 export {
   resolveUiTheme,
   windowBgFromTheme,

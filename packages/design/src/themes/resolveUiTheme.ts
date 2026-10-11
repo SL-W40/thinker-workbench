@@ -10,7 +10,6 @@ export type CustomThemeLike = {
   theme: {
     id: string;
     colorScheme?: "light" | "dark";
-    typeStyle?: "hand" | "regular";
     ui: Record<string, string>;
     markdown: Record<string, string>;
     mermaid?: {
@@ -32,7 +31,6 @@ function themeFromCustom(record: CustomThemeLike): DesignTheme {
   return {
     id: record.id,
     colorScheme: t.colorScheme,
-    typeStyle: t.typeStyle,
     ui: { ...t.ui },
     markdown: { ...t.markdown },
     mermaid: {

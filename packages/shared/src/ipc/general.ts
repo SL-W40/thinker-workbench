@@ -1,5 +1,5 @@
 /**
- * 通用应用设置：通知、托盘、语言、主题、字体风格、工作区访问、AI 删文件与恢复缓存 TTL、引导完成态、数据目录与日志策略。
+ * 通用应用设置：通知、托盘、语言、主题、工作区访问、AI 删文件与恢复缓存 TTL、引导完成态、数据目录与日志策略。
  * 持久化于主进程设置文件；经 IPC 与 renderer 同步。
  *
  * `dataDir` 不走 `setGeneral` 即时生效，须经 `previewDataDirChange` / `applyDataDirChange`。
@@ -131,26 +131,6 @@ export function migrateAppThemeFromCatalogV1(value: unknown): AppThemeId {
   return normalizeAppTheme(value, DEFAULT_APP_THEME);
 }
 
-/** 字体 / 排版风格：常规无衬线 vs 手写笔记感。 */
-export const APP_TYPE_STYLE_IDS = ["regular", "hand"] as const;
-/** 字体风格联合类型。 */
-export type AppTypeStyle = (typeof APP_TYPE_STYLE_IDS)[number];
-/** 默认风格：常规无衬线。 */
-export const DEFAULT_APP_TYPE_STYLE: AppTypeStyle = "regular";
-
-/**
- * 将未知值规范为合法字体风格。
- * 不在目录内时返回 `fallback`。
- */
-export function normalizeAppTypeStyle(
-  value: unknown,
-  fallback: AppTypeStyle = DEFAULT_APP_TYPE_STYLE,
-): AppTypeStyle {
-  return typeof value === "string" && (APP_TYPE_STYLE_IDS as readonly string[]).includes(value)
-    ? (value as AppTypeStyle)
-    : fallback;
-}
-
 /**
  * 文件工具对工作区外路径的访问档位。
  * - `workspace`：读写均不可越界
@@ -209,8 +189,6 @@ export type GeneralSettings = {
   uiTheme: AppThemeId;
   /** 用户自定义主题目录（完整色板快照）。 */
   customThemes: CustomThemeRecord[];
-  /** 手写字体 + 草图图示，或常规无衬线 + 经典 Mermaid。 */
-  uiTypeStyle: AppTypeStyle;
   /** 首次启动引导是否已完成（或已跳过）。 */
   onboardingCompleted: boolean;
   /**
@@ -418,7 +396,6 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   deleteFileRestoreTtlDays: DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
   uiTheme: DEFAULT_APP_THEME,
   customThemes: [],
-  uiTypeStyle: DEFAULT_APP_TYPE_STYLE,
   onboardingCompleted: false,
   dataDir: "",
   logRetentionDays: 0,
@@ -523,7 +500,6 @@ export function normalizeGeneral(
   } else {
     base.uiTheme = normalizeUiTheme(obj.uiTheme, base.customThemes, DEFAULT_APP_THEME);
   }
-  base.uiTypeStyle = normalizeAppTypeStyle(obj.uiTypeStyle, DEFAULT_APP_TYPE_STYLE);
   if (typeof obj.onboardingCompleted === "boolean") {
     base.onboardingCompleted = obj.onboardingCompleted;
   } else {

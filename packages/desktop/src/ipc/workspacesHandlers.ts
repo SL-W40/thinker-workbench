@@ -9,7 +9,6 @@ import {
   type WorkspaceCreateInput,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, type IpcMain, shell } from "electron";
-import { clearThreadCheckpoint } from "../db/checkpointClear";
 import { openCatalogDb } from "../db/thinkerDb";
 import {
   clearWorkspace,
@@ -93,14 +92,8 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain): void {
   });
 
   ipcMain.handle(IpcChannels.workspacesClear, async (_e, id: string) => {
-    const threadIds = clearWorkspace(id);
-    for (const threadId of threadIds) {
-      try {
-        clearThreadCheckpoint(threadId);
-      } catch {
-        /* ignore */
-      }
-    }
+    // removeSession 内已 purgeSessionArtifacts（checkpoint + Trace）
+    clearWorkspace(id);
     broadcastWorkspacesChanged();
     broadcastThreadsChanged();
   });

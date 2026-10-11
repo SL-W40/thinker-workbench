@@ -26,6 +26,8 @@ import type Database from "better-sqlite3";
 import { getDefaultWorkspaceRoot } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { peekThreadCheckpoint } from "./checkpointClear";
+import { activityAtFromMessages } from "./sessionActivity";
+import { purgeSessionArtifacts } from "./sessionArtifacts";
 import {
   destroyWorkspaceChatDb,
   openCatalogDb,
@@ -318,7 +320,8 @@ export function removeWorkspace(id: string): void {
 
 /**
  * 清空工作空间内全部会话与消息（保留工作空间目录与元数据）。
- * @returns 被删除会话的 threadId 列表（供清理 checkpoint）。
+ * 旁路数据（checkpoint / Trace）由 `removeSession` → `purgeSessionArtifacts` 清理。
+ * @returns 被删除会话的 threadId 列表。
  */
 export function clearWorkspace(id: string): string[] {
   requireWorkspace(id);
@@ -335,7 +338,7 @@ export function listThreads(workspaceId?: string): ThreadMeta[] {
     const rows = chatDb(workspaceId)
       .prepare(
         `SELECT * FROM chat_sessions
-         ORDER BY pinned DESC, sort_order ASC, updated_at DESC`,
+         ORDER BY pinned DESC, updated_at DESC, sort_order ASC`,
       )
       .all() as SessionRow[];
     return rows.map(mapThread);
@@ -346,8 +349,8 @@ export function listThreads(workspaceId?: string): ThreadMeta[] {
   }
   return out.sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return b.updatedAt - a.updatedAt;
+    if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
+    return a.sortOrder - b.sortOrder;
   });
 }
 
@@ -447,13 +450,14 @@ export function upsertSessionForRun(options: {
     options.activeRunId !== undefined ? options.activeRunId : existing.activeRunId;
   const interruptReason =
     options.interruptReason !== undefined ? options.interruptReason : existing.interruptReason;
+  // 不碰 updated_at：侧栏时间/排序跟末条消息，与跑状态无关
   chatDb(existing.workspaceId)
     .prepare(
       `UPDATE chat_sessions SET
-         title = ?, run_status = ?, active_run_id = ?, interrupt_reason = ?, updated_at = ?
+         title = ?, run_status = ?, active_run_id = ?, interrupt_reason = ?
        WHERE id = ?`,
     )
-    .run(title, runStatus, activeRunId, interruptReason, now, existing.id);
+    .run(title, runStatus, activeRunId, interruptReason, existing.id);
   return requireSession(existing.workspaceId, existing.id);
 }
 
@@ -466,7 +470,6 @@ export function setSessionRunStatus(
     ? getSessionByThreadId(sessionIdOrThreadId)
     : getSession(sessionIdOrThreadId);
   if (!session) return;
-  const now = Date.now();
   const activeRunId =
     options?.activeRunId !== undefined ? options.activeRunId : session.activeRunId;
   const interruptReason =
@@ -474,10 +477,10 @@ export function setSessionRunStatus(
   chatDb(session.workspaceId)
     .prepare(
       `UPDATE chat_sessions SET
-         run_status = ?, active_run_id = ?, interrupt_reason = ?, updated_at = ?
+         run_status = ?, active_run_id = ?, interrupt_reason = ?
        WHERE id = ?`,
     )
-    .run(status, activeRunId, interruptReason, now, session.id);
+    .run(status, activeRunId, interruptReason, session.id);
 }
 
 /** 统计仍在 running 的会话数（跨工作空间）。 */
@@ -501,7 +504,6 @@ export function countRunningSessions(): number {
  */
 export function healRunningSessions(): number {
   let changes = 0;
-  const now = Date.now();
 
   for (const ws of listWorkspaces()) {
     const db = chatDb(ws.id);
@@ -536,19 +538,17 @@ export function healRunningSessions(): number {
           db.prepare(
             `UPDATE chat_sessions
              SET run_status = 'crashed',
-                 interrupt_reason = ?,
-                 updated_at = ?
+                 interrupt_reason = ?
              WHERE id = ?`,
-          ).run("crash", now, row.id);
+          ).run("crash", row.id);
           changes += 1;
         } else if (dirtyReason) {
           db.prepare(
             `UPDATE chat_sessions
              SET run_status = 'crashed',
-                 interrupt_reason = ?,
-                 updated_at = ?
+                 interrupt_reason = ?
              WHERE id = ?`,
-          ).run("crash", now, row.id);
+          ).run("crash", row.id);
           changes += 1;
         }
         continue;
@@ -559,10 +559,9 @@ export function healRunningSessions(): number {
           `UPDATE chat_sessions
            SET run_status = 'failed',
                active_run_id = NULL,
-               interrupt_reason = COALESCE(interrupt_reason, ?),
-               updated_at = ?
+               interrupt_reason = COALESCE(interrupt_reason, ?)
            WHERE id = ?`,
-        ).run("Process exited before the run could be checkpointed.", now, row.id);
+        ).run("Process exited before the run could be checkpointed.", row.id);
         finalizeOrphanPendingMessages(ws.id, row.id, "Run interrupted by process restart.");
         changes += 1;
         continue;
@@ -586,14 +585,41 @@ export function healRunningSessions(): number {
             `UPDATE chat_sessions
              SET run_status = 'failed',
                  active_run_id = NULL,
-                 interrupt_reason = COALESCE(interrupt_reason, ?),
-                 updated_at = ?
+                 interrupt_reason = COALESCE(interrupt_reason, ?)
              WHERE id = ?`,
-          ).run("No checkpoint to resume.", now, row.id);
+          ).run("No checkpoint to resume.", row.id);
         }
         changes += 1;
       }
     }
+  }
+  // 纠正历史误写的 updated_at（重命名/置顶/跑状态曾误刷新）
+  changes += resyncSessionActivityTimes();
+  return changes;
+}
+
+/**
+ * 将各会话 updated_at 与末条消息 created_at 对齐（无消息则用 created_at）。
+ * @returns 实际改动的行数。
+ */
+export function resyncSessionActivityTimes(): number {
+  let changes = 0;
+  for (const ws of listWorkspaces()) {
+    const result = chatDb(ws.id)
+      .prepare(
+        `UPDATE chat_sessions
+         SET updated_at = COALESCE(
+           (SELECT MAX(created_at) FROM chat_messages WHERE session_id = chat_sessions.id),
+           created_at
+         )
+         WHERE updated_at IS NOT
+           COALESCE(
+             (SELECT MAX(created_at) FROM chat_messages WHERE session_id = chat_sessions.id),
+             created_at
+           )`,
+      )
+      .run();
+    changes += result.changes;
   }
   return changes;
 }
@@ -652,32 +678,29 @@ export function renameSession(sessionId: string, title: string): ChatSessionReco
   if (!session) throw new Error("Session not found.");
   const trimmed = title.trim().slice(0, 120);
   if (!trimmed) throw new Error("Title is empty.");
-  const now = Date.now();
   chatDb(session.workspaceId)
-    .prepare("UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?")
-    .run(trimmed, now, sessionId);
+    .prepare("UPDATE chat_sessions SET title = ? WHERE id = ?")
+    .run(trimmed, sessionId);
   return requireSession(session.workspaceId, sessionId);
 }
 
 export function setSessionPinned(sessionId: string, pinned: boolean): ChatSessionRecord {
   const session = getSession(sessionId);
   if (!session) throw new Error("Session not found.");
-  const now = Date.now();
   chatDb(session.workspaceId)
-    .prepare("UPDATE chat_sessions SET pinned = ?, updated_at = ? WHERE id = ?")
-    .run(pinned ? 1 : 0, now, sessionId);
+    .prepare("UPDATE chat_sessions SET pinned = ? WHERE id = ?")
+    .run(pinned ? 1 : 0, sessionId);
   return requireSession(session.workspaceId, sessionId);
 }
 
 export function reorderSessions(workspaceId: string, input: ReorderInput): void {
   const upd = chatDb(workspaceId).prepare(
-    "UPDATE chat_sessions SET sort_order = ?, updated_at = ? WHERE id = ?",
+    "UPDATE chat_sessions SET sort_order = ? WHERE id = ?",
   );
-  const now = Date.now();
   const tx = chatDb(workspaceId).transaction((ids: string[]) => {
     for (let index = 0; index < ids.length; index++) {
       const id = ids[index];
-      if (id) upd.run(index, now, id);
+      if (id) upd.run(index, id);
     }
   });
   tx(input.orderedIds);
@@ -690,14 +713,13 @@ export function moveSession(input: MoveSessionInput): ChatSessionRecord {
   if (session.workspaceId === input.workspaceId) {
     if (typeof input.sortOrder === "number") {
       chatDb(input.workspaceId)
-        .prepare("UPDATE chat_sessions SET sort_order = ?, updated_at = ? WHERE id = ?")
-        .run(input.sortOrder, Date.now(), input.sessionId);
+        .prepare("UPDATE chat_sessions SET sort_order = ? WHERE id = ?")
+        .run(input.sortOrder, input.sessionId);
     }
     return requireSession(input.workspaceId, input.sessionId);
   }
 
   const messages = loadMessages(input.sessionId);
-  const now = Date.now();
   const sortOrder =
     typeof input.sortOrder === "number"
       ? input.sortOrder
@@ -722,7 +744,7 @@ export function moveSession(input: MoveSessionInput): ChatSessionRecord {
       session.activeRunId,
       session.interruptReason,
       session.createdAt,
-      now,
+      session.updatedAt,
     );
   saveMessagesToDb(input.workspaceId, input.sessionId, messages);
   chatDb(session.workspaceId).prepare("DELETE FROM chat_sessions WHERE id = ?").run(session.id);
@@ -733,11 +755,14 @@ export function moveSession(input: MoveSessionInput): ChatSessionRecord {
 export function removeSession(sessionId: string): void {
   const session = getSession(sessionId);
   if (!session) throw new Error("Session not found.");
+  const threadId = session.threadId;
   chatDb(session.workspaceId).prepare("DELETE FROM chat_sessions WHERE id = ?").run(sessionId);
   unindexSession(sessionId);
   if (getKv(KV_ACTIVE) === sessionId) setKv(KV_ACTIVE, "");
   clearSessionModelSelection(sessionId);
   clearSessionChatMode(sessionId);
+  // checkpoint + Trace（失败忽略，不拖垮删会话）
+  purgeSessionArtifacts({ sessionId, threadId });
 }
 
 function saveMessagesToDb(workspaceId: string, sessionId: string, messages: ChatMessage[]): void {
@@ -748,6 +773,11 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
      VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const now = Date.now();
+  const sessionRow = db
+    .prepare("SELECT created_at FROM chat_sessions WHERE id = ?")
+    .get(sessionId) as { created_at: number } | undefined;
+  const fallback = sessionRow?.created_at ?? now;
+  const activityAt = activityAtFromMessages(messages, fallback);
   const tx = db.transaction(() => {
     del.run(sessionId);
     for (let seq = 0; seq < messages.length; seq++) {
@@ -781,7 +811,7 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
         : null;
       ins.run(m.id, sessionId, m.role, m.text, m.createdAt ?? now, m.pending ? 1 : 0, payload, seq);
     }
-    db.prepare("UPDATE chat_sessions SET updated_at = ? WHERE id = ?").run(now, sessionId);
+    db.prepare("UPDATE chat_sessions SET updated_at = ? WHERE id = ?").run(activityAt, sessionId);
   });
   tx();
 }

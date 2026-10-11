@@ -37,6 +37,7 @@ export type ThreadMeta = {
   sessionId: string;
   workspaceId: string;
   title: string;
+  /** 末条消息时间（无消息则为会话创建时间）；侧栏展示与排序用。 */
   updatedAt: number;
   pinned: boolean;
   sortOrder: number;
@@ -59,6 +60,7 @@ export type ChatSessionRecord = {
    */
   interruptReason: string | null;
   createdAt: number;
+  /** 末条消息时间（无消息则为会话创建时间）。 */
   updatedAt: number;
 };
 

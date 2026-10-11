@@ -40,7 +40,7 @@ export function registerIpc(
   registerAgentHandlers(ipcMain, bridge);
   registerTerminalHandlers(ipcMain);
   registerBrowserHandlers(ipcMain);
-  // Customize 含 skillsList / listDetailed / rules / agents（替代旧 skillsHandlers）
+  // Customize：skills / rules / agents
   registerCustomizeHandlers(ipcMain, bridge);
   registerMcpHandlers(ipcMain, bridge);
   registerSettingsHandlers(ipcMain, {

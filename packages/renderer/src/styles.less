@@ -5,19 +5,6 @@
   .notes-tokens();
 }
 
-/* Regular type style: force display/hand slots onto body sans (beats stale Less defaults). */
-html[data-tw-type="regular"] {
-  --font-hand: var(--tw-font-body, var(--font-body));
-  --font: var(--tw-font-body, var(--font-body));
-  --tw-font-ui: var(--tw-font-body, var(--font-body));
-  --display: var(--tw-font-body, var(--font-body));
-  --md-font-hand: var(--tw-font-body, var(--font-body));
-}
-
-html[data-tw-type="hand"] {
-  --font: var(--tw-font-ui, var(--tw-font-hand, var(--font-hand)));
-}
-
 * {
   box-sizing: border-box;
 }
@@ -85,8 +72,8 @@ code {
 }
 
 .chat-main {
-  /* 消息列与底部输入框共用最大宽度与左右边距，避免列表比输入框更宽 */
-  --composer-max-width: 40rem;
+  /* 消息列与底部输入框共用最大宽度：随列宽自适应，且时间线永不宽过输入框 */
+  --composer-max-width: min(64rem, 100%);
   --composer-gutter: 18px;
   flex: 1 1 auto;
   min-width: 0;
@@ -94,6 +81,12 @@ code {
   display: grid;
   grid-template-rows: 1fr auto;
   overflow: hidden;
+}
+
+@media (min-width: 1600px) {
+  .chat-main {
+    --composer-max-width: min(72rem, 100%);
+  }
 }
 
 .chat-side {
@@ -108,7 +101,23 @@ code {
     var(--panel-solid, var(--bg-elev)) 88%,
     transparent
   );
-  backdrop-filter: blur(8px);
+  /*
+   * 模糊放在伪元素上：backdrop-filter 会让本节点成为 fixed 包含块，
+   * Monaco 补全（fixedOverflowWidgets）会被裁在侧栏内。
+   */
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 
   &--left {
     border-right: 1.5px solid var(--line);
@@ -146,7 +155,7 @@ code {
 
   h2 {
     margin: 0;
-    font-family: var(--font-hand);
+    font-family: var(--font);
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--ink);
@@ -321,7 +330,7 @@ code {
 
   h1 {
     margin: 0 0 6px;
-    font-family: var(--font-hand);
+    font-family: var(--font);
     font-size: 1.55rem;
     font-weight: 600;
   }
@@ -972,13 +981,6 @@ code {
   width: 8.5rem;
 }
 
-.settings-type-style {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  margin-top: 2px;
-  min-width: 11rem;
-}
-
 .settings-shortcut-group {
   margin-top: 8px;
 
@@ -1268,8 +1270,19 @@ kbd {
   /* 不用 CSS smooth：流式贴底跟随时会连拖；平滑仅 jump 按钮显式指定 */
 }
 
-/* 主会话宽度链：与右侧子代理面板一致，强制可收缩 */
-.stage .thread,
+/*
+ * 主会话宽度链：.thread 与底部 composer-shell 同宽；
+ * 勿给 .thread 设 max-width:100%，否则会盖掉 --composer-max-width，时间线比输入框更宽。
+ */
+.stage .thread {
+  min-width: 0;
+  width: 100%;
+  max-width: var(--composer-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
 .stage .bubble,
 .stage .bubble-main,
 .stage .run-timeline,
@@ -1359,7 +1372,7 @@ kbd {
   list-style: none;
   box-sizing: border-box;
   width: 100%;
-  max-width: var(--composer-max-width, 40rem);
+  max-width: var(--composer-max-width);
   margin: 0 auto;
   padding: 0 0 12px;
   display: grid;
@@ -1721,7 +1734,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  font-family: var(--font-hand);
+  font-family: var(--font);
   font-size: 0.88rem;
   color: var(--muted);
   line-height: 1.35;
@@ -1812,7 +1825,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
   overscroll-behavior: contain;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--font-hand);
+  font-family: var(--font);
   font-size: 0.74rem;
   line-height: 1.45;
   color: color-mix(in srgb, var(--muted) 88%, var(--ink));
@@ -2222,7 +2235,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 
 .subagent-session__empty {
   margin: 0;
-  font-family: var(--font-hand);
+  font-family: var(--font);
   font-size: 0.88rem;
   color: var(--muted);
 }
@@ -2637,7 +2650,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 .run-timeline-explore-files__name {
   flex: 0 0 auto;
   color: var(--muted);
-  font-family: var(--font-hand, inherit);
+  font-family: var(--font, inherit);
 }
 
 .run-timeline-explore-files__primary,
@@ -2680,7 +2693,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
   flex: 0 0 auto;
   align-self: center;
   display: block;
-  /* 略小于正文，避免相对手写体显得偏高 */
+  /* 略小于正文，与标题行高更齐 */
   width: 0.85em;
   height: 0.85em;
   color: color-mix(in srgb, var(--muted) 70%, transparent);
@@ -2700,7 +2713,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 }
 
 .run-timeline-badge {
-  font-family: var(--font-hand);
+  font-family: var(--font);
   font-size: 0.72rem;
   color: color-mix(in srgb, var(--muted) 85%, transparent);
 }
@@ -2863,7 +2876,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-hand);
+  font-family: var(--font);
   font-size: 0.8rem;
   color: var(--ink);
   text-align: left;
@@ -3142,6 +3155,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 }
 
 .composer-gate {
+  box-sizing: border-box;
   width: 100%;
   max-width: var(--composer-max-width);
   margin: 0 auto 10px;
@@ -3149,6 +3163,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 
 .composer-shell {
   position: relative;
+  box-sizing: border-box;
   width: 100%;
   max-width: var(--composer-max-width);
   margin: 0 auto;
@@ -3179,7 +3194,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
   padding: 5.25px 3.75px 6.75px;
   background: transparent;
   color: color-mix(in srgb, var(--ink) 82%, var(--muted));
-  /* 输入用清晰黑体栈，不跟手写体（中文笔画像素偏重） */
+  /* 输入用清晰无衬线栈 */
   font-family: var(
     --tw-font-body,
     "Segoe UI",
@@ -3640,7 +3655,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 
 .onboarding-head h1 {
   margin: 0;
-  font-family: var(--font-hand);
+  font-family: var(--font);
   font-size: 1.45rem;
   font-weight: 600;
   color: var(--ink);

@@ -12,12 +12,12 @@ import { SegmentedControl } from "@thinker-workbench/design/react";
 
 ```tsx
 <SegmentedControl
-  value={style}
-  onChange={setStyle}
-  aria-label="字体"
+  value={mode}
+  onChange={setMode}
+  aria-label="模式"
   options={[
-    { value: "hand", label: "手写" },
-    { value: "regular", label: "常规" },
+    { value: "one", label: "选项一" },
+    { value: "two", label: "选项二" },
   ]}
 />
 ```

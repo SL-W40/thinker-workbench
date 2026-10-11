@@ -33,7 +33,6 @@ export function RootApp() {
       <ThemeProvider theme={boot.theme}>
         <AppearanceProvider
           initialThemeId={boot.themeId}
-          initialTypeStyle={boot.typeStyle}
           initialCustomThemes={boot.customThemes}
         >
           <I18nProvider>

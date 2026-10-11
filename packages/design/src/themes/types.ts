@@ -21,8 +21,6 @@ export type DesignTheme = {
   id: DesignThemeId;
   /** 原生表单 / 滚动条 UI 配色方案；由 `applyDesignTheme` 写入。 */
   colorScheme?: "light" | "dark";
-  /** 手写 / 常规字型风格（由 `applyTypeStyle` 设置）。 */
-  typeStyle?: "hand" | "regular";
   ui: UiThemeVars;
   /** 与 `MarkdownTheme.vars` 同形——应用到 `.tw-md` / `:root`。 */
   markdown: MarkdownThemeVars;

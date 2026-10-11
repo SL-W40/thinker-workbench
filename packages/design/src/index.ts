@@ -4,12 +4,11 @@
  */
 
 export { disableTabFocusNav } from "./dom/disableTabFocusNav";
-export type { DesignTheme, DesignThemeId, DesignThemeInput, DesignTypeStyle } from "./themes";
+export type { DesignTheme, DesignThemeId, DesignThemeInput } from "./themes";
 export {
   type ApplyThemeOptions,
   type CustomThemeLike,
   applyDesignTheme,
-  applyTypeStyle,
   createDesignTheme,
   auroraTheme,
   darkTheme,

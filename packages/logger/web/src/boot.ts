@@ -4,17 +4,13 @@ import {
   notesTheme,
   eyecareTheme,
   auroraTheme,
-  applyTypeStyle,
   type DesignTheme,
 } from "@thinker-workbench/design";
 import {
   DEFAULT_APP_THEME,
-  DEFAULT_APP_TYPE_STYLE,
   normalizeAppTheme,
-  normalizeAppTypeStyle,
   resolveVisualThemeId,
   type AppThemeId,
-  type AppTypeStyle,
 } from "@thinker-workbench/shared";
 
 function themeFromId(id: AppThemeId): DesignTheme {
@@ -38,23 +34,17 @@ function readPrefersDark(): boolean {
 export function readBootAppearance(): {
   theme: DesignTheme;
   themeId: AppThemeId;
-  typeStyle: AppTypeStyle;
 } {
   const params = new URLSearchParams(location.search);
   const embed = params.get("embed") === "1";
   const rawTheme =
     params.get("theme") || (!embed ? localStorage.getItem("tw-logs-theme") : null) || DEFAULT_APP_THEME;
   const themeId = normalizeAppTheme(rawTheme, DEFAULT_APP_THEME);
-  const rawType =
-    params.get("type") || (!embed ? localStorage.getItem("tw-logs-type") : null);
-  const typeStyle = normalizeAppTypeStyle(rawType, DEFAULT_APP_TYPE_STYLE);
   const visual = resolveVisualThemeId(themeId, readPrefersDark());
   document.documentElement.dataset.twTheme = visual;
-  document.documentElement.dataset.twType = typeStyle;
   return {
     themeId,
-    typeStyle,
-    theme: applyTypeStyle(themeFromId(visual), typeStyle),
+    theme: themeFromId(visual),
   };
 }
 

@@ -15,6 +15,7 @@ import { BrowserWindow, WebContentsView, nativeTheme, session } from "electron";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { getMainWindow } from "../window/createWindow";
+import { maybeOpenLocalLinkExternally } from "./localLinks";
 import { buildOverlayDataUrl, overlayTokensForVisual } from "./overlayHtml";
 import {
   SNAPSHOT_SCRIPT,
@@ -232,13 +233,19 @@ class BrowserSessionManager {
     this.emitState();
   }
 
-  /** 导航并可选要求 UI 打开面板。 */
+  /**
+   * 导航并可选要求 UI 打开面板。
+   * `preferBuiltin: true` 时忽略「本地链接走系统浏览器」设置（供 AI 自动化）。
+   */
   async navigate(
     url: string,
-    options?: { reveal?: boolean },
+    options?: { reveal?: boolean; preferBuiltin?: boolean },
   ): Promise<BrowserState> {
-    const view = this.ensureView();
     const target = normalizeUrl(url);
+    if (!options?.preferBuiltin && maybeOpenLocalLinkExternally(target)) {
+      return this.getState();
+    }
+    const view = this.ensureView();
     if (options?.reveal !== false) {
       broadcast({ type: "reveal", url: target });
     }
@@ -349,6 +356,7 @@ class BrowserSessionManager {
         if (!req.url?.trim()) throw new Error("url is required");
         const state = await this.navigate(req.url, {
           reveal: req.reveal !== false,
+          preferBuiltin: true,
         });
         const shot = await this.maybeScreenshot(req.takeScreenshotAfterwards);
         return {

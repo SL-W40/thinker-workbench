@@ -55,10 +55,9 @@ export function ThemeProvider({ children, theme: themeInput = "light", target }:
 
   const setTheme = useCallback((next: DesignThemeInput) => {
     const resolved = resolveDesignTheme(next);
-    // 始终克隆，以便同一主题 id 在 hand ↔ regular 切换时 React 仍会应用 CSS。
+    // 始终克隆，便于同 id 主题覆盖 token 时 React 仍会应用 CSS。
     setThemeState({
       ...resolved,
-      typeStyle: resolved.typeStyle,
       ui: { ...resolved.ui },
       markdown: { ...resolved.markdown },
       mermaid: {

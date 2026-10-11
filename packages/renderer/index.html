@@ -81,10 +81,7 @@
 
       .boot-splash__title {
         margin: 0;
-        font-family: var(
-          --font,
-          var(--font-hand, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif)
-        );
+        font-family: var(--font, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif);
         font-size: 1.4rem;
         font-weight: 600;
         letter-spacing: -0.02em;
@@ -139,7 +136,6 @@
        * 旧版把 light 画成 notes 米色，导致首屏先闪 notes 再切到真实主题。
        */
       (function paintBootSplash() {
-        var HAND = '"Segoe Print", "Bradley Hand", "Apple Chancery", "TW Hand", cursive';
         var SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
         var palettes = {
           light: {
@@ -222,11 +218,8 @@
             p = palettes.light;
             themeId = "light";
           }
-          // 默认字型与 shared DEFAULT_APP_TYPE_STYLE=regular 一致
-          var typeStyle = general && general.uiTypeStyle === "hand" ? "hand" : "regular";
           var root = document.documentElement;
           root.dataset.twTheme = themeId;
-          root.dataset.twType = typeStyle;
           root.style.setProperty("--bg", p.bg);
           root.style.setProperty("--ink", p.ink);
           root.style.setProperty("--tw-bg", p.bg);
@@ -235,13 +228,10 @@
           root.style.setProperty("--paper-rule", p.rule);
           root.style.setProperty("--tw-font-body", SANS);
           root.style.setProperty("--font-body", SANS);
-          var handFont = typeStyle === "regular" ? SANS : HAND;
-          root.style.setProperty("--tw-font-hand", handFont);
-          root.style.setProperty("--tw-font-ui", handFont);
-          root.style.setProperty("--md-font-hand", handFont);
-          root.style.setProperty("--font-hand", handFont);
-          root.style.setProperty("--font", handFont);
-          root.style.setProperty("--display", handFont);
+          root.style.setProperty("--tw-font-ui", SANS);
+          root.style.setProperty("--md-font", SANS);
+          root.style.setProperty("--font", SANS);
+          root.style.setProperty("--display", SANS);
           root.style.colorScheme = p.dark ? "dark" : "light";
         } catch (_) {
           /* Vite preview without Electron — keep CSS fallbacks */

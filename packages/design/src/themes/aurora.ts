@@ -5,7 +5,7 @@ import { auroraTheme as mdAurora } from "@thinker-workbench/markdown";
 import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
 
-const HAND = mdAurora.vars["--md-font-hand"] ?? "";
+const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdAurora.vars["--md-font-mono"] ?? "";
 
 /** Aurora——深蓝夜空 + 青绿极光。 */
@@ -29,8 +29,7 @@ export const auroraTheme: DesignTheme = {
     "--tw-code-bg": "#1a2438",
     "--tw-placeholder": "rgba(138, 168, 176, 0.7)",
     "--tw-hover": "rgba(232, 244, 242, 0.06)",
-    "--tw-font-body": '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif',
-    "--tw-font-hand": HAND,
+    "--tw-font-body": SANS,
     "--tw-font-mono": MONO,
     "--tw-radius": "14px",
     "--tw-radius-control": "10px",

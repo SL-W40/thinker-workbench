@@ -322,7 +322,7 @@ export function App() {
               open={panels.leftOpen}
               width={panels.leftWidth}
               minWidth={panels.minWidth}
-              maxWidth={panels.maxWidth}
+              maxWidth={panels.maxLeftWidth}
               title={t("chat.leftPanel")}
               showHead={false}
               onWidthChange={panels.setLeftWidth}
@@ -396,7 +396,7 @@ export function App() {
               open={panels.rightOpen}
               width={panels.rightWidth}
               minWidth={panels.minRightWidth}
-              maxWidth={panels.maxWidth}
+              maxWidth={panels.maxRightWidth}
               title={t("chat.rightPanel")}
               showHead={false}
               onWidthChange={panels.setRightWidth}

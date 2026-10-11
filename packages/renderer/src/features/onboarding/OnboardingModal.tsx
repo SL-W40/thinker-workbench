@@ -1,23 +1,20 @@
 /**
- * 两步首次引导：① UI / AI 语言 + 根目录；② 主题与字型。
+ * 两步首次引导：① UI / AI 语言 + 根目录；② 主题。
  *
  * 选择过程中即时预览外观与语言；完成或跳过时写入通用设置并标记 `onboardingCompleted`。
  * 根目录（dataDir）不走 setGeneral，须经 applyDataDirChange。
  */
 import { useId, useMemo, useState } from "react";
-import { Button, Input, Modal, SegmentedControl, Select } from "@thinker-workbench/design/react";
+import { Button, Input, Modal, Select } from "@thinker-workbench/design/react";
 import {
   AI_LOCALES,
   APP_LOCALES,
-  APP_TYPE_STYLE_IDS,
   DEFAULT_AI_LOCALE,
   DEFAULT_APP_LOCALE,
   DEFAULT_APP_THEME,
-  DEFAULT_APP_TYPE_STYLE,
   type AiLocale,
   type AppLocale,
   type AppThemeId,
-  type AppTypeStyle,
 } from "@thinker-workbench/shared";
 import {
   applyDataDirChange,
@@ -41,7 +38,6 @@ export function OnboardingModal({ onDone }: Props) {
   const dataDirId = useId();
   const [step, setStep] = useState<Step>(1);
   const [themeId, setThemeId] = useState<AppThemeId>(DEFAULT_APP_THEME);
-  const [typeStyle, setTypeStyle] = useState<AppTypeStyle>(DEFAULT_APP_TYPE_STYLE);
   const [uiLocale, setUiLocale] = useState<AppLocale>(locale || DEFAULT_APP_LOCALE);
   const [aiLocale, setAiLocale] = useState<AiLocale>(DEFAULT_AI_LOCALE);
   /** 空字符串 = 默认 `~/.thinker`。 */
@@ -50,18 +46,6 @@ export function OnboardingModal({ onDone }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const canBrowse = Boolean(window.thinker?.settings?.pickDirectory);
-
-  const typeStyleOptions = useMemo(
-    () =>
-      APP_TYPE_STYLE_IDS.map((style) => ({
-        value: style,
-        label:
-          style === "regular"
-            ? t("settings.general.typeStyle.regular")
-            : t("settings.general.typeStyle.hand"),
-      })),
-    [t],
-  );
 
   const localeOptions = useMemo(
     () =>
@@ -89,13 +73,7 @@ export function OnboardingModal({ onDone }: Props) {
   /** 选主题并立刻应用到界面。 */
   function pickTheme(id: AppThemeId) {
     setThemeId(id);
-    applyAppearance(id, typeStyle);
-  }
-
-  /** 选字型并立刻应用。 */
-  function pickTypeStyle(style: AppTypeStyle) {
-    setTypeStyle(style);
-    applyAppearance(themeId, style);
+    applyAppearance(id);
   }
 
   /** 选 UI 语言：本地状态 + 即时切换 i18n。 */
@@ -119,7 +97,6 @@ export function OnboardingModal({ onDone }: Props) {
   async function persist(
     patch: {
       uiTheme: AppThemeId;
-      uiTypeStyle: AppTypeStyle;
       uiLocale: AppLocale;
       aiLocale: AiLocale;
     },
@@ -142,7 +119,7 @@ export function OnboardingModal({ onDone }: Props) {
         ...patch,
         onboardingCompleted: true,
       });
-      applyAppearance(saved.uiTheme, saved.uiTypeStyle, saved.customThemes);
+      applyAppearance(saved.uiTheme, saved.customThemes);
       applyGeneral(saved);
       onDone();
     } catch (err) {
@@ -154,12 +131,11 @@ export function OnboardingModal({ onDone }: Props) {
 
   /** 跳过：恢复默认后仍标记完成。 */
   async function skip() {
-    applyAppearance(DEFAULT_APP_THEME, DEFAULT_APP_TYPE_STYLE);
+    applyAppearance(DEFAULT_APP_THEME);
     setLocale(DEFAULT_APP_LOCALE);
     await persist(
       {
         uiTheme: DEFAULT_APP_THEME,
-        uiTypeStyle: DEFAULT_APP_TYPE_STYLE,
         uiLocale: DEFAULT_APP_LOCALE,
         aiLocale: DEFAULT_AI_LOCALE,
       },
@@ -169,7 +145,7 @@ export function OnboardingModal({ onDone }: Props) {
 
   /** 完成：保存当前向导选择。 */
   async function finish() {
-    await persist({ uiTheme: themeId, uiTypeStyle: typeStyle, uiLocale, aiLocale }, dataDirDraft);
+    await persist({ uiTheme: themeId, uiLocale, aiLocale }, dataDirDraft);
   }
 
   return (
@@ -253,7 +229,6 @@ export function OnboardingModal({ onDone }: Props) {
         <div className="onboarding-body">
           <ThemePicker
             savedTheme={themeId}
-            typeStyle={typeStyle}
             showIntro={false}
             allowCustom={false}
             onSelect={(id) => {
@@ -261,18 +236,6 @@ export function OnboardingModal({ onDone }: Props) {
               return true;
             }}
           />
-
-          <div className="onboarding-row">
-            <div className="onboarding-row-copy">
-              <strong>{t("onboarding.typeStyleTitle")}</strong>
-            </div>
-            <SegmentedControl
-              value={typeStyle}
-              options={typeStyleOptions}
-              aria-label={t("onboarding.typeStyleTitle")}
-              onChange={(style) => pickTypeStyle(style as AppTypeStyle)}
-            />
-          </div>
         </div>
       )}
 

@@ -8,7 +8,6 @@ import {
   type ChatMode,
   type ContextUsageSegment,
   type ContextUsageSnapshot,
-  emptyContextUsageSnapshot,
 } from "@thinker-workbench/shared";
 import { buildChatModeAddendum, getChatMode, setChatMode } from "../chatMode";
 import { getDataDir } from "../config/dataDir";
@@ -149,9 +148,4 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   } finally {
     if (input.chatMode) setChatMode(prevMode);
   }
-}
-
-/** utility 未配置工作区时的空用量。 */
-export function emptyAssembledUsage(limit?: number): ContextUsageSnapshot {
-  return emptyContextUsageSnapshot(limit ?? DEFAULT_CONTEXT_WINDOW);
 }

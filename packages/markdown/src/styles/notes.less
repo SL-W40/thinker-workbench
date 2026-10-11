@@ -1,4 +1,4 @@
-// renderer + desktop 共用的笔记 / 手写墨色皮肤 token。
+// renderer + desktop 共用的笔记墨色皮肤 token。
 // 消费者在 `:root` 上调用 `.notes-tokens()`，在表面上调用 `.notes-paper()`。
 
 .notes-tokens() {
@@ -34,7 +34,7 @@
   --paper-rule: rgba(120, 90, 60, 0.12);
   --paper-margin: rgba(180, 120, 90, 0.14);
   --paper-glow: rgba(196, 165, 116, 0.2);
-  /* ThemeProvider / applyTypeStyle 已写入时优先使用设计 `--tw-*`。 */
+  /* ThemeProvider 已写入时优先使用设计 `--tw-*`。 */
   --font-body: var(
     --tw-font-body,
     "Segoe UI",
@@ -42,16 +42,8 @@
     "Microsoft YaHei UI",
     sans-serif
   );
-  --font-hand: var(
-    --tw-font-hand,
-    "Segoe Print",
-    "Bradley Hand",
-    "Apple Chancery",
-    "TW Hand",
-    cursive
-  );
-  --font: var(--tw-font-ui, var(--font-hand));
-  --display: var(--tw-font-hand, var(--font-hand));
+  --font: var(--tw-font-ui, var(--font-body));
+  --display: var(--tw-font-ui, var(--font-body));
   --mono: var(--tw-font-mono, ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace);
   --radius: 14px;
   --scrollbar-size: 7px;

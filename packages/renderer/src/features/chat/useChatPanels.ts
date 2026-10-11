@@ -12,10 +12,13 @@ export type ChatPanelsState = {
   rightWidth: number;
 };
 
-const MIN_WIDTH = 180;
+const MIN_LEFT_WIDTH = 180;
 /** 右侧 inspector：需容纳 Changes 起始磁贴上的 +/- 统计，不宜过窄。 */
 const MIN_RIGHT_WIDTH = 300;
-const MAX_WIDTH = 720;
+/** 左侧工作区列表：不需要拉得很宽。 */
+const MAX_LEFT_WIDTH = 360;
+/** 右侧 Files / Changes / 预览：大屏可再宽一些。 */
+const MAX_RIGHT_WIDTH = 1200;
 const DEFAULT_WIDTH = 260;
 const DEFAULT_RIGHT_WIDTH = 380;
 
@@ -27,9 +30,9 @@ const DEFAULTS: ChatPanelsState = {
   rightWidth: DEFAULT_RIGHT_WIDTH,
 };
 
-/** 将宽度钳制到 [min, MAX_WIDTH] 并取整。 */
-function clampWidth(n: number, min = MIN_WIDTH): number {
-  return Math.min(MAX_WIDTH, Math.max(min, Math.round(n)));
+/** 将宽度钳制到 [min, max] 并取整。 */
+function clampWidth(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(n)));
 }
 
 /** 从 localStorage 读取侧栏状态；损坏或缺失时用默认值。 */
@@ -42,10 +45,12 @@ function readStored(): ChatPanelsState {
       leftOpen: Boolean(parsed.leftOpen),
       rightOpen: Boolean(parsed.rightOpen),
       leftWidth:
-        typeof parsed.leftWidth === "number" ? clampWidth(parsed.leftWidth) : DEFAULT_WIDTH,
+        typeof parsed.leftWidth === "number"
+          ? clampWidth(parsed.leftWidth, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH)
+          : DEFAULT_WIDTH,
       rightWidth:
         typeof parsed.rightWidth === "number"
-          ? clampWidth(parsed.rightWidth, MIN_RIGHT_WIDTH)
+          ? clampWidth(parsed.rightWidth, MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH)
           : DEFAULT_RIGHT_WIDTH,
     };
   } catch {
@@ -78,18 +83,25 @@ export function useChatPanels() {
   }, []);
 
   const setLeftWidth = useCallback((width: number) => {
-    setState((prev) => ({ ...prev, leftWidth: clampWidth(width) }));
+    setState((prev) => ({
+      ...prev,
+      leftWidth: clampWidth(width, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH),
+    }));
   }, []);
 
   const setRightWidth = useCallback((width: number) => {
-    setState((prev) => ({ ...prev, rightWidth: clampWidth(width, MIN_RIGHT_WIDTH) }));
+    setState((prev) => ({
+      ...prev,
+      rightWidth: clampWidth(width, MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH),
+    }));
   }, []);
 
   return {
     ...state,
-    minWidth: MIN_WIDTH,
+    minWidth: MIN_LEFT_WIDTH,
     minRightWidth: MIN_RIGHT_WIDTH,
-    maxWidth: MAX_WIDTH,
+    maxLeftWidth: MAX_LEFT_WIDTH,
+    maxRightWidth: MAX_RIGHT_WIDTH,
     toggleLeft,
     toggleRight,
     setRightOpen,

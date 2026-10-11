@@ -3,8 +3,7 @@
  */
 import type { MarkdownTheme } from "./types";
 
-/** 拉丁系统手写体 + 自托管中文站酷快乐体。 */
-const HAND = '"Segoe Print", "Bradley Hand", "Apple Chancery", "TW Hand", cursive';
+const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = 'ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace';
 
 /** Notes——暖色笔记纸面 + 墨色。 */
@@ -29,7 +28,7 @@ export const notesTheme: MarkdownTheme = {
     "--md-shadow-soft": "rgba(90, 70, 50, 0.06)",
     "--md-stream-glow": "rgba(196, 165, 116, 0.28)",
     "--md-font-mono": MONO,
-    "--md-font-hand": HAND,
+    "--md-font": SANS,
     "--md-hl-keyword": "#5c4033",
     "--md-hl-string": "#1a7f37",
     "--md-hl-number": "#9b3b2e",
@@ -66,6 +65,6 @@ export const notesTheme: MarkdownTheme = {
   },
   mermaid: {
     theme: "base",
-    look: "handDrawn",
+    look: "classic",
   },
 };

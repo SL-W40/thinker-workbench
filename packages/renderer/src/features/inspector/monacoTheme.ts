@@ -8,7 +8,7 @@ import type * as Monaco from "monaco-editor";
 /** 与 FileEditor `theme` prop 共用的主题名。 */
 export const TW_MONACO_THEME = "tw-theme";
 
-/** 稳定等宽栈——避免手写体 `--font` 渗入编辑器。 */
+/** 稳定等宽栈——避免 UI `--font` 渗入编辑器。 */
 export const TW_MONACO_FONT =
   'ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Monaco, "Cascadia Code", Consolas, monospace';
 
@@ -139,7 +139,16 @@ export function applyMonacoTheme(
       "editorSuggestWidget.background": panel,
       "editorSuggestWidget.border": border,
       "editorSuggestWidget.foreground": fg,
-      "editorSuggestWidget.selectedBackground": codeBg,
+      // 选中行必须高对比：浅底 + 深字（勿用偏淡的 keyword 色）
+      "editorSuggestWidget.selectedBackground": toMonacoColor(
+        getComputedStyle(document.documentElement).getPropertyValue("--tw-accent-soft").trim() ||
+          "",
+        dark ? "#3d3a35" : "#ddd4c6",
+      ),
+      "editorSuggestWidget.selectedForeground": fg,
+      "editorSuggestWidget.selectedIconForeground": fg,
+      "editorSuggestWidget.highlightForeground": accentStrong,
+      "editorSuggestWidget.focusHighlightForeground": accentStrong,
       "editorIndentGuide.background1": border,
       "editorIndentGuide.activeBackground1": muted,
       "editorBracketMatch.background": codeBg,
@@ -152,7 +161,7 @@ export function applyMonacoTheme(
   monaco.editor.setTheme(TW_MONACO_THEME);
 }
 
-/** 读取主题等宽字体；拼上稳定回退，避免落到手写体。 */
+/** 读取主题等宽字体；拼上稳定回退。 */
 export function readMonacoFontFamily(): string {
   const mono = getComputedStyle(document.documentElement).getPropertyValue("--mono").trim();
   if (!mono) return TW_MONACO_FONT;

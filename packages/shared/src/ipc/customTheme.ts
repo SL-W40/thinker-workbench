@@ -25,7 +25,6 @@ export type CustomThemeMermaid = {
 export type CustomThemeSnapshot = {
   id: string;
   colorScheme?: "light" | "dark";
-  typeStyle?: "hand" | "regular";
   ui: Record<string, string>;
   markdown: Record<string, string>;
   mermaid: CustomThemeMermaid;
@@ -102,11 +101,9 @@ export function normalizeCustomThemeSnapshot(
   const markdown = normalizeStringMap(obj.markdown);
   if (!Object.keys(ui).length && !Object.keys(markdown).length) return null;
   const colorScheme = obj.colorScheme === "dark" || obj.colorScheme === "light" ? obj.colorScheme : undefined;
-  const typeStyle = obj.typeStyle === "hand" || obj.typeStyle === "regular" ? obj.typeStyle : undefined;
   return {
     id: recordId,
     ...(colorScheme ? { colorScheme } : {}),
-    ...(typeStyle ? { typeStyle } : {}),
     ui,
     markdown,
     mermaid: normalizeMermaid(obj.mermaid),

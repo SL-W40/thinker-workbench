@@ -186,7 +186,7 @@
   position: relative;
   overflow: hidden;
   background: var(--panel);
-  /* 阻断 .app 上手写体 `--font` 渗入 Monaco（字号会忽大忽小） */
+  /* 阻断 .app 上 UI `--font` 渗入 Monaco（字号会忽大忽小） */
   font-family: var(--mono, ui-monospace, "SF Mono", Menlo, Monaco, monospace);
 }
 
@@ -196,6 +196,21 @@
   inset: 0;
   width: 100% !important;
   height: 100% !important;
+}
+
+/* fixedOverflowWidgets：补全浮层 position:fixed，抬高以免被侧栏盖住 */
+.monaco-editor .overflowingContentWidgets,
+.monaco-editor .suggest-widget,
+.monaco-editor .parameter-hints-widget,
+.monaco-editor .monaco-hover {
+  z-index: 1200;
+}
+
+/* 补全选中行：强制正文色，避免浅底 + 淡蓝 keyword 看不清 */
+.monaco-editor .suggest-widget .monaco-list-row.focused,
+.monaco-editor .suggest-widget .monaco-list-row.focused .monaco-highlighted-label,
+.monaco-editor .suggest-widget .monaco-list-row.focused .suggest-icon {
+  color: var(--tw-fg, var(--ink, #1e1e1e)) !important;
 }
 
 .editor-wrap__monaco .monaco-editor,

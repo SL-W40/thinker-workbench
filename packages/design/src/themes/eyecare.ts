@@ -5,7 +5,7 @@ import { eyecareTheme as mdEyecare } from "@thinker-workbench/markdown";
 import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
 
-const HAND = mdEyecare.vars["--md-font-hand"] ?? "";
+const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdEyecare.vars["--md-font-mono"] ?? "";
 
 /** 护眼——柔和灰绿。 */
@@ -29,8 +29,7 @@ export const eyecareTheme: DesignTheme = {
     "--tw-code-bg": "#e2e8d8",
     "--tw-placeholder": "rgba(95, 109, 90, 0.7)",
     "--tw-hover": "rgba(47, 58, 44, 0.06)",
-    "--tw-font-body": '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif',
-    "--tw-font-hand": HAND,
+    "--tw-font-body": SANS,
     "--tw-font-mono": MONO,
     "--tw-radius": "14px",
     "--tw-radius-control": "10px",
