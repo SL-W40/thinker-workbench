@@ -2,10 +2,10 @@
  * 图节点在一次 run 内的轻量事件出口（status / token / tool）。
  *
  * 节点不直接碰 EventBus，只调 getRunEmitter()；
- * AgentRuntime 用 withRunEmitter 包住整次图遍历，并由 bindRuntimeEmitter
- * 补上 threadId / runId / ts，转成完整 AgentEvent。
+ * AgentRuntime 用 runWithContext 包住整次图遍历，并由 bindRuntimeEmitter
+ * 补上 threadId / runId / sessionId / ts，转成完整 AgentEvent。
  *
- * 用模块级 current 做「当前 run」上下文，避免每个节点都显式传 emit。
+ * 真相在 RunContext；模块级 fallback 仅兼容无 ALS 的遗留路径。
  */
 import type {
   AgentEvent,
@@ -14,6 +14,7 @@ import type {
   AgentModelSwitchEvent,
   AgentSubagentEvent,
 } from "@thinker-workbench/shared";
+import { getRunContext } from "./runContext";
 
 /** 节点可发的事件（id / 时间戳由 runtime 填充）。 */
 export type RunEmitEvent =
@@ -51,32 +52,40 @@ export type RunEmitEvent =
 
 export type RunEmitter = (event: RunEmitEvent) => void;
 
-/** 当前异步调用栈上的 emitter；不在 withRunEmitter 内时为 null。 */
-let current: RunEmitter | null = null;
-/** 当前 run 的 thread / run id（供 HITL / PTY）。 */
-let currentIds: { threadId: string; runId: string } | null = null;
+/** 无 ALS 时的遗留 fallback（不应在并行 run 路径使用）。 */
+let fallbackEmit: RunEmitter | null = null;
+let fallbackIds: { threadId: string; runId: string; sessionId?: string } | null = null;
 
 /** 供 agent / tools 节点取当前 run 的发射器。 */
 export function getRunEmitter(): RunEmitter | null {
-  return current;
+  return getRunContext()?.emit ?? fallbackEmit;
 }
 
 /** 当前 run 标识；不在 run 内时为 null。 */
-export function getRunIds(): { threadId: string; runId: string } | null {
-  return currentIds;
+export function getRunIds(): { threadId: string; runId: string; sessionId?: string } | null {
+  const ctx = getRunContext();
+  if (ctx) {
+    return { threadId: ctx.threadId, runId: ctx.runId, sessionId: ctx.sessionId };
+  }
+  return fallbackIds;
+}
+
+/** @deprecated 用 getRunIds().sessionId；保留别名。 */
+export function getChatSessionId(): string | undefined {
+  return getRunIds()?.sessionId;
 }
 
 /**
- * 在 work 执行期间设置 current emitter，结束后恢复先前值。
- * 支持嵌套（外层 run 被内层临时覆盖时也能还原）。
+ * @deprecated 并行安全路径请用 runWithContext；本函数仅嵌套兼容。
+ * 在 work 执行期间设置 fallback emitter。
  */
 export async function withRunEmitter<T>(emit: RunEmitter, work: () => Promise<T>): Promise<T> {
-  const prev = current;
-  current = emit;
+  const prev = fallbackEmit;
+  fallbackEmit = emit;
   try {
     return await work();
   } finally {
-    current = prev;
+    fallbackEmit = prev;
   }
 }
 
@@ -87,12 +96,15 @@ export function bindRuntimeEmitter(
   emit: (event: AgentEvent) => void,
   threadId: string,
   runId: string,
+  sessionId?: string,
 ): RunEmitter {
-  currentIds = { threadId, runId };
+  fallbackIds = { threadId, runId, sessionId };
   return (event) => {
-    currentIds = { threadId, runId };
+    fallbackIds = { threadId, runId, sessionId };
+    // 工具事件自带 sessionId=终端 id，勿覆盖；聊天会话用 chatSessionId
     emit({
       ...event,
+      ...(sessionId ? { chatSessionId: sessionId } : {}),
       threadId,
       runId,
       ts: Date.now(),

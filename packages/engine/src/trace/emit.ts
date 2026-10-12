@@ -11,6 +11,7 @@ import {
   type TraceSpanStatus,
 } from "@thinker-workbench/shared";
 import { postToParent } from "../host/port";
+import { getRunIds } from "../runtime/runEmit";
 
 type TraceContext = {
   enabled: boolean;
@@ -32,8 +33,8 @@ type TaskAlsStore = {
 };
 
 let ctx: TraceContext = { enabled: true };
-/** 主会话（非 Task 内部）span 栈。 */
-const mainSpanStack: string[] = [];
+/** 主会话 span 栈：按 runId 分桶，避免并行 run 互清。 */
+const mainSpanStacksByRun = new Map<string, string[]>();
 /** 每个 Task 独立的 span 栈。 */
 const taskSpanStacks = new Map<string, string[]>();
 /** task 栈空时的锚点 parent（一般为 tool:Task span）。 */
@@ -44,10 +45,24 @@ const taskRootParent = new Map<string, string>();
  */
 const taskAls = new AsyncLocalStorage<TaskAlsStore>();
 
-function clearAllStacks(): void {
-  mainSpanStack.length = 0;
-  taskSpanStacks.clear();
-  taskRootParent.clear();
+function currentRunKey(): string {
+  return getRunIds()?.runId ?? ctx.runId ?? "_";
+}
+
+function mainSpanStackFor(runId?: string): string[] {
+  const key = runId?.trim() || currentRunKey();
+  let stack = mainSpanStacksByRun.get(key);
+  if (!stack) {
+    stack = [];
+    mainSpanStacksByRun.set(key, stack);
+  }
+  return stack;
+}
+
+function clearStacksForRun(runId: string): void {
+  const key = runId.trim() || "_";
+  mainSpanStacksByRun.delete(key);
+  // Task 栈仍按 taskId；新 run 开局清自己的主栈即可
 }
 
 /** 当前异步链上的 taskId（无则 undefined = 主会话）。 */
@@ -68,7 +83,7 @@ export function peekAgentSpanId(): string | undefined {
 }
 
 function spanStackForTask(taskId: string | undefined): string[] {
-  if (!taskId) return mainSpanStack;
+  if (!taskId) return mainSpanStackFor();
   let stack = taskSpanStacks.get(taskId);
   if (!stack) {
     stack = [];
@@ -90,9 +105,9 @@ function isTaskToolLaunch(input: { name: string; kind: TraceSpanKind }): boolean
 export function configureAgentTrace(next: Partial<TraceContext>): void {
   const prevRun = ctx.runId;
   ctx = { ...ctx, ...next };
-  // 新 run 清空栈，避免串 run / 并行残留污染 parent
-  if (next.runId !== undefined && next.runId !== prevRun) {
-    clearAllStacks();
+  // 新 run 只清本 run 的主栈，勿动其它并行 run
+  if (next.runId !== undefined && next.runId !== prevRun && next.runId) {
+    clearStacksForRun(next.runId);
   }
 }
 
@@ -149,7 +164,7 @@ export function agentStartSpan(input: AgentStartSpanInput): string {
   const taskLaunch = isTaskToolLaunch(input);
   const alsTask = getActiveAgentTaskId();
   // Task 工具本身始终挂主栈；内部工作才进 task 栈（由 ALS taskId 决定）
-  const stack = taskLaunch ? mainSpanStack : activeSpanStack();
+  const stack = taskLaunch ? mainSpanStackFor(input.runId ?? ctx.runId) : activeSpanStack();
   const taskId = input.taskId ?? (taskLaunch ? undefined : alsTask);
 
   let parentSpanId = input.parentSpanId;
@@ -196,7 +211,8 @@ export function agentStartSpan(input: AgentStartSpanInput): string {
         ...(input.attrs ?? {}),
         ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
         ...(ctx.workspaceId ? { workspaceId: ctx.workspaceId } : {}),
-        ...(ctx.title ? { title: ctx.title } : {}),
+        // 会话标题用独立键，勿覆盖 Task/subagent 的 attrs.title
+        ...(ctx.title ? { sessionTitle: ctx.title } : {}),
       },
       input: input.input,
     },
@@ -224,7 +240,16 @@ export function agentEndSpan(
     }
     return false;
   };
-  if (!tryPop(mainSpanStack)) {
+  let popped = tryPop(mainSpanStackFor());
+  if (!popped) {
+    for (const stack of mainSpanStacksByRun.values()) {
+      if (tryPop(stack)) {
+        popped = true;
+        break;
+      }
+    }
+  }
+  if (!popped) {
     for (const stack of taskSpanStacks.values()) {
       if (tryPop(stack)) break;
     }

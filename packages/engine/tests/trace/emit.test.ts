@@ -21,6 +21,7 @@ type SpanStart = {
     parentSpanId?: string;
     taskId?: string;
     name: string;
+    attrs?: Record<string, unknown>;
   };
 };
 
@@ -226,5 +227,26 @@ describe("trace emit parallel Task", () => {
     const c = startsNamed("model.candidate")[0];
     assert.ok(c);
     assert.equal(c.span.parentSpanId, chat);
+  });
+
+  it("会话标题写入 sessionTitle，不覆盖 Task attrs.title", () => {
+    configureAgentTrace({
+      enabled: true,
+      sessionId: "sess_test",
+      runId: `run_title_${Date.now()}`,
+      traceId: "tr_test",
+      title: "帮我介绍一下这个项目",
+      parentSpanId: "span_bridge",
+    });
+    agentStartSpan({
+      name: "tool:Task",
+      kind: "tool",
+      taskId: "task_t",
+      attrs: { title: "Engine 包深度探索", background: true },
+    });
+    const task = startsNamed("tool:Task")[0];
+    assert.ok(task);
+    assert.equal(task.span.attrs?.title, "Engine 包深度探索");
+    assert.equal(task.span.attrs?.sessionTitle, "帮我介绍一下这个项目");
   });
 });

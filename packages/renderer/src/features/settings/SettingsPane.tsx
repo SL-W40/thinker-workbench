@@ -1,6 +1,7 @@
 /**
  * 设置页外壳：左侧分组 SideNav 切换分区，右侧渲染对应表单。 * 侧栏随窗口宽度伸缩；窄时收成仅图标（container query）。 * 快捷键分区自带标题行；其它分区用统一 header + 表单 / EmptyState。 */
 import {
+  AgentModeIcon,
   BellIcon,
   CubeIcon,
   DatabaseIcon,
@@ -15,6 +16,7 @@ import {
 } from "@thinker-workbench/design/react";
 import type { ComponentType } from "react";
 import { useT } from "../../i18n/useI18n";
+import { AgentLimitsSettingsForm } from "./AgentLimitsSettingsForm";
 import { AppearanceSettingsForm } from "./AppearanceSettingsForm";
 import { BrowserNetworkSettingsForm } from "./BrowserNetworkSettingsForm";
 import { DataSettingsForm } from "./DataSettingsForm";
@@ -41,6 +43,7 @@ const SECTION_ICONS: Record<SettingsSectionId, ComponentType<IconProps>> = {
   notifications: BellIcon,
   data: DatabaseIcon,
   permissions: ShieldIcon,
+  agentLimits: AgentModeIcon,
   browser: GlobeIcon,
   model: CubeIcon,
   shortcuts: KeyboardIcon,
@@ -100,6 +103,8 @@ export function SettingsPane({ active, section, onSectionChange }: Props) {
               <DataSettingsForm active={active} />
             ) : section === "permissions" ? (
               <PermissionsSettingsForm active={active} />
+            ) : section === "agentLimits" ? (
+              <AgentLimitsSettingsForm active={active} />
             ) : section === "browser" ? (
               <BrowserNetworkSettingsForm active={active} />
             ) : section === "model" ? (

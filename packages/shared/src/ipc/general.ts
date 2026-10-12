@@ -9,6 +9,7 @@ import type {
   DataDirChangeRequest,
   DataDirChangeResult,
   DataDirMigrateProgress,
+  DataDirPaths,
 } from "./dataDir";
 import {
   isCustomThemeId,
@@ -259,6 +260,33 @@ export type GeneralSettings = {
   openLocalLinksInBrowser: boolean;
   /** 模型 HTTP 客户端兼容模式（HTTP/2 vs HTTP/1.1）。 */
   httpCompatibilityMode: HttpCompatibilityMode;
+  /**
+   * 同时处于 running 的聊天会话软上限（跨工作区合计）。
+   * 超限时新 run 被拒绝（不排队）；同 thread 仍始终互斥。
+   */
+  maxParallelRuns: number;
+  /** 主会话 agent↔tools 最大轮次。 */
+  maxAgentSteps: number;
+  /** Task / 子代理独立模型轮次上限。 */
+  maxSubagentSteps: number;
+  /** 模型请求最大尝试次数（含首次）。 */
+  modelRetryMaxAttempts: number;
+  /** 模型重试首次基础延迟（ms）。 */
+  modelRetryBaseDelayMs: number;
+  /** shell / shell_await 默认 block_until_ms。 */
+  defaultShellBlockUntilMs: number;
+  /** shell 输出进模型前的字符上限。 */
+  shellOutputCap: number;
+  /** MCP 连接超时（ms）。 */
+  mcpConnectTimeoutMs: number;
+  /** MCP 工具调用超时（ms）。 */
+  mcpCallTimeoutMs: number;
+  /** `@` 单文件最大字节。 */
+  contextFilesMaxFileBytes: number;
+  /** `@` 注入合计最大字节。 */
+  contextFilesMaxTotalBytes: number;
+  /** read_file 默认 max_chars。 */
+  readFileDefaultMaxChars: number;
   /** 是否采集会话 Trace（span + jsonl）。 */
   traceEnabled: boolean;
   traceRetentionDays: number;
@@ -394,6 +422,35 @@ export const DELETE_FILE_RESTORE_TTL_DAY_OPTIONS = [1, 3, 7, 14, 30, 90, 0] as c
 /** 删除恢复缓存默认保留 7 天。 */
 export const DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS = 7;
 
+/** 并行会话默认上限。 */
+export const DEFAULT_MAX_PARALLEL_RUNS = 3;
+
+/** 设置页可选的并行上限。 */
+export const MAX_PARALLEL_RUNS_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10] as const;
+
+/** 主会话默认最大轮次。 */
+export const DEFAULT_MAX_AGENT_STEPS = 16;
+/** 子代理默认最大轮次。 */
+export const DEFAULT_MAX_SUBAGENT_STEPS = 24;
+/** 模型重试默认次数（含首次）。 */
+export const DEFAULT_MODEL_RETRY_MAX_ATTEMPTS = 3;
+/** 模型重试默认基础延迟（ms）。 */
+export const DEFAULT_MODEL_RETRY_BASE_DELAY_MS = 400;
+/** Shell 默认等待（ms）。 */
+export const DEFAULT_SHELL_BLOCK_UNTIL_MS = 30_000;
+/** Shell 输出默认截断上限（字符）。 */
+export const DEFAULT_SHELL_OUTPUT_CAP = 200_000;
+/** MCP 连接默认超时（ms）。 */
+export const DEFAULT_MCP_CONNECT_TIMEOUT_MS = 15_000;
+/** MCP 调用默认超时（ms）。 */
+export const DEFAULT_MCP_CALL_TIMEOUT_MS = 60_000;
+/** `@` 单文件默认上限（字节）。 */
+export const DEFAULT_CONTEXT_FILES_MAX_FILE_BYTES = 100 * 1024;
+/** `@` 合计默认上限（字节）。 */
+export const DEFAULT_CONTEXT_FILES_MAX_TOTAL_BYTES = 256 * 1024;
+/** read_file 默认 max_chars。 */
+export const DEFAULT_READ_FILE_MAX_CHARS = 120_000;
+
 /** 将未知值规范为合法 TTL 天数（0～3650）。 */
 export function normalizeDeleteFileRestoreTtlDays(
   value: unknown,
@@ -401,6 +458,103 @@ export function normalizeDeleteFileRestoreTtlDays(
 ): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(0, Math.min(3650, Math.floor(value)));
+}
+
+/** 将未知值规范为并行会话上限（1～10）。 */
+export function normalizeMaxParallelRuns(
+  value: unknown,
+  fallback: number = DEFAULT_MAX_PARALLEL_RUNS,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(10, Math.floor(value)));
+}
+
+/** 整数落在 [min, max]；非法回退 fallback。 */
+export function normalizeIntInRange(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+export function normalizeMaxAgentSteps(
+  value: unknown,
+  fallback: number = DEFAULT_MAX_AGENT_STEPS,
+): number {
+  return normalizeIntInRange(value, fallback, 1, 200);
+}
+
+export function normalizeMaxSubagentSteps(
+  value: unknown,
+  fallback: number = DEFAULT_MAX_SUBAGENT_STEPS,
+): number {
+  return normalizeIntInRange(value, fallback, 1, 200);
+}
+
+export function normalizeModelRetryMaxAttempts(
+  value: unknown,
+  fallback: number = DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
+): number {
+  return normalizeIntInRange(value, fallback, 1, 10);
+}
+
+export function normalizeModelRetryBaseDelayMs(
+  value: unknown,
+  fallback: number = DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
+): number {
+  return normalizeIntInRange(value, fallback, 50, 10_000);
+}
+
+export function normalizeDefaultShellBlockUntilMs(
+  value: unknown,
+  fallback: number = DEFAULT_SHELL_BLOCK_UNTIL_MS,
+): number {
+  return normalizeIntInRange(value, fallback, 0, 600_000);
+}
+
+export function normalizeShellOutputCap(
+  value: unknown,
+  fallback: number = DEFAULT_SHELL_OUTPUT_CAP,
+): number {
+  return normalizeIntInRange(value, fallback, 1_000, 2_000_000);
+}
+
+export function normalizeMcpConnectTimeoutMs(
+  value: unknown,
+  fallback: number = DEFAULT_MCP_CONNECT_TIMEOUT_MS,
+): number {
+  return normalizeIntInRange(value, fallback, 1_000, 300_000);
+}
+
+export function normalizeMcpCallTimeoutMs(
+  value: unknown,
+  fallback: number = DEFAULT_MCP_CALL_TIMEOUT_MS,
+): number {
+  return normalizeIntInRange(value, fallback, 1_000, 600_000);
+}
+
+export function normalizeContextFilesMaxFileBytes(
+  value: unknown,
+  fallback: number = DEFAULT_CONTEXT_FILES_MAX_FILE_BYTES,
+): number {
+  return normalizeIntInRange(value, fallback, 1_024, 10 * 1024 * 1024);
+}
+
+export function normalizeContextFilesMaxTotalBytes(
+  value: unknown,
+  fallback: number = DEFAULT_CONTEXT_FILES_MAX_TOTAL_BYTES,
+): number {
+  return normalizeIntInRange(value, fallback, 1_024, 50 * 1024 * 1024);
+}
+
+export function normalizeReadFileDefaultMaxChars(
+  value: unknown,
+  fallback: number = DEFAULT_READ_FILE_MAX_CHARS,
+): number {
+  return normalizeIntInRange(value, fallback, 1_000, 2_000_000);
 }
 
 /** 通用设置出厂默认值。 */
@@ -429,6 +583,18 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   shellBlocklist: [],
   openLocalLinksInBrowser: false,
   httpCompatibilityMode: DEFAULT_HTTP_COMPATIBILITY_MODE,
+  maxParallelRuns: DEFAULT_MAX_PARALLEL_RUNS,
+  maxAgentSteps: DEFAULT_MAX_AGENT_STEPS,
+  maxSubagentSteps: DEFAULT_MAX_SUBAGENT_STEPS,
+  modelRetryMaxAttempts: DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
+  modelRetryBaseDelayMs: DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
+  defaultShellBlockUntilMs: DEFAULT_SHELL_BLOCK_UNTIL_MS,
+  shellOutputCap: DEFAULT_SHELL_OUTPUT_CAP,
+  mcpConnectTimeoutMs: DEFAULT_MCP_CONNECT_TIMEOUT_MS,
+  mcpCallTimeoutMs: DEFAULT_MCP_CALL_TIMEOUT_MS,
+  contextFilesMaxFileBytes: DEFAULT_CONTEXT_FILES_MAX_FILE_BYTES,
+  contextFilesMaxTotalBytes: DEFAULT_CONTEXT_FILES_MAX_TOTAL_BYTES,
+  readFileDefaultMaxChars: DEFAULT_READ_FILE_MAX_CHARS,
   traceEnabled: true,
   traceRetentionDays: DEFAULT_TRACE_RETENTION_DAYS,
   traceMaxSessions: DEFAULT_TRACE_MAX_SESSIONS,
@@ -477,6 +643,11 @@ export type ThinkerGeneralApi = {
     title?: string;
     filters?: Array<{ name: string; extensions: string[] }>;
   }): Promise<string | null>;
+  /**
+   * 解析数据根与 settings 路径。
+   * 省略参数时用当前已生效配置；传入草稿串可预览「保存后」落点。
+   */
+  resolveDataDir?(configured?: string): Promise<DataDirPaths>;
   /** 预览数据目录变更（不落盘）。 */
   previewDataDirChange?(dataDir: string): Promise<DataDirChangePreview>;
   /** 应用数据目录变更（须无 running 会话；可选择迁移）。 */
@@ -562,6 +733,44 @@ export function normalizeGeneral(
     base.openLocalLinksInBrowser = obj.openLocalLinksInBrowser;
   }
   base.httpCompatibilityMode = normalizeHttpCompatibilityMode(obj.httpCompatibilityMode);
+  if (Object.hasOwn(obj, "maxParallelRuns")) {
+    base.maxParallelRuns = normalizeMaxParallelRuns(obj.maxParallelRuns);
+  }
+  if (Object.hasOwn(obj, "maxAgentSteps")) {
+    base.maxAgentSteps = normalizeMaxAgentSteps(obj.maxAgentSteps);
+  }
+  if (Object.hasOwn(obj, "maxSubagentSteps")) {
+    base.maxSubagentSteps = normalizeMaxSubagentSteps(obj.maxSubagentSteps);
+  }
+  if (Object.hasOwn(obj, "modelRetryMaxAttempts")) {
+    base.modelRetryMaxAttempts = normalizeModelRetryMaxAttempts(obj.modelRetryMaxAttempts);
+  }
+  if (Object.hasOwn(obj, "modelRetryBaseDelayMs")) {
+    base.modelRetryBaseDelayMs = normalizeModelRetryBaseDelayMs(obj.modelRetryBaseDelayMs);
+  }
+  if (Object.hasOwn(obj, "defaultShellBlockUntilMs")) {
+    base.defaultShellBlockUntilMs = normalizeDefaultShellBlockUntilMs(obj.defaultShellBlockUntilMs);
+  }
+  if (Object.hasOwn(obj, "shellOutputCap")) {
+    base.shellOutputCap = normalizeShellOutputCap(obj.shellOutputCap);
+  }
+  if (Object.hasOwn(obj, "mcpConnectTimeoutMs")) {
+    base.mcpConnectTimeoutMs = normalizeMcpConnectTimeoutMs(obj.mcpConnectTimeoutMs);
+  }
+  if (Object.hasOwn(obj, "mcpCallTimeoutMs")) {
+    base.mcpCallTimeoutMs = normalizeMcpCallTimeoutMs(obj.mcpCallTimeoutMs);
+  }
+  if (Object.hasOwn(obj, "contextFilesMaxFileBytes")) {
+    base.contextFilesMaxFileBytes = normalizeContextFilesMaxFileBytes(obj.contextFilesMaxFileBytes);
+  }
+  if (Object.hasOwn(obj, "contextFilesMaxTotalBytes")) {
+    base.contextFilesMaxTotalBytes = normalizeContextFilesMaxTotalBytes(
+      obj.contextFilesMaxTotalBytes,
+    );
+  }
+  if (Object.hasOwn(obj, "readFileDefaultMaxChars")) {
+    base.readFileDefaultMaxChars = normalizeReadFileDefaultMaxChars(obj.readFileDefaultMaxChars);
+  }
   if (typeof obj.traceEnabled === "boolean") base.traceEnabled = obj.traceEnabled;
   if (typeof obj.traceRetentionDays === "number" && Number.isFinite(obj.traceRetentionDays)) {
     base.traceRetentionDays = Math.max(0, Math.min(3650, Math.floor(obj.traceRetentionDays)));

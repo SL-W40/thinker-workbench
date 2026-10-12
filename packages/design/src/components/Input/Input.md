@@ -13,6 +13,8 @@ import { Input } from "@thinker-workbench/design/react";
 ```tsx
 <Input value={v} onChange={(e) => setV(e.target.value)} placeholder="…" />
 <Input invalid size="sm" startAdornment={<Search />} />
+{/* 单位等后缀：用 endAdornment，勿塞进 label */}
+<Input type="number" value={ms} endAdornment="ms" onChange={…} />
 ```
 
 ## API

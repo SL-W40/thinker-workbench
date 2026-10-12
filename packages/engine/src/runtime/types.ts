@@ -23,4 +23,6 @@ export type RunRequest = AgentRunCommand & {
   traceId?: string;
   workspaceRoot?: string;
   workspaceName?: string;
+  /** 由 UtilityHost 预组装的上下文；缺省时 runtime 用命令字段拼最小 ctx。 */
+  runContext?: import("./runContext").RunContext;
 };

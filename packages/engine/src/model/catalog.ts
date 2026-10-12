@@ -2,7 +2,6 @@
  * 模型目录运行时：候选构建、故障切换包装。
  * 配置由 UtilityHost 每轮下发；chat 调用经 withModelFailover。
  */
-import { isLogPreviewTruncating } from "@thinker-workbench/logger";
 import {
   buildModelCandidates,
   classifyModelSwitchReason,
@@ -13,11 +12,12 @@ import {
   type ModelSettings,
   type ModelSwitchReason,
 } from "@thinker-workbench/shared";
+import { getRunContext, getRunTurn } from "../runtime/runContext";
 import { getRunEmitter } from "../runtime/runEmit";
 import { agentEndSpan, agentStartSpan } from "../trace/emit";
 import {
   configureChatModel,
-  getChatModel,
+  getChatModelFor,
   MODEL_API_KEY_MISSING,
 } from "./openai";
 import {
@@ -26,7 +26,7 @@ import {
 } from "./retry";
 import type { ChatCompletionResult, ChatRequest } from "./types";
 
-/** model.chat 输入摘要：默认瘦身；Verbose（关闭截断）保留 messages。 */
+/** model.chat 输入：始终带 messages，由 Main truncateForTrace 裁切。 */
 function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
   const messages = request.messages ?? [];
   const tools = request.tools ?? [];
@@ -37,60 +37,110 @@ function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
   const lastRole = last?.role;
   const lastPreview =
     typeof last?.content === "string" ? last.content.slice(0, 120) : undefined;
-  const base: Record<string, unknown> = {
+  return {
     messageCount: messages.length,
     toolNames,
     lastRole,
     ...(lastPreview ? { lastContentPreview: lastPreview } : {}),
+    messages,
+    ...(request.system ? { system: request.system } : {}),
   };
-  if (!isLogPreviewTruncating()) {
-    base.messages = messages;
-    base.tools = toolNames;
-  }
-  return base;
 }
 
-/** 当前目录与选用。 */
+/** 组装 model.chat 结束 output（含取消半截）。 */
+function modelChatOutput(args: {
+  modelId: string;
+  result?: ChatCompletionResult | null;
+  replyBuf: string;
+  thinkingBuf: string;
+  partial: boolean;
+}): Record<string, unknown> {
+  const content = args.result?.content ?? args.replyBuf;
+  const reasoning = args.result?.reasoning ?? args.thinkingBuf;
+  return {
+    modelId: args.modelId,
+    ...(args.result?.providerResponseId
+      ? { providerResponseId: args.result.providerResponseId }
+      : {}),
+    content,
+    ...(reasoning ? { reasoning } : {}),
+    toolCalls: args.result?.toolCalls ?? [],
+    ...(args.result?.usage ? { usage: args.result.usage } : {}),
+    partial: args.partial,
+    contentChars: content.length,
+    reasoningChars: reasoning.length,
+  };
+}
+
+/** 进程级目录与选用（hello / 无 ALS）；run 内以 RunContext 为准。 */
 let catalog: ModelCatalog | null = null;
 let selection: ModelSelection = { mode: "auto" };
 /** 本轮用户文本 / 路径（供 Auto 路由）。 */
 let routeContext: { userText: string; contextPaths?: string[] } = { userText: "" };
 
-/** 应用主进程下发的目录与选用。 */
+function activeCatalog(): ModelCatalog | null {
+  return getRunContext()?.catalog ?? catalog;
+}
+
+function activeSelection(): ModelSelection {
+  const ctx = getRunContext();
+  return ctx ? ctx.selection : selection;
+}
+
+function activeRoute(): { userText: string; contextPaths?: string[] } {
+  const ctx = getRunContext();
+  return ctx ? ctx.routeContext : routeContext;
+}
+
+/** 应用主进程下发的目录与选用（有 RunContext 时只写本 run）。 */
 export function configureModelCatalog(
   nextCatalog?: ModelCatalog | null,
   nextSelection?: ModelSelection | null,
   route?: { userText?: string; contextPaths?: string[] },
 ): void {
+  const ctx = getRunContext();
+  const targetCatalog = ctx ? { holder: ctx as { catalog: ModelCatalog | null } } : null;
+
   if (nextCatalog) {
-    catalog = {
+    const cloned: ModelCatalog = {
       providers: nextCatalog.providers.map((p) => ({ ...p })),
       models: nextCatalog.models.map((m) => ({ ...m, tags: [...m.tags] })),
       selection: nextCatalog.selection,
       allowEmoji: nextCatalog.allowEmoji,
     };
+    if (ctx) ctx.catalog = cloned;
+    else catalog = cloned;
   }
-  if (nextSelection) selection = nextSelection;
-  else if (nextCatalog) selection = nextCatalog.selection;
+  if (nextSelection) {
+    if (ctx) ctx.selection = nextSelection;
+    else selection = nextSelection;
+  } else if (nextCatalog) {
+    if (ctx) ctx.selection = nextCatalog.selection;
+    else selection = nextCatalog.selection;
+  }
   if (route) {
-    routeContext = {
+    const nextRoute = {
       userText: route.userText ?? "",
       contextPaths: route.contextPaths,
     };
+    if (ctx) ctx.routeContext = nextRoute;
+    else routeContext = nextRoute;
   }
+  void targetCatalog;
 
   // 预配置首候选（兼容仍直接 getChatModel 的路径）
   const candidates = listCandidates();
   const first = candidates[0];
-  if (first && catalog) {
-    const settings = resolveModelSettings(catalog, first);
+  const cat = activeCatalog();
+  if (first && cat) {
+    const settings = resolveModelSettings(cat, first);
     configureChatModel(settings);
-  } else if (catalog) {
+  } else if (cat) {
     configureChatModel({
       apiKey: "",
       baseUrl: "",
       model: "",
-      allowEmoji: catalog.allowEmoji,
+      allowEmoji: cat.allowEmoji,
     });
   }
 }
@@ -103,16 +153,19 @@ export function configureFromLegacyModel(settings?: ModelSettings | null): void 
 
 /** 当前候选列表。 */
 export function listCandidates(): ModelEntry[] {
-  if (!catalog) return [];
-  return buildModelCandidates(catalog, selection, {
-    userText: routeContext.userText,
-    contextPaths: routeContext.contextPaths,
+  const cat = activeCatalog();
+  if (!cat) return [];
+  const sel = activeSelection();
+  const route = activeRoute();
+  return buildModelCandidates(cat, sel, {
+    userText: route.userText,
+    contextPaths: route.contextPaths,
   });
 }
 
 /** 当前选用（供子代理临时覆盖后还原）。 */
 export function getModelSelection(): ModelSelection {
-  return { ...selection };
+  return { ...activeSelection() };
 }
 
 /**
@@ -125,15 +178,21 @@ export async function chatWithFailover(
 ): Promise<ChatCompletionResult> {
   const emit = getRunEmitter();
   const candidates = listCandidates();
-  if (candidates.length === 0 || !catalog) {
+  const cat = activeCatalog();
+  if (candidates.length === 0 || !cat) {
     throw new Error(MODEL_API_KEY_MISSING);
   }
 
+  const turn = getRunTurn();
+  const turnLabel = turn != null ? ` · turn ${turn}` : "";
   const modelSpanId = agentStartSpan({
     name: "model.chat",
     kind: "model",
-    summary: "model.chat",
+    summary: `model.chat${turnLabel}`,
     input: modelChatInputSummary(request),
+    attrs: {
+      ...(turn != null ? { turn } : {}),
+    },
   });
 
   const skippedProviders = new Set<string>();
@@ -144,47 +203,58 @@ export async function chatWithFailover(
       if (!entry) continue;
       if (skippedProviders.has(entry.providerId)) continue;
 
-      const settings = resolveModelSettings(catalog, entry);
+      const settings = resolveModelSettings(cat, entry);
       if (!settings) {
         lastError = new Error(MODEL_API_KEY_MISSING);
         continue;
       }
 
+      // 同步进程默认（非 ALS 路径）；本调用用 getChatModelFor 避免并行抢占
       configureChatModel(settings);
 
       const candSpanId = agentStartSpan({
         name: "model.candidate",
         kind: "model",
-        summary: `model.candidate · ${entry.id}`,
-        attrs: { modelId: entry.id, providerId: entry.providerId, index: i },
+        summary: `model.candidate${turnLabel} · ${entry.id}`,
+        attrs: {
+          modelId: entry.id,
+          providerId: entry.providerId,
+          index: i,
+          ...(turn != null ? { turn } : {}),
+        },
       });
 
       // 已向 UI 吐过 token 则不可换模型（避免重复半截回复）
       let emittedTokens = false;
+      let replyBuf = "";
+      let thinkingBuf = "";
       const wrapped: ChatRequest = {
         ...request,
         onToken: (text, channel) => {
           emittedTokens = true;
+          if ((channel ?? "reply") === "thinking") thinkingBuf += text;
+          else replyBuf += text;
           request.onToken?.(text, channel);
         },
       };
 
       try {
-        const result = await getChatModel().chat(wrapped, signal);
+        const result = await getChatModelFor(settings).chat(wrapped, signal);
         agentEndSpan(candSpanId, {
           status: "ok",
-          attrs: { modelId: entry.id },
+          attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
         agentEndSpan(modelSpanId, {
           status: "ok",
-          summary: `model.chat · ${entry.id}`,
-          output: {
+          summary: `model.chat${turnLabel} · ${entry.id}`,
+          output: modelChatOutput({
             modelId: entry.id,
-            content: result.content,
-            toolCalls: result.toolCalls,
-            usage: result.usage,
-          },
-          attrs: { modelId: entry.id },
+            result,
+            replyBuf,
+            thinkingBuf,
+            partial: false,
+          }),
+          attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
         return result;
       } catch (err) {
@@ -193,14 +263,38 @@ export async function chatWithFailover(
           agentEndSpan(candSpanId, {
             status: "cancelled",
             error: formatErrorMessage(err),
+            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
           });
-          agentEndSpan(modelSpanId, { status: "cancelled", error: formatErrorMessage(err) });
+          agentEndSpan(modelSpanId, {
+            status: "cancelled",
+            error: formatErrorMessage(err),
+            summary: `model.chat${turnLabel} · ${entry.id}`,
+            output: modelChatOutput({
+              modelId: entry.id,
+              result: null,
+              replyBuf,
+              thinkingBuf,
+              partial: true,
+            }),
+            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+          });
           throw err;
         }
         const msg = formatErrorMessage(err);
         if (/MODEL_API_KEY_MISSING|api key is not set/i.test(msg)) {
           agentEndSpan(candSpanId, { status: "error", error: msg });
-          agentEndSpan(modelSpanId, { status: "error", error: msg });
+          agentEndSpan(modelSpanId, {
+            status: "error",
+            error: msg,
+            output: modelChatOutput({
+              modelId: entry.id,
+              result: null,
+              replyBuf,
+              thinkingBuf,
+              partial: true,
+            }),
+            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+          });
           throw err;
         }
 
@@ -215,7 +309,19 @@ export async function chatWithFailover(
             });
           }
           agentEndSpan(candSpanId, { status: "error", error: msg, attrs: { modelId: entry.id } });
-          agentEndSpan(modelSpanId, { status: "error", error: msg, attrs: { modelId: entry.id } });
+          agentEndSpan(modelSpanId, {
+            status: "error",
+            error: msg,
+            summary: `model.chat${turnLabel} · ${entry.id}`,
+            output: modelChatOutput({
+              modelId: entry.id,
+              result: null,
+              replyBuf,
+              thinkingBuf,
+              partial: true,
+            }),
+            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+          });
           throw err instanceof Error ? err : new Error(msg);
         }
 
@@ -264,7 +370,18 @@ export async function chatWithFailover(
             error: msg.slice(0, 500),
           });
         }
-        agentEndSpan(modelSpanId, { status: "error", error: msg, attrs: { modelId: entry.id } });
+        agentEndSpan(modelSpanId, {
+          status: "error",
+          error: msg,
+          output: modelChatOutput({
+            modelId: entry.id,
+            result: null,
+            replyBuf,
+            thinkingBuf,
+            partial: true,
+          }),
+          attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+        });
         throw err instanceof Error ? err : new Error(msg);
       }
     }

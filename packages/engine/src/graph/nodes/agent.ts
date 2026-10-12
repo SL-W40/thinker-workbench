@@ -16,8 +16,10 @@ import {
   getContextWindow,
 } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
+import { setRunTurn } from "../../runtime/runContext";
 import { getRunEmitter } from "../../runtime/runEmit";
-import { MAX_AGENT_STEPS, type GraphState } from "../types";
+import { getMaxAgentSteps } from "../../config/runtimeLimits";
+import type { GraphState } from "../types";
 
 /** 一轮模型回合：可能流式文本，也可能请求工具。 */
 export async function agent(state: GraphState, signal: AbortSignal): Promise<Partial<GraphState>> {
@@ -27,8 +29,9 @@ export async function agent(state: GraphState, signal: AbortSignal): Promise<Par
   }
 
   const step = state.step + 1;
-  if (step > MAX_AGENT_STEPS) {
-    throw new Error(`Agent exceeded max steps (${MAX_AGENT_STEPS}).`);
+  const maxSteps = getMaxAgentSteps();
+  if (step > maxSteps) {
+    throw new Error(`Agent exceeded max steps (${maxSteps}).`);
   }
 
   const ctx = assembleContext({
@@ -57,6 +60,8 @@ export async function agent(state: GraphState, signal: AbortSignal): Promise<Par
 
   // C 端时间线：进入模型调用前标为 Thinking
   emit({ type: "status", status: "thinking" });
+  // Trace：本轮 turn 写入后续 model.chat / tool span
+  setRunTurn(step);
 
   // 走 catalog 故障切换；内部会打 model.chat / model.candidate span
   const result = await chatWithFailover(

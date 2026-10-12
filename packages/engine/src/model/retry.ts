@@ -1,8 +1,14 @@
 /**
  * 模型请求可重试判定与指数退避等待。
  * 网络抖动 / 429 / 5xx 可重试；鉴权、取消、业务 4xx 不重试。
+ * 次数 / 基础延迟可由 Settings 经 runtimeLimits 覆盖。
  */
-import { isCancelErrorMessage } from "@thinker-workbench/shared";
+import {
+  DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
+  DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
+  isCancelErrorMessage,
+} from "@thinker-workbench/shared";
+import { getModelRetryBaseDelayMs } from "../config/runtimeLimits";
 
 export { isCancelErrorMessage };
 
@@ -12,10 +18,10 @@ export function isCancelError(err: unknown): boolean {
   return isCancelErrorMessage(formatErrorMessage(err));
 }
 
-/** 最大尝试次数（含首次）。 */
-export const MODEL_RETRY_MAX_ATTEMPTS = 3;
-/** 首次重试基础延迟（ms）；之后按 2^n 指数增长。 */
-export const MODEL_RETRY_BASE_DELAY_MS = 400;
+/** @deprecated 使用 getModelRetryMaxAttempts()；保留默认常量供测试。 */
+export const MODEL_RETRY_MAX_ATTEMPTS = DEFAULT_MODEL_RETRY_MAX_ATTEMPTS;
+/** @deprecated 使用 getModelRetryBaseDelayMs()。 */
+export const MODEL_RETRY_BASE_DELAY_MS = DEFAULT_MODEL_RETRY_BASE_DELAY_MS;
 
 /** 从 Error.cause 链拼出可读消息（undici 常把细节放在 cause）。 */
 export function formatErrorMessage(err: unknown): string {
@@ -57,7 +63,7 @@ export function isRetryableError(err: unknown, options?: { emittedTokens?: boole
 /** 指数退避等待；abort 时抛出取消错误。 */
 export function sleepBackoff(attempt: number, signal: AbortSignal): Promise<void> {
   // attempt 从 1 起表示第几次重试
-  const base = MODEL_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1);
+  const base = getModelRetryBaseDelayMs() * 2 ** Math.max(0, attempt - 1);
   const jitter = Math.floor(Math.random() * 120);
   const ms = base + jitter;
   return new Promise((resolve, reject) => {

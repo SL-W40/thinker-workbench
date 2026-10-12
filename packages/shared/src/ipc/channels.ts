@@ -57,6 +57,8 @@ export const IpcChannels = {
   settingsPickDirectory: "settings:pickDirectory",
   /** 另存为文本文件（系统保存对话框 + 写入）。 */
   settingsSaveTextFile: "settings:saveTextFile",
+  /** 将 dataDir 配置串解析为绝对路径（空=默认 ~/.thinker）。 */
+  settingsResolveDataDir: "settings:resolveDataDir",
   /** 预览数据目录变更（校验、列出迁移项、检查运行中会话）。 */
   settingsPreviewDataDirChange: "settings:previewDataDirChange",
   /** 应用数据目录变更（可选迁移历史数据）。 */
@@ -213,6 +215,8 @@ export const IpcChannels = {
   traceStartSpan: "trace:startSpan",
   traceEndSpan: "trace:endSpan",
   traceDeleteSession: "trace:deleteSession",
+  /** 导出会话 Trace + 聊天排查 ZIP。 */
+  traceExportSession: "trace:exportSession",
 
   /** 列出 MCP server 配置与状态。 */
   mcpList: "mcp:list",

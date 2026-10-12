@@ -45,7 +45,8 @@ export const zh: MessageTree = {
     deleteSessionTitle: "删除会话？",
     deleteSessionBody: "将永久删除该会话、消息、运行检查点与会话 Trace。",
     newSessionAbove: "在上方新建会话",
-    copyThreadId: "复制 thread id",
+    copySessionId: "复制 session id",
+    openInTrace: "在 Trace 中打开",
     more: "显示更多",
     less: "收起",
     confirmDelete: "删除",
@@ -85,14 +86,30 @@ export const zh: MessageTree = {
       emptySessions:
         "暂无会话 Trace。请在设置 → 数据中开启 Trace，发送消息后会出现在这里。",
       pickSession: "选择左侧会话以查看追踪",
-      emptySpans: "该会话尚无 span 记录",
+      emptySpans: "该 run 尚无 span 记录",
+      emptyRuns: "该会话尚无 run",
+      loadingRuns: "正在加载 run…",
       pickSpan: "点击追踪树或时序图中的节点查看入参出参",
       runCount: "{n} 次运行",
+      runLabel: "Run {n} · {time}",
+      runLabelShort: "Run {n}",
+      runUnknown: "Run {n}（无 id）",
+      spanCount: "{n} 个 span",
+      sessionMenu: "会话操作",
+      viewPretty: "结构化",
+      viewRaw: "原始",
+      payloadViewMode: "载荷展示方式",
+      emptyPayload: "无数据",
+      resizeDetail: "拖拽调整详情栏宽度",
       viewCallTree: "追踪树",
       viewSequence: "时序图",
       input: "入参",
       output: "出参",
       truncated: "已截断",
+      partial: "部分输出（取消/失败）",
+      exportSession: "导出排查包",
+      exportSessionOk: "已保存到 {path}",
+      exportSessionFail: "导出失败：{error}",
       scopeMain: "主会话",
       scopeMainShort: "主会话",
       scopeTask: "Task",
@@ -293,6 +310,15 @@ export const zh: MessageTree = {
     restore: "还原",
     close: "关闭",
     toggleDevTools: "控制台",
+  },
+  hmr: {
+    recovering: "正在恢复界面…",
+    recoveringLabel: "正在恢复界面",
+    stuckTitle: "界面未能恢复",
+    stuckDescription:
+      "{message}\n开发热更新出错时会出现此页；修代码后点重载即可。",
+    reload: "重新加载",
+    retry: "再试一次",
   },
   chat: {
     placeholder: "输入消息，/ 选 Skills，@ 选文件或目录…",
@@ -531,6 +557,10 @@ export const zh: MessageTree = {
         title: "权限",
         description: "工作区访问、Shell 工具与命令审批。",
       },
+      agentLimits: {
+        title: "Agent 限额",
+        description: "轮次预算、重试、Shell/MCP 超时与上下文注入上限。",
+      },
       browser: {
         title: "浏览器与网络",
         description: "内置浏览器自动化、保护、本地链接与 HTTP 兼容模式。",
@@ -707,6 +737,61 @@ export const zh: MessageTree = {
         title: "AI 语言",
         description: "Agent 回复的偏好语言。「智能」跟随你的输入语言。下次对话生效。",
       },
+      maxParallelRuns: {
+        title: "最大并行会话数",
+        description:
+          "同时可有多少个会话在跑 Agent。超出后新发送会被拒绝，需等结束或手动停止。同一会话仍只能有一个进行中的 run。",
+      },
+      maxAgentSteps: {
+        title: "主会话最大轮次",
+        description: "单次 run 内 agent↔tools 的最大轮数。长任务可调高；越高越费 token。",
+      },
+      maxSubagentSteps: {
+        title: "子代理最大轮次",
+        description: "每个 Task / 子代理独立的模型轮次上限。",
+      },
+      modelRetryMaxAttempts: {
+        title: "模型重试次数",
+        description: "单次 chat completion 的总尝试次数（含首次）。仅对可重试的网络 / 5xx 生效。",
+      },
+      modelRetryBaseDelayMs: {
+        title: "模型重试基础延迟",
+        description: "首次重试前的基础等待；之后按指数退避并加抖动。",
+      },
+      defaultShellBlockUntilMs: {
+        title: "Shell 默认等待",
+        description:
+          "模型未指定时 shell / shell_await 的默认 block_until_ms。0 表示立即转后台。",
+      },
+      shellOutputCap: {
+        title: "Shell 输出上限",
+        description: "回传给模型前截断 shell 输出的最大字符数。",
+      },
+      mcpConnectTimeoutMs: {
+        title: "MCP 连接超时",
+        description: "启动 MCP 服务连接时的最长等待。",
+      },
+      mcpCallTimeoutMs: {
+        title: "MCP 调用超时",
+        description: "单次 MCP 工具调用的最长等待。",
+      },
+      contextFilesMaxFileBytes: {
+        title: "@ 单文件上限",
+        description: "通过 @ 注入的单个工作区文件的最大体积。",
+      },
+      contextFilesMaxTotalBytes: {
+        title: "@ 合计预算",
+        description: "单次请求中所有 @ 文件合计的最大字节数。",
+      },
+      readFileDefaultMaxChars: {
+        title: "read_file 默认截断",
+        description: "模型整文件读取且未指定行区间时的默认截断长度。",
+      },
+      unit: {
+        ms: "ms",
+        chars: "字符",
+        bytes: "字节",
+      },
       workspaceAccess: {
         title: "工作区访问",
         description:
@@ -768,26 +853,26 @@ export const zh: MessageTree = {
       localeZh: "中文",
       storage: {
         title: "存储",
-        description:
-          "本机应用根目录（默认 ~/.thinker）：settings.json、state/、会话库、日志、skills、mcps 等。修改后需手动保存。",
+        description: "数据根下的会话、日志、skills、mcps 与设置（默认 ~/.thinker）。",
       },
       dataDir: {
         title: "根目录",
         description:
-          "默认 ~/.thinker。修改不会立即生效：须结束全部会话后点保存。settings.json 始终随根目录切换；历史数据可选迁移。",
+          "默认 ~/.thinker。须结束全部会话后保存。换根后设置写在新目录；启动仍先读固定的 ~/.thinker/settings.json，由它指向新根。",
         placeholder: "~/.thinker",
+        settingsPath: "设置",
+        bootstrapPath: "启动入口",
+        pendingPath: "保存后",
         save: "保存根目录…",
         discard: "撤销",
         runningSessions: "仍有 {n} 个会话在运行，请全部结束后再更改根目录。",
         nestedPaths: "新目录不能是当前目录的子路径或父路径。",
         migrateTitle: "迁移历史数据？",
-        migrateLead:
-          "是否将会话、日志、catalog、checkpoints、skills / mcps 等复制到新目录？settings.json（含模型密钥等）会始终写入新根目录。",
+        migrateLead: "是否把现有数据复制到新根目录？切换时设置会一并带走。",
         from: "当前",
         to: "目标",
-        migrateSize: "≈{size}",
-        migrateNote:
-          "「不迁移」只跳过会话/日志等历史；settings.json 仍会带到新目录。即使选择迁移，也是复制到新路径，旧目录不会删除——请勿改错那一份。",
+        migrateSize: "约 {size} 待复制",
+        migrateNote: "「不迁移历史」会跳过会话/日志。复制不会删除旧目录。",
         cancel: "取消",
         skipMigrate: "不迁移历史，仅切换",
         doMigrate: "迁移并切换",
@@ -877,6 +962,9 @@ export const zh: MessageTree = {
       model: "模型 id",
       modelHint: "发给服务商的模型 id（例如 gpt-4o-mini）。",
       modelPlaceholder: "gpt-4o-mini",
+      contextWindow: "上下文窗口（token）",
+      contextWindowHint: "该模型的上下文上限，用于 Context Usage 与组装。未填时默认 128000。",
+      contextWindowPlaceholder: "128000",
       displayName: "显示名称",
       displayNamePlaceholder: "便于识别的名称",
       providerLabel: "凭证",

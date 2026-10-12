@@ -194,9 +194,16 @@ export function App() {
     if (nav.current !== "tools" && nav.current !== "settings") go("tools");
   }
 
-  /** 打开控制台 Trace，聚焦当前聊天会话。 */
+  /** 打开控制台 Trace，聚焦当前聊天会话（气泡上的 traceId 仅作提示，列表键是 sessionId）。 */
   function openTrace(_traceId?: string) {
     const sid = session.sessionId?.trim();
+    if (sid) setTraceFocusSessionId(sid);
+    openConsole("logs");
+  }
+
+  /** 侧栏右键：打开 Trace 并聚焦指定会话。 */
+  function openTraceForSession(sessionId: string) {
+    const sid = sessionId.trim();
     if (sid) setTraceFocusSessionId(sid);
     openConsole("logs");
   }
@@ -303,8 +310,10 @@ export function App() {
           role={role}
           current={normalizePage(nav.current)}
           leftPanelOpen={panels.leftOpen}
+          rightPanelOpen={panels.rightOpen}
           onGoHome={() => nav.reset("chat")}
           onToggleLeftPanel={panels.toggleLeft}
+          onToggleRightPanel={panels.toggleRight}
           toolsTab={toolsTab}
           onToolsTabChange={(tab) => openConsole(tab)}
         />
@@ -334,6 +343,7 @@ export function App() {
                 onSessionCreated={(sessionId, threadId) => {
                   void session.activateNewSession(sessionId, threadId);
                 }}
+                onOpenTrace={openTraceForSession}
               />
             </ChatSidePanel>
             <div className="chat-main">
@@ -376,6 +386,7 @@ export function App() {
                 workspaceRoot={session.workspaceRoot}
                 workspaceId={session.workspaceId}
                 sessionId={session.sessionId}
+                threadId={session.threadId}
                 messages={session.messages}
                 gateMessage={session.workspaceGate?.message ?? null}
                 onOpenWorkspace={

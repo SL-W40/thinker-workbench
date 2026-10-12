@@ -2,18 +2,21 @@
  * shell / shell_await 工具执行体。
  */
 import path from "node:path";
+import {
+  getDefaultShellBlockUntilMs,
+  getShellOutputCap,
+} from "../../config/runtimeLimits";
 import { ptyAwait, ptyExec } from "../../host/ptyClient";
 import { getWorkspaceAccess, getWorkspaceRoot } from "../../workspace";
 import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
 import { ensureShellApproved } from "./approve";
 
-const OUTPUT_CAP = 200_000;
-
 /** 截断输出：保留头尾。 */
 function truncateOutput(text: string): string {
-  if (text.length <= OUTPUT_CAP) return text;
-  const head = Math.floor(OUTPUT_CAP * 0.4);
-  const tail = OUTPUT_CAP - head - 80;
+  const cap = getShellOutputCap();
+  if (text.length <= cap) return text;
+  const head = Math.floor(cap * 0.4);
+  const tail = cap - head - 80;
   return `${text.slice(0, head)}\n\n...[${text.length - head - tail} bytes truncated]...\n\n${text.slice(-tail)}`;
 }
 
@@ -45,7 +48,7 @@ export async function shellTool(args: ToolArgs, ctx: ToolContext): Promise<ToolE
   const blockUntilMs =
     typeof args.block_until_ms === "number" && Number.isFinite(args.block_until_ms)
       ? Math.max(0, Math.floor(args.block_until_ms))
-      : 30_000;
+      : getDefaultShellBlockUntilMs();
 
   await ensureShellApproved(command, ctx.signal);
   const cwd = resolveCwd(workingDirectory, ctx.workspaceRoot || getWorkspaceRoot());
@@ -90,7 +93,7 @@ export async function shellAwaitTool(
   const blockUntilMs =
     typeof args.block_until_ms === "number" && Number.isFinite(args.block_until_ms)
       ? Math.max(0, Math.floor(args.block_until_ms))
-      : 30_000;
+      : getDefaultShellBlockUntilMs();
   const pattern = typeof args.pattern === "string" ? args.pattern : undefined;
 
   const result = await ptyAwait(

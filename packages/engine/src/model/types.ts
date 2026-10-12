@@ -67,6 +67,10 @@ export type ChatCompletionResult = {
   toolCalls: ChatToolCall[];
   /** 网关返回的用量；部分流式端点可能缺失。 */
   usage?: ChatUsage;
+  /** 网关补全 id（如 chatcmpl-…），供 Trace 与线上对账。 */
+  providerResponseId?: string;
+  /** 推理/thinking 通道累计文本（与 content 分离）。 */
+  reasoning?: string;
 };
 
 /** 可注入的模型抽象。 */

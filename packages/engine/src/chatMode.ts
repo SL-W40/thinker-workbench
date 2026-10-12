@@ -1,19 +1,26 @@
 /**
- * 进程内当前 ChatMode，以及 system 附录 / 工具过滤策略。
+ * ChatMode：run 内优先读 RunContext；进程级仅作 hello / 无 ALS 默认。
  */
 import type { ChatMode } from "@thinker-workbench/shared";
 import { DEFAULT_CHAT_MODE, normalizeChatMode } from "@thinker-workbench/shared";
+import { getRunContext } from "./runtime/runContext";
 
 let currentChatMode: ChatMode = DEFAULT_CHAT_MODE;
 
-/** 设置本轮 / 当前进程 ChatMode。 */
+/** 设置进程默认 ChatMode（hello）；run 内应写 RunContext。 */
 export function setChatMode(mode: ChatMode | undefined | null): void {
-  currentChatMode = normalizeChatMode(mode ?? DEFAULT_CHAT_MODE);
+  const normalized = normalizeChatMode(mode ?? DEFAULT_CHAT_MODE);
+  const ctx = getRunContext();
+  if (ctx) {
+    ctx.chatMode = normalized;
+    return;
+  }
+  currentChatMode = normalized;
 }
 
 /** 读取当前 ChatMode。 */
 export function getChatMode(): ChatMode {
-  return currentChatMode;
+  return getRunContext()?.chatMode ?? currentChatMode;
 }
 
 /** 写入类内置工具名。 */

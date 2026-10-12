@@ -8,6 +8,13 @@ import type { HitlKind, HitlRequest, HitlResponse } from "./hitl";
 
 /** 所有 AgentEvent 共有字段。 */
 export type AgentEventBase = {
+  /**
+   * 所属聊天会话（端到端寻址）。
+   * 注意：与 `AgentToolEvent.sessionId`（终端会话 id）不同概念；
+   * 工具事件上 chat 会话 id 优先看本字段，终端 id 仍用 tool.sessionId。
+   * Desktop 广播前可按 threadId 补全。
+   */
+  chatSessionId?: string;
   /** 所属线程。 */
   threadId: string;
   /** 所属运行。 */

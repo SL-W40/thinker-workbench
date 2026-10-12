@@ -1,11 +1,14 @@
 /**
  * HITL：向主进程发起用户介入请求，挂起直到答复或 cancel。
+ * pending 按 runId 索引，cancel 只拒本 run。
  */
 import { createId, type HitlRequest, type HitlResponse } from "@thinker-workbench/shared";
 import { postToParent } from "../host/port";
+import { getRunContext } from "../runtime/runContext";
 import { getRunIds } from "../runtime/runEmit";
 
 type Pending = {
+  runId: string;
   resolve: (response: HitlResponse) => void;
   reject: (err: Error) => void;
 };
@@ -17,13 +20,26 @@ export function resolveHitl(response: HitlResponse): void {
   const p = pending.get(response.hitlId);
   if (!p) return;
   pending.delete(response.hitlId);
+  const ctx = getRunContext();
+  ctx?.hitlIds.delete(response.hitlId);
   p.resolve(response);
 }
 
-/** cancel 时拒绝全部挂起的 HITL。 */
+/** @deprecated 全清；并行路径请用 rejectHitlByRunId。 */
 export function rejectAllHitl(reason = "Run cancelled."): void {
   for (const [id, p] of pending) {
     pending.delete(id);
+    p.reject(new Error(reason));
+  }
+}
+
+/** 仅拒绝指定 run 的挂起 HITL。 */
+export function rejectHitlByRunId(runId: string, reason = "Run cancelled."): void {
+  const id = runId?.trim();
+  if (!id) return;
+  for (const [hitlId, p] of pending) {
+    if (p.runId !== id) continue;
+    pending.delete(hitlId);
     p.reject(new Error(reason));
   }
 }
@@ -41,11 +57,12 @@ export function requestHitl(
 ): Promise<HitlResponse> {
   const ids = getRunIds();
   const hitlId = createId("hitl");
+  const runId = partial.runId ?? ids?.runId ?? "";
   const request: HitlRequest = {
     hitlId,
     kind: partial.kind,
     threadId: partial.threadId ?? ids?.threadId ?? "",
-    runId: partial.runId ?? ids?.runId ?? "",
+    runId,
     title: partial.title,
     body: partial.body,
     payload: partial.payload,
@@ -59,20 +76,25 @@ export function requestHitl(
     }
     const onAbort = () => {
       pending.delete(hitlId);
+      getRunContext()?.hitlIds.delete(hitlId);
       reject(new Error("Run cancelled."));
     };
     signal?.addEventListener("abort", onAbort, { once: true });
 
     pending.set(hitlId, {
+      runId,
       resolve: (response) => {
         signal?.removeEventListener("abort", onAbort);
+        getRunContext()?.hitlIds.delete(hitlId);
         resolve(response);
       },
       reject: (err) => {
         signal?.removeEventListener("abort", onAbort);
+        getRunContext()?.hitlIds.delete(hitlId);
         reject(err);
       },
     });
+    getRunContext()?.hitlIds.add(hitlId);
 
     postToParent({ channel: "utility", kind: "hitl", request });
   });

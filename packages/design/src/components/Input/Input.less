@@ -62,6 +62,18 @@
     color: var(--tw-placeholder, var(--placeholder));
   }
 
+  /* type=number：去掉上下箭头，避免和 endAdornment（单位）挤在一起 */
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+
+  &[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
   /* 去掉 Chrome / Edge 自动填充黄底（及深色态） */
   &:-webkit-autofill,
   &:-webkit-autofill:hover,

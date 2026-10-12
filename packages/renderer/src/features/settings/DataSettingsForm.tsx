@@ -1,8 +1,13 @@
 /**
- * 设置 →数据：根目录（草?迁移）、会?Trace 开?保留/截断。 */
+ * 设置 → 数据：根目录（草稿 / 迁移）、会话 Trace 开关与保留/截断。
+ */
 import { Button, Field, Input, Modal, Progress, Select, Switch } from "@thinker-workbench/design/react";
-import { LOG_RETENTION_DAY_OPTIONS } from "@thinker-workbench/shared";
-import { useId, useMemo } from "react";
+import {
+  LOG_RETENTION_DAY_OPTIONS,
+  type DataDirPaths,
+} from "@thinker-workbench/shared";
+import { useEffect, useId, useMemo, useState } from "react";
+import { resolveDataDir } from "../../bridge/thinker";
 import { useI18n } from "../../i18n/useI18n";
 import { formatBytes, retentionLabel } from "./generalLabels";
 import { useGeneralSettings } from "./useGeneralSettings";
@@ -64,6 +69,40 @@ export function DataSettingsForm({ active = true }: Props) {
         label: retentionLabel(value, t),
       }));
   }, [general.traceRetentionDays, t]);
+
+  /** 当前 / 草稿的数据根与 settings 落点（含固定引导路径） */
+  const [activePaths, setActivePaths] = useState<DataDirPaths | null>(null);
+  const [draftPaths, setDraftPaths] = useState<DataDirPaths | null>(null);
+
+  useEffect(() => {
+    if (!available || !active) return;
+    let cancelled = false;
+    void resolveDataDir()
+      .then((p) => {
+        if (!cancelled) setActivePaths(p);
+      })
+      .catch(() => {
+        if (!cancelled) setActivePaths(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [available, active, general.dataDir]);
+
+  useEffect(() => {
+    if (!available || !active) return;
+    let cancelled = false;
+    void resolveDataDir(dataDirDraft)
+      .then((p) => {
+        if (!cancelled) setDraftPaths(p);
+      })
+      .catch(() => {
+        if (!cancelled) setDraftPaths(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [available, active, dataDirDraft]);
 
   if (!available) {
     return (
@@ -133,6 +172,41 @@ export function DataSettingsForm({ active = true }: Props) {
                 </Button>
               ) : null}
             </div>
+            {activePaths ? (
+              <div className="settings-path-resolved-list">
+                <p className="settings-path-resolved" title={activePaths.settingsPath}>
+                  <span className="settings-path-resolved__label">
+                    {t("settings.general.dataDir.settingsPath")}
+                  </span>
+                  <code>{activePaths.settingsPath}</code>
+                </p>
+                {!activePaths.sameAsBootstrap ? (
+                  <p
+                    className="settings-path-resolved"
+                    title={activePaths.bootstrapSettingsPath}
+                  >
+                    <span className="settings-path-resolved__label">
+                      {t("settings.general.dataDir.bootstrapPath")}
+                    </span>
+                    <code>{activePaths.bootstrapSettingsPath}</code>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {dataDirDirty &&
+            draftPaths &&
+            activePaths &&
+            draftPaths.settingsPath !== activePaths.settingsPath ? (
+              <p
+                className="settings-path-resolved is-pending"
+                title={draftPaths.settingsPath}
+              >
+                <span className="settings-path-resolved__label">
+                  {t("settings.general.dataDir.pendingPath")}
+                </span>
+                <code>{draftPaths.settingsPath}</code>
+              </p>
+            ) : null}
           </Field>
         </div>
       </section>
@@ -306,14 +380,24 @@ export function DataSettingsForm({ active = true }: Props) {
               </div>
             </dl>
             {migratePreview.items.length > 0 ? (
-              <ul>
-                {migratePreview.items.map((item) => (
-                  <li key={item.id}>
-                    {item.label} ({formatBytes(item.bytes)})
-                  </li>
-                ))}
-              </ul>
+              <>
+                <p className="settings-data-dir-size">
+                  {t("settings.general.dataDir.migrateSize").replace(
+                    "{size}",
+                    formatBytes(migratePreview.totalBytes),
+                  )}
+                </p>
+                <ul className="settings-data-dir-items">
+                  {migratePreview.items.map((item) => (
+                    <li key={item.id}>
+                      <span>{item.label}</span>
+                      <span>{formatBytes(item.bytes)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : null}
+            <p className="settings-data-dir-note">{t("settings.general.dataDir.migrateNote")}</p>
             <div className="settings-data-dir-actions">
               <Button
                 variant="secondary"

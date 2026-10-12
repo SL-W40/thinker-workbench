@@ -459,55 +459,80 @@ code {
 }
 
 .settings-data-dir-modal {
-  max-width: 512px;
+  max-width: 520px;
+  width: min(520px, 100%);
+  text-align: left;
 }
 
 .settings-data-dir-dialog {
   display: grid;
   gap: 12px;
-  padding: 4px 2px 2px;
+  padding: 0;
+  min-width: 0;
+  text-align: left;
+  justify-items: stretch;
 
   h2 {
     margin: 0;
     font-size: 17px;
+    text-align: left;
   }
 
-  p {
+  > p {
     margin: 0;
-    color: var(--tw-fg-muted, inherit);
-    font-size: 14px;
+    color: var(--muted);
+    font-size: 13px;
     line-height: 1.45;
+    text-align: left;
   }
 }
 
+/* From / To：与设置页路径行同一套左对齐 */
 .settings-data-dir-paths {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   margin: 0;
+  min-width: 0;
 
   div {
     display: grid;
-    gap: 2px;
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+    gap: 8px;
+    align-items: baseline;
+    min-width: 0;
   }
 
   dt {
+    margin: 0;
     font-size: 12px;
-    opacity: 0.7;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
   }
 
   dd {
     margin: 0;
+    min-width: 0;
+    text-align: left;
 
     code {
       display: block;
-      word-break: break-all;
-      font-size: 13px;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+      color: var(--ink);
     }
   }
 }
 
 .settings-data-dir-size {
-  font-size: 14px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .settings-data-dir-items {
@@ -515,16 +540,40 @@ code {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 4px;
-  font-size: 14px;
+  gap: 0;
+  font-size: 12px;
+  max-height: 220px;
+  overflow: auto;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 8px;
 
   li {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
-    padding: 2px 0;
-    border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    align-items: baseline;
+    padding: 5px 10px;
+    text-align: left;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    span:last-child {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
   }
+}
+
+.settings-data-dir-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 .settings-data-dir-actions {
@@ -532,7 +581,7 @@ code {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .settings-path-row {
@@ -545,6 +594,55 @@ code {
     flex: 1 1 224px;
     min-width: 0;
   }
+}
+
+/* 根目录：设置路径；换根时多一行固定启动入口 */
+.settings-path-resolved-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-path-resolved {
+  /* 标签列定宽，多行路径左缘对齐（含列表外的「保存后」） */
+  --settings-path-label-w: 5.75rem;
+  margin: 0;
+  display: grid;
+  grid-template-columns: var(--settings-path-label-w) minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+  text-align: left;
+
+  &.is-pending {
+    margin-top: 6px;
+  }
+
+  code {
+    margin: 0;
+    padding: 0;
+    justify-self: start;
+    text-align: left;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-size: 12px;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &.is-pending code {
+    color: var(--accent, #6b8cae);
+  }
+}
+
+.settings-path-resolved__label {
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .settings-model {
@@ -987,7 +1085,31 @@ code {
   flex: 0 0 auto;
   align-self: flex-start;
   margin-top: 2px;
-  width: 136px;
+  /* 略宽于默认，容纳 “Windows PowerShell” 等；超长仍由 Select 省略号裁切 */
+  width: 180px;
+  min-width: 180px;
+}
+
+/* Agent Limits：数字左齐、单位右缀，避免右对齐留下大块空白 */
+.settings-limit-input {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 2px;
+  width: 148px;
+  min-width: 148px;
+  gap: 4px;
+
+  .tw-input__control {
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+    padding-right: 4px;
+  }
+
+  .tw-input__adornment--end {
+    padding-left: 2px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
 }
 
 .settings-font-scale {

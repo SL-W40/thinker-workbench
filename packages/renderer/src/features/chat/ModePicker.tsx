@@ -214,11 +214,14 @@ export function ModePicker({ sessionId, disabled }: Props) {
                       <span className="composer-mode-menu__name">{t(LABEL_KEY[id])}</span>
                       {selected ? (
                         <span className="composer-mode-menu__check" aria-hidden>
-                          …?                        </span>
+                          ✓
+                        </span>
                       ) : (
                         <span className="composer-mode-menu__check-slot" aria-hidden />
                       )}
-                      <p className="composer-mode-menu__desc">{t(DESC_KEY[id])}</p>
+                      <p className="composer-mode-menu__desc" title={t(DESC_KEY[id])}>
+                        {t(DESC_KEY[id])}
+                      </p>
                     </button>
                   );
                 })}

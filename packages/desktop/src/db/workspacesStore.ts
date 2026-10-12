@@ -495,6 +495,23 @@ export function countRunningSessions(): number {
   return n;
 }
 
+/** 按 active_run_id 查找会话（cancel 落库时不依赖 activeSession）。 */
+export function getSessionByActiveRunId(runId: string): ChatSessionRecord | null {
+  const id = runId?.trim();
+  if (!id) return null;
+  for (const ws of listWorkspaces()) {
+    const row = chatDb(ws.id)
+      .prepare(
+        `SELECT id, thread_id, workspace_id, title, pinned, sort_order,
+                run_status, active_run_id, interrupt_reason, created_at, updated_at
+         FROM chat_sessions WHERE active_run_id = ? LIMIT 1`,
+      )
+      .get(id) as SessionRow | undefined;
+    if (row) return mapSession(row);
+  }
+  return null;
+}
+
 /**
  * 进程退出 / 启动时愈合会话状态：
  * - `running` 且有 checkpoint → `crashed`（可 Resume）
@@ -818,7 +835,8 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
 
 export function saveMessages(sessionId: string, messages: ChatMessage[]): void {
   const session = getSession(sessionId);
-  if (!session) throw new Error("Session not found.");
+  // 会话已删（侧栏删除 / 切空间竞态）：幂等忽略，避免 IPC 抛 Session not found
+  if (!session) return;
   saveMessagesToDb(session.workspaceId, sessionId, messages);
 }
 

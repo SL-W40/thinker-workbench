@@ -14,6 +14,8 @@ import { useT } from "../../i18n/useI18n";
 import "./BackgroundTasksBar.less";
 
 type Props = {
+  /** 当前聊天 thread；有则只展示本会话的 subagent（shell 仍按全局 backgrounded） */
+  threadId?: string;
   onOpenTerminal?: (detail?: {
     sessionId?: string;
     previewOutput?: string;
@@ -26,7 +28,6 @@ type SubagentTask = {
   subagent: string;
   title?: string;
   summary?: string;
-  liveLine?: string;
 };
 
 /** 是否为仍存活的 background shell*/
@@ -40,7 +41,7 @@ function taskLabel(s: TerminalSession): string {
   return cmd.length > 48 ? `${cmd.slice(0, 47)}…` : cmd;
 }
 
-export function BackgroundTasksBar({ onOpenTerminal }: Props) {
+export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
   const t = useT();
   const [shellTasks, setShellTasks] = useState<TerminalSession[]>([]);
   const [subagents, setSubagents] = useState<SubagentTask[]>([]);
@@ -52,15 +53,19 @@ export function BackgroundTasksBar({ onOpenTerminal }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    const matchThread = (s: TerminalSession) =>
+      !threadId || !s.threadId || s.threadId === threadId;
     void listTerminalSessions().then((list) => {
-      if (!cancelled) setShellTasks(list.filter(isBackgroundTask));
+      if (!cancelled) {
+        setShellTasks(list.filter((s) => isBackgroundTask(s) && matchThread(s)));
+      }
     });
     const unsub = onTerminalEvent((event) => {
       if (event.type === "created" || event.type === "updated") {
         const session = event.session;
         setShellTasks((prev) => {
           const without = prev.filter((s) => s.sessionId !== session.sessionId);
-          if (!isBackgroundTask(session)) return without;
+          if (!isBackgroundTask(session) || !matchThread(session)) return without;
           return [...without, session];
         });
         return;
@@ -73,22 +78,23 @@ export function BackgroundTasksBar({ onOpenTerminal }: Props) {
       cancelled = true;
       unsub();
     };
-  }, []);
+  }, [threadId]);
 
   useEffect(() => {
     const settled = settledTaskIds.current;
     return onAgentEvent((event) => {
- // 手动取消：清空全部子代理条（含仅流式预告、尚未写入 engine Map 的）
- // 注意：正常 done 时后台 Task 应继续，不能在此清空
+ // 手动取消：仅清当前 thread 相关（无 threadId 时全清）
       if (
         event.type === "error" &&
         /cancel/i.test(event.error || "")
       ) {
+        if (threadId && event.threadId && event.threadId !== threadId) return;
         for (const s of subagentsRef.current) settled.add(s.taskId);
         setSubagents([]);
         return;
       }
       if (event.type !== "subagent" || !event.background) return;
+      if (threadId && event.threadId && event.threadId !== threadId) return;
       if (
         event.phase === "finished" ||
         event.phase === "failed" ||
@@ -102,15 +108,25 @@ export function BackgroundTasksBar({ onOpenTerminal }: Props) {
         if (settled.has(event.taskId)) return;
         setSubagents((prev) => {
           const prior = prev.find((t) => t.taskId === event.taskId);
+          const title = event.title?.trim() || prior?.title;
+          const summary = event.summary ?? prior?.summary;
+          // 后台条只展示静态标题；progress 的 liveLine 不写入，避免刷屏
+          if (
+            prior &&
+            prior.subagent === event.subagent &&
+            prior.title === title &&
+            prior.summary === summary
+          ) {
+            return prev;
+          }
           const without = prev.filter((t) => t.taskId !== event.taskId);
           return [
             ...without,
             {
               taskId: event.taskId,
               subagent: event.subagent,
-              title: event.title?.trim() || prior?.title,
-              summary: event.summary,
-              liveLine: event.liveLine,
+              title,
+              summary,
             },
           ];
         });
@@ -182,34 +198,29 @@ export function BackgroundTasksBar({ onOpenTerminal }: Props) {
                 : s.subagent;
             const label = s.title?.trim() || typeName;
             return (
-            <li key={s.taskId}>
-              <button
-                type="button"
-                className="bg-tasks__chip"
-                aria-label={t("chat.subagent.openTimeline", { name: label })}
-                onClick={() =>
-                  requestOpenSubagent({
-                    id: s.taskId,
-                    kind: "subagent",
-                    taskId: s.taskId,
-                    subagent: s.subagent === "…" ? typeName : s.subagent,
-                    title: s.title,
-                    phase: "progress",
-                    liveLine: s.liveLine,
-                    summary: s.summary,
-                    background: true,
-                    active: true,
-                  })
-                }
-              >
-                <span className="bg-tasks__dot" aria-hidden="true" />
-                <span className="bg-tasks__cmd">
-                  {s.liveLine?.trim()
-                    ? `${label} · ${s.liveLine.trim()}`
-                    : t("chat.subagent.bgChip", { name: label })}
-                </span>
-              </button>
-            </li>
+              <li key={s.taskId}>
+                <button
+                  type="button"
+                  className="bg-tasks__chip"
+                  aria-label={t("chat.subagent.openTimeline", { name: label })}
+                  onClick={() =>
+                    requestOpenSubagent({
+                      id: s.taskId,
+                      kind: "subagent",
+                      taskId: s.taskId,
+                      subagent: s.subagent === "…" ? typeName : s.subagent,
+                      title: s.title,
+                      phase: "progress",
+                      summary: s.summary,
+                      background: true,
+                      active: true,
+                    })
+                  }
+                >
+                  <span className="bg-tasks__dot" aria-hidden="true" />
+                  <span className="bg-tasks__cmd">{label}</span>
+                </button>
+              </li>
             );
           })}
         </ul>

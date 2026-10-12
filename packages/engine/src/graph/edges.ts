@@ -11,9 +11,9 @@
  * - 已达步数上限 → 结束，不再进 agent
  * - 否则 → agent
  */
+import { getMaxAgentSteps } from "../config/runtimeLimits";
 import { agentLog } from "../log/setup";
 import type { EdgeFn, GraphState } from "./types";
-import { MAX_AGENT_STEPS } from "./types";
 
 /** agent 节点之后的条件边。 */
 export const afterAgent: EdgeFn<GraphState> = (state) => {
@@ -26,7 +26,7 @@ export const afterAgent: EdgeFn<GraphState> = (state) => {
     return null;
   }
   // 步数打满仍先跑完已挂起的工具，避免静默丢弃
-  if (state.step >= MAX_AGENT_STEPS) {
+  if (state.step >= getMaxAgentSteps()) {
     log.warn("afterAgent → tools (drain at max-steps)", {
       spanId: "afterAgent",
       meta: {
@@ -60,7 +60,7 @@ export const afterTools: EdgeFn<GraphState> = (state) => {
     });
     return "tools";
   }
-  if (state.step >= MAX_AGENT_STEPS) {
+  if (state.step >= getMaxAgentSteps()) {
     log.warn("afterTools → end", {
       spanId: "afterTools",
       meta: { step: state.step, reason: "max-steps" },

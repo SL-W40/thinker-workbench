@@ -52,6 +52,28 @@ export type UtilityHello = {
   shellBlocklist?: string[];
   /** 模型 HTTP 兼容模式。 */
   httpCompatibilityMode?: HttpCompatibilityMode;
+  /** 主会话 agent↔tools 最大轮次。 */
+  maxAgentSteps?: number;
+  /** Task / 子代理最大轮次。 */
+  maxSubagentSteps?: number;
+  /** 模型重试次数（含首次）。 */
+  modelRetryMaxAttempts?: number;
+  /** 模型重试基础延迟（ms）。 */
+  modelRetryBaseDelayMs?: number;
+  /** shell 默认 block_until_ms。 */
+  defaultShellBlockUntilMs?: number;
+  /** shell 输出截断上限。 */
+  shellOutputCap?: number;
+  /** MCP 连接超时（ms）。 */
+  mcpConnectTimeoutMs?: number;
+  /** MCP 调用超时（ms）。 */
+  mcpCallTimeoutMs?: number;
+  /** `@` 单文件最大字节。 */
+  contextFilesMaxFileBytes?: number;
+  /** `@` 合计最大字节。 */
+  contextFilesMaxTotalBytes?: number;
+  /** read_file 默认 max_chars。 */
+  readFileDefaultMaxChars?: number;
   /** 是否采集 Trace。 */
   traceEnabled?: boolean;
   /** 解析后的当前 shell（供 environment_context）。 */
@@ -110,6 +132,17 @@ export type UtilityRun = {
   shellAllowlist?: string[];
   shellBlocklist?: string[];
   httpCompatibilityMode?: HttpCompatibilityMode;
+  maxAgentSteps?: number;
+  maxSubagentSteps?: number;
+  modelRetryMaxAttempts?: number;
+  modelRetryBaseDelayMs?: number;
+  defaultShellBlockUntilMs?: number;
+  shellOutputCap?: number;
+  mcpConnectTimeoutMs?: number;
+  mcpCallTimeoutMs?: number;
+  contextFilesMaxFileBytes?: number;
+  contextFilesMaxTotalBytes?: number;
+  readFileDefaultMaxChars?: number;
   traceEnabled?: boolean;
   shell?: ShellProfile;
   /** 本轮起是否截断日志长文本（与通用设置同步）。 */
@@ -165,6 +198,17 @@ export type UtilityResume = {
   shellAllowlist?: string[];
   shellBlocklist?: string[];
   httpCompatibilityMode?: HttpCompatibilityMode;
+  maxAgentSteps?: number;
+  maxSubagentSteps?: number;
+  modelRetryMaxAttempts?: number;
+  modelRetryBaseDelayMs?: number;
+  defaultShellBlockUntilMs?: number;
+  shellOutputCap?: number;
+  mcpConnectTimeoutMs?: number;
+  mcpCallTimeoutMs?: number;
+  contextFilesMaxFileBytes?: number;
+  contextFilesMaxTotalBytes?: number;
+  readFileDefaultMaxChars?: number;
   traceEnabled?: boolean;
   shell?: ShellProfile;
   /** 本轮起是否截断日志长文本（与通用设置同步）。 */

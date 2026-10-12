@@ -17,6 +17,7 @@ import type {
   DataDirChangeRequest,
   DataDirChangeResult,
   DataDirMigrateProgress,
+  DataDirPaths,
   GeneralSettings,
   HitlResponse,
   LogRecord,
@@ -249,6 +250,15 @@ export function pickDirectory(options?: {
   const settings = api()?.settings;
   if (!settings?.pickDirectory) return Promise.resolve(null);
   return settings.pickDirectory(options);
+}
+
+/** 解析数据根与 settings 路径；省略参数时用当前已生效配置。 */
+export function resolveDataDir(configured?: string): Promise<DataDirPaths> {
+  const settings = api()?.settings;
+  if (!settings?.resolveDataDir) {
+    return Promise.reject(new Error("Data directory API unavailable."));
+  }
+  return settings.resolveDataDir(configured);
 }
 
 /** 预览数据目录变更（校验、迁移清单、运行中会话）。 */

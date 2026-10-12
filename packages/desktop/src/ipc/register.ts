@@ -35,7 +35,7 @@ export function registerIpc(
   },
 ): void {
   registerWindowHandlers(ipcMain);
-  registerWorkspacesHandlers(ipcMain);
+  registerWorkspacesHandlers(ipcMain, bridge);
   registerWorkspaceFsHandlers(ipcMain);
   registerAgentHandlers(ipcMain, bridge);
   registerTerminalHandlers(ipcMain);

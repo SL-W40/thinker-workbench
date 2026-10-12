@@ -63,6 +63,15 @@ import {
 import { extractContextPaths } from "./composerMentions";
 import type { ComposerEditorHandle } from "./ComposerEditor";
 import {
+  ensureLiveRunRegistry,
+  listBusyLiveRuns,
+  parkForegroundRun,
+  setForegroundSessionId,
+  subscribeLiveRuns,
+  takeLiveRunSlot,
+  upsertLiveRunSlot,
+} from "./liveRunRegistry";
+import {
   EMPTY_USAGE,
   addUsage,
   estimatePartialUsage,
@@ -145,7 +154,7 @@ function failAssistantMessage(
   });
 }
 
-/**
+/** 续跑前可丢掉的空壳错误助手气泡。 */
 function isResumeStubMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
   if (message.text?.trim()) return false;
@@ -423,7 +432,11 @@ export function useChatSession(visible = true) {
     if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       saveTimer.current = null;
-      void saveSessionMessages(sid, payload);
+      // 定时器触发时若已切走 / 清空，丢弃过期落库
+      if (sessionIdRef.current !== sid) return;
+      void saveSessionMessages(sid, payload).catch(() => {
+        // 会话可能已删；主进程已幂等忽略，此处吞掉以免未处理 rejection
+      });
     }, 400);
   }
 
@@ -434,7 +447,11 @@ export function useChatSession(visible = true) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    await saveSessionMessages(sid, messagesRef.current);
+    try {
+      await saveSessionMessages(sid, messagesRef.current);
+    } catch {
+      // 同上：已删会话的落库竞态
+    }
   }
 
   /**
@@ -656,6 +673,7 @@ export function useChatSession(visible = true) {
   }
 
   useEffect(() => {
+    ensureLiveRunRegistry();
     return onThreadsChanged(() => {
       void reconcileIfSessionGone();
  // 主进程 finalize 后拉终态（刷新期间错过 done 事件时）
@@ -664,6 +682,19 @@ export function useChatSession(visible = true) {
  // 仅挂载订阅；逻辑走 ref
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setForegroundSessionId(sessionId);
+  }, [sessionId]);
+
+  const [liveRunTick, setLiveRunTick] = useState(0);
+  useEffect(() => {
+    return subscribeLiveRuns(() => setLiveRunTick((n) => n + 1));
+  }, []);
+  const backgroundRunCount = listBusyLiveRuns().filter(
+    (s) => s.sessionId !== sessionId,
+  ).length;
+  void liveRunTick;
 
   // 回到聊天页：冲掉未刷完的流式帧；不强制滚底（尊重用户阅读位置：
   useEffect(() => {
@@ -865,6 +896,18 @@ export function useChatSession(visible = true) {
         targetMsgId.current = null;
         activeRunId.current = null;
         setBusy(false);
+        if (sessionIdRef.current && event.threadId) {
+          upsertLiveRunSlot({
+            sessionId: sessionIdRef.current,
+            threadId: event.threadId,
+            runId: null,
+            messages: messagesRef.current,
+            busy: false,
+            targetMsgId: null,
+            streamText: "",
+            timeline: [],
+          });
+        }
         return;
       }
 
@@ -917,6 +960,18 @@ export function useChatSession(visible = true) {
         targetMsgId.current = null;
         activeRunId.current = null;
         setBusy(false);
+        if (sessionIdRef.current && event.threadId) {
+          upsertLiveRunSlot({
+            sessionId: sessionIdRef.current,
+            threadId: event.threadId,
+            runId: null,
+            messages: messagesRef.current,
+            busy: false,
+            targetMsgId: null,
+            streamText: "",
+            timeline: [],
+          });
+        }
       }
     });
 
@@ -975,67 +1030,120 @@ export function useChatSession(visible = true) {
     };
   }, []);
 
-  /** 切换到指定会话；忙碌时先静默中断当前跑，避免空态+busy 锁死*/
-  async function selectSession(nextSessionId: string, nextThreadId: string) {
-    if (busy) {
-      // 同会话：强制从 DB 重载（修复消息未展示 / 状态卡住）
-      if (nextSessionId === sessionIdRef.current) {
-        abortRunSilently();
-        const loaded = await getSession(nextSessionId);
-        applyLoadedSession(loaded?.session.runStatus, loaded?.messages ?? [], {
-          activeRunId: loaded?.session.activeRunId,
-        });
-        requestStickToBottom();
-        return;
-      }
-      abortRunSilently();
+  /** 打断未刷完的流式帧，避免切会话后把旧 pending 写进新视图。 */
+  function cancelPendingStreamFlush() {
+    if (raf.current != null) {
+      window.cancelAnimationFrame(raf.current);
+      raf.current = null;
     }
+  }
+
+  /**
+   * 切换到指定会话：切换是视图操作，不取消后台 run。
+   * 先等齐数据，再在同一同步段里改 sessionId / messages / busy，避免 await 间隙闪一下进行中动画。
+   */
+  async function selectSession(nextSessionId: string, nextThreadId: string) {
+    // 同会话：强制从 DB 重载（修复消息未展示 / 状态卡住）
+    if (nextSessionId === sessionIdRef.current) {
+      const loaded = await getSession(nextSessionId);
+      applyLoadedSession(loaded?.session.runStatus, loaded?.messages ?? [], {
+        activeRunId: loaded?.session.activeRunId,
+      });
+      requestStickToBottom();
+      return;
+    }
+
+    // 封存当前前台流式态到 LiveRunRegistry，供后台继续
+    const prevSid = sessionIdRef.current;
+    const prevTid = threadId;
+    if (prevSid && prevTid && (busy || activeRunId.current)) {
+      parkForegroundRun({
+        sessionId: prevSid,
+        threadId: prevTid,
+        runId: activeRunId.current,
+        messages: messagesRef.current,
+        streamText: streamText.current,
+        timeline: timelineRef.current,
+        targetMsgId: targetMsgId.current,
+        busy,
+      });
+    }
+
     await flushSave();
+    const loaded = await getSession(nextSessionId);
+
+    // —— 以下为同步 UI 切换：中间不可 await ——
+    cancelPendingStreamFlush();
     sessionEpoch.current += 1;
     suppressLiveRef.current = false;
-    const loaded = await getSession(nextSessionId);
-    setSessionId(nextSessionId);
     sessionIdRef.current = nextSessionId;
+    setSessionId(nextSessionId);
+    setForegroundSessionId(nextSessionId);
     setThreadId(nextThreadId);
-    await setActiveSession(nextSessionId);
-    const wid = loaded?.session.workspaceId ?? null;
-    if (wid) {
-      await setLastWorkspaceId(wid);
-      await syncWorkspaceLabel(wid);
-    }
-    applyLoadedSession(loaded?.session.runStatus, loaded?.messages ?? [], {
-      activeRunId: loaded?.session.activeRunId,
-    });
-    setWorkspaceGate(null);
-    clearUserEdit();
-    setDraft("");
- // running 时保留 applyLoadedSession 挂上的 target / timeline，勿清空
-    if (loaded?.session.runStatus !== "running") {
+
+    const live = takeLiveRunSlot(nextSessionId);
+    if (live?.busy) {
+      messagesRef.current = live.messages;
+      setMessages(live.messages);
+      activeRunId.current = live.runId;
+      targetMsgId.current = live.targetMsgId;
+      streamText.current = live.streamText;
+      timelineRef.current = live.timeline;
+      setBusy(true);
+      setCanResume(false);
+    } else {
       activeRunId.current = null;
       targetMsgId.current = null;
       streamText.current = "";
       timelineRef.current = [];
+      applyLoadedSession(loaded?.session.runStatus, loaded?.messages ?? [], {
+        activeRunId: loaded?.session.activeRunId,
+      });
+      if (loaded?.session.runStatus !== "running") {
+        setBusy(false);
+      }
     }
+    setWorkspaceGate(null);
+    clearUserEdit();
+    setDraft("");
     requestStickToBottom();
-  }
 
-  /** 新建会话后激活空聊天*/
-  async function activateNewSession(nextSessionId: string, nextThreadId: string) {
-    if (busy) return;
-    await flushSave();
-    sessionEpoch.current += 1;
-    const loaded = await getSession(nextSessionId);
-    setSessionId(nextSessionId);
-    sessionIdRef.current = nextSessionId;
-    setThreadId(nextThreadId);
+    // 持久化侧栏选中等非绘制关键副作用
     await setActiveSession(nextSessionId);
     const wid = loaded?.session.workspaceId ?? null;
     if (wid) {
       await setLastWorkspaceId(wid);
       await syncWorkspaceLabel(wid);
     }
+  }
+
+  /** 新建会话后激活空聊天（其它会话可继续后台跑） */
+  async function activateNewSession(nextSessionId: string, nextThreadId: string) {
+    // 先封存当前忙会话
+    if (busy && sessionIdRef.current && threadId) {
+      parkForegroundRun({
+        sessionId: sessionIdRef.current,
+        threadId,
+        runId: activeRunId.current,
+        messages: messagesRef.current,
+        streamText: streamText.current,
+        timeline: timelineRef.current,
+        targetMsgId: targetMsgId.current,
+        busy: true,
+      });
+    }
+    await flushSave();
+    const loaded = await getSession(nextSessionId);
+
+    cancelPendingStreamFlush();
+    sessionEpoch.current += 1;
+    sessionIdRef.current = nextSessionId;
+    setSessionId(nextSessionId);
+    setForegroundSessionId(nextSessionId);
+    setThreadId(nextThreadId);
     setMessages([]);
     messagesRef.current = [];
+    setBusy(false);
     setCanResume(false);
     setWorkspaceGate(null);
     clearUserEdit();
@@ -1045,11 +1153,17 @@ export function useChatSession(visible = true) {
     streamText.current = "";
     timelineRef.current = [];
     requestStickToBottom();
+
+    await setActiveSession(nextSessionId);
+    const wid = loaded?.session.workspaceId ?? null;
+    if (wid) {
+      await setLastWorkspaceId(wid);
+      await syncWorkspaceLabel(wid);
+    }
   }
 
-  /** 在当前工作空间新建会话（快捷键 / 命令用）；忙碌时忽略*/
+  /** 在当前工作空间新建会话（快捷键 / 命令用） */
   async function newChat() {
-    if (busy) return;
     let wid = workspaceId ?? (await getLastWorkspaceId());
     if (!wid) {
       const workspaces = await listWorkspaces();
@@ -1066,9 +1180,8 @@ export function useChatSession(visible = true) {
     }, 0);
   }
 
-  /** 选中工作空间：记住选择；切到该空间最近会话，若无则清空当前聊天*/
+  /** 选中工作空间：记住选择；切到该空间最近会话，若无则清空当前聊天 */
   async function selectWorkspace(nextWorkspaceId: string) {
-    if (busy) return;
     await setLastWorkspaceId(nextWorkspaceId);
     await syncWorkspaceLabel(nextWorkspaceId);
     if (nextWorkspaceId === workspaceId && sessionId) return;
@@ -1081,13 +1194,15 @@ export function useChatSession(visible = true) {
     }
 
     await flushSave();
+
+    cancelPendingStreamFlush();
     sessionEpoch.current += 1;
+    sessionIdRef.current = null;
     setSessionId(null);
     setThreadId(undefined);
-    sessionIdRef.current = null;
-    await setActiveSession(null);
     setMessages([]);
     messagesRef.current = [];
+    setBusy(false);
     setCanResume(false);
     setWorkspaceGate(null);
     clearUserEdit();
@@ -1097,6 +1212,8 @@ export function useChatSession(visible = true) {
     streamText.current = "";
     timelineRef.current = [];
     requestStickToBottom();
+
+    await setActiveSession(null);
   }
 
   /**
@@ -1184,6 +1301,17 @@ export function useChatSession(visible = true) {
     });
     requestStickToBottom();
     setBusy(true);
+    if (sid && runThreadId) {
+      upsertLiveRunSlot({
+        sessionId: sid,
+        threadId: runThreadId,
+        messages: messagesRef.current,
+        streamText: "",
+        timeline: [],
+        targetMsgId: pending.id,
+        busy: true,
+      });
+    }
     try {
       const contextPaths = extractContextPaths(text);
       const result = await runAgent({
@@ -1191,12 +1319,23 @@ export function useChatSession(visible = true) {
         history,
         threadId: runThreadId,
         sessionId: sid ?? undefined,
-        workspaceId: workspaceIdRef.current ?? undefined,
         traceId,
         ...(contextPaths.length > 0 ? { contextPaths } : {}),
       });
       if (epoch !== runEpoch.current) return;
-      if (result.runId) activeRunId.current = result.runId;
+      if (result.runId) {
+        activeRunId.current = result.runId;
+        if (sid) {
+          upsertLiveRunSlot({
+            sessionId: sid,
+            threadId: result.threadId || runThreadId || "",
+            runId: result.runId,
+            messages: messagesRef.current,
+            targetMsgId: pending.id,
+            busy: true,
+          });
+        }
+      }
       if (result.threadId) setThreadId(result.threadId);
 
       await new Promise<void>((resolve) => {
@@ -1373,7 +1512,6 @@ export function useChatSession(visible = true) {
         threadId,
         traceId,
         sessionId: sid ?? undefined,
-        workspaceId: workspaceIdRef.current ?? undefined,
       });
       if (epoch !== runEpoch.current) return;
       if (result.runId) activeRunId.current = result.runId;
@@ -1691,5 +1829,7 @@ export function useChatSession(visible = true) {
     flushSave,
     onKeyDown,
     restoreDeletedFile,
+    /** 其它会话仍在跑的数量（侧栏 / 后台指示） */
+    backgroundRunCount: listBusyLiveRuns().filter((s) => s.sessionId !== sessionId).length,
   };
 }

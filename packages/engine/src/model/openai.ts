@@ -13,6 +13,7 @@ import {
   type AiLocale,
   type ModelSettings,
 } from "@thinker-workbench/shared";
+import { getModelRetryMaxAttempts } from "../config/runtimeLimits";
 import { agentLog } from "../log/setup";
 import { buildSystemPrompt } from "../prompts/system";
 import { modelFetch } from "./httpFetch";
@@ -20,7 +21,6 @@ import {
   formatErrorMessage,
   isRetryableError,
   isRetryableHttpStatus,
-  MODEL_RETRY_MAX_ATTEMPTS,
   sleepBackoff,
 } from "./retry";
 import type {
@@ -191,6 +191,8 @@ async function readChatSse(
   const decoder = new TextDecoder();
   let buffer = "";
   let content = "";
+  let reasoning = "";
+  let providerResponseId: string | undefined;
   let usage: ChatUsage | undefined;
   const toolAcc = new Map<number, StreamToolCallAcc>();
 
@@ -213,6 +215,7 @@ async function readChatSse(
         const data = trimmed.slice(5).trim();
         if (!data || data === "[DONE]") continue;
         let json: {
+          id?: string;
           usage?: unknown;
           choices?: Array<{
             delta?: {
@@ -237,6 +240,10 @@ async function readChatSse(
         }
 
         // include_usage 时末包常无 delta，只带 usage
+        if (typeof json.id === "string" && json.id.trim() && !providerResponseId) {
+          providerResponseId = json.id.trim();
+        }
+
         const parsedUsage = parseUsage(json.usage);
         if (parsedUsage) usage = parsedUsage;
 
@@ -245,6 +252,7 @@ async function readChatSse(
 
         const thinkingPiece = extractReasoningPiece(delta as Record<string, unknown>);
         if (thinkingPiece) {
+          reasoning += thinkingPiece;
           onToken?.(thinkingPiece, "thinking");
         }
 
@@ -284,7 +292,13 @@ async function readChatSse(
     }))
     .filter((tc) => tc.function.name.length > 0);
 
-  return { content, toolCalls, ...(usage ? { usage } : {}) };
+  return {
+    content,
+    toolCalls,
+    ...(usage ? { usage } : {}),
+    ...(providerResponseId ? { providerResponseId } : {}),
+    ...(reasoning ? { reasoning } : {}),
+  };
 }
 
 /** 解析非流式 choices[0].message。 */
@@ -348,7 +362,8 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
       });
 
       let lastError: unknown;
-      for (let attempt = 1; attempt <= MODEL_RETRY_MAX_ATTEMPTS; attempt++) {
+      const maxAttempts = getModelRetryMaxAttempts();
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         if (signal.aborted) {
           throw new Error("Chat completion cancelled.");
         }
@@ -356,7 +371,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
           log.warn("retry", {
             meta: {
               attempt,
-              maxAttempts: MODEL_RETRY_MAX_ATTEMPTS,
+              maxAttempts,
               error: formatErrorMessage(lastError),
             },
           });
@@ -392,7 +407,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             log.error("fetch failed", { meta: { error, ms: Date.now() - started, attempt } });
             lastError = err;
             if (
-              attempt < MODEL_RETRY_MAX_ATTEMPTS &&
+              attempt < maxAttempts &&
               isRetryableError(err, { emittedTokens })
             ) {
               continue;
@@ -413,7 +428,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             const httpErr = new Error(`OpenAI HTTP ${res.status}: ${errBody.slice(0, 400)}`);
             lastError = httpErr;
             if (
-              attempt < MODEL_RETRY_MAX_ATTEMPTS &&
+              attempt < maxAttempts &&
               isRetryableHttpStatus(res.status)
             ) {
               continue;
@@ -439,6 +454,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             // 部分网关忽略 stream=true，仍返回普通 JSON body
             if (contentType.includes("application/json") && !contentType.includes("event-stream")) {
               const data = (await res.json()) as {
+                id?: string;
                 usage?: unknown;
                 choices?: Array<{
                   message?: {
@@ -450,6 +466,8 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
               };
               const result = parseNonStreamMessage(data.choices?.[0]?.message ?? {});
               const usage = parseUsage(data.usage);
+              const providerResponseId =
+                typeof data.id === "string" && data.id.trim() ? data.id.trim() : undefined;
               if (result.reasoning) {
                 trackToken?.(result.reasoning, "thinking");
                 await yieldEventLoop();
@@ -462,7 +480,11 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
                 throw new Error("OpenAI response missing content and tool calls.");
               }
               return finish(
-                { ...result, ...(usage ? { usage } : {}) },
+                {
+                  ...result,
+                  ...(usage ? { usage } : {}),
+                  ...(providerResponseId ? { providerResponseId } : {}),
+                },
                 "json-fallback",
               );
             }
@@ -477,7 +499,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
               // 流已部分落地则不可重试，避免重复 token
               lastError = err;
               if (
-                attempt < MODEL_RETRY_MAX_ATTEMPTS &&
+                attempt < maxAttempts &&
                 isRetryableError(err, { emittedTokens })
               ) {
                 continue;
@@ -487,19 +509,29 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
           }
 
           const data = (await res.json()) as {
+            id?: string;
             usage?: unknown;
             choices?: Array<{ message?: { content?: string | null; tool_calls?: ChatToolCall[] } }>;
           };
           const result = parseNonStreamMessage(data.choices?.[0]?.message ?? {});
           const usage = parseUsage(data.usage);
+          const providerResponseId =
+            typeof data.id === "string" && data.id.trim() ? data.id.trim() : undefined;
           if (!result.content.trim() && result.toolCalls.length === 0) {
             throw new Error("OpenAI response missing content and tool calls.");
           }
-          return finish({ ...result, ...(usage ? { usage } : {}) }, "json");
+          return finish(
+            {
+              ...result,
+              ...(usage ? { usage } : {}),
+              ...(providerResponseId ? { providerResponseId } : {}),
+            },
+            "json",
+          );
         } catch (err) {
           lastError = err;
           if (
-            attempt < MODEL_RETRY_MAX_ATTEMPTS &&
+            attempt < maxAttempts &&
             isRetryableError(err, { emittedTokens })
           ) {
             continue;
@@ -525,3 +557,17 @@ export function getChatModel(): ChatModel {
   cached = createOpenAIModel(configured);
   return cached;
 }
+
+/** 按给定凭据创建客户端（不改写全局配置；供并行 failover）。 */
+export function getChatModelFor(settings: ModelSettings): ChatModel {
+  const apiKey = settings.apiKey?.trim() ?? "";
+  if (!apiKey) {
+    throw new Error(MODEL_API_KEY_MISSING);
+  }
+  return createOpenAIModel({
+    apiKey,
+    baseUrl: settings.baseUrl?.trim() || undefined,
+    model: settings.model?.trim() || undefined,
+  });
+}
+

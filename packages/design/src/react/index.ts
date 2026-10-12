@@ -45,6 +45,7 @@ export {
   CubeIcon,
   DatabaseIcon,
   DebugModeIcon,
+  DownloadIcon,
   FilterIcon,
   FolderIcon,
   FolderPlusIcon,

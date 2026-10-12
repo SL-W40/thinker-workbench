@@ -43,7 +43,8 @@ export const en = {
     deleteSessionTitle: "Delete chat?",
     deleteSessionBody: "This permanently removes the chat, messages, run checkpoints, and session Trace.",
     newSessionAbove: "New chat above",
-    copyThreadId: "Copy thread id",
+    copySessionId: "Copy session id",
+    openInTrace: "Open in Trace",
     more: "Show more",
     less: "Show less",
     confirmDelete: "Delete",
@@ -82,14 +83,30 @@ export const en = {
       emptySessions:
         "No session traces yet. Enable Trace under Settings → Data, then send a message.",
       pickSession: "Pick a session to inspect",
-      emptySpans: "No spans recorded for this session",
+      emptySpans: "No spans recorded for this run",
+      emptyRuns: "No runs in this session",
+      loadingRuns: "Loading runs…",
       pickSpan: "Select a node in the trace tree or sequence diagram",
       runCount: "{n} runs",
+      runLabel: "Run {n} · {time}",
+      runLabelShort: "Run {n}",
+      runUnknown: "Run {n} (no id)",
+      spanCount: "{n} spans",
+      sessionMenu: "Session actions",
+      viewPretty: "Pretty",
+      viewRaw: "Raw",
+      payloadViewMode: "Payload view",
+      emptyPayload: "No data",
+      resizeDetail: "Drag to resize detail panel",
       viewCallTree: "Trace tree",
       viewSequence: "Sequence",
       input: "Input",
       output: "Output",
       truncated: "Truncated",
+      partial: "Partial (cancelled/failed)",
+      exportSession: "Export feedback ZIP",
+      exportSessionOk: "Saved to {path}",
+      exportSessionFail: "Export failed: {error}",
       scopeMain: "Main session",
       scopeMainShort: "Main",
       scopeTask: "Task",
@@ -291,6 +308,15 @@ export const en = {
     restore: "Restore",
     close: "Close",
     toggleDevTools: "Console",
+  },
+  hmr: {
+    recovering: "Recovering UI…",
+    recoveringLabel: "Recovering UI",
+    stuckTitle: "UI could not recover",
+    stuckDescription:
+      "{message}\nThis page appears when a hot-reload error breaks the UI. Fix the code, then reload.",
+    reload: "Reload",
+    retry: "Try again",
   },
   chat: {
     placeholder: "Message… / for skills, @ for files or folders",
@@ -540,6 +566,10 @@ export const en = {
         title: "Permissions",
         description: "Workspace access, shell tools, and command approval.",
       },
+      agentLimits: {
+        title: "Agent limits",
+        description: "Turn budgets, retries, shell/MCP timeouts, and context injection caps.",
+      },
       browser: {
         title: "Browser & Network",
         description: "Built-in browser automation, protection, local links, and HTTP compatibility.",
@@ -717,6 +747,62 @@ export const en = {
         description:
           "Preferred language for agent replies. Smart matches the language of your messages. Applies on the next chat.",
       },
+      maxParallelRuns: {
+        title: "Max parallel sessions",
+        description:
+          "How many chat sessions may run an agent at the same time. Extra sends are rejected until one finishes or you stop it. Same session still allows only one active run.",
+      },
+      maxAgentSteps: {
+        title: "Max agent steps",
+        description:
+          "Main-session agent↔tools rounds per run. Raise for long tasks; higher values use more tokens.",
+      },
+      maxSubagentSteps: {
+        title: "Max subagent steps",
+        description: "Independent model rounds for each Task / subagent run.",
+      },
+      modelRetryMaxAttempts: {
+        title: "Model retry attempts",
+        description: "Total tries for a chat completion (includes the first). Applies to retryable network/5xx errors.",
+      },
+      modelRetryBaseDelayMs: {
+        title: "Model retry base delay",
+        description: "Initial backoff before the first retry; doubles each attempt with jitter.",
+      },
+      defaultShellBlockUntilMs: {
+        title: "Shell default wait",
+        description:
+          "Default block_until_ms for shell / shell_await when the model omits it. 0 backgrounds immediately.",
+      },
+      shellOutputCap: {
+        title: "Shell output cap",
+        description: "Truncate shell output before it is sent back to the model.",
+      },
+      mcpConnectTimeoutMs: {
+        title: "MCP connect timeout",
+        description: "How long to wait when starting an MCP server connection.",
+      },
+      mcpCallTimeoutMs: {
+        title: "MCP call timeout",
+        description: "How long to wait for a single MCP tool call.",
+      },
+      contextFilesMaxFileBytes: {
+        title: "@ file size limit",
+        description: "Max size of one workspace file injected via @ mention.",
+      },
+      contextFilesMaxTotalBytes: {
+        title: "@ total budget",
+        description: "Max total bytes for all @-mentioned files in one request.",
+      },
+      readFileDefaultMaxChars: {
+        title: "read_file default max",
+        description: "Default max_chars when the model reads a whole file without a line range.",
+      },
+      unit: {
+        ms: "ms",
+        chars: "chars",
+        bytes: "bytes",
+      },
       workspaceAccess: {
         title: "Workspace access",
         description:
@@ -783,25 +869,27 @@ export const en = {
       storage: {
         title: "Storage",
         description:
-          "App root directory (default ~/.thinker): settings.json, state/, chats, logs, skills, mcps, …. Changes require an explicit save.",
+          "Chats, logs, skills, mcps, and settings under the data root (default ~/.thinker).",
       },
       dataDir: {
         title: "Root directory",
         description:
-          "Default ~/.thinker. Changes do not apply immediately: finish all running sessions, then Save. settings.json always moves with the root; history migration is optional.",
+          "Default ~/.thinker. Save after all sessions finish. If you move the root, settings live in the new folder; startup still reads a fixed ~/.thinker/settings.json that points there.",
         placeholder: "~/.thinker",
+        settingsPath: "Settings",
+        bootstrapPath: "Launcher",
+        pendingPath: "After save",
         save: "Save root directory…",
         discard: "Discard",
         runningSessions: "{n} session(s) still running. Finish them before changing the root directory.",
         nestedPaths: "The new path cannot be inside or contain the current root directory.",
         migrateTitle: "Migrate existing data?",
-        migrateLead:
-          "Copy chats, logs, catalog, checkpoints, skills / mcps into the new directory? settings.json (including model keys) is always written to the new root.",
+        migrateLead: "Copy existing data into the new root? Settings always move with the switch.",
         from: "From",
         to: "To",
-        migrateSize: "≈{size}",
+        migrateSize: "About {size} to copy",
         migrateNote:
-          "“Switch without history” skips chats/logs only; settings.json still goes to the new root. Migration copies into the new path and never deletes the old one — don’t edit the wrong tree.",
+          "“Switch without history” skips chats/logs. Copy never deletes the old folder.",
         cancel: "Cancel",
         skipMigrate: "Switch without history",
         doMigrate: "Migrate and switch",
@@ -898,6 +986,10 @@ export const en = {
       model: "Model id",
       modelHint: "Model id sent to the provider (for example gpt-4o-mini).",
       modelPlaceholder: "gpt-4o-mini",
+      contextWindow: "Context window (tokens)",
+      contextWindowHint:
+        "Per-model context limit used for Context Usage and packing. Default 128000 when unset.",
+      contextWindowPlaceholder: "128000",
       displayName: "Display name",
       displayNamePlaceholder: "Friendly name",
       providerLabel: "Credential",

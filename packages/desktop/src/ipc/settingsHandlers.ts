@@ -19,6 +19,7 @@ import fs from "node:fs";
 import { BrowserWindow, dialog, type IpcMain } from "electron";
 import { applyDataDirChange, previewDataDirChange } from "../config/dataDirMigrate";
 import {
+  describeDataDirPaths,
   getGeneralSettings,
   getPublicModelSettings,
   getShortcutsSettings,
@@ -168,6 +169,12 @@ export function registerSettingsHandlers(
       return result.filePath;
     },
   );
+
+  ipcMain.handle(IpcChannels.settingsResolveDataDir, (_evt, configured?: string) => {
+    return configured === undefined
+      ? describeDataDirPaths()
+      : describeDataDirPaths(typeof configured === "string" ? configured : "");
+  });
 
   ipcMain.handle(IpcChannels.settingsPreviewDataDirChange, (_evt, dataDir: string) => {
     return previewDataDirChange(typeof dataDir === "string" ? dataDir : "");

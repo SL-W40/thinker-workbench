@@ -17,6 +17,7 @@ import {
   getActiveSessionId,
   getCollapsedWorkspaceIds,
   getLastWorkspaceId,
+  getSession,
   getSessionWithMessages,
   getWorkspace,
   listSessions,
@@ -35,6 +36,18 @@ import {
   setSessionPinned,
   setWorkspacePinned,
 } from "../db/workspacesStore";
+import type { AgentBridge } from "../utility/AgentBridge";
+
+/** 删会话前先停掉该会话 in-flight run，降低 Trace 迟到写回概率。 */
+function cancelSessionRuns(bridge: AgentBridge | undefined, sessionId: string): void {
+  const id = sessionId.trim();
+  if (!id || !bridge) return;
+  const session = getSession(id);
+  if (session?.activeRunId?.trim()) {
+    bridge.cancel(session.activeRunId.trim());
+  }
+  bridge.cancelRunsForSession(id);
+}
 
 /** 向所有窗口广播工作空间变更。 */
 export function broadcastWorkspacesChanged(): void {
@@ -51,7 +64,7 @@ export function broadcastThreadsChanged(): void {
 }
 
 /** 注册 workspaces:* / chatSessions:* 通道。 */
-export function registerWorkspacesHandlers(ipcMain: IpcMain): void {
+export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridge): void {
   openCatalogDb();
 
   ipcMain.handle(IpcChannels.workspacesList, async () => listWorkspaces());
@@ -92,7 +105,10 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain): void {
   });
 
   ipcMain.handle(IpcChannels.workspacesClear, async (_e, id: string) => {
-    // removeSession 内已 purgeSessionArtifacts（checkpoint + Trace）
+    // 先停跑再清；removeSession 内 purgeSessionArtifacts（checkpoint + Trace）
+    for (const s of listSessions(id)) {
+      cancelSessionRuns(bridge, s.id);
+    }
     clearWorkspace(id);
     broadcastWorkspacesChanged();
     broadcastThreadsChanged();
@@ -154,6 +170,7 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain): void {
   });
 
   ipcMain.handle(IpcChannels.chatSessionsRemove, async (_e, sessionId: string) => {
+    cancelSessionRuns(bridge, sessionId);
     removeSession(sessionId);
     broadcastThreadsChanged();
   });

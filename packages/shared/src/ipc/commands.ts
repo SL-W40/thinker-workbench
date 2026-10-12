@@ -11,6 +11,11 @@ export type AgentHistoryMessage = {
 
 /** 发起一次 agent 运行。 */
 export type AgentRunCommand = {
+  /**
+   * 拥有本轮 run 的聊天会话 id（端到端寻址主键）。
+   * Desktop 用其解析 workspace / 落库，禁止仅靠 activeSession 推断所有权。
+   */
+  sessionId?: string;
   /** 可选；省略时由宿主创建新线程。 */
   threadId?: string;
   /** 用户输入文本。 */
@@ -25,7 +30,7 @@ export type AgentRunCommand = {
    * 省略时由 desktop 或 agent 补生成。
    */
   traceId?: string;
-  /** 本轮工具执行的工作区绝对路径（由桌面注入 active workspace）。 */
+  /** 本轮工具执行的工作区绝对路径（由桌面按 session 注入）。 */
   workspaceRoot?: string;
   /** 工作区显示名（别名或文件夹名），写入环境上下文。 */
   workspaceName?: string;
@@ -36,14 +41,18 @@ export type AgentRunCommand = {
   contextPaths?: string[];
 };
 
-/** 取消正在进行的运行。 */
+/** 取消正在进行的运行（按 runId 作用域，不取消其它并行 run）。 */
 export type AgentCancelCommand = {
   /** 要取消的运行 id。 */
   runId: string;
+  /** 可选；用于校验拥有关系。 */
+  sessionId?: string;
 };
 
 /** 从 checkpoint 恢复运行（崩溃后续跑）。 */
 export type AgentResumeCommand = {
+  /** 拥有本轮 resume 的聊天会话 id。 */
+  sessionId?: string;
   /** 所属线程 id。 */
   threadId: string;
   /**

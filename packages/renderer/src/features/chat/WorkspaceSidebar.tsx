@@ -59,6 +59,8 @@ type Props = {
   onSelectWorkspace: (workspaceId: string) => void;
   onSessionCreated: (sessionId: string, threadId: string) => void;
   onSessionsMutated?: () => void;
+  /** 打开控制台 Trace 并聚焦该会话。 */
+  onOpenTrace?: (sessionId: string) => void;
 };
 
 type MenuState = {
@@ -81,6 +83,7 @@ export function WorkspaceSidebar({
   onSelectWorkspace,
   onSessionCreated,
   onSessionsMutated,
+  onOpenTrace,
 }: Props) {
   const t = useT();
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
@@ -258,7 +261,8 @@ export function WorkspaceSidebar({
     }
     const th = threads.find((x) => x.sessionId === menu.id);
     if (!th) return [];
-    const isActiveBusy = busy && th.sessionId === activeSessionId;
+    // 任意正在跑的会话都禁删（不仅当前会话 UI busy）
+    const sessionBusy = th.runStatus === "running" || (busy && th.sessionId === activeSessionId);
     return [
       {
         label: t("workspaces.rename"),
@@ -273,14 +277,22 @@ export function WorkspaceSidebar({
         onSelect: () => void handleNewSession(th.workspaceId),
       },
       {
-        label: t("workspaces.copyThreadId"),
-        onSelect: () => void navigator.clipboard?.writeText(th.id),
+        label: t("workspaces.copySessionId"),
+        onSelect: () => void navigator.clipboard?.writeText(th.sessionId),
       },
+      ...(onOpenTrace
+        ? [
+            {
+              label: t("workspaces.openInTrace"),
+              onSelect: () => onOpenTrace(th.sessionId),
+            } satisfies ContextMenuItemProps,
+          ]
+        : []),
       {
         label: t("workspaces.deleteSession"),
         danger: true,
         separatorBefore: true,
-        disabled: isActiveBusy,
+        disabled: sessionBusy,
         onSelect: () => setConfirm({ kind: "session", id: th.sessionId, title: th.title }),
       },
     ];

@@ -38,6 +38,17 @@ export function ChevronRightIcon({
 
 export const PlusIcon = createIcon("PlusIcon", <path d="M8 3.25v9.5M3.25 8h9.5" />, VB);
 
+/** 下载 / 导出箭头入托盘。 */
+export const DownloadIcon = createIcon(
+  "DownloadIcon",
+  <>
+    <path d="M8 3.25v7" />
+    <path d="M5.25 7.75 8 10.5l2.75-2.75" />
+    <path d="M3.25 12.75h9.5" />
+  </>,
+  VB,
+);
+
 export const CloseIcon = createIcon(
   "CloseIcon",
   <path d="M4.25 4.25l7.5 7.5M11.75 4.25l-7.5 7.5" />,

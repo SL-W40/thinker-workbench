@@ -3,6 +3,7 @@
  * 子代理不改全局 ChatMode（避免并行互踩）；只读靠 childReadonly 收紧工具。
  */
 import { createId, type SubagentChildEvent } from "@thinker-workbench/shared";
+import { getMaxSubagentSteps } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
 import {
   chatWithFailover,
@@ -11,7 +12,8 @@ import {
 } from "../../model/catalog";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
-import { getRunEmitter } from "../../runtime/runEmit";
+import { getRunContext, setRunTurn } from "../../runtime/runContext";
+import { getRunEmitter, getRunIds } from "../../runtime/runEmit";
 import {
   getSubagentDefinition,
   listSubagentDefinitions,
@@ -22,13 +24,14 @@ import { runTool } from "../runTool";
 import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
 import { deriveTaskTitle } from "./title";
 
-/** 子代理模型轮次上限（含工具循环）。 */
-const MAX_CHILD_STEPS = 24;
+/** task_await 默认等待（与 shell 默认无关）。 */
 const DEFAULT_AWAIT_MS = 30_000;
 type BgStatus = "running" | "finished" | "failed";
 
 type BackgroundTask = {
   subagent: string;
+  /** 父 run id；cancel 按 run 作用域。 */
+  parentRunId: string;
   status: BgStatus;
   summary: string;
   error?: string;
@@ -43,24 +46,41 @@ const backgroundTasks = new Map<string, BackgroundTask>();
 let modelGate: Promise<void> = Promise.resolve();
 
 /**
- * 主会话 cancel 时收束仍在跑的后台 Task（emit cancelled，供 UI 同步）。
- * 子代理协程仍会被 AbortSignal 打断；此处保证时间线立刻更新。
+ * @deprecated 全清；并行路径请用 cancelBackgroundTasksByRunId。
  */
 export function cancelRunningBackgroundTasks(reason = "Cancelled."): void {
   for (const [taskId, task] of backgroundTasks) {
-    if (task.status !== "running") continue;
-    task.status = "failed";
-    task.summary = "";
-    task.error = reason;
-    emitSubagent("cancelled", {
-      taskId,
-      subagent: task.subagent,
-      background: true,
-      error: reason,
-      summary: reason,
-    });
-    task.markSettled();
+    cancelOneBackgroundTask(taskId, task, reason);
   }
+}
+
+/** 仅取消指定父 run 派生的后台 Task。 */
+export function cancelBackgroundTasksByRunId(runId: string, reason = "Cancelled."): void {
+  const id = runId?.trim();
+  if (!id) return;
+  for (const [taskId, task] of backgroundTasks) {
+    if (task.parentRunId !== id) continue;
+    cancelOneBackgroundTask(taskId, task, reason);
+  }
+}
+
+function cancelOneBackgroundTask(
+  taskId: string,
+  task: BackgroundTask,
+  reason: string,
+): void {
+  if (task.status !== "running") return;
+  task.status = "failed";
+  task.summary = "";
+  task.error = reason;
+  emitSubagent("cancelled", {
+    taskId,
+    subagent: task.subagent,
+    background: true,
+    error: reason,
+    summary: reason,
+  });
+  task.markSettled();
 }
 
 function parseBool(value: unknown): boolean | undefined {
@@ -296,10 +316,12 @@ export async function runChildAgent(options: {
         const messages: ChatMessage[] = [{ role: "user", content: options.prompt }];
         emitProgress("Starting…", { type: "status", status: "thinking" });
 
-        for (let step = 0; step < MAX_CHILD_STEPS; step++) {
+        for (let step = 0; step < getMaxSubagentSteps(); step++) {
           if (options.signal.aborted) {
             return { ok: false, summary: "Subagent cancelled." };
           }
+          const childTurn = step + 1;
+          setRunTurn(childTurn);
           emitProgress("Thinking…", { type: "status", status: "thinking" });
 
           const assembled = assembleContext({
@@ -381,18 +403,52 @@ export async function runChildAgent(options: {
                 ? parsed.path.trim()
                 : undefined;
             const callId = call.id || createId("call");
+            const toolSummary = line.includes(" · ")
+              ? line.split(" · ").slice(1).join(" · ")
+              : undefined;
             emitProgress(line, {
               type: "tool",
               phase: "start",
               name: toolName,
               callId,
               path,
-              summary: line.includes(" · ")
-                ? line.split(" · ").slice(1).join(" · ")
-                : undefined,
+              summary: toolSummary,
             });
-            // 走 runTool 以便挂 tool:* span（parent = 当前 subagent）
-            const tr = await runTool(toolName, parsed, options.signal, callId);
+            // 显式打 tool:* span（parent = 当前 subagent；runTool 本身不建 span）
+            const childToolSpanId = agentStartSpan({
+              name: `tool:${toolName || "unknown"}`,
+              kind: "tool",
+              taskId: options.taskId,
+              summary: toolName || "tool",
+              input: parsed,
+              attrs: {
+                callId,
+                turn: childTurn,
+                ...(path ? { path } : {}),
+              },
+            });
+            let tr: Awaited<ReturnType<typeof runTool>>;
+            try {
+              tr = await runTool(toolName, parsed, options.signal, callId);
+              agentEndSpan(childToolSpanId, {
+                status: tr.ok ? "ok" : "error",
+                output: {
+                  ok: tr.ok,
+                  output: tr.output,
+                  ...(tr.ui ? { ui: tr.ui } : {}),
+                },
+                attrs: { callId, turn: childTurn },
+              });
+            } catch (toolErr) {
+              const errMsg =
+                toolErr instanceof Error ? toolErr.message : String(toolErr);
+              agentEndSpan(childToolSpanId, {
+                status: /cancel/i.test(errMsg) ? "cancelled" : "error",
+                error: errMsg,
+                attrs: { callId, turn: childTurn },
+              });
+              throw toolErr;
+            }
             const output = tr.output;
             const ok = tr.ok;
             const ui = tr.ui;
@@ -402,9 +458,7 @@ export async function runChildAgent(options: {
               name: toolName,
               callId,
               path: ui?.path ?? path,
-              summary: line.includes(" · ")
-                ? line.split(" · ").slice(1).join(" · ")
-                : undefined,
+              summary: toolSummary,
               ok,
               diff: ui?.diff,
               sessionId: ui?.sessionId,
@@ -555,14 +609,17 @@ export async function runTaskTool(args: ToolArgs, ctx: ToolContext): Promise<Too
     const settled = new Promise<void>((resolve) => {
       markSettled = resolve;
     });
+    const parentRunId = getRunIds()?.runId ?? "";
     const entry: BackgroundTask = {
       subagent: def.name,
+      parentRunId,
       status: "running",
       summary: "",
       settled,
       markSettled,
     };
     backgroundTasks.set(taskId, entry);
+    if (parentRunId) getRunContext()?.taskIds.add(taskId);
     void (async () => {
       try {
         const result = await runChildAgent(childOpts);

@@ -1,5 +1,5 @@
 /**
- * 工作区根路径：由 desktop 经 hello / run / resume 注入；工具执行读此处。
+ * 工作区根路径：run 内优先读 RunContext（ALS）；进程级变量仅作 hello / contextUsage 默认。
  * 未注入时不得回落到 monorepo / cwd，避免误读写产品工程本身。
  */
 import fs from "node:fs";
@@ -15,6 +15,7 @@ import {
   type ShellProfile,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
+import { getRunContext } from "./runtime/runContext";
 
 let currentRoot: string | null = null;
 /** 展示名（别名或文件夹名）；可与 root basename 不同。 */
@@ -59,6 +60,8 @@ export function setWorkspaceRoot(
 
 /** 供工具执行读取的当前工作区根。 */
 export function getWorkspaceRoot(): string {
+  const fromRun = getRunContext()?.workspaceRoot?.trim();
+  if (fromRun) return fromRun;
   if (!currentRoot) {
     throw new Error("No workspace root configured. Open a workspace before using tools.");
   }
@@ -67,12 +70,12 @@ export function getWorkspaceRoot(): string {
 
 /** 环境上下文用：未配置时返回 null，不抛错。 */
 export function getWorkspaceRootOrNull(): string | null {
-  return currentRoot;
+  return getRunContext()?.workspaceRoot?.trim() || currentRoot;
 }
 
 /** 当前工作区显示名；未配置时 null。 */
 export function getWorkspaceName(): string | null {
-  return currentName;
+  return getRunContext()?.workspaceName?.trim() || currentName;
 }
 
 /** 设置工作区外访问档位（hello / run / resume 下发）。 */
@@ -83,7 +86,7 @@ export function setWorkspaceAccess(mode: WorkspaceAccess | undefined | null): Wo
 
 /** 当前工作区外访问档位。 */
 export function getWorkspaceAccess(): WorkspaceAccess {
-  return currentAccess;
+  return getRunContext()?.workspaceAccess ?? currentAccess;
 }
 
 /** 设置是否允许 AI 删除文件（hello / run / resume 下发）。 */
@@ -94,7 +97,7 @@ export function setAllowAiDeleteFiles(value: boolean | undefined | null): boolea
 
 /** 当前是否允许 AI 删除文件。 */
 export function getAllowAiDeleteFiles(): boolean {
-  return allowAiDeleteFiles;
+  return getRunContext()?.allowAiDeleteFiles ?? allowAiDeleteFiles;
 }
 
 /** 设置是否允许 AI shell。 */
@@ -104,7 +107,7 @@ export function setAllowAiShell(value: boolean | undefined | null): boolean {
 }
 
 export function getAllowAiShell(): boolean {
-  return allowAiShell;
+  return getRunContext()?.allowAiShell ?? allowAiShell;
 }
 
 /** 设置是否允许 AI 内置浏览器工具。 */
@@ -114,7 +117,7 @@ export function setAllowAiBrowser(value: boolean | undefined | null): boolean {
 }
 
 export function getAllowAiBrowser(): boolean {
-  return allowAiBrowser;
+  return getRunContext()?.allowAiBrowser ?? allowAiBrowser;
 }
 
 /** 设置命令行审批模式。 */
@@ -124,7 +127,7 @@ export function setShellApprovalMode(mode: ShellApprovalMode | undefined | null)
 }
 
 export function getShellApprovalMode(): ShellApprovalMode {
-  return shellApprovalMode;
+  return getRunContext()?.shellApprovalMode ?? shellApprovalMode;
 }
 
 /** 设置白名单（完整替换）。 */
@@ -134,13 +137,22 @@ export function setShellAllowlist(list: string[] | undefined | null): string[] {
 }
 
 export function getShellAllowlist(): string[] {
+  const ctx = getRunContext();
+  if (ctx) return ctx.shellAllowlist;
   return shellAllowlist;
 }
 
-/** HITL「加入白名单」时进程内即时追加。 */
+/** HITL「加入白名单」时即时追加（优先改当前 RunContext）。 */
 export function addShellAllowlistToken(token: string): void {
   const t = token.trim().toLowerCase();
-  if (!t || shellAllowlist.includes(t)) return;
+  if (!t) return;
+  const ctx = getRunContext();
+  if (ctx) {
+    if (ctx.shellAllowlist.includes(t)) return;
+    ctx.shellAllowlist = [...ctx.shellAllowlist, t];
+    return;
+  }
+  if (shellAllowlist.includes(t)) return;
   shellAllowlist = [...shellAllowlist, t];
 }
 
@@ -150,5 +162,7 @@ export function setShellProfile(profile: ShellProfile | undefined | null): void 
 }
 
 export function getShellProfile(): ShellProfile | null {
+  const ctx = getRunContext();
+  if (ctx) return ctx.shellProfile;
   return currentShell;
 }

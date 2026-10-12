@@ -6,6 +6,7 @@ import { withJsonPreview, withTextPreview } from "@thinker-workbench/logger";
 import { agentLog } from "../../log/setup";
 import type { ChatMessage, ChatToolCall } from "../../model/types";
 import { getRunEmitter } from "../../runtime/runEmit";
+import { getRunTurn } from "../../runtime/runContext";
 import { agentEndSpan, agentStartSpan } from "../../trace/emit";
 import { runTool } from "../../tools/runTool";
 import { peekTaskLaunchesInBackground } from "../../tools/task/execute";
@@ -88,6 +89,7 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
       : "";
   const taskBackground =
     isTaskTool && parsed.ok ? peekTaskLaunchesInBackground(parsed.args) : false;
+  const turn = getRunTurn();
   const toolSpanId = agentStartSpan({
     name: `tool:${name}`,
     kind: "tool",
@@ -97,6 +99,7 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
     attrs: {
       callId,
       path: hints.path,
+      ...(turn != null ? { turn } : {}),
       ...(isTaskTool
         ? {
             background: taskBackground,

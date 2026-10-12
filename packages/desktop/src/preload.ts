@@ -120,6 +120,8 @@ const api: ThinkerApi = {
       filters?: Array<{ name: string; extensions: string[] }>;
     }) =>
       ipcRenderer.invoke(IpcChannels.settingsSaveTextFile, options) as Promise<string | null>,
+    resolveDataDir: (configured?: string) =>
+      ipcRenderer.invoke(IpcChannels.settingsResolveDataDir, configured),
     previewDataDirChange: (dataDir: string) =>
       ipcRenderer.invoke(IpcChannels.settingsPreviewDataDirChange, dataDir),
     applyDataDirChange: (request: DataDirChangeRequest) =>
@@ -295,6 +297,8 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.traceEndSpan, req),
     deleteSession: (sessionId: string) =>
       ipcRenderer.invoke(IpcChannels.traceDeleteSession, sessionId),
+    exportSession: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceExportSession, sessionId),
   },
   mcp: {
     list: () => ipcRenderer.invoke(IpcChannels.mcpList),

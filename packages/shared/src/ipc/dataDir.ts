@@ -1,7 +1,22 @@
 /**
  * 数据目录变更 / 历史数据迁移协议。
  * 变更不即时生效：须无进行中会话，用户确认是否迁移，并经专用 IPC 提交。
+ *
+ * 启动不靠「在新目录里找 settings」：固定引导文件 `~/.thinker/settings.json`
+ * 里写着 dataDir；权威设置在 `<dataDir>/settings.json`（自定义根时引导为镜像）。
  */
+
+/** 数据根与 settings 路径一览（供设置页展示，解开「改完目录找不到自己」的疑虑）。 */
+export type DataDirPaths = {
+  /** 已解析的数据根绝对路径。 */
+  dataDir: string;
+  /** 权威 settings.json（`<dataDir>/settings.json`）。 */
+  settingsPath: string;
+  /** 固定引导 settings.json（始终在 `~/.thinker`，供下次启动读 dataDir）。 */
+  bootstrapSettingsPath: string;
+  /** 权威与引导是否为同一文件（默认根时为 true）。 */
+  sameAsBootstrap: boolean;
+};
 
 /** 可迁移的一项（文件或目录）。 */
 export type DataDirMigrateItem = {

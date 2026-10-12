@@ -21,12 +21,16 @@
     "@thinker-workbench/logger": "workspace:*",
     "@thinker-workbench/shared": "workspace:*",
     "better-sqlite3": "12.11.1",
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "yazl": "^3.3.1"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.10.5",
-    "esbuild": "^0.28.2"
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
+    "esbuild": "^0.28.2",
+    "yauzl": "^3.4.0"
   }
 }

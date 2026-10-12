@@ -26,7 +26,7 @@ import {
 import { setChatMode } from "../chatMode";
 import { setDataDir } from "../config/dataDir";
 import { assembleContext } from "../context/assembleContext";
-import { rejectAllHitl, resolveHitl } from "../hitl/requestHitl";
+import { rejectHitlByRunId, resolveHitl } from "../hitl/requestHitl";
 import { agentLog, configureAgentLog } from "../log/setup";
 import { getMcpManager } from "../mcp/McpManager";
 import { configureAgentTrace } from "../trace/emit";
@@ -34,6 +34,7 @@ import {
   configureFromLegacyModel,
   configureModelCatalog,
 } from "../model/catalog";
+import { configureRuntimeLimits } from "../config/runtimeLimits";
 import { configureHttpCompatibilityMode } from "../model/httpFetch";
 import {
   configureAiLocale,
@@ -42,9 +43,11 @@ import {
   getContextWindow,
 } from "../model/openai";
 import type { ChatMessage } from "../model/types";
+import { buildRunContext } from "../runtime/buildRunContext";
 import { createAgentRuntime, type AgentRuntime } from "../runtime/AgentRuntime";
+import { bindRuntimeEmitter } from "../runtime/runEmit";
 import { setSubagentDefinitions } from "../subagents/registry";
-import { cancelRunningBackgroundTasks } from "../tools/task/execute";
+import { cancelBackgroundTasksByRunId } from "../tools/task/execute";
 import { setAllowAiDeleteFiles, setWorkspaceAccess, setWorkspaceRoot } from "../workspace";
 import { handleBrowserEvent } from "./browserClient";
 import { handlePtyEvent } from "./ptyClient";
@@ -244,6 +247,7 @@ export class UtilityHost {
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
     configureHttpCompatibilityMode(message.httpCompatibilityMode);
+    configureRuntimeLimits(message);
     this.applyDataDir(message.dataDir);
     void this.applyMcpServers(message.mcpServers);
     if (message.subagents) setSubagentDefinitions(message.subagents);
@@ -291,6 +295,7 @@ export class UtilityHost {
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
     configureHttpCompatibilityMode(message.httpCompatibilityMode);
+    configureRuntimeLimits(message);
     this.applyDataDir(message.dataDir);
     this.applyTrace({
       traceEnabled: message.traceEnabled,
@@ -316,6 +321,7 @@ export class UtilityHost {
       return;
     }
     try {
+      // 进程默认（无 ALS 路径）；本 run 以下方 RunContext 为准
       setWorkspaceRoot(workspaceRoot, { name: workspaceName });
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -328,26 +334,59 @@ export class UtilityHost {
           runId: message.runId,
           ts: Date.now(),
           error,
+          ...(message.sessionId ? { chatSessionId: message.sessionId } : {}),
         },
       });
       return;
     }
-    await this.ensureRuntime().run({
+    const runtime = this.ensureRuntime();
+    const emit = bindRuntimeEmitter(
+      (e) => runtime.events.emit(e),
+      message.threadId,
+      message.runId,
+      message.sessionId,
+    );
+    const runContext = buildRunContext({
       runId: message.runId,
       threadId: message.threadId,
+      sessionId: message.sessionId,
+      workspaceRoot,
+      workspaceName,
+      chatMode: message.chatMode,
+      workspaceAccess: message.workspaceAccess,
+      allowAiDeleteFiles: message.allowAiDeleteFiles,
+      allowAiShell: message.allowAiShell,
+      allowAiBrowser: message.allowAiBrowser,
+      shellApprovalMode: message.shellApprovalMode,
+      shellAllowlist: message.shellAllowlist,
+      shell: message.shell,
+      catalog: message.catalog,
+      selection: message.selection,
+      route: { userText: text, contextPaths: message.command.contextPaths },
+      emit,
+    });
+    await runtime.run({
+      runId: message.runId,
+      threadId: message.threadId,
+      sessionId: message.sessionId,
       traceId,
       message: text,
       history: message.command.history,
+      contextPaths: message.command.contextPaths,
       workspaceRoot,
       workspaceName,
+      runContext,
     });
   }
 
   private onCancel(message: UtilityCancel): void {
-    agentLog("host").info("cancel", { runId: message.command.runId });
-    rejectAllHitl("Run cancelled.");
-    cancelRunningBackgroundTasks("Cancelled.");
-    this.runtime?.cancel(message.command.runId);
+    const runId = message.command.runId?.trim() ?? "";
+    agentLog("host").info("cancel", { runId });
+    if (!runId) return;
+    // 仅作用本 run：勿 rejectAll / cancel 全部 Task
+    rejectHitlByRunId(runId, "Run cancelled.");
+    cancelBackgroundTasksByRunId(runId, "Cancelled.");
+    this.runtime?.cancel(runId);
   }
 
   private async onResume(message: UtilityResume): Promise<void> {
@@ -373,6 +412,7 @@ export class UtilityHost {
       this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
       applyShellConfig(message);
       configureHttpCompatibilityMode(message.httpCompatibilityMode);
+      configureRuntimeLimits(message);
       this.applyDataDir(message.dataDir);
       this.applyTrace({
         traceEnabled: message.traceEnabled,
@@ -386,9 +426,39 @@ export class UtilityHost {
       if (message.workspaceRoot) {
         setWorkspaceRoot(message.workspaceRoot, { name: message.command.workspaceName });
       }
-      await this.ensureRuntime().resume({
+      const runtime = this.ensureRuntime();
+      const root = message.workspaceRoot?.trim() || "";
+      const emit = bindRuntimeEmitter(
+        (e) => runtime.events.emit(e),
+        threadId,
+        message.runId,
+        message.sessionId,
+      );
+      const runContext = root
+        ? buildRunContext({
+            runId: message.runId,
+            threadId,
+            sessionId: message.sessionId,
+            workspaceRoot: root,
+            workspaceName: message.command.workspaceName,
+            chatMode: message.chatMode,
+            workspaceAccess: message.workspaceAccess,
+            allowAiDeleteFiles: message.allowAiDeleteFiles,
+            allowAiShell: message.allowAiShell,
+            allowAiBrowser: message.allowAiBrowser,
+            shellApprovalMode: message.shellApprovalMode,
+            shellAllowlist: message.shellAllowlist,
+            shell: message.shell,
+            catalog: message.catalog,
+            selection: message.selection,
+            emit,
+          })
+        : undefined;
+      await runtime.resume({
         ...message.command,
+        sessionId: message.sessionId,
         runId: message.runId,
+        ...(runContext ? { runContext } : {}),
       });
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -396,7 +466,14 @@ export class UtilityHost {
       postToParent({
         channel: "utility",
         kind: "event",
-        event: { type: "error", threadId, runId, ts: Date.now(), error },
+        event: {
+          type: "error",
+          threadId,
+          runId,
+          ts: Date.now(),
+          error,
+          ...(message.sessionId ? { chatSessionId: message.sessionId } : {}),
+        },
       });
     }
   }

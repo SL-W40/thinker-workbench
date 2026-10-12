@@ -10,6 +10,7 @@ export type SettingsSectionId =
   | "notifications"
   | "data"
   | "permissions"
+  | "agentLimits"
   | "browser"
   | "model"
   | "shortcuts";
@@ -54,6 +55,12 @@ const PERMISSIONS: SettingsSection = {
   descriptionKey: "settings.sections.permissions.description",
 };
 
+const AGENT_LIMITS: SettingsSection = {
+  id: "agentLimits",
+  titleKey: "settings.sections.agentLimits.title",
+  descriptionKey: "settings.sections.agentLimits.description",
+};
+
 const BROWSER: SettingsSection = {
   id: "browser",
   titleKey: "settings.sections.browser.title",
@@ -82,7 +89,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: "agent",
     labelKey: "settings.nav.groups.agent",
-    items: [PERMISSIONS, BROWSER, MODEL, SHORTCUTS],
+    items: [PERMISSIONS, AGENT_LIMITS, BROWSER, MODEL, SHORTCUTS],
   },
 ];
 
@@ -96,6 +103,7 @@ export function isSettingsSection(value: string | undefined): value is SettingsS
     value === "notifications" ||
     value === "data" ||
     value === "permissions" ||
+    value === "agentLimits" ||
     value === "browser" ||
     value === "model" ||
     value === "shortcuts"

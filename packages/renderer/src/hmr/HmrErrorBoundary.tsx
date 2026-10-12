@@ -1,9 +1,10 @@
 /**
  * 仅开发态使用：HMR / Fast Refresh 导致渲染抛错时自动 remount，避免 Electron 白屏只能硬刷新。
- * 生产包不应挂载本组件（见 RootApp）。
+ * 生产包不应挂载本组件（见 RootApp）。文案走 i18n（须包在 I18nProvider 内）。
  */
 import { Button, EmptyState, Spinner } from "@thinker-workbench/design/react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { useT } from "../i18n/useI18n";
 
 /** 同一错误连续自动 remount 的上限；超出后展示失败态。 */
 const MAX_AUTO_RETRIES = 2;
@@ -22,6 +23,76 @@ type State = {
   /** true = 不再自动重试，展示错误面板。 */
   stuck: boolean;
 };
+
+/** 自动 remount 中的过渡态。 */
+function HmrRecovering() {
+  const t = useT();
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        height: "100%",
+        padding: 24,
+        boxSizing: "border-box",
+        background: "var(--tw-bg, var(--bg, #f6f4ef))",
+        color: "var(--tw-fg-muted, var(--muted, #6b6560))",
+        fontFamily: "var(--tw-font-ui, system-ui, sans-serif)",
+        fontSize: 13,
+      }}
+      role="status"
+      aria-live="polite"
+    >
+      <Spinner size="md" label={t("hmr.recoveringLabel")} />
+      <p style={{ margin: 0 }}>{t("hmr.recovering")}</p>
+    </div>
+  );
+}
+
+/** 自动重试耗尽后的失败面板。 */
+function HmrStuckPanel({
+  message,
+  onReload,
+  onRetry,
+}: {
+  message: string;
+  onReload: () => void;
+  onRetry: () => void;
+}) {
+  const t = useT();
+  return (
+    <div
+      style={{
+        display: "grid",
+        placeItems: "center",
+        height: "100%",
+        padding: 32,
+        boxSizing: "border-box",
+        background: "var(--tw-bg, var(--bg, #f6f4ef))",
+        color: "var(--tw-fg, var(--ink, #2a2622))",
+      }}
+      role="alert"
+    >
+      <EmptyState
+        title={t("hmr.stuckTitle")}
+        description={t("hmr.stuckDescription", { message })}
+        action={
+          <>
+            <Button variant="primary" size="sm" onClick={onReload}>
+              {t("hmr.reload")}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onRetry}>
+              {t("hmr.retry")}
+            </Button>
+          </>
+        }
+      />
+    </div>
+  );
+}
 
 export class HmrErrorBoundary extends Component<Props, State> {
   state: State = { error: null, retries: 0, stuck: false };
@@ -62,58 +133,10 @@ export class HmrErrorBoundary extends Component<Props, State> {
     if (this.state.stuck) {
       const message = this.state.error.message?.trim() || String(this.state.error);
       return (
-        <div
-          style={{
-            display: "grid",
-            placeItems: "center",
-            height: "100%",
-            padding: 32,
-            boxSizing: "border-box",
-            background: "var(--tw-bg, var(--bg, #f6f4ef))",
-            color: "var(--tw-fg, var(--ink, #2a2622))",
-          }}
-          role="alert"
-        >
-          <EmptyState
-            title="界面未能恢复"
-            description={`${message}\n开发热更新出错时会出现此页；修代码后点重载即可。`}
-            action={
-              <>
-                <Button variant="primary" size="sm" onClick={this.hardReload}>
-                  重新加载
-                </Button>
-                <Button variant="ghost" size="sm" onClick={this.retryOnce}>
-                  再试一次
-                </Button>
-              </>
-            }
-          />
-        </div>
+        <HmrStuckPanel message={message} onReload={this.hardReload} onRetry={this.retryOnce} />
       );
     }
 
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          height: "100%",
-          padding: 24,
-          boxSizing: "border-box",
-          background: "var(--tw-bg, var(--bg, #f6f4ef))",
-          color: "var(--tw-fg-muted, var(--muted, #6b6560))",
-          fontFamily: "var(--tw-font-ui, system-ui, sans-serif)",
-          fontSize: 13,
-        }}
-        role="status"
-        aria-live="polite"
-      >
-        <Spinner size="md" label="正在恢复界面" />
-        <p style={{ margin: 0 }}>正在恢复界面…</p>
-      </div>
-    );
+    return <HmrRecovering />;
   }
 }

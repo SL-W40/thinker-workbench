@@ -97,20 +97,24 @@
   margin: 0;
   padding: 0 6px 6px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bg-tasks__list > li {
+  min-width: 0;
 }
 
 .bg-tasks__chip {
   appearance: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 100%;
+  width: 100%;
   margin: 0;
-  padding: 3px 8px 3px 6px;
+  padding: 4px 8px 4px 6px;
   border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.16)));
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg, var(--tw-bg, #fff));
   color: var(--ink, var(--tw-fg));
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

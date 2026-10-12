@@ -3,6 +3,7 @@
 import { Select, Switch } from "@thinker-workbench/design/react";
 import {
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
+  MAX_PARALLEL_RUNS_OPTIONS,
   SHELL_APPROVAL_MODES,
   WORKSPACE_ACCESS_OPTIONS,
   type ShellApprovalMode,
@@ -44,6 +45,15 @@ export function PermissionsSettingsForm({ active = true }: Props) {
         label: shellApprovalLabel(mode, t),
       })),
     [t],
+  );
+
+  const maxParallelOptions = useMemo(
+    () =>
+      MAX_PARALLEL_RUNS_OPTIONS.map((n) => ({
+        value: String(n),
+        label: String(n),
+      })),
+    [],
   );
 
   const shellProfileOptions = useMemo(() => {
@@ -110,6 +120,21 @@ export function PermissionsSettingsForm({ active = true }: Props) {
   return (
     <div className="settings-general">
       <ul className="settings-toggle-list">
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.maxParallelRuns.title")}</strong>
+            <span>{t("settings.general.maxParallelRuns.description")}</span>
+          </div>
+          <Select
+            className="settings-locale-select"
+            value={String(general.maxParallelRuns)}
+            options={maxParallelOptions}
+            aria-label={t("settings.general.maxParallelRuns.title")}
+            onChange={(value) =>
+              void patchGeneral({ maxParallelRuns: Number(value) })
+            }
+          />
+        </li>
         <li className="settings-toggle-row">
           <div className="settings-toggle-copy">
             <strong>{t("settings.general.workspaceAccess.title")}</strong>

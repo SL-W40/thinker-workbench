@@ -1,6 +1,7 @@
 /**
  * Agent 运行相关 IPC：run / cancel / resume / listThreads，
  * 并将 utilityProcess 事件广播到所有窗口；同步 SQLite run_status。
+ * 所有权按 sessionId/runId 寻址，不依赖 activeSession。
  */
 import {
   type AgentCancelCommand,
@@ -12,11 +13,9 @@ import {
   type LogRecord,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, type IpcMain } from "electron";
+import { admitRun, resolveSession, resolveSessionForCancel } from "../agent/runCoordinator";
 import {
   assertWorkspaceRoot,
-  getActiveSessionId,
-  getActiveWorkspaceRoot,
-  getSession,
   getSessionByThreadId,
   getWorkspace,
   healRunningSessions,
@@ -28,35 +27,13 @@ import { setDesktopLogBroadcast, writeAgentLogRecord, writeAppLogRecord } from "
 import { handleAgentAttention } from "../notify/agentAttention";
 import { handleHitlAgentEvent, respondHitl } from "../notify/hitlNotify";
 import type { AgentBridge } from "../utility/AgentBridge";
+import { flushPendingMcpReload } from "./mcpHandlers";
 import { broadcastThreadsChanged } from "./workspacesHandlers";
 
 function broadcastLog(record: LogRecord): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(IpcChannels.logEvent, record);
   }
-}
-
-const NO_WORKSPACE_ERROR =
-  "No workspace open. Open a workspace and start a chat before sending.";
-
-/** 解析本轮工作区根：命令显式 > 活动会话所属工作空间。 */
-function resolveWorkspaceRoot(explicit?: string): string | undefined {
-  if (explicit?.trim()) {
-    try {
-      return assertWorkspaceRoot(explicit.trim());
-    } catch {
-      return undefined;
-    }
-  }
-  return getActiveWorkspaceRoot() ?? undefined;
-}
-
-/** 活动会话所属工作区显示名。 */
-function resolveWorkspaceName(): string | undefined {
-  const sid = getActiveSessionId();
-  const session = sid ? getSession(sid) : null;
-  if (!session?.workspaceId) return undefined;
-  return getWorkspace(session.workspaceId)?.name;
 }
 
 /**
@@ -81,27 +58,39 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   bridge.onEvent((event) => {
     handleAgentAttention(event);
     handleHitlAgentEvent(event, bridge);
+
+    // 广播前尽量补上 chatSessionId，便于 renderer 按会话路由
+    const chatSessionId =
+      event.chatSessionId?.trim() ||
+      getSessionByThreadId(event.threadId)?.id ||
+      undefined;
+    const enriched =
+      chatSessionId && !event.chatSessionId
+        ? { ...event, chatSessionId }
+        : event;
+
     for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(IpcChannels.agentEvent, event);
+      win.webContents.send(IpcChannels.agentEvent, enriched);
     }
 
     try {
-      if (event.type === "done") {
-        setSessionRunStatus(event.threadId, "idle", {
+      if (enriched.type === "done") {
+        setSessionRunStatus(enriched.threadId, "idle", {
           byThread: true,
           activeRunId: null,
           interruptReason: null,
         });
         broadcastThreadsChanged();
-      } else if (event.type === "error") {
-        const cancelled = /cancel/i.test(event.error);
+        flushPendingMcpReload(bridge);
+      } else if (enriched.type === "error") {
+        const cancelled = /cancel/i.test(enriched.error);
         const crashed =
           /utilityProcess exited|ready timeout|Process exited|EPIPE|\bcrash\b/i.test(
-            event.error,
+            enriched.error,
           );
         // 手动取消 → cancelled；进程异常 → crashed（可 Resume）；其它 → failed
         setSessionRunStatus(
-          event.threadId,
+          enriched.threadId,
           cancelled ? "cancelled" : crashed ? "crashed" : "failed",
           {
             byThread: true,
@@ -110,10 +99,11 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
               ? "cancelled"
               : crashed
                 ? "crash"
-                : event.error,
+                : enriched.error,
           },
         );
         broadcastThreadsChanged();
+        flushPendingMcpReload(bridge);
       }
     } catch {
       /* 落库失败不阻断事件 */
@@ -126,51 +116,56 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
         ? { message: payload }
         : {
             message: payload?.message ?? "",
+            sessionId: payload?.sessionId,
             threadId: payload?.threadId,
             history: payload?.history,
             traceId: payload?.traceId,
             workspaceRoot: payload?.workspaceRoot,
             workspaceName: payload?.workspaceName,
+            contextPaths: payload?.contextPaths,
           };
 
-    const workspaceRoot = resolveWorkspaceRoot(command.workspaceRoot);
-    if (!workspaceRoot) {
-      return { ok: false as const, error: NO_WORKSPACE_ERROR };
+    const admitted = admitRun({
+      sessionId: command.sessionId,
+      threadId: command.threadId,
+      workspaceRoot: command.workspaceRoot,
+      workspaceName: command.workspaceName,
+    });
+    if (!admitted.ok) {
+      return { ok: false as const, error: admitted.error };
     }
-    const workspaceName = command.workspaceName?.trim() || resolveWorkspaceName();
-    const activeSessionId = getActiveSessionId();
-    const activeSession = activeSessionId ? getSession(activeSessionId) : null;
-    const threadId = command.threadId?.trim() || activeSession?.threadId;
-    const workspaceId = activeSession?.workspaceId;
 
-    // 若尚无会话且有活动工作空间，先 upsert 占位以便落库 run_status
-    if (threadId && workspaceId) {
-      try {
-        upsertSessionForRun({
-          threadId,
-          workspaceId,
-          titleHint: command.message,
-          runStatus: "running",
-        });
-      } catch {
-        /* ignore */
-      }
+    try {
+      upsertSessionForRun({
+        threadId: admitted.threadId,
+        workspaceId: admitted.session.workspaceId,
+        titleHint: command.message,
+        runStatus: "running",
+      });
+    } catch {
+      /* ignore */
     }
 
     return bridge.run({
       ...command,
-      threadId,
-      workspaceRoot,
-      workspaceName,
+      sessionId: admitted.session.id,
+      threadId: admitted.threadId,
+      workspaceRoot: admitted.workspaceRoot,
+      workspaceName: admitted.workspaceName,
     });
   });
 
   ipcMain.handle(IpcChannels.agentCancel, async (_evt, payload?: AgentCancelCommand | string) => {
-    const runId = typeof payload === "string" ? payload : payload?.runId;
-    bridge.cancel(runId?.trim() ? runId : undefined);
-    // 取消保留 checkpoint，标 cancelled，供时间线「继续」
-    const activeId = getActiveSessionId();
-    const session = activeId ? getSession(activeId) : null;
+    const runId =
+      typeof payload === "string" ? payload.trim() : payload?.runId?.trim() ?? "";
+    const sessionId =
+      typeof payload === "string" ? undefined : payload?.sessionId?.trim();
+    if (!runId) {
+      // 禁止 cancel-all：必须带 runId
+      return;
+    }
+    bridge.cancel(runId);
+    const session = resolveSessionForCancel({ runId, sessionId });
     if (session) {
       setSessionRunStatus(session.id, "cancelled", {
         activeRunId: null,
@@ -189,20 +184,32 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   });
 
   ipcMain.handle(IpcChannels.agentResume, async (_evt, command: AgentResumeCommand) => {
-    const workspaceRoot = resolveWorkspaceRoot();
+    const session = resolveSession(command.sessionId, command.threadId);
+    if (!session) {
+      return { ok: false as const, error: "Session not found for resume." };
+    }
+    const workspace = getWorkspace(session.workspaceId);
+    let workspaceRoot: string | undefined;
+    try {
+      if (workspace?.rootPath) workspaceRoot = assertWorkspaceRoot(workspace.rootPath);
+    } catch {
+      workspaceRoot = undefined;
+    }
     if (!workspaceRoot) {
-      return { ok: false as const, error: NO_WORKSPACE_ERROR };
+      return {
+        ok: false as const,
+        error: "No workspace open. Open a workspace and start a chat before sending.",
+      };
     }
-    const workspaceName = command.workspaceName?.trim() || resolveWorkspaceName();
-    const session = getSessionByThreadId(command.threadId);
-    if (session) {
-      setSessionRunStatus(session.id, "running", {
-        interruptReason: null,
-      });
-      broadcastThreadsChanged();
-    }
+    const workspaceName = command.workspaceName?.trim() || workspace?.name;
+    setSessionRunStatus(session.id, "running", {
+      interruptReason: null,
+    });
+    broadcastThreadsChanged();
     return bridge.resume({
       ...command,
+      sessionId: session.id,
+      threadId: session.threadId,
       workspaceRoot,
       workspaceName,
     });
@@ -212,9 +219,17 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
     const contextPaths = Array.isArray(payload?.contextPaths)
       ? payload.contextPaths.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
       : undefined;
+    let workspaceRoot: string | undefined;
+    if (payload?.workspaceRoot?.trim()) {
+      try {
+        workspaceRoot = assertWorkspaceRoot(payload.workspaceRoot.trim());
+      } catch {
+        workspaceRoot = undefined;
+      }
+    }
     const request: ContextUsageRequest = {
       messages: Array.isArray(payload?.messages) ? payload.messages : [],
-      workspaceRoot: resolveWorkspaceRoot(payload?.workspaceRoot),
+      workspaceRoot,
       ...(contextPaths?.length ? { contextPaths } : {}),
     };
     return bridge.getContextUsage(request);

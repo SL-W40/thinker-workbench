@@ -26,9 +26,9 @@ function DevHmrShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** 根树：主题 / 外观 / i18n / App；开发态外加 HMR remount 兜底。 */
+/** 根树：主题 / 外观 / i18n / App；开发态在 i18n 内侧加 HMR remount 兜底（文案需 locale）。 */
 export function RootApp() {
-  const tree = (
+  return (
     <StrictMode>
       <ThemeProvider theme={boot.theme}>
         <AppearanceProvider
@@ -36,12 +36,16 @@ export function RootApp() {
           initialCustomThemes={boot.customThemes}
         >
           <I18nProvider>
-            <App />
+            {import.meta.env.DEV ? (
+              <DevHmrShell>
+                <App />
+              </DevHmrShell>
+            ) : (
+              <App />
+            )}
           </I18nProvider>
         </AppearanceProvider>
       </ThemeProvider>
     </StrictMode>
   );
-
-  return import.meta.env.DEV ? <DevHmrShell>{tree}</DevHmrShell> : tree;
 }

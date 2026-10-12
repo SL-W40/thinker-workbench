@@ -11,6 +11,7 @@ import {
   type TraceSpanStatus,
 } from "@thinker-workbench/shared";
 import { getGeneralSettings } from "../config/settingsStore";
+import { isSessionArtifactsPurged } from "../db/sessionArtifacts";
 import { appendPayload } from "./sessionJsonl";
 import { getSpan, insertSpanStart, updateSpanEnd, upsertSession } from "./traceDb";
 import { limitsFromGeneral, truncateForTrace } from "./truncate";
@@ -48,6 +49,8 @@ export function startTraceSpan(input: StartSpanInput): string {
   const spanId = input.spanId?.trim() || createSpanId();
   if (!enabled()) return spanId;
   if (!input.sessionId.trim()) return spanId;
+  // 聊天已删：忽略迟到写入，避免 Trace 会话「删了又回来」
+  if (isSessionArtifactsPurged(input.sessionId)) return spanId;
 
   const limits = limitsFromGeneral(getGeneralSettings());
   const startTs = input.startTs ?? Date.now();
@@ -122,6 +125,7 @@ export function endTraceSpan(
   const prev = getSpan(spanId);
   const sessionId = patch.sessionId ?? prev?.sessionId;
   if (!sessionId) return;
+  if (isSessionArtifactsPurged(sessionId)) return;
 
   const limits = limitsFromGeneral(getGeneralSettings());
   const endTs = patch.endTs ?? Date.now();

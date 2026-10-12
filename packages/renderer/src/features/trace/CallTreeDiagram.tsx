@@ -21,6 +21,7 @@ import {
   callTreeLabel,
   formatDuration,
   spanDurationMs,
+  spanTurn,
   type CallTreeRow,
 } from "./callTreeModel";
 
@@ -140,6 +141,13 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
     const s = row.span;
     const selected = s.spanId === selectedSpanId;
     const label = callTreeLabel(s);
+    const turn = spanTurn(s);
+    const statusClass =
+      s.status === "cancelled"
+        ? " is-cancelled"
+        : s.status === "error"
+          ? " is-error"
+          : "";
     const dur = spanDurationMs(s);
     const left = ((s.startTs - tMin) / totalMs) * 100;
     const width = Math.max(0.15, (dur / totalMs) * 100);
@@ -147,7 +155,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
     return (
       <div
         key={s.spanId}
-        className={`trace-calltree__row${selected ? " is-selected" : ""}${row.hasKids ? " is-expandable" : ""}`}
+        className={`trace-calltree__row${selected ? " is-selected" : ""}${row.hasKids ? " is-expandable" : ""}${statusClass}`}
         onClick={() => onSelect(s.spanId)}
       >
         <div className="trace-calltree__label" style={{ paddingLeft: pad }}>
@@ -178,6 +186,11 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
             ) : null}
           </button>
           <span className="trace-calltree__kind">{s.kind}</span>
+          {turn != null ? (
+            <span className="trace-calltree__turn" title={`turn ${turn}`}>
+              T{turn}
+            </span>
+          ) : null}
           <span className="trace-calltree__name" title={label}>
             {label}
           </span>
@@ -214,9 +227,15 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
       <div className="trace-calltree__body">
         {chunks.map((chunk, i) => {
           if (chunk.type === "par") {
+            // 只缩进横幅文案；子行保留绝对 depth，避免把树缩进「弄没」
+            const parDepth = Math.min(...chunk.rows.map((r) => r.depth));
+            const bannerPad = 8 + Math.max(0, parDepth) * 14;
             return (
               <div key={`par-${chunk.key}`} className="trace-calltree__par-band">
-                <div className="trace-calltree__par-banner">
+                <div
+                  className="trace-calltree__par-banner"
+                  style={{ paddingLeft: bannerPad }}
+                >
                   {t("tools.trace.scopePar")} · {chunk.size}
                 </div>
                 {chunk.tasks.map((task) => (

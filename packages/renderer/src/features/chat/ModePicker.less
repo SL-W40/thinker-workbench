@@ -157,6 +157,13 @@
   line-height: 1.4;
   text-align: left;
   color: var(--ink-muted, #6b655c);
+  /* 最多两行，超出省略；完整说明见触发器 title / 悬停 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .composer-mode-menu__check,

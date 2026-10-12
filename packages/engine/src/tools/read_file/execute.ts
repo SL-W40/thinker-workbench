@@ -2,6 +2,7 @@
  * read_file 实现：读取工作区内文本文件（整文件或行区间）。
  */
 import { readFile, stat } from "node:fs/promises";
+import { getReadFileDefaultMaxChars } from "../../config/runtimeLimits";
 import {
   assertRangeInFile,
   formatNumberedSlice,
@@ -11,8 +12,6 @@ import {
 import { resolveWorkspacePath, toWorkspaceRelative } from "../shared/paths";
 import { throwIfAborted } from "../shared/walk";
 import type { ToolArgs, ToolContext } from "../types";
-
-const DEFAULT_MAX_CHARS = 120_000;
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -61,7 +60,7 @@ export async function readFileTool(args: ToolArgs, ctx: ToolContext): Promise<st
     return `${header}\n\n${body}`;
   }
 
-  const maxChars = asPositiveInt(args.max_chars, DEFAULT_MAX_CHARS);
+  const maxChars = asPositiveInt(args.max_chars, getReadFileDefaultMaxChars());
   const shown = text.length > maxChars ? text.slice(0, maxChars) : text;
   const truncated = text.length > maxChars;
 

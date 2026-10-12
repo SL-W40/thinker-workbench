@@ -44,6 +44,7 @@ type Props = {
   workspaceRoot?: string | null;
   workspaceId?: string | null;
   sessionId?: string | null;
+  threadId?: string | null;
   messages?: ChatMessage[];
   gateMessage?: string | null;
   onOpenWorkspace?: () => void;
@@ -134,6 +135,7 @@ export function Composer({
   workspaceRoot = null,
   workspaceId = null,
   sessionId = null,
+  threadId = null,
   messages = [],
   gateMessage,
   onOpenWorkspace,
@@ -364,7 +366,10 @@ export function Composer({
 
   return (
     <footer className="composer-dock">
-      <BackgroundTasksBar onOpenTerminal={onOpenTerminal} />
+      <BackgroundTasksBar
+        threadId={threadId ?? undefined}
+        onOpenTerminal={onOpenTerminal}
+      />
       {gateMessage ? (
         <Callout
           tone="warning"

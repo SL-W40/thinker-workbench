@@ -18,9 +18,6 @@ export type CompiledGraph<S> = {
   edges: Record<string, EdgeFn<S> | string>;
 };
 
-/** 单次 run 内 agent↔tools 迭代的安全上限，防止死循环烧额度。 */
-export const MAX_AGENT_STEPS = 16;
-
 /** 图在一次 run 中累积的可变状态。 */
 export type GraphState = {
   /** 本轮用户原始消息。 */

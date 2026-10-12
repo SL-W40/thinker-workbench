@@ -112,6 +112,32 @@ function samePath(a: string, b: string): boolean {
     : na === nb;
 }
 
+/**
+ * 数据根 / 权威 settings / 固定引导 settings 的绝对路径一览。
+ * @param configured 省略=当前已生效；传入则按该配置串解析（可预览草稿）。
+ */
+export function describeDataDirPaths(configured?: string): {
+  dataDir: string;
+  settingsPath: string;
+  bootstrapSettingsPath: string;
+  sameAsBootstrap: boolean;
+} {
+  const dataDir =
+    configured === undefined
+      ? cached
+        ? resolveDataDir(cached.general.dataDir)
+        : peekDataDirFromBootstrap()
+      : resolveDataDir(typeof configured === "string" ? configured : "");
+  const settings = path.join(dataDir, "settings.json");
+  const bootstrap = bootstrapSettingsPath();
+  return {
+    dataDir,
+    settingsPath: settings,
+    bootstrapSettingsPath: bootstrap,
+    sameAsBootstrap: samePath(settings, bootstrap),
+  };
+}
+
 /** 从引导文件窥探 dataDir（加载缓存前用）。 */
 function peekDataDirFromBootstrap(): string {
   try {

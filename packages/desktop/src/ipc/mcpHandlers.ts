@@ -7,6 +7,7 @@ import {
   type McpServerUpsertInput,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, dialog, type IpcMain } from "electron";
+import { canReloadMcpNow } from "../agent/resourceGovernor";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { pushAgentHello } from "../utility/startAgentProcess";
 import {
@@ -17,9 +18,13 @@ import {
   setMcpEnabled,
   upsertMcpConfig,
 } from "../mcp/mcpStore";
+import { desktopLog } from "../log/setup";
 
 /** 缓存 engine 推送的运行时状态。 */
 const statusById = new Map<string, McpServerRuntimeStatus>();
+
+/** running 期间延后的 MCP reload。 */
+let mcpReloadPending = false;
 
 /** 向所有窗口广播状态。 */
 export function broadcastMcpStatus(status: McpServerRuntimeStatus): void {
@@ -35,7 +40,28 @@ export function handleMcpStatusFromAgent(status: McpServerRuntimeStatus): void {
   broadcastMcpStatus(status);
 }
 
+/**
+ * 有 running 会话时不立刻 reload（避免拆掉在途 MCP 调用），标记待应用；
+ * 空闲时立即下发。
+ */
 function reloadMcpOnAgent(bridge: AgentBridge): void {
+  if (!canReloadMcpNow()) {
+    mcpReloadPending = true;
+    desktopLog("mcp").info("reload deferred: sessions running");
+    return;
+  }
+  flushMcpReload(bridge);
+}
+
+/** 在无 running 时冲刷延后的 MCP 配置（可由 agent done 后调用）。 */
+export function flushPendingMcpReload(bridge: AgentBridge): void {
+  if (!mcpReloadPending) return;
+  if (!canReloadMcpNow()) return;
+  flushMcpReload(bridge);
+}
+
+function flushMcpReload(bridge: AgentBridge): void {
+  mcpReloadPending = false;
   const servers = listEnabledMcpConfigs();
   try {
     bridge.send({ channel: "utility", kind: "mcpReload", mcpServers: servers });

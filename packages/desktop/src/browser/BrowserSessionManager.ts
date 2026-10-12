@@ -66,8 +66,12 @@ class BrowserSessionManager {
       url: wc && !wc.isDestroyed() ? wc.getURL() : ABOUT_BLANK,
       title: wc && !wc.isDestroyed() ? wc.getTitle() : "",
       loading: this.loading,
-      canGoBack: Boolean(wc && !wc.isDestroyed() && wc.canGoBack()),
-      canGoForward: Boolean(wc && !wc.isDestroyed() && wc.canGoForward()),
+      canGoBack: Boolean(
+        wc && !wc.isDestroyed() && wc.navigationHistory.canGoBack(),
+      ),
+      canGoForward: Boolean(
+        wc && !wc.isDestroyed() && wc.navigationHistory.canGoForward(),
+      ),
       locked: this.locked,
       visible: this.visible && this.bounds.width > 0 && this.bounds.height > 0,
       viewportWidth: this.viewportWidth || this.bounds.width,
@@ -258,14 +262,16 @@ class BrowserSessionManager {
 
   async goBack(): Promise<BrowserState> {
     const view = this.ensureView();
-    if (view.webContents.canGoBack()) view.webContents.goBack();
+    const history = view.webContents.navigationHistory;
+    if (history.canGoBack()) history.goBack();
     this.emitState();
     return this.getState();
   }
 
   async goForward(): Promise<BrowserState> {
     const view = this.ensureView();
-    if (view.webContents.canGoForward()) view.webContents.goForward();
+    const history = view.webContents.navigationHistory;
+    if (history.canGoForward()) history.goForward();
     this.emitState();
     return this.getState();
   }

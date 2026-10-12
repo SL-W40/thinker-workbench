@@ -22,10 +22,13 @@ import { agentLog } from "../log/setup";
 import { formatErrorMessage } from "../model/retry";
 import { ThreadStore } from "../session/ThreadStore";
 import { agentEndSpan, agentStartSpan, configureAgentTrace } from "../trace/emit";
-import { setWorkspaceRoot } from "../workspace";
+import { getWorkspaceRootOrNull, setWorkspaceRoot } from "../workspace";
+import { buildRunContext } from "./buildRunContext";
 import { EventBus } from "./EventBus";
+import { runWithContext, type RunContext } from "./runContext";
+import { registerRun, unregisterRun } from "./runRegistry";
 import { RunController } from "./RunController";
-import { bindRuntimeEmitter, withRunEmitter } from "./runEmit";
+import { bindRuntimeEmitter } from "./runEmit";
 import type { AgentRuntimeOptions, RunRequest } from "./types";
 
 export class AgentRuntime {
@@ -83,7 +86,13 @@ export class AgentRuntime {
   }
 
   /** 从 checkpoint 恢复：进程崩溃留下的中途快照沿边续跑。 */
-  async resume(command: AgentResumeCommand & { runId?: string; traceId?: string }): Promise<void> {
+  async resume(
+    command: AgentResumeCommand & {
+      runId?: string;
+      traceId?: string;
+      runContext?: RunContext;
+    },
+  ): Promise<void> {
     const threadId = command.threadId.trim();
     const runId = command.runId?.trim() || createRunId();
     const traceId = command.traceId?.trim() || createTraceId();
@@ -115,6 +124,31 @@ export class AgentRuntime {
 
     const controller = new RunController(runId, threadId);
     this.active.set(runId, controller);
+    const sessionId = command.sessionId?.trim() || undefined;
+    const emit = bindRuntimeEmitter((e) => this.emit(e), threadId, runId, sessionId);
+    const runCtx =
+      command.runContext ??
+      buildRunContext({
+        runId,
+        threadId,
+        sessionId,
+        workspaceRoot: getWorkspaceRootOrNull() ?? "",
+        emit,
+      });
+    if (!runCtx.workspaceRoot.trim()) {
+      this.emit({
+        type: "error",
+        threadId,
+        runId,
+        ts: Date.now(),
+        error: "No workspace root configured. Open a workspace before chatting.",
+        ...(sessionId ? { chatSessionId: sessionId } : {}),
+      });
+      this.active.delete(runId);
+      return;
+    }
+    runCtx.emit = emit;
+    registerRun({ context: runCtx, controller });
     const runSpanId = agentStartSpan({
       name: "run",
       kind: "graph",
@@ -124,25 +158,22 @@ export class AgentRuntime {
 
     try {
       const text = await withLogContextAsync({ source: "agent", traceId, threadId, runId }, () =>
-        withRunEmitter(
-          bindRuntimeEmitter((e) => this.emit(e), threadId, runId),
-          async () => {
-            log.info("start", {
-              ...ids,
-              meta: {
-                fromNode: checkpoint.nodeId,
-                startNode: startNodeId,
-              },
-            });
-            return this.runLoop(state, startNodeId, {
-              threadId,
-              runId,
-              controller,
-              log,
-              ids,
-            });
-          },
-        ),
+        runWithContext(runCtx, async () => {
+          log.info("start", {
+            ...ids,
+            meta: {
+              fromNode: checkpoint.nodeId,
+              startNode: startNodeId,
+            },
+          });
+          return this.runLoop(state, startNodeId, {
+            threadId,
+            runId,
+            controller,
+            log,
+            ids,
+          });
+        }),
       );
 
       await this.checkpointer.clear?.(threadId);
@@ -156,6 +187,7 @@ export class AgentRuntime {
         runId,
         ts: Date.now(),
         text,
+        ...(sessionId ? { chatSessionId: sessionId } : {}),
       });
     } catch (err) {
       const error = formatErrorMessage(err);
@@ -174,9 +206,11 @@ export class AgentRuntime {
         runId,
         ts: Date.now(),
         error,
+        ...(sessionId ? { chatSessionId: sessionId } : {}),
       });
     } finally {
       this.active.delete(runId);
+      unregisterRun(runId);
     }
   }
 
@@ -204,6 +238,7 @@ export class AgentRuntime {
       });
       return;
     }
+    // 进程默认根仅作 contextUsage 等无 ALS 路径；本 run 以 RunContext 为准
     try {
       setWorkspaceRoot(command.workspaceRoot, { name: command.workspaceName });
     } catch (err) {
@@ -214,6 +249,7 @@ export class AgentRuntime {
         runId,
         ts: Date.now(),
         error,
+        ...(command.sessionId ? { chatSessionId: command.sessionId } : {}),
       });
       return;
     }
@@ -226,6 +262,7 @@ export class AgentRuntime {
         runId,
         ts: Date.now(),
         error: "Message is empty.",
+        ...(command.sessionId ? { chatSessionId: command.sessionId } : {}),
       });
       return;
     }
@@ -235,6 +272,21 @@ export class AgentRuntime {
 
     const controller = new RunController(runId, threadId);
     this.active.set(runId, controller);
+    const sessionId = command.sessionId?.trim() || undefined;
+    const emit = bindRuntimeEmitter((e) => this.emit(e), threadId, runId, sessionId);
+    const runCtx =
+      command.runContext ??
+      buildRunContext({
+        runId,
+        threadId,
+        sessionId,
+        workspaceRoot: command.workspaceRoot.trim(),
+        workspaceName: command.workspaceName,
+        emit,
+        route: { userText: message, contextPaths: command.contextPaths },
+      });
+    runCtx.emit = emit;
+    registerRun({ context: runCtx, controller });
 
     const runSpanId = agentStartSpan({
       name: "run",
@@ -245,29 +297,26 @@ export class AgentRuntime {
 
     try {
       const text = await withLogContextAsync({ source: "agent", traceId, threadId, runId }, () =>
-        withRunEmitter(
-          bindRuntimeEmitter((e) => this.emit(e), threadId, runId),
-          async () => {
-            const history = (command.history ?? [])
-              .filter((m) => m.role === "user" || m.role === "assistant")
-              .map((m) => ({ role: m.role, content: m.content }));
-            log.info("start", {
-              ...ids,
-              meta: {
-                ...withTextPreview(message, "message", PREVIEW_BODY_CHARS),
-                historyTurns: history.length,
-              },
-            });
-            const state = initialState(message, history, command.contextPaths);
-            return this.runLoop(state, this.graph.start, {
-              threadId,
-              runId,
-              controller,
-              log,
-              ids,
-            });
-          },
-        ),
+        runWithContext(runCtx, async () => {
+          const history = (command.history ?? [])
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({ role: m.role, content: m.content }));
+          log.info("start", {
+            ...ids,
+            meta: {
+              ...withTextPreview(message, "message", PREVIEW_BODY_CHARS),
+              historyTurns: history.length,
+            },
+          });
+          const state = initialState(message, history, command.contextPaths);
+          return this.runLoop(state, this.graph.start, {
+            threadId,
+            runId,
+            controller,
+            log,
+            ids,
+          });
+        }),
       );
 
       await this.checkpointer.clear?.(threadId);
@@ -281,6 +330,7 @@ export class AgentRuntime {
         runId,
         ts: Date.now(),
         text,
+        ...(sessionId ? { chatSessionId: sessionId } : {}),
       });
     } catch (err) {
       const error = formatErrorMessage(err);
@@ -299,9 +349,11 @@ export class AgentRuntime {
         runId,
         ts: Date.now(),
         error,
+        ...(sessionId ? { chatSessionId: sessionId } : {}),
       });
     } finally {
       this.active.delete(runId);
+      unregisterRun(runId);
     }
   }
 

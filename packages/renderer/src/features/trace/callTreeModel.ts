@@ -126,39 +126,105 @@ function titleFromAttrs(s: TraceSpanRecord): string {
   return typeof t === "string" ? t.trim() : "";
 }
 
-/** 追踪树行标题。 */
+/** 从 attrs.turn 取轮次；无效则 undefined。 */
+export function spanTurn(s: TraceSpanRecord): number | undefined {
+  const raw = s.attrs?.turn;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+    const n = Number(raw.trim());
+    return n > 0 ? n : undefined;
+  }
+  return undefined;
+}
+
+/** 无 runId 的 span 归入此桶。 */
+export const UNKNOWN_RUN_ID = "_";
+
+/** 按 runId 分组后的一棵树。 */
+export type TraceRunGroup = {
+  runId: string;
+  spans: TraceSpanRecord[];
+  /** 组内最早 startTs。 */
+  startTs: number;
+};
+
+/** 按 runId 分组；缺省 run 归 UNKNOWN_RUN_ID；按 startTs 升序。 */
+export function groupSpansByRun(spans: TraceSpanRecord[]): TraceRunGroup[] {
+  const map = new Map<string, TraceSpanRecord[]>();
+  for (const s of spans) {
+    const key = s.runId?.trim() || UNKNOWN_RUN_ID;
+    const list = map.get(key) ?? [];
+    list.push(s);
+    map.set(key, list);
+  }
+  const groups: TraceRunGroup[] = [...map.entries()].map(([runId, list]) => ({
+    runId,
+    spans: list,
+    startTs: Math.min(...list.map((x) => x.startTs)),
+  }));
+  groups.sort((a, b) => a.startTs - b.startTs || a.runId.localeCompare(b.runId));
+  return groups;
+}
+
+/** 树行标签最大长度（完整 summary 留给右侧详情）。 */
+const LABEL_MAX = 48;
+
+function clipLabel(text: string, max = LABEL_MAX): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  if (t.length <= max) return t;
+  return `${t.slice(0, Math.max(1, max - 1))}…`;
+}
+
+/** 无更好结构字段时，从 summary 抽短片段。 */
+function shortFromSummary(summary: string): string {
+  const s = summary.replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  const head = s.split("·")[0]?.trim() || s;
+  return clipLabel(head);
+}
+
+/**
+ * 追踪树行短标题：优先 name / Task·title / tool / model id。
+ * Task/subagent 优先用采集侧写入的短 summary（勿被会话标题污染的 attrs.title 盖掉）。
+ * 长文 summary 不贴进树；详情栏另展全文。
+ */
 export function callTreeLabel(s: TraceSpanRecord): string {
   const tt = titleFromAttrs(s);
   const name = (s.name || "").trim();
   const summary = (s.summary || "").replace(/\s+/g, " ").trim();
 
   if (isTaskTool(s)) {
-    if (summary.startsWith("Task")) return summary;
-    return tt ? `Task · ${tt}` : summary || "Task";
+    // 形如 "Task · Engine 包深度探索"
+    if (/^Task\s*·/i.test(summary)) return clipLabel(summary);
+    if (tt) return clipLabel(`Task · ${tt}`);
+    return "Task";
   }
   if (s.kind === "subagent") {
-    if (summary.includes("·")) return summary;
     const agent = name.replace(/^subagent:/i, "") || "subagent";
-    return tt ? `${agent} · ${tt}` : summary || agent;
+    // 形如 "explorer · Engine 包深度探索"
+    if (summary.includes("·")) return clipLabel(summary);
+    if (tt) return clipLabel(`${agent} · ${tt}`);
+    return clipLabel(agent);
   }
   if (s.kind === "model") {
-    if (/^model\.candidate/i.test(name) || summary.startsWith("model.candidate")) {
-      return summary || name;
+    if (/^model\.candidate/i.test(name)) {
+      return clipLabel(name);
     }
-    if (summary.startsWith("model.chat")) return summary;
-    const m = summary.match(/mdl_[\w]+/) || name.match(/mdl_[\w]+/);
+    const m = name.match(/mdl_[\w]+/) || summary.match(/mdl_[\w]+/);
     return m ? `model.chat · ${m[0]}` : "model.chat";
   }
   if (s.kind === "tool") {
-    return name.replace(/^tool:/i, "") || summary || "tool";
+    return clipLabel(name.replace(/^tool:/i, "") || "tool");
   }
   if (s.kind === "graph") {
-    return name.replace(/^graph\./i, "graph.") || summary || name;
+    return clipLabel(name.replace(/^graph\./i, "graph.") || name || "graph");
   }
-  if (s.kind === "other" || /^(runtime|context|checkpoint|mcp)\./i.test(name)) {
-    return summary || name || s.spanId;
-  }
-  return summary || name || s.spanId;
+  if (name) return clipLabel(name);
+  if (tt) return clipLabel(tt);
+  return clipLabel(shortFromSummary(summary) || s.spanId);
 }
 
 export function spanDurationMs(s: TraceSpanRecord): number {

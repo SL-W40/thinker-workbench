@@ -4,9 +4,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-
-const MAX_FILE_BYTES = 100 * 1024;
-const MAX_TOTAL_BYTES = 256 * 1024;
+import {
+  getContextFilesMaxFileBytes,
+  getContextFilesMaxTotalBytes,
+} from "../config/runtimeLimits";
 
 /** 规范化相对路径并限制在 workspace 内。 */
 function resolveSafe(workspaceRoot: string, rel: string): string | null {
@@ -65,7 +66,7 @@ export function loadContextFilesBlock(
       const dirPath = display.replace(/\/$/, "") || display;
       const listing = names.length ? names.join("\n") : "(empty)";
       const body = `${listing}\n`;
-      if (total + Buffer.byteLength(body, "utf8") > MAX_TOTAL_BYTES) {
+      if (total + Buffer.byteLength(body, "utf8") > getContextFilesMaxTotalBytes()) {
         parts.push(`<directory path="${dirPath}">\nskipped: total context budget exceeded\n</directory>`);
         continue;
       }
@@ -77,13 +78,13 @@ export function loadContextFilesBlock(
       parts.push(`<file path="${display}">\nskipped: not a file\n</file>`);
       continue;
     }
-    if (st.size > MAX_FILE_BYTES) {
+    if (st.size > getContextFilesMaxFileBytes()) {
       parts.push(
         `<file path="${display}">\nskipped: too large (${st.size} bytes)\n</file>`,
       );
       continue;
     }
-    if (total + st.size > MAX_TOTAL_BYTES) {
+    if (total + st.size > getContextFilesMaxTotalBytes()) {
       parts.push(`<file path="${display}">\nskipped: total context budget exceeded\n</file>`);
       continue;
     }

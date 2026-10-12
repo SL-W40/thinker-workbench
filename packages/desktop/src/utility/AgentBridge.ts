@@ -28,6 +28,10 @@ import {
   type UtilityToChild,
 } from "@thinker-workbench/shared";
 import type { UtilityProcess } from "electron";
+import {
+  releaseBrowserLease,
+  tryAcquireBrowserLease,
+} from "../agent/resourceGovernor";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
 import { getDataDir } from "../config/paths";
 import {
@@ -55,9 +59,11 @@ import { isUtilityToParent } from "./transfer";
 /** 等待终态的进行中 run。 */
 type PendingRun = {
   resolve: (result: RunResult) => void;
+  sessionId?: string;
   threadId: string;
   runId: string;
   traceId: string;
+  workspaceRoot?: string;
 };
 
 /** 等待 contextUsage 结果。 */
@@ -170,7 +176,13 @@ export class AgentBridge {
               workspaceId:
                 typeof attrs.workspaceId === "string" ? attrs.workspaceId : undefined,
               threadId: typeof attrs.threadId === "string" ? attrs.threadId : undefined,
-              title: typeof attrs.title === "string" ? attrs.title : undefined,
+              // 会话列表标题：优先 sessionTitle（emit 新键）；旧数据可能仍写在 title
+              title:
+                typeof attrs.sessionTitle === "string"
+                  ? attrs.sessionTitle
+                  : typeof attrs.title === "string"
+                    ? attrs.title
+                    : undefined,
               bumpRun: s.name === "run",
             });
           } else {
@@ -324,6 +336,14 @@ export class AgentBridge {
       }
     };
 
+    const runId = req.runId?.trim() ?? "";
+    if (runId && !tryAcquireBrowserLease(runId)) {
+      reply("error", {
+        error: "Browser is busy with another session. Wait or stop the other run.",
+      });
+      return;
+    }
+
     try {
       const result = await browserSessionManager.handleRequest(req);
       reply("result", {
@@ -332,6 +352,8 @@ export class AgentBridge {
       });
     } catch (err) {
       reply("error", { error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      if (runId) releaseBrowserLease(runId);
     }
   }
 
@@ -462,24 +484,43 @@ export class AgentBridge {
   }
 
   /**
-   * 取消指定 run，或未传 runId 时取消全部 pending。
+   * 取消指定 run（必须带 runId；禁止 cancel-all，避免误伤并行会话）。
    */
   cancel(runId?: string): void {
-    const targets = runId?.trim() ? [runId.trim()] : [...this.pending.keys()];
-    for (const id of targets) {
-      const pending = this.pending.get(id);
-      desktopLog("bridge").info("cancel", {
-        traceId: pending?.traceId,
-        runId: id,
-        threadId: pending?.threadId,
-      });
-      terminalSessionManager.killByRunId(id);
-      this.send({
-        channel: "utility",
-        kind: "cancel",
-        command: { runId: id },
-      });
+    const id = runId?.trim();
+    if (!id) {
+      desktopLog("bridge").warn("cancel ignored: runId required");
+      return;
     }
+    const pending = this.pending.get(id);
+    desktopLog("bridge").info("cancel", {
+      traceId: pending?.traceId,
+      runId: id,
+      threadId: pending?.threadId,
+      meta: pending?.sessionId ? { sessionId: pending.sessionId } : undefined,
+    });
+    terminalSessionManager.killByRunId(id);
+    this.send({
+      channel: "utility",
+      kind: "cancel",
+      command: { runId: id, sessionId: pending?.sessionId },
+    });
+  }
+
+  /** 取消某聊天会话下全部 in-flight run（删会话 / 清空工作区前调用）。 */
+  cancelRunsForSession(sessionId: string): void {
+    const id = sessionId.trim();
+    if (!id) return;
+    const runIds: string[] = [];
+    for (const [runId, p] of this.pending) {
+      if (p.sessionId === id) runIds.push(runId);
+    }
+    for (const runId of runIds) this.cancel(runId);
+  }
+
+  /** 按 runId 查 pending 元数据（供落库 / governor）。 */
+  getPendingRun(runId: string): PendingRun | undefined {
+    return this.pending.get(runId.trim());
   }
 
   /** hello / run / resume 共用的 shell 相关字段。 */
@@ -491,6 +532,24 @@ export class AgentBridge {
       shellApprovalMode: general.shellApprovalMode,
       shellAllowlist: general.shellAllowlist,
       shell: shellFactsForAgent(general.shellProfileId),
+    };
+  }
+
+  /** hello / run / resume 共用的运行时限额字段。 */
+  private runtimeLimitsPayload() {
+    const general = getGeneralSettings();
+    return {
+      maxAgentSteps: general.maxAgentSteps,
+      maxSubagentSteps: general.maxSubagentSteps,
+      modelRetryMaxAttempts: general.modelRetryMaxAttempts,
+      modelRetryBaseDelayMs: general.modelRetryBaseDelayMs,
+      defaultShellBlockUntilMs: general.defaultShellBlockUntilMs,
+      shellOutputCap: general.shellOutputCap,
+      mcpConnectTimeoutMs: general.mcpConnectTimeoutMs,
+      mcpCallTimeoutMs: general.mcpCallTimeoutMs,
+      contextFilesMaxFileBytes: general.contextFilesMaxFileBytes,
+      contextFilesMaxTotalBytes: general.contextFilesMaxTotalBytes,
+      readFileDefaultMaxChars: general.readFileDefaultMaxChars,
     };
   }
 
@@ -541,11 +600,12 @@ export class AgentBridge {
     const message = typeof command.message === "string" ? command.message : "";
     const log = desktopLog("bridge.run");
 
-    let sessionId: string | undefined;
+    let sessionId = command.sessionId?.trim() || undefined;
     let workspaceId: string | undefined;
     let sessionTitle: string | undefined;
     try {
-      const existing = getSessionByThreadId(threadId);
+      const existing =
+        (sessionId ? getSession(sessionId) : null) ?? getSessionByThreadId(threadId);
       const session = upsertSessionForRun({
         threadId,
         workspaceId: existing?.workspaceId,
@@ -565,16 +625,21 @@ export class AgentBridge {
     return new Promise<RunResult>((resolve) => {
       this.pending.set(runId, {
         resolve,
+        sessionId,
         threadId,
         runId,
         traceId,
+        workspaceRoot: command.workspaceRoot,
       });
       const general = getGeneralSettings();
       log.info("dispatch", {
         traceId,
         runId,
         threadId,
-        meta: withTextPreview(message, "message", PREVIEW_BODY_CHARS),
+        meta: {
+          ...withTextPreview(message, "message", PREVIEW_BODY_CHARS),
+          ...(sessionId ? { sessionId } : {}),
+        },
       });
       try {
         this.send({
@@ -587,12 +652,14 @@ export class AgentBridge {
           workspaceId,
           sessionTitle,
           command: {
+            sessionId,
             threadId,
             message,
             history: command.history,
             traceId,
             workspaceRoot: command.workspaceRoot,
             workspaceName: command.workspaceName,
+            contextPaths: command.contextPaths,
           },
           ...this.modelPayload(threadId),
           ...this.chatModePayload(threadId),
@@ -603,6 +670,7 @@ export class AgentBridge {
           allowAiDeleteFiles: general.allowAiDeleteFiles,
           ...this.shellPayload(),
           httpCompatibilityMode: general.httpCompatibilityMode,
+          ...this.runtimeLimitsPayload(),
           logTruncateLongContent: general.logTruncateLongContent,
           loggingEnabled: general.loggingEnabled,
           traceEnabled: general.traceEnabled,
@@ -660,9 +728,11 @@ export class AgentBridge {
     return new Promise<RunResult>((resolve) => {
       this.pending.set(runId, {
         resolve,
+        sessionId: command.sessionId?.trim() || sessionId,
         threadId,
         runId,
         traceId,
+        workspaceRoot: command.workspaceRoot,
       });
       log.info("dispatch", { traceId, runId, threadId });
       try {
@@ -670,10 +740,11 @@ export class AgentBridge {
           channel: "utility",
           kind: "resume",
           runId,
-          sessionId,
+          sessionId: command.sessionId?.trim() || sessionId,
           workspaceId,
           sessionTitle,
           command: {
+            sessionId: command.sessionId?.trim() || sessionId,
             threadId,
             workspaceName: command.workspaceName,
             traceId,
@@ -688,6 +759,7 @@ export class AgentBridge {
           allowAiDeleteFiles: general.allowAiDeleteFiles,
           ...this.shellPayload(),
           httpCompatibilityMode: general.httpCompatibilityMode,
+          ...this.runtimeLimitsPayload(),
           logTruncateLongContent: general.logTruncateLongContent,
           loggingEnabled: general.loggingEnabled,
           traceEnabled: general.traceEnabled,

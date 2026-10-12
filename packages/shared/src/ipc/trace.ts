@@ -139,6 +139,13 @@ export type ThinkerTraceApi = {
   endSpan(req: TraceEndSpanRequest): Promise<void>;
   /** 删除会话 Trace（索引 + jsonl）；不删聊天会话本身。 */
   deleteSession(sessionId: string): Promise<void>;
+  /**
+   * 导出会话排查 ZIP（spans / payloads / chat / manifest）。
+   * 成功返回保存路径；用户取消时 `error` 为 `"cancelled"`。
+   */
+  exportSession(
+    sessionId: string,
+  ): Promise<{ ok: true; path: string } | { ok: false; error: string }>;
 };
 
 /** 默认脱敏 key。 */

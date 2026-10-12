@@ -11,14 +11,16 @@ import type {
   McpServerRuntimeStatus,
   McpToolSummary,
 } from "@thinker-workbench/shared";
+import {
+  getMcpCallTimeoutMs,
+  getMcpConnectTimeoutMs,
+} from "../config/runtimeLimits";
 import { agentLog } from "../log/setup";
 import type { ChatToolDefinition } from "../model/types";
 import type { ToolArgs, ToolResult } from "../tools/types";
 import { mcpToolName, parseMcpToolName, sanitizeMcpPart } from "./names";
 import { normalizeMcpParameters } from "./schemaMap";
 
-const CONNECT_TIMEOUT_MS = 15_000;
-const CALL_TIMEOUT_MS = 60_000;
 const MAX_TOOLS_PER_SERVER = 64;
 const MAX_TOOLS_TOTAL = 128;
 
@@ -136,7 +138,10 @@ export class McpManager {
       await Promise.race([
         client.connect(transport),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("MCP connect timeout")), CONNECT_TIMEOUT_MS),
+          setTimeout(
+            () => reject(new Error("MCP connect timeout")),
+            getMcpConnectTimeoutMs(),
+          ),
         ),
       ]);
       const listed = await client.listTools();
@@ -227,7 +232,7 @@ export class McpManager {
         new Promise<never>((_, reject) => {
           const timer = setTimeout(
             () => reject(new Error("MCP call timeout")),
-            CALL_TIMEOUT_MS,
+            getMcpCallTimeoutMs(),
           );
           signal?.addEventListener(
             "abort",

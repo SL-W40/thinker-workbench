@@ -18,6 +18,7 @@ import {
 import {
   createId,
   MODEL_TAGS,
+  DEFAULT_CONTEXT_WINDOW,
   type ModelCatalogPublic,
   type ModelEntry,
   type ModelSelection,
@@ -59,6 +60,8 @@ type ModelForm = {
   model: string;
   label: string;
   tags: ModelTag[];
+  /** 上下文窗口（token）；表单用字符串便于编辑。 */
+  contextWindow: string;
   enabled: boolean;
   isNew: boolean;
 };
@@ -226,6 +229,7 @@ export function ModelSettingsForm() {
       model: "",
       label: "",
       tags: ["general"],
+      contextWindow: String(DEFAULT_CONTEXT_WINDOW),
       enabled: true,
       isNew: true,
     });
@@ -238,6 +242,11 @@ export function ModelSettingsForm() {
       model: m.model,
       label: m.label,
       tags: [...m.tags],
+      contextWindow: String(
+        typeof m.contextWindow === "number" && m.contextWindow > 0
+          ? m.contextWindow
+          : DEFAULT_CONTEXT_WINDOW,
+      ),
       enabled: m.enabled,
       isNew: false,
     });
@@ -248,6 +257,11 @@ export function ModelSettingsForm() {
     const tags = modelForm.tags.includes("general")
       ? modelForm.tags
       : (["general", ...modelForm.tags] as ModelTag[]);
+    const parsedWindow = Number(modelForm.contextWindow);
+    const contextWindow =
+      Number.isFinite(parsedWindow) && parsedWindow > 0
+        ? Math.floor(parsedWindow)
+        : DEFAULT_CONTEXT_WINDOW;
     setModels((prev) => {
       if (modelForm.isNew) {
         return [
@@ -259,6 +273,7 @@ export function ModelSettingsForm() {
             label: modelForm.label.trim(),
             tags,
             priority: prev.length,
+            contextWindow,
             enabled: modelForm.enabled,
             health: "ok",
           },
@@ -272,6 +287,7 @@ export function ModelSettingsForm() {
               model: modelForm.model.trim(),
               label: modelForm.label.trim(),
               tags,
+              contextWindow,
               enabled: modelForm.enabled,
             }
           : m,
@@ -695,6 +711,21 @@ export function ModelSettingsForm() {
                 placeholder={t("settings.model.modelPlaceholder")}
                 onChange={(e) =>
                   setModelForm((prev) => (prev ? { ...prev, model: e.target.value } : prev))
+                }
+              />
+            </Field>
+            <Field
+              label={t("settings.model.contextWindow")}
+              description={t("settings.model.contextWindowHint")}
+            >
+              <Input
+                type="number"
+                value={modelForm.contextWindow}
+                placeholder={t("settings.model.contextWindowPlaceholder")}
+                onChange={(e) =>
+                  setModelForm((prev) =>
+                    prev ? { ...prev, contextWindow: e.target.value } : prev,
+                  )
                 }
               />
             </Field>

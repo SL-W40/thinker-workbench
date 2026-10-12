@@ -1,6 +1,6 @@
 /**
  * 自定义标题栏：品牌回首页、控制台 tab（主窗 logo 旁）、非聊天时「返回」tab、
- * 聊天时左侧栏开关，以及 Windows 窗口控件（最小化 / 最大化 / 关闭）。
+ * 聊天时左右侧栏开关，以及 Windows 窗口控件（最小化 / 最大化 / 关闭）。
  */
 import { useEffect, useState } from "react";
 import {
@@ -11,6 +11,7 @@ import {
   MinimizeIcon,
   RestoreIcon,
   SidebarLeftIcon,
+  SidebarRightIcon,
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import type { WindowRole } from "@thinker-workbench/shared";
@@ -26,8 +27,10 @@ type TitleBarProps = {
   role: WindowRole;
   current: PageId;
   leftPanelOpen: boolean;
+  rightPanelOpen: boolean;
   onGoHome: () => void;
   onToggleLeftPanel: () => void;
+  onToggleRightPanel: () => void;
   /** 控制台当前 tab。 */
   toolsTab?: ToolTabId;
   /** 点 tab：切 tab 并打开控制台页。 */
@@ -84,8 +87,10 @@ export function TitleBar({
   role,
   current,
   leftPanelOpen,
+  rightPanelOpen,
   onGoHome,
   onToggleLeftPanel,
+  onToggleRightPanel,
   toolsTab = "settings",
   onToolsTabChange,
 }: TitleBarProps) {
@@ -178,6 +183,16 @@ export function TitleBar({
               onClick={onToggleLeftPanel}
             >
               <SidebarLeftIcon open={leftPanelOpen} />
+            </IconButton>
+            <IconButton
+              className={`titlebar-nav-btn${rightPanelOpen ? " is-active" : ""}`}
+              size="sm"
+              title={t("nav.toggleRightPanel")}
+              aria-label={t("nav.toggleRightPanel")}
+              aria-pressed={rightPanelOpen}
+              onClick={onToggleRightPanel}
+            >
+              <SidebarRightIcon open={rightPanelOpen} />
             </IconButton>
           </div>
         ) : null}

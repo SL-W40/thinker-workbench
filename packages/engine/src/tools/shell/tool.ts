@@ -22,7 +22,7 @@ export const shellToolSpec = defineTool({
       block_until_ms: {
         type: "number",
         description:
-          "Max ms to wait for the command to finish (default 30000). If it is still running (e.g. servers), returns backgrounded=true and keeps the PTY; use shell_await or open the terminal. 0 = return as backgrounded immediately after start.",
+          "Max ms to wait for the command to finish (default from Settings). If it is still running (e.g. servers), returns backgrounded=true and keeps the PTY; use shell_await or open the terminal. 0 = return as backgrounded immediately after start.",
       },
     },
     required: ["command"],
@@ -43,7 +43,7 @@ export const shellAwaitToolSpec = defineTool({
       },
       block_until_ms: {
         type: "number",
-        description: "Max wait in ms (default 30000).",
+        description: "Max wait in ms (default from Settings).",
       },
       pattern: {
         type: "string",

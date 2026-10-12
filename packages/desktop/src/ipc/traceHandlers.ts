@@ -1,13 +1,15 @@
 /**
- * 会话 Trace IPC：列表 / spans / payload / start-end / 删除。
+ * 会话 Trace IPC：列表 / spans / payload / start-end / 删除 / 导出。
  */
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import {
   IpcChannels,
   type TraceEndSpanRequest,
   type TraceListSessionsQuery,
   type TraceStartSpanRequest,
 } from "@thinker-workbench/shared";
+import { markSessionArtifactsPurged } from "../db/sessionArtifacts";
+import { exportSessionZip } from "../trace/exportSessionZip";
 import { readPayload, removeSessionJsonl } from "../trace/sessionJsonl";
 import { deleteSession, listSessionSpans, listSessions } from "../trace/traceDb";
 import { handleEndSpan, handleStartSpan } from "../trace/writeSpan";
@@ -36,7 +38,12 @@ export function registerTraceHandlers(): void {
   ipcMain.handle(IpcChannels.traceDeleteSession, (_e, sessionId: string) => {
     const id = typeof sessionId === "string" ? sessionId.trim() : "";
     if (!id) return;
+    markSessionArtifactsPurged(id);
     deleteSession(id);
     removeSessionJsonl(id);
+  });
+  ipcMain.handle(IpcChannels.traceExportSession, async (evt, sessionId: string) => {
+    const win = BrowserWindow.fromWebContents(evt.sender);
+    return exportSessionZip(typeof sessionId === "string" ? sessionId : "", win);
   });
 }

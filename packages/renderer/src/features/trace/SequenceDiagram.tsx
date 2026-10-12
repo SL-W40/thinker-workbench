@@ -14,6 +14,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useT } from "../../i18n/useI18n";
+import { callTreeLabel } from "./callTreeModel";
 
 /** 并行区展示：滑动切换?Task / 展开?Task 分块连排。*/
 type ParViewMode = "swipe" | "expand";
@@ -145,9 +146,9 @@ function laneOf(span: TraceSpanRecord): LaneId {
   }
 }
 
-/** 标签优先 summary；控制长度以免压住箭头。*/
+/** 时序短标签：与追踪树同一套关键规则，再压到箭头宽度。 */
 function displayLabel(span: TraceSpanRecord): string {
-  const raw = (span.summary?.trim() || span.name).trim();
+  const raw = callTreeLabel(span);
   return raw.length > 20 ? `${raw.slice(0, 18)}…` : raw;
 }
 
@@ -168,19 +169,14 @@ function scopeOf(span: TraceSpanRecord, all: TraceSpanRecord[]): "main" | string
 
 function taskTitle(taskId: string, spans: TraceSpanRecord[]): string {
   const sub = spans.find((s) => s.taskId === taskId && s.kind === "subagent");
-  if (sub) {
-    const name =
-      sub.summary?.replace(/^subagent:/, "").trim() ||
-      sub.name.replace(/^subagent:/, "").trim();
-    if (name) return name;
-  }
+  if (sub) return callTreeLabel(sub);
   const tool = spans.find(
     (s) =>
       (s.taskId === taskId || s.attrs?.callId === taskId) &&
       s.kind === "tool" &&
       /task/i.test(s.name),
   );
-  if (tool?.summary) return tool.summary.replace(/^tool:/, "");
+  if (tool) return callTreeLabel(tool);
   return taskId.slice(0, 10);
 }
 
