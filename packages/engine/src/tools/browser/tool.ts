@@ -105,8 +105,7 @@ export const browserClickToolSpec = defineTool({
 
 export const browserTypeToolSpec = defineTool({
   name: "browser_type",
-  description:
-    "Type text into an input/textarea/contenteditable by ref (appends at caret).",
+  description: "Type text into an input/textarea/contenteditable by ref (appends at caret).",
   parameters: {
     type: "object",
     properties: {
@@ -128,8 +127,7 @@ export const browserTypeToolSpec = defineTool({
 
 export const browserFillToolSpec = defineTool({
   name: "browser_fill",
-  description:
-    "Replace the value of an input/textarea/select/contenteditable by ref.",
+  description: "Replace the value of an input/textarea/select/contenteditable by ref.",
   parameters: {
     type: "object",
     properties: {
@@ -151,8 +149,7 @@ export const browserFillToolSpec = defineTool({
 
 export const browserPressKeyToolSpec = defineTool({
   name: "browser_press_key",
-  description:
-    "Press a key (Enter, Escape, Tab, ArrowDown, or a character) in the page.",
+  description: "Press a key (Enter, Escape, Tab, ArrowDown, or a character) in the page.",
   parameters: {
     type: "object",
     properties: {
@@ -226,8 +223,7 @@ export const browserEvaluateToolSpec = defineTool({
 
 export const browserResizeToolSpec = defineTool({
   name: "browser_resize",
-  description:
-    "Set the browser viewport size (CSS pixels) via device metrics emulation.",
+  description: "Set the browser viewport size (CSS pixels) via device metrics emulation.",
   parameters: {
     type: "object",
     properties: {
@@ -267,8 +263,7 @@ export const browserGetStylesToolSpec = defineTool({
 
 export const browserScreenshotToolSpec = defineTool({
   name: "browser_screenshot",
-  description:
-    "Capture a PNG screenshot of the browser viewport; returns a local file path.",
+  description: "Capture a PNG screenshot of the browser viewport; returns a local file path.",
   parameters: {
     type: "object",
     properties: {},

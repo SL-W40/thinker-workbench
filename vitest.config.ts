@@ -18,6 +18,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "packages/shared/tests/**/*.test.ts",
+      "packages/design/tests/**/*.test.ts",
       "packages/markdown/tests/**/*.test.ts",
       "packages/engine/tests/**/*.test.ts",
       "packages/desktop/tests/**/*.test.ts",
@@ -38,6 +39,7 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       include: [
         "packages/shared/src/**/*.{ts,tsx}",
+        "packages/design/src/**/*.{ts,tsx}",
         "packages/markdown/src/**/*.{ts,tsx}",
         "packages/engine/src/**/*.{ts,tsx}",
         "packages/desktop/src/**/*.{ts,tsx}",

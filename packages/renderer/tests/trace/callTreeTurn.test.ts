@@ -2,9 +2,9 @@
  * Call Tree：attrs.turn → spanTurn。
  */
 import assert from "node:assert/strict";
+import type { TraceSpanRecord } from "@thinker-workbench/shared";
 import { describe, it } from "vitest";
 import { spanTurn } from "../../src/features/trace/callTreeModel";
-import type { TraceSpanRecord } from "@thinker-workbench/shared";
 
 function span(attrs?: Record<string, unknown>): TraceSpanRecord {
   return {

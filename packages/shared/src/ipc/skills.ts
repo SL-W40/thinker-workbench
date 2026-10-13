@@ -43,9 +43,5 @@ export type ThinkerSkillsApi = {
   listDetailed(workspaceRoot?: string | null): Promise<SkillListResult>;
   upsert(input: SkillUpsertInput): Promise<SkillListItem>;
   remove(scope: CustomizeScope, name: string): Promise<void>;
-  copyToScope(
-    name: string,
-    fromPath: string,
-    scope: CustomizeScope,
-  ): Promise<SkillListItem>;
+  copyToScope(name: string, fromPath: string, scope: CustomizeScope): Promise<SkillListItem>;
 };

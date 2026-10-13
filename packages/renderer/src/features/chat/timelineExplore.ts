@@ -90,7 +90,7 @@ function pushExplore(items: TimelineDisplayItem[], steps: ChatTimelineStep[]): v
   const { fileCount, searchCount, active } = countExplore(steps);
   items.push({
     type: "explore",
-    id: `explore:${steps[0]!.id}`,
+    id: `explore:${steps[0]?.id}`,
     steps,
     fileCount,
     searchCount,

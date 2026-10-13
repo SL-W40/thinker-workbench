@@ -7,9 +7,6 @@ import { MarkdownView, type MarkdownViewProps } from "./MarkdownView";
 export type StreamingMarkdownViewProps = MarkdownViewProps;
 
 /** 默认 `streaming=true`；停止后应传 `false` 去掉光标。 */
-export function StreamingMarkdownView({
-  streaming = true,
-  ...props
-}: StreamingMarkdownViewProps) {
+export function StreamingMarkdownView({ streaming = true, ...props }: StreamingMarkdownViewProps) {
   return <MarkdownView {...props} streaming={streaming} />;
 }

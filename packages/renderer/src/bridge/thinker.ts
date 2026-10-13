@@ -31,11 +31,11 @@ import type {
   ModelProbeRequest,
   ModelProbeResult,
   ModelSelection,
+  RunResult,
   ShortcutsMap,
   SkillListItem,
   ThinkerApi,
   ThreadMeta,
-  RunResult,
   UnlockModelSecretsRequest,
   UnlockModelSecretsResult,
 } from "@thinker-workbench/shared";
@@ -213,9 +213,7 @@ export function getShortcutsSettings(): Promise<ShortcutsMap> {
 export const SHORTCUTS_SETTINGS_CHANGED = "tw:shortcuts-settings";
 
 /** 部分更新快捷键映射；成功后派发 `SHORTCUTS_SETTINGS_CHANGED`。 */
-export async function setShortcutsSettings(
-  patch: Partial<ShortcutsMap>,
-): Promise<ShortcutsMap> {
+export async function setShortcutsSettings(patch: Partial<ShortcutsMap>): Promise<ShortcutsMap> {
   const settings = api()?.settings;
   if (!settings?.setShortcuts) return Promise.reject(new Error("Settings API unavailable."));
   const saved = await settings.setShortcuts(patch);

@@ -19,11 +19,8 @@ export function mcpToolName(serverId: string, toolName: string): string {
 }
 
 /** 解析模型工具名；非 MCP 返回 null。 */
-export function parseMcpToolName(
-  name: string,
-): { serverId: string; toolName: string } | null {
-  const m = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(name);
-  // 更稳妥：按前缀拆两段
+export function parseMcpToolName(name: string): { serverId: string; toolName: string } | null {
+  // 更稳妥：按前缀拆两段（不用整段正则，避免 serverId 含下划线时歧义）
   if (!name.startsWith("mcp__")) return null;
   const rest = name.slice("mcp__".length);
   const sep = rest.indexOf("__");

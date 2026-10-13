@@ -1,15 +1,9 @@
 /**
  * shell 审批闸门：白名单 / AI 研判 / HITL。
  */
-import {
-  type ShellApprovalMode,
-} from "@thinker-workbench/shared";
+import type { ShellApprovalMode } from "@thinker-workbench/shared";
 import { requestHitl } from "../../hitl/requestHitl";
-import {
-  addShellAllowlistToken,
-  getShellAllowlist,
-  getShellApprovalMode,
-} from "../../workspace";
+import { addShellAllowlistToken, getShellAllowlist, getShellApprovalMode } from "../../workspace";
 import { reviewCommand } from "./reviewCommand";
 import { getShellSessionCommand } from "./sessionMeta";
 
@@ -34,10 +28,7 @@ function isAllowlisted(command: string): boolean {
  * 按设置决定是否放行；需用户确认时走 HITL。
  * @returns true 放行；false 用户拒绝（应抛错或返回失败）
  */
-export async function ensureShellApproved(
-  command: string,
-  signal: AbortSignal,
-): Promise<void> {
+export async function ensureShellApproved(command: string, signal: AbortSignal): Promise<void> {
   const mode: ShellApprovalMode = getShellApprovalMode();
 
   if (mode === "unrestricted") return;
@@ -84,10 +75,7 @@ export async function ensureShellApproved(
   await applyHitlResponse(response, command);
 }
 
-async function applyHitlResponse(
-  response: { actionId: string },
-  command: string,
-): Promise<void> {
+async function applyHitlResponse(response: { actionId: string }, command: string): Promise<void> {
   if (response.actionId === "deny") {
     throw new Error("Shell command denied by user.");
   }
@@ -114,8 +102,7 @@ export async function ensureShellWriteApproved(
   if (mode === "unrestricted") return;
 
   const preview = data.length > 200 ? `${data.slice(0, 200)}…` : data;
-  const parent =
-    options?.parentCommand?.trim() || getShellSessionCommand(sessionId) || "";
+  const parent = options?.parentCommand?.trim() || getShellSessionCommand(sessionId) || "";
   const parentLine = parent
     ? `Waiting command:\n${parent.slice(0, 300)}`
     : `Shell session:\n${sessionId}`;

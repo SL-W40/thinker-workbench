@@ -3,9 +3,9 @@
  * （样式已全面使用 px，不能再靠根字号联动。）
  */
 import {
+  type AppFontScale,
   DEFAULT_APP_FONT_SCALE,
   normalizeAppFontScale,
-  type AppFontScale,
 } from "@thinker-workbench/shared";
 
 /**

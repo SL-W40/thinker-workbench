@@ -31,7 +31,7 @@ export async function* walkFiles(root: string, signal: AbortSignal): AsyncGenera
   while (stack.length > 0) {
     throwIfAborted(signal, "Walk");
     const dir = stack.pop()!;
-    let entries;
+    let entries: Awaited<ReturnType<typeof readdir>>;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {

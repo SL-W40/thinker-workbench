@@ -5,17 +5,13 @@ import {
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
   MAX_PARALLEL_RUNS_OPTIONS,
   SHELL_APPROVAL_MODES,
-  WORKSPACE_ACCESS_OPTIONS,
   type ShellApprovalMode,
+  WORKSPACE_ACCESS_OPTIONS,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n/useI18n";
-import {
-  deleteRestoreTtlLabel,
-  shellApprovalLabel,
-  workspaceAccessLabel,
-} from "./generalLabels";
+import { deleteRestoreTtlLabel, shellApprovalLabel, workspaceAccessLabel } from "./generalLabels";
 import { ShellTokenList } from "./ShellTokenList";
 import { useGeneralSettings } from "./useGeneralSettings";
 
@@ -96,7 +92,7 @@ export function PermissionsSettingsForm({ active = true }: Props) {
     if (general.shellAllowlist.includes(token)) return;
     void patchGeneral({
       shellAllowlist: [...general.shellAllowlist, token],
- // 加入白名单时移出黑名? shellBlocklist: general.shellBlocklist.filter((x) => x !== token),
+      // 加入白名单时移出黑名? shellBlocklist: general.shellBlocklist.filter((x) => x !== token),
     });
   }
 
@@ -107,7 +103,7 @@ export function PermissionsSettingsForm({ active = true }: Props) {
     if (general.shellBlocklist.includes(token)) return;
     void patchGeneral({
       shellBlocklist: [...general.shellBlocklist, token],
- // 加入黑名单时移出白名? shellAllowlist: general.shellAllowlist.filter((x) => x !== token),
+      // 加入黑名单时移出白名? shellAllowlist: general.shellAllowlist.filter((x) => x !== token),
     });
   }
 
@@ -130,9 +126,7 @@ export function PermissionsSettingsForm({ active = true }: Props) {
             value={String(general.maxParallelRuns)}
             options={maxParallelOptions}
             aria-label={t("settings.general.maxParallelRuns.title")}
-            onChange={(value) =>
-              void patchGeneral({ maxParallelRuns: Number(value) })
-            }
+            onChange={(value) => void patchGeneral({ maxParallelRuns: Number(value) })}
           />
         </li>
         <li className="settings-toggle-row">

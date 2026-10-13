@@ -15,7 +15,7 @@ import {
   TextArea,
 } from "@thinker-workbench/design/react";
 import type { CustomizeScope } from "@thinker-workbench/shared";
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useT } from "../../i18n/useI18n";
 import { ScopeGroupSection } from "./ScopeGroupSection";
 import type { ScopeGroupDef } from "./scopeHelpers";

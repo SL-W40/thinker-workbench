@@ -3,10 +3,7 @@
  */
 import path from "node:path";
 import type { PtyExecMode } from "@thinker-workbench/shared";
-import {
-  getDefaultShellBlockUntilMs,
-  getShellOutputCap,
-} from "../../config/runtimeLimits";
+import { getDefaultShellBlockUntilMs, getShellOutputCap } from "../../config/runtimeLimits";
 import { requestHitl } from "../../hitl/requestHitl";
 import { ptyAwait, ptyExec, ptyWrite } from "../../host/ptyClient";
 import { getWorkspaceAccess, getWorkspaceRoot } from "../../workspace";
@@ -28,10 +25,7 @@ function truncateOutput(text: string): string {
 }
 
 /** 清洗后再截断；已 spill 时只留短尾。 */
-function prepareOutputForModel(
-  raw: string,
-  options: { spilled?: boolean },
-): string {
+function prepareOutputForModel(raw: string, options: { spilled?: boolean }): string {
   const cleaned = stripAnsi(raw).replace(/\r\n/g, "\n").trimEnd();
   if (options.spilled) {
     if (!cleaned) return "(full output in outputPath; inline tail empty)";
@@ -45,9 +39,7 @@ function prepareOutputForModel(
 function resolveCwd(workingDirectory: string | undefined, workspaceRoot: string): string {
   if (!workingDirectory?.trim()) return workspaceRoot;
   const raw = workingDirectory.trim();
-  const resolved = path.isAbsolute(raw)
-    ? path.resolve(raw)
-    : path.resolve(workspaceRoot, raw);
+  const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(workspaceRoot, raw);
   const access = getWorkspaceAccess();
   if (access !== "full") {
     const rel = path.relative(workspaceRoot, resolved);
@@ -64,10 +56,7 @@ function resolveCwd(workingDirectory: string | undefined, workspaceRoot: string)
  * 解析 exec_mode。
  * auto（默认）：await=false → login；其余 → direct。
  */
-export function resolveShellExecMode(
-  requested: unknown,
-  awaitMode: boolean,
-): PtyExecMode {
+export function resolveShellExecMode(requested: unknown, awaitMode: boolean): PtyExecMode {
   const raw = typeof requested === "string" ? requested.trim().toLowerCase() : "auto";
   if (raw === "login" || raw === "direct") return raw;
   return awaitMode ? "direct" : "login";
@@ -165,10 +154,7 @@ export async function shellTool(args: ToolArgs, ctx: ToolContext): Promise<ToolE
 }
 
 /** shell_await 工具。 */
-export async function shellAwaitTool(
-  args: ToolArgs,
-  ctx: ToolContext,
-): Promise<ToolExecuteResult> {
+export async function shellAwaitTool(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
   const sessionId = typeof args.sessionId === "string" ? args.sessionId.trim() : "";
   if (!sessionId) throw new Error("sessionId is required.");
   const blockUntilMs =
@@ -177,10 +163,7 @@ export async function shellAwaitTool(
       : getDefaultShellBlockUntilMs();
   const pattern = typeof args.pattern === "string" ? args.pattern : undefined;
 
-  const result = await ptyAwait(
-    { sessionId, blockUntilMs, pattern },
-    ctx.signal,
-  );
+  const result = await ptyAwait({ sessionId, blockUntilMs, pattern }, ctx.signal);
 
   const backgrounded = result.outcome === "still_running";
   return {
@@ -248,10 +231,7 @@ function isControlOnlyPayload(payload: string): boolean {
 }
 
 /** shell_write 工具（含 secret HITL）。 */
-export async function shellWriteTool(
-  args: ToolArgs,
-  ctx: ToolContext,
-): Promise<ToolExecuteResult> {
+export async function shellWriteTool(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
   const sessionId = typeof args.sessionId === "string" ? args.sessionId.trim() : "";
   if (!sessionId) throw new Error("sessionId is required.");
   const secret = args.secret === true;
@@ -277,8 +257,7 @@ export async function shellWriteTool(
     if (response.actionId === "deny") {
       throw new Error("Shell secret input cancelled by user.");
     }
-    const secretValue =
-      typeof response.values?.secret === "string" ? response.values.secret : "";
+    const secretValue = typeof response.values?.secret === "string" ? response.values.secret : "";
     if (!secretValue) throw new Error("Empty secret.");
     payload = secretValue;
     submit = submitArg;

@@ -36,9 +36,7 @@ export type ToolResult = {
 };
 
 /** execute 可只返回字符串，或附带 UI 载荷；`ok: false` 表示业务失败（仍可带 ui）。 */
-export type ToolExecuteResult =
-  | string
-  | { output: string; ui?: ToolUiPayload; ok?: boolean };
+export type ToolExecuteResult = string | { output: string; ui?: ToolUiPayload; ok?: boolean };
 
 /** 执行时注入的上下文（工作区根 + 取消信号）。 */
 export type ToolContext = {

@@ -35,8 +35,7 @@ export async function probeModel(request: ModelProbeRequest): Promise<ModelProbe
   if (!unlock.ok) {
     return {
       ok: false,
-      error:
-        unlock.reason === "denied" ? "MODEL_API_KEY_UNLOCK_DENIED" : "MODEL_API_KEY_MISSING",
+      error: unlock.reason === "denied" ? "MODEL_API_KEY_UNLOCK_DENIED" : "MODEL_API_KEY_MISSING",
       catalog: getPublicModelSettings(),
     };
   }

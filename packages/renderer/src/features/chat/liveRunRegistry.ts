@@ -71,7 +71,7 @@ export function listBusyLiveRuns(): LiveRunSlot[] {
 }
 
 /** 前台开始/恢复 run 时登记槽。 */
-export function upsertLiveRunSlot( partial: {
+export function upsertLiveRunSlot(partial: {
   sessionId: string;
   threadId: string;
   runId?: string | null;
@@ -87,13 +87,13 @@ export function upsertLiveRunSlot( partial: {
   const slot: LiveRunSlot = {
     sessionId,
     threadId: partial.threadId,
-    runId: partial.runId !== undefined ? partial.runId : prev?.runId ?? null,
+    runId: partial.runId !== undefined ? partial.runId : (prev?.runId ?? null),
     busy: partial.busy ?? true,
     messages: partial.messages,
     streamText: partial.streamText ?? prev?.streamText ?? "",
     timeline: partial.timeline ?? prev?.timeline ?? [],
     targetMsgId:
-      partial.targetMsgId !== undefined ? partial.targetMsgId : prev?.targetMsgId ?? null,
+      partial.targetMsgId !== undefined ? partial.targetMsgId : (prev?.targetMsgId ?? null),
   };
   slots.set(sessionId, slot);
   threadToSession.set(partial.threadId, sessionId);
@@ -143,7 +143,7 @@ async function applyBackgroundEvent(event: AgentEvent): Promise<void> {
   if (!sessionId) return;
   if (foregroundSessionId && sessionId === foregroundSessionId) return;
 
-  let slot = slots.get(sessionId);
+  const slot = slots.get(sessionId);
   if (!slot) {
     // 刷新后可能无槽；仅跟踪终态外的 running 需要侧栏，落库依赖主进程 status
     if (event.type !== "token" && event.type !== "tool" && event.type !== "status") return;
@@ -164,21 +164,18 @@ async function applyBackgroundEvent(event: AgentEvent): Promise<void> {
   } else if (event.type === "tool") {
     slot.timeline = applyToolEvent(slot.timeline, event);
   } else if (event.type === "done" || event.type === "error") {
-    const text =
-      event.type === "done"
-        ? event.text || slot.streamText
-        : slot.streamText;
+    const text = event.type === "done" ? event.text || slot.streamText : slot.streamText;
     const errText = event.type === "error" ? event.error : undefined;
     if (errText) {
       slot.timeline = appendError(slot.timeline, errText);
     }
     slot.messages = slot.messages.map((m) =>
-      m.id === slot!.targetMsgId
+      m.id === slot.targetMsgId
         ? {
             ...m,
             text: text || m.text,
             pending: false,
-            timeline: [...slot!.timeline],
+            timeline: [...slot.timeline],
             ...(errText ? { error: errText } : {}),
           }
         : m,
@@ -200,12 +197,12 @@ async function applyBackgroundEvent(event: AgentEvent): Promise<void> {
 
   if (slot.targetMsgId) {
     slot.messages = slot.messages.map((m) =>
-      m.id === slot!.targetMsgId
+      m.id === slot.targetMsgId
         ? {
             ...m,
-            text: slot!.streamText || m.text,
+            text: slot.streamText || m.text,
             pending: true,
-            timeline: [...slot!.timeline],
+            timeline: [...slot.timeline],
           }
         : m,
     );

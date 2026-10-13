@@ -3,7 +3,7 @@
  * 打开 / 关闭带进出场动画；关闭时等面板离场动画结束再卸载。
  * 内容过高时在滚动层滚动，蒙层本身不动。
  */
-import { useEffect, useState, type AnimationEvent, type ReactNode } from "react";
+import { type AnimationEvent, type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 export type ModalProps = {

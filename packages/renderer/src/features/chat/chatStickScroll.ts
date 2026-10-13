@@ -16,10 +16,7 @@ export function distanceFromBottom(el: HTMLElement): number {
 }
 
 /** 是否仍贴在底部附近。 */
-export function isNearBottom(
-  el: HTMLElement,
-  thresholdPx = STICK_BOTTOM_THRESHOLD_PX,
-): boolean {
+export function isNearBottom(el: HTMLElement, thresholdPx = STICK_BOTTOM_THRESHOLD_PX): boolean {
   return distanceFromBottom(el) <= thresholdPx;
 }
 
@@ -32,10 +29,7 @@ export function hasTextSelectionIn(el: HTMLElement): boolean {
 }
 
 /** 滚到内容最底；默认 instant，避免流式时 smooth 连动画。 */
-export function scrollElementToBottom(
-  el: HTMLElement,
-  behavior: ScrollBehavior = "auto",
-): void {
+export function scrollElementToBottom(el: HTMLElement, behavior: ScrollBehavior = "auto"): void {
   el.scrollTo({ top: el.scrollHeight, behavior });
 }
 

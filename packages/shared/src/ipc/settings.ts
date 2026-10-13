@@ -11,12 +11,7 @@ import type { ShortcutsMap, ThinkerShortcutsApi } from "./shortcuts";
 export type ModelTag = "general" | "coding" | "reasoning" | "fast";
 
 /** 全部标签字面量。 */
-export const MODEL_TAGS: readonly ModelTag[] = [
-  "general",
-  "coding",
-  "reasoning",
-  "fast",
-] as const;
+export const MODEL_TAGS: readonly ModelTag[] = ["general", "coding", "reasoning", "fast"] as const;
 
 /** 运行/探测得到的连通状态（与用户手动 enabled 正交）。 */
 export type ModelHealth = "ok" | "error";
@@ -50,9 +45,7 @@ export type ModelEntry = {
 };
 
 /** 当前选用：Auto 或指定模型条目。 */
-export type ModelSelection =
-  | { mode: "auto" }
-  | { mode: "manual"; modelId: string };
+export type ModelSelection = { mode: "auto" } | { mode: "manual"; modelId: string };
 
 /** 完整模型目录 — 仅主进程 / utility（含明文 apiKey）。 */
 export type ModelCatalog = {
@@ -112,9 +105,7 @@ export type ModelProbeResult = {
  * 发消息前解锁 OS 加密存储的结果。
  * `denied` = 钥匙串未授权；`missing` = 从未保存过密钥。
  */
-export type UnlockModelSecretsResult =
-  | { ok: true }
-  | { ok: false; reason: "missing" | "denied" };
+export type UnlockModelSecretsResult = { ok: true } | { ok: false; reason: "missing" | "denied" };
 
 /** 解锁请求；`force` 表示 Retry，强制再调一次 decrypt。 */
 export type UnlockModelSecretsRequest = {
@@ -355,10 +346,7 @@ export function routeModelTag(text: string, contextPaths?: string[]): ModelTag {
     /[/\\][\w.-]+[/\\]/.test(t);
   if (hasCodeFence || hasPathLike || paths.length >= 2) return "coding";
 
-  if (
-    t.length > 280 ||
-    /分析|推理|证明|设计架构|refactor|architecture|prove|reason\b/i.test(t)
-  ) {
+  if (t.length > 280 || /分析|推理|证明|设计架构|refactor|architecture|prove|reason\b/i.test(t)) {
     return "reasoning";
   }
 

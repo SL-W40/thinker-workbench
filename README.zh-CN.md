@@ -54,6 +54,16 @@ pnpm run dev -- --devtools    # 启动时打开 DevTools              (THINKER_O
 | `pnpm run format` / `lint` | 仅格式化写入 / 仅 lint |
 | `pnpm run dev:logger:web` | 日志查看器 → http://127.0.0.1:5181 |
 | `pnpm run pack:zip` | 打包仓库 zip（遵循 `.gitignore`） |
+| `pnpm run stage:desktop` | 组装 `.stage/app` + `.stage/payload`（需先 `pnpm build`） |
+| `pnpm run pack:desktop` | build → stage → electron-builder 打当前 OS 目标 |
+| `pnpm run pack:desktop:win` / `pack:desktop:mac` | 仅 Windows / 仅 macOS 目标 |
+| `pnpm run pack:desktop:dir` | 同上但 `--dir`（只出未封装应用目录） |
+
+安装包产物在仓库根目录 `release/`。打包布局：Shell 在 `app.asar`，Payload 在 `Resources/payload/`（`layout.json` + renderer/engine/bundled）。`pack:zip` 只是源码 zip，不是桌面安装包。
+
+CI：`.github/workflows/pack.yml` 在 `windows-latest` / `macos-latest` 上分别打包，触发为 **手动 workflow_dispatch** 或推送 **`v*` tag**；产物以 Actions artifact 上传（`thinker-workbench-win` / `thinker-workbench-mac`）。未配置签名证书时产出未签名包。
+
+**Windows 打包与签名工具链：** `electron-builder` 会下载并解压 `winCodeSign`（用于改 exe 资源，以及在有证书时做 Authenticode）。该压缩包含符号链接；若报 `Cannot create symbolic link` / 客户端没有所需特权，请开启 **设置 → 系统 → 开发者选项 → 开发人员模式**（或管理员终端），然后删除 `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign` 后重跑 `pnpm run pack:desktop`。未配置代码签名证书时仍会走该工具链写资源信息；正式分发请自行配置证书。macOS 公证见 `notarize-hint`。
 
 测试在各包 `tests/`（镜像 `src/`），命名 `*.test.ts`。配置：[`vitest.config.ts`](vitest.config.ts)。单包：`pnpm --filter @thinker-workbench/<pkg> test`。
 

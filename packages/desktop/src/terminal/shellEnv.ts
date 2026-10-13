@@ -38,9 +38,7 @@ export function augmentPathEnv(pathEnv: string | undefined): string {
 /**
  * 构造 spawn 用 env：继承 process.env，补 PATH，并合并额外变量。
  */
-export function buildPtyEnv(
-  extra?: Record<string, string | undefined>,
-): Record<string, string> {
+export function buildPtyEnv(extra?: Record<string, string | undefined>): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (typeof v === "string") env[k] = v;

@@ -1,23 +1,24 @@
 /**
  * 设置 → 快捷键：按分组展示可编辑加速键，点击后进入录制模式（捕获 keydown）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+
 import { Button, Callout, Kbd } from "@thinker-workbench/design/react";
 import {
-  SHORTCUT_CATALOG,
-  SHORTCUT_GROUPS,
   acceleratorFromKeyboardEvent,
   findShortcutConflict,
   formatAcceleratorLabel,
   getDefaultShortcuts,
   normalizeAccelerator,
+  SHORTCUT_CATALOG,
+  SHORTCUT_GROUPS,
   type ShortcutGroup,
   type ShortcutId,
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getShortcutsSettings, setShortcutsSettings } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import { setShortcutRecording } from "../shortcuts/recordingGate";
 
 type Props = {
@@ -86,7 +87,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const available = Boolean(window.thinker?.settings?.getShortcuts);
 
- // 录制监听只用 ref，避?shortcuts/t 变化时拆?keydown 监听导致「录不上。
+  // 录制监听只用 ref，避?shortcuts/t 变化时拆?keydown 监听导致「录不上。
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
   const tRef = useRef(t);
@@ -120,7 +121,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
   useEffect(() => {
     if (!recording) return;
     setShortcutRecording(true);
- // 离开按钮焦点，避?Space/Enter 再次点到 Kbd
+    // 离开按钮焦点，避?Space/Enter 再次点到 Kbd
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -232,9 +233,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
                         className="settings-shortcut-key"
                         recording={isRecording}
                         aria-label={
-                          isRecording
-                            ? t("settings.shortcuts.pressKeys")
-                            : t(copy.titleKey)
+                          isRecording ? t("settings.shortcuts.pressKeys") : t(copy.titleKey)
                         }
                         onClick={() => {
                           setMessage(null);

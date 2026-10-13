@@ -191,9 +191,12 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
 
   ipcMain.handle(IpcChannels.chatSessionsGetLastWorkspace, async () => getLastWorkspaceId());
 
-  ipcMain.handle(IpcChannels.chatSessionsSetLastWorkspace, async (_e, workspaceId: string | null) => {
-    setLastWorkspaceId(workspaceId);
-  });
+  ipcMain.handle(
+    IpcChannels.chatSessionsSetLastWorkspace,
+    async (_e, workspaceId: string | null) => {
+      setLastWorkspaceId(workspaceId);
+    },
+  );
 
   ipcMain.handle(IpcChannels.chatSessionsGetCollapsed, async () => getCollapsedWorkspaceIds());
 

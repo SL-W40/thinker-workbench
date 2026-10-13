@@ -1,11 +1,16 @@
 /**
  * 设置 → 数据：根目录（草稿 / 迁移）、会话 Trace 开关与保留/截断。
  */
-import { Button, Field, Input, Modal, Progress, Select, Switch } from "@thinker-workbench/design/react";
 import {
-  LOG_RETENTION_DAY_OPTIONS,
-  type DataDirPaths,
-} from "@thinker-workbench/shared";
+  Button,
+  Field,
+  Input,
+  Modal,
+  Progress,
+  Select,
+  Switch,
+} from "@thinker-workbench/design/react";
+import { type DataDirPaths, LOG_RETENTION_DAY_OPTIONS } from "@thinker-workbench/shared";
 import { useEffect, useId, useMemo, useState } from "react";
 import { resolveDataDir } from "../../bridge/thinker";
 import { useI18n } from "../../i18n/useI18n";
@@ -87,7 +92,7 @@ export function DataSettingsForm({ active = true }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [available, active, general.dataDir]);
+  }, [available, active]);
 
   useEffect(() => {
     if (!available || !active) return;
@@ -181,10 +186,7 @@ export function DataSettingsForm({ active = true }: Props) {
                   <code>{activePaths.settingsPath}</code>
                 </p>
                 {!activePaths.sameAsBootstrap ? (
-                  <p
-                    className="settings-path-resolved"
-                    title={activePaths.bootstrapSettingsPath}
-                  >
+                  <p className="settings-path-resolved" title={activePaths.bootstrapSettingsPath}>
                     <span className="settings-path-resolved__label">
                       {t("settings.general.dataDir.bootstrapPath")}
                     </span>
@@ -197,10 +199,7 @@ export function DataSettingsForm({ active = true }: Props) {
             draftPaths &&
             activePaths &&
             draftPaths.settingsPath !== activePaths.settingsPath ? (
-              <p
-                className="settings-path-resolved is-pending"
-                title={draftPaths.settingsPath}
-              >
+              <p className="settings-path-resolved is-pending" title={draftPaths.settingsPath}>
                 <span className="settings-path-resolved__label">
                   {t("settings.general.dataDir.pendingPath")}
                 </span>

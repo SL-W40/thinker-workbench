@@ -68,7 +68,7 @@ export const shellAwaitToolSpec = defineTool({
 export const shellWriteToolSpec = defineTool({
   name: "shell_write",
   description:
-    "Write to a still_running login shell session stdin (confirmations, simple prompts, interrupt). For Ctrl+C use data=\"ctrl+c\" or \"^C\" with submit=false (aliases are normalized to the real control byte). Use secret=true for passwords — user enters via secure prompt; plaintext never appears in the tool result. Not supported for direct exec sessions. To stop a background server, prefer shell kill/session kill over hoping the process exits.",
+    'Write to a still_running login shell session stdin (confirmations, simple prompts, interrupt). For Ctrl+C use data="ctrl+c" or "^C" with submit=false (aliases are normalized to the real control byte). Use secret=true for passwords — user enters via secure prompt; plaintext never appears in the tool result. Not supported for direct exec sessions. To stop a background server, prefer shell kill/session kill over hoping the process exits.',
   parameters: {
     type: "object",
     properties: {

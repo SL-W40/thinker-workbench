@@ -3,7 +3,11 @@
  * 正式分发前接 @electron/notarize，并对 asarUnpack 出的 .node / spawn-helper 再签一次名。
  */
 export default async function afterSign(_context) {
-  if (process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID) {
+  if (
+    process.env.APPLE_ID &&
+    process.env.APPLE_APP_SPECIFIC_PASSWORD &&
+    process.env.APPLE_TEAM_ID
+  ) {
     console.log(
       "[notarize-hint] 已检测到 Apple 公证环境变量，但本仓库尚未接入 @electron/notarize；请补全后再发正式包。",
     );

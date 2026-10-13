@@ -5,19 +5,12 @@
 import { createId, type SubagentChildEvent } from "@thinker-workbench/shared";
 import { getMaxSubagentSteps } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
-import {
-  chatWithFailover,
-  configureModelCatalog,
-  getModelSelection,
-} from "../../model/catalog";
+import { chatWithFailover, configureModelCatalog, getModelSelection } from "../../model/catalog";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
 import { getRunContext, setRunTurn } from "../../runtime/runContext";
 import { getRunEmitter, getRunIds } from "../../runtime/runEmit";
-import {
-  getSubagentDefinition,
-  listSubagentDefinitions,
-} from "../../subagents/registry";
+import { getSubagentDefinition, listSubagentDefinitions } from "../../subagents/registry";
 import { agentEndSpan, agentStartSpan, runWithAgentTaskId } from "../../trace/emit";
 import { getWorkspaceRootOrNull } from "../../workspace";
 import { runTool } from "../runTool";
@@ -64,11 +57,7 @@ export function cancelBackgroundTasksByRunId(runId: string, reason = "Cancelled.
   }
 }
 
-function cancelOneBackgroundTask(
-  taskId: string,
-  task: BackgroundTask,
-  reason: string,
-): void {
+function cancelOneBackgroundTask(taskId: string, task: BackgroundTask, reason: string): void {
   if (task.status !== "running") return;
   task.status = "failed";
   task.summary = "";
@@ -144,8 +133,7 @@ function formatThinkingLiveLine(buf: string): string {
 /** 子代理工具调用的单行活跃文案（卡片底部）。 */
 function formatChildLiveLine(toolName: string, args: ToolArgs): string {
   const name = toolName.trim() || "tool";
-  const path =
-    typeof args.path === "string" && args.path.trim() ? args.path.trim() : "";
+  const path = typeof args.path === "string" && args.path.trim() ? args.path.trim() : "";
   const pattern =
     typeof args.pattern === "string" && args.pattern.trim()
       ? args.pattern.trim()
@@ -269,9 +257,7 @@ export async function runChildAgent(options: {
       name: `subagent:${options.subagent}`,
       kind: "subagent",
       taskId: options.taskId,
-      summary: title
-        ? `${options.subagent} · ${title}`
-        : `subagent:${options.subagent}`,
+      summary: title ? `${options.subagent} · ${title}` : `subagent:${options.subagent}`,
       input: {
         prompt: options.prompt,
         readonly: options.readonly,
@@ -293,10 +279,7 @@ export async function runChildAgent(options: {
         configureModelCatalog(undefined, { mode: "manual", modelId });
       }
 
-      const emitProgress = (
-        liveLine: string,
-        childEvent?: SubagentChildEvent,
-      ) => {
+      const emitProgress = (liveLine: string, childEvent?: SubagentChildEvent) => {
         // 主会话已 cancel：勿再推 progress，否则 Background 条会被重新加回
         if (options.signal.aborted) return;
         if (options.background) {
@@ -376,15 +359,12 @@ export async function runChildAgent(options: {
           const assistant: ChatMessage = {
             role: "assistant",
             content: result.content,
-            ...(result.toolCalls.length
-              ? { tool_calls: result.toolCalls }
-              : {}),
+            ...(result.toolCalls.length ? { tool_calls: result.toolCalls } : {}),
           };
           messages.push(assistant);
           const calls = result.toolCalls;
           if (!calls.length) {
-            const summary =
-              (result.content || "").trim() || "(empty subagent reply)";
+            const summary = (result.content || "").trim() || "(empty subagent reply)";
             emitProgress(summary.slice(0, 120));
             return { ok: true, summary };
           }
@@ -440,8 +420,7 @@ export async function runChildAgent(options: {
                 attrs: { callId, turn: childTurn },
               });
             } catch (toolErr) {
-              const errMsg =
-                toolErr instanceof Error ? toolErr.message : String(toolErr);
+              const errMsg = toolErr instanceof Error ? toolErr.message : String(toolErr);
               agentEndSpan(childToolSpanId, {
                 status: /cancel/i.test(errMsg) ? "cancelled" : "error",
                 error: errMsg,
@@ -572,9 +551,7 @@ export async function runTaskTool(args: ToolArgs, ctx: ToolContext): Promise<Too
   const titleArg = typeof args.title === "string" ? args.title : undefined;
   const title = deriveTaskTitle(titleArg, prompt);
   const modelArg =
-    typeof args.model === "string" && args.model.trim()
-      ? args.model.trim()
-      : def.model;
+    typeof args.model === "string" && args.model.trim() ? args.model.trim() : def.model;
   const systemBody = [
     `You are the "${def.name}" subagent.`,
     def.description ? `Role: ${def.description}` : "",

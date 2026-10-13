@@ -21,8 +21,7 @@ export function consumePendingOpenBrowser(): OpenBrowserDetail | null {
 
 /** 请求打开右侧 Browser 面板（可选导航）。 */
 export function requestOpenBrowser(detail?: string | OpenBrowserDetail): void {
-  const payload: OpenBrowserDetail =
-    typeof detail === "string" ? { url: detail } : (detail ?? {});
+  const payload: OpenBrowserDetail = typeof detail === "string" ? { url: detail } : (detail ?? {});
   pendingOpen = payload;
   window.dispatchEvent(new CustomEvent(OPEN_BROWSER_EVENT, { detail: payload }));
 }

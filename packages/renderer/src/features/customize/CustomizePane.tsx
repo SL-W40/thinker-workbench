@@ -28,7 +28,9 @@ export function CustomizePane({ active }: Props) {
 
   useEffect(() => {
     if (!active) return;
-    void listWorkspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
+    void listWorkspaces()
+      .then(setWorkspaces)
+      .catch(() => setWorkspaces([]));
   }, [active]);
 
   return (

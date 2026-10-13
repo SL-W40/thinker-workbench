@@ -46,10 +46,7 @@ export function isProcessExitError(message: string): boolean {
 /**
  * 软中断对应的 Resume 种类：cancelled 仅时间线；crashed 时间线 + 输入区横幅。
  */
-export function softStopResumeKind(
-  message: string,
-  code?: string,
-): null | "cancelled" | "crashed" {
+export function softStopResumeKind(message: string, code?: string): null | "cancelled" | "crashed" {
   const c = code ?? classifyRunError(message);
   if (c === "CANCELLED") return "cancelled";
   if (c === "PROCESS_EXIT") return "crashed";

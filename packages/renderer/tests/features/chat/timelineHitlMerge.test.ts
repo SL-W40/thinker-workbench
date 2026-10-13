@@ -2,8 +2,8 @@
  * shell HITL 应合并进已有 Running 卡片，不另开一张。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
 import type { ChatTimelineStep, HitlRequest } from "@thinker-workbench/shared";
+import { describe, it } from "vitest";
 import { applyHitlRequest } from "../../../src/features/chat/timelineModel";
 
 describe("applyHitlRequest merge", () => {

@@ -1,5 +1,7 @@
 /**
  * 加载转圈；可声明为装饰性（由父级已暴露 busy）。
+ * 非装饰时用 `role="status"` 播报。无固定角色的 span 不支持 `aria-label`，
+ * 文案放在视觉隐藏节点里，由读屏读取文本。
  */
 export type SpinnerSize = "sm" | "md" | "lg";
 
@@ -22,10 +24,10 @@ export function Spinner({ size = "md", label = "Loading", decorative, className 
     <span
       className={`tw-spinner tw-spinner--${size}${className ? ` ${className}` : ""}`}
       role={decorative ? undefined : "status"}
-      aria-label={decorative ? undefined : label}
       aria-busy={decorative ? undefined : true}
       aria-hidden={decorative || undefined}
     >
+      {decorative ? null : <span className="tw-spinner__label">{label}</span>}
       <svg viewBox="0 0 28 28" width={px} height={px} aria-hidden>
         <circle
           className="tw-spinner__track"

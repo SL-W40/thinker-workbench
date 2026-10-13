@@ -2,7 +2,7 @@
  * Customize 内按作用域展开的分组：标题栏 + 添加 + 空状态 / 内容。
  */
 import { Button, ChevronRightIcon, EmptyState } from "@thinker-workbench/design/react";
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 type Props = {
   title: string;

@@ -6,8 +6,8 @@ import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
 import {
   type ChatMessage,
   type ChatTimelineStep,
-  type GeneralSettings,
   createTraceId,
+  type GeneralSettings,
 } from "@thinker-workbench/shared";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { onTerminalEvent } from "../../bridge/terminal";
@@ -19,11 +19,6 @@ import {
   resumeAgent,
   runAgent,
 } from "../../bridge/thinker";
-import {
-  useEnsureModelSecrets,
-  useShowModelSecretGate,
-} from "../modelSecrets/ModelSecretGate";
-import { isUnlockDeniedError } from "./systemErrors";
 import { workspaceWriteFile } from "../../bridge/workspaceFs";
 import {
   createSession,
@@ -41,12 +36,22 @@ import {
 } from "../../bridge/workspaces";
 import { useT } from "../../i18n/useI18n";
 import { appLog } from "../../log/sessionLog";
-import { createMessage, toAgentHistory, visibleAssistantText } from "./messageModel";
+import { useEnsureModelSecrets, useShowModelSecretGate } from "../modelSecrets/ModelSecretGate";
+import type { ComposerEditorHandle } from "./ComposerEditor";
+import { extractContextPaths } from "./composerMentions";
 import {
-  classifyRunError,
-  isSoftStopCode,
-  softStopResumeKind,
-} from "./runErrors";
+  ensureLiveRunRegistry,
+  listBusyLiveRuns,
+  parkForegroundRun,
+  setForegroundSessionId,
+  subscribeLiveRuns,
+  takeLiveRunSlot,
+  upsertLiveRunSlot,
+} from "./liveRunRegistry";
+import { createMessage, toAgentHistory, visibleAssistantText } from "./messageModel";
+import { classifyRunError, isSoftStopCode, softStopResumeKind } from "./runErrors";
+import { shouldApplySessionReload } from "./sessionReload";
+import { isUnlockDeniedError } from "./systemErrors";
 import {
   appendError,
   appendModelSwitch,
@@ -61,36 +66,16 @@ import {
   applySubagentEvent,
   applyToolEvent,
   bindShellSessionId,
-  freezeTimelineHistory,
   deactivateAll,
+  freezeTimelineHistory,
   isDeleteRestoreExpired,
   pruneExpiredDeleteRestoreCaches,
   readDeleteFileRestoreTtlDays,
 } from "./timelineModel";
-import { extractContextPaths } from "./composerMentions";
-import type { ComposerEditorHandle } from "./ComposerEditor";
-import { shouldApplySessionReload } from "./sessionReload";
-import {
-  ensureLiveRunRegistry,
-  listBusyLiveRuns,
-  parkForegroundRun,
-  setForegroundSessionId,
-  subscribeLiveRuns,
-  takeLiveRunSlot,
-  upsertLiveRunSlot,
-} from "./liveRunRegistry";
-import {
-  EMPTY_USAGE,
-  addUsage,
-  estimatePartialUsage,
-  totalTokens,
-} from "./usageStats";
+import { addUsage, EMPTY_USAGE, estimatePartialUsage, totalTokens } from "./usageStats";
 
 /** 收集助手气泡之前的可见历史，供中断时粗估 input*/
-function collectInputTextsBefore(
-  messages: ChatMessage[],
-  assistantId: string,
-): string[] {
+function collectInputTextsBefore(messages: ChatMessage[], assistantId: string): string[] {
   const texts: string[] = [];
   for (const m of messages) {
     if (m.id === assistantId) break;
@@ -134,8 +119,7 @@ function settleMessageClock(message: ChatMessage): ChatMessage {
   if (message.runStartedAt == null) return message;
   return {
     ...message,
-    durationMs:
-      (message.durationMs ?? 0) + Math.max(0, Date.now() - message.runStartedAt),
+    durationMs: (message.durationMs ?? 0) + Math.max(0, Date.now() - message.runStartedAt),
     runStartedAt: undefined,
   };
 }
@@ -174,7 +158,7 @@ function isResumeStubMessage(message: ChatMessage): boolean {
  * 从磁盘 hydrate 时收束「进程已死但仍 active」的时间线。
  * - cancelled / crashed：清掉 pending（Resume 看 runStatus + checkpoint），补软中断行
  * - 其它终态：一并清 pending，避免永远 Planning
-*/
+ */
 function settleLoadedMessages(
   messages: ChatMessage[],
   runStatus: string | undefined,
@@ -183,15 +167,14 @@ function settleLoadedMessages(
   const resumable = runStatus === "cancelled" || runStatus === "crashed";
   return messages.map((m) => {
     if (m.role !== "assistant") return m;
- // 非运行中：丢掉 live 计时字段；时间线用历史冻结（禁止墙钟重算）
+    // 非运行中：丢掉 live 计时字段；时间线用历史冻结（禁止墙钟重算）
     let base = m.runStartedAt != null ? { ...m, runStartedAt: undefined } : m;
     let timeline = freezeTimelineHistory(base.timeline ?? [], base.durationMs);
     const hasSoft = timeline.some((s) => s.kind === "error" && isSoftStopCode(s.code));
     // 崩溃 / 取消恢复：补一条软中断，便于时间线展示「继续。
     if (resumable && !hasSoft) {
       const softCode = runStatus === "crashed" ? "PROCESS_EXIT" : "CANCELLED";
-      const softMsg =
-        softCode === "PROCESS_EXIT" ? "Exited unexpectedly." : "Stopped.";
+      const softMsg = softCode === "PROCESS_EXIT" ? "Exited unexpectedly." : "Stopped.";
       timeline = appendError(timeline, softMsg, softCode);
     }
     // 非运行中：丢掉 live 计时字段；时间线用历史冻结（禁止墙钟重算）
@@ -213,14 +196,11 @@ function settleLoadedMessages(
 }
 
 /** 从会话 runStatus 推导 Resume 种类*/
-function resumeKindFromRunStatus(
-  runStatus: string | undefined,
-): null | "cancelled" | "crashed" {
+function resumeKindFromRunStatus(runStatus: string | undefined): null | "cancelled" | "crashed" {
   if (runStatus === "crashed") return "crashed";
   if (runStatus === "cancelled") return "cancelled";
   return null;
 }
-
 
 /**
  * @param visible 聊天页是否在前台。离开再回来时用于立刻刷 token 并滚到底。
@@ -333,9 +313,7 @@ export function useChatSession(visible = true) {
     resetUnbilled();
     setMessages((prev) => {
       const next = prev.map((m) =>
-        m.id === id
-          ? { ...m, usage: addUsage(m.usage ?? EMPTY_USAGE, delta) }
-          : m,
+        m.id === id ? { ...m, usage: addUsage(m.usage ?? EMPTY_USAGE, delta) } : m,
       );
       messagesRef.current = next;
       scheduleSave(next);
@@ -401,7 +379,7 @@ export function useChatSession(visible = true) {
     messagesRef.current = pruned;
     setMessages(pruned);
     scheduleSave(pruned);
-  }, [messages]);
+  }, [messages, scheduleSave]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -432,7 +410,7 @@ export function useChatSession(visible = true) {
       window.clearInterval(timer);
       window.removeEventListener(GENERAL_SETTINGS_CHANGED, onSettings);
     };
-  }, []);
+  }, [scheduleSave]);
 
   /** 防抖落库当前会话消息*/
   function scheduleSave(nextMessages?: ChatMessage[]) {
@@ -465,9 +443,9 @@ export function useChatSession(visible = true) {
   }
 
   /**
- * 将磁盘会话应用到 UI：running 时重新挂上 pending 助手；非 running 才回写冻结耗时。
- * 避免 hydrate 后的 scheduleSave 覆盖主进程刚写入的 done 终态。
- */
+   * 将磁盘会话应用到 UI：running 时重新挂上 pending 助手；非 running 才回写冻结耗时。
+   * 避免 hydrate 后的 scheduleSave 覆盖主进程刚写入的 done 终态。
+   */
   function applyLoadedSession(
     runStatus: string | undefined,
     messages: ChatMessage[],
@@ -478,9 +456,7 @@ export function useChatSession(visible = true) {
     messagesRef.current = settled;
     setCanResume(resumeKindFromRunStatus(runStatus) ?? false);
 
-    const pending = [...settled]
-      .reverse()
-      .find((m) => m.role === "assistant" && m.pending);
+    const pending = [...settled].reverse().find((m) => m.role === "assistant" && m.pending);
     if (runStatus === "running" && pending) {
       targetMsgId.current = pending.id;
       streamText.current = pending.text || "";
@@ -524,8 +500,7 @@ export function useChatSession(visible = true) {
       const loc = messagesRef.current.find((x) => x.id === m.id);
       if (!loc || m.role !== "assistant") return m;
       const timeline = pickRicherTimeline(loc.timeline ?? [], m.timeline);
-      const text =
-        (loc.text?.length ?? 0) >= (m.text?.length ?? 0) ? (loc.text ?? m.text) : m.text;
+      const text = (loc.text?.length ?? 0) >= (m.text?.length ?? 0) ? (loc.text ?? m.text) : m.text;
       return {
         ...m,
         text,
@@ -583,8 +558,7 @@ export function useChatSession(visible = true) {
       }
 
       const lastWsId = await getLastWorkspaceId();
-      const ws =
-        workspaces.find((w) => w.id === lastWsId) ?? workspaces[0] ?? null;
+      const ws = workspaces.find((w) => w.id === lastWsId) ?? workspaces[0] ?? null;
       if (!ws || cancelled) return;
       await setLastWorkspaceId(ws.id);
       await syncWorkspaceLabel(ws.id);
@@ -610,7 +584,7 @@ export function useChatSession(visible = true) {
     };
     // 仅挂载时恢复
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [requestStickToBottom, syncWorkspaceLabel, applyLoadedSession]);
 
   // 别名等变更时刷新输入框工作空间名
   useEffect(() => {
@@ -618,7 +592,7 @@ export function useChatSession(visible = true) {
     return onWorkspacesChanged(() => {
       void syncWorkspaceLabel(workspaceId);
     });
-  }, [workspaceId]);
+  }, [workspaceId, syncWorkspaceLabel]);
 
   /**
    * 侧栏删除会话 / 清空工作空间后：DB 已无当前会话，但主区仍可能挂着内存消息。   * 监听 threads 变更，若当前会话已不存在则切到同空间最近会话或清空主区。   */
@@ -630,7 +604,7 @@ export function useChatSession(visible = true) {
     // 用户可能已切到别的会
     if (sessionIdRef.current !== sid) return;
 
- // 会话已删：取消未落库的 save，避免 saveMessages 报 Session not found / 写回幽灵数据
+    // 会话已删：取消未落库的 save，避免 saveMessages 报 Session not found / 写回幽灵数据
     if (saveTimer.current != null) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -697,12 +671,12 @@ export function useChatSession(visible = true) {
     ensureLiveRunRegistry();
     return onThreadsChanged(() => {
       void reconcileIfSessionGone();
- // 主进程 finalize 后拉终态（刷新期间错过 done 事件时）
+      // 主进程 finalize 后拉终态（刷新期间错过 done 事件时）
       void reloadCurrentSessionFromDb();
     });
- // 仅挂载订阅；逻辑走 ref
+    // 仅挂载订阅；逻辑走 ref
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reloadCurrentSessionFromDb, reconcileIfSessionGone]);
 
   useEffect(() => {
     setForegroundSessionId(sessionId);
@@ -712,9 +686,7 @@ export function useChatSession(visible = true) {
   useEffect(() => {
     return subscribeLiveRuns(() => setLiveRunTick((n) => n + 1));
   }, []);
-  const backgroundRunCount = listBusyLiveRuns().filter(
-    (s) => s.sessionId !== sessionId,
-  ).length;
+  const _backgroundRunCount = listBusyLiveRuns().filter((s) => s.sessionId !== sessionId).length;
   void liveRunTick;
 
   // 回到聊天页：冲掉未刷完的流式帧；不强制滚底（尊重用户阅读位置：
@@ -769,7 +741,7 @@ export function useChatSession(visible = true) {
     const unsub = onAgentEvent((event) => {
       // 会话已切换：丢弃绑定前的迟到事件
       if (sessionEpoch.current !== boundSessionEpoch) return;
- // 仅处理当前 thread 的事件
+      // 仅处理当前 thread 的事件
       if (threadId && event.threadId !== threadId) return;
 
       // 手动停止后：不重挂直播；终态仍合并 DB
@@ -780,7 +752,7 @@ export function useChatSession(visible = true) {
         return;
       }
 
- // 刷新后丢失 target：挂回仍 pending 的助手气泡，继续收流
+      // 刷新后丢失 target：挂回仍 pending 的助手气泡，继续收流
       if (!targetMsgId.current) {
         const pending = [...messagesRef.current]
           .reverse()
@@ -939,14 +911,15 @@ export function useChatSession(visible = true) {
       if (event.type === "error") {
         const errCode = classifyRunError(event.error);
         const resume = softStopResumeKind(event.error, errCode);
- // 手动取消：仅时间线可续；进程异常：时间线可续
+        // 手动取消：仅时间线可续；进程异常：时间线可续
         setCanResume(resume ?? false);
         setMessages((prev) => {
           const next = prev.map((m) => {
             if (m.id !== id) return m;
-            const baseTimeline =
-              timelineRef.current.length ? timelineRef.current : (m.timeline ?? []);
- // 本地已写入「已停止」CANCELLED 时，保留友好文案，勿被 agent 的 "…cancelled" 覆盖
+            const baseTimeline = timelineRef.current.length
+              ? timelineRef.current
+              : (m.timeline ?? []);
+            // 本地已写入「已停止」CANCELLED 时，保留友好文案，勿被 agent 的 "…cancelled" 覆盖
             const alreadyStopped = baseTimeline.some(
               (s) => s.kind === "error" && s.code === "CANCELLED",
             );
@@ -1004,9 +977,16 @@ export function useChatSession(visible = true) {
       flushStreamRef.current = null;
       unsub();
     };
- // scheduleSave 用 ref，勿列入依赖以免重订事件
+    // scheduleSave 用 ref，勿列入依赖以免重订事件
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId]);
+  }, [
+    threadId,
+    withUnbilledUsageEstimate,
+    scheduleSave,
+    reloadCurrentSessionFromDb, // 手动取消：仅时间线可续；进程异常：时间线可续
+    setCanResume,
+    patchTargetUsage,
+  ]);
 
   // 终端输出 → 时间线 shell 步骤 liveOutput
   useEffect(() => {
@@ -1014,16 +994,13 @@ export function useChatSession(visible = true) {
       const id = targetMsgId.current;
       if (!id) return;
       if (event.type === "created" && event.session.fromAgent) {
-        timelineRef.current = bindShellSessionId(
-          timelineRef.current,
-          event.session.sessionId,
-          { runId: event.session.runId, command: event.session.command },
-        );
+        timelineRef.current = bindShellSessionId(timelineRef.current, event.session.sessionId, {
+          runId: event.session.runId,
+          command: event.session.command,
+        });
         setMessages((prev) => {
           const next = prev.map((m) =>
-            m.id === id
-              ? { ...m, pending: true, timeline: [...timelineRef.current] }
-              : m,
+            m.id === id ? { ...m, pending: true, timeline: [...timelineRef.current] } : m,
           );
           messagesRef.current = next;
           return next;
@@ -1031,15 +1008,10 @@ export function useChatSession(visible = true) {
         return;
       }
       if (event.type === "commandBackgrounded") {
-        timelineRef.current = applyShellCommandBackgrounded(
-          timelineRef.current,
-          event.sessionId,
-        );
+        timelineRef.current = applyShellCommandBackgrounded(timelineRef.current, event.sessionId);
         setMessages((prev) => {
           const next = prev.map((m) =>
-            m.id === id
-              ? { ...m, pending: true, timeline: [...timelineRef.current] }
-              : m,
+            m.id === id ? { ...m, pending: true, timeline: [...timelineRef.current] } : m,
           );
           messagesRef.current = next;
           return next;
@@ -1054,9 +1026,7 @@ export function useChatSession(visible = true) {
         );
         setMessages((prev) => {
           const next = prev.map((m) =>
-            m.id === id
-              ? { ...m, pending: true, timeline: [...timelineRef.current] }
-              : m,
+            m.id === id ? { ...m, pending: true, timeline: [...timelineRef.current] } : m,
           );
           messagesRef.current = next;
           return next;
@@ -1064,16 +1034,10 @@ export function useChatSession(visible = true) {
         return;
       }
       if (event.type !== "data") return;
-      timelineRef.current = appendShellLiveOutput(
-        timelineRef.current,
-        event.data,
-        event.sessionId,
-      );
+      timelineRef.current = appendShellLiveOutput(timelineRef.current, event.data, event.sessionId);
       setMessages((prev) => {
         const next = prev.map((m) =>
-          m.id === id
-            ? { ...m, pending: true, timeline: [...timelineRef.current] }
-            : m,
+          m.id === id ? { ...m, pending: true, timeline: [...timelineRef.current] } : m,
         );
         messagesRef.current = next;
         return next;
@@ -1284,10 +1248,10 @@ export function useChatSession(visible = true) {
     // 先解锁钥匙串；仅「拒绝授权」弹窗并中止。未配置密钥不拦截，走气泡内既有引导。
     if (!(await ensureModelSecrets())) return;
 
- // 必须有活动会话所属的工作空间；有工作空间无会话时自动建会话
+    // 必须有活动会话所属的工作空间；有工作空间无会话时自动建会话
     // getSession 返回 { session, messages }，工作空间在 session.workspaceId
     let sid = sessionId ?? (await getActiveSessionId());
-    let sess = sid ? await getSession(sid) : null;
+    const sess = sid ? await getSession(sid) : null;
     let runThreadId = sess?.session.threadId ?? threadId;
     if (!sess?.session.workspaceId) {
       let wid = workspaceId ?? (await getLastWorkspaceId());
@@ -1340,7 +1304,7 @@ export function useChatSession(visible = true) {
       runStartedAt: Date.now(),
       traceId,
     };
- // 在追加本轮气泡之前快照历史，避免把当前 user / 空助手也塞进模型上下文
+    // 在追加本轮气泡之前快照历史，避免把当前 user / 空助手也塞进模型上下文
     const history = toAgentHistory(messagesRef.current);
     suppressLiveRef.current = false;
     targetMsgId.current = pending.id;
@@ -1541,7 +1505,7 @@ export function useChatSession(visible = true) {
 
     if (!(await ensureModelSecrets())) return;
 
- // 续写原先那条助手消息：丢掉末尾空壳错误气泡，再取最后一条 assistant
+    // 续写原先那条助手消息：丢掉末尾空壳错误气泡，再取最后一条 assistant
     let base = [...messagesRef.current];
     while (base.length > 0) {
       const last = base[base.length - 1]!;
@@ -1608,9 +1572,7 @@ export function useChatSession(visible = true) {
           const next = prev.map((m) => {
             if (m.id !== pendingId) return m;
             if (crashed) {
-              let timeline = deactivateAll(
-                pickRicherTimeline(timelineRef.current, m.timeline),
-              );
+              let timeline = deactivateAll(pickRicherTimeline(timelineRef.current, m.timeline));
               if (!timeline.some((s) => s.kind === "error" && isSoftStopCode(s.code))) {
                 timeline = appendError(timeline, "Exited unexpectedly.", "PROCESS_EXIT");
               }
@@ -1658,9 +1620,7 @@ export function useChatSession(visible = true) {
         const next = prev.map((m) => {
           if (m.id !== pendingId || !m.pending) return m;
           const text = result.text || streamText.current || m.text || "";
-          timelineRef.current = deactivateAll(
-            pickRicherTimeline(timelineRef.current, m.timeline),
-          );
+          timelineRef.current = deactivateAll(pickRicherTimeline(timelineRef.current, m.timeline));
           return {
             ...m,
             pending: false,
@@ -1687,7 +1647,7 @@ export function useChatSession(visible = true) {
     runEpoch.current += 1;
     suppressLiveRef.current = true;
     const id = targetMsgId.current;
- // 先同步收敛 messagesRef（pending=false），再掐 target，避免迟到事件按 pending 重挂
+    // 先同步收敛 messagesRef（pending=false），再掐 target，避免迟到事件按 pending 重挂
     if (id) {
       const next = messagesRef.current.map((m) => {
         if (m.id !== id) return m;
@@ -1695,16 +1655,13 @@ export function useChatSession(visible = true) {
           m.runStartedAt != null
             ? {
                 ...m,
-                durationMs:
-                  (m.durationMs ?? 0) + Math.max(0, Date.now() - m.runStartedAt),
+                durationMs: (m.durationMs ?? 0) + Math.max(0, Date.now() - m.runStartedAt),
                 runStartedAt: undefined,
               }
             : m;
- // 流末 usage 常随中断丢失：用未入账正文 / 思考粗估
-    // 先收束活动工具 / 子代理 Task，再挂「已停止」
-        const frozen = deactivateAll(
-          pickRicherTimeline(timelineRef.current, withClock.timeline),
-        );
+        // 流末 usage 常随中断丢失：用未入账正文 / 思考粗估
+        // 先收束活动工具 / 子代理 Task，再挂「已停止」
+        const frozen = deactivateAll(pickRicherTimeline(timelineRef.current, withClock.timeline));
         const failed = failAssistantMessage(
           withUnbilledUsageEstimate({
             ...withClock,
@@ -1741,7 +1698,7 @@ export function useChatSession(visible = true) {
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key !== "Enter") return;
- // Shift+Enter：换行；Enter：发送
+    // Shift+Enter：换行；Enter：发送
     if (e.shiftKey) {
       e.preventDefault();
       document.execCommand("insertLineBreak");
@@ -1803,15 +1760,15 @@ export function useChatSession(visible = true) {
   }
 
   /**
- * 时间线 delete_file「恢复」：把删前缓存的正文写回工作区，并标记 restored。
- * 失败时抛错，供卡片展示提示。
- */
+   * 时间线 delete_file「恢复」：把删前缓存的正文写回工作区，并标记 restored。
+   * 失败时抛错，供卡片展示提示。
+   */
   async function restoreDeletedFile(messageId: string, stepId: string) {
     const wid = workspaceId;
     if (!wid) throw new Error(t("chat.noWorkspaceLabel"));
     const msg = messagesRef.current.find((m) => m.id === messageId);
     const step = msg?.timeline?.find((s) => s.id === stepId);
-    if (!step || step.kind !== "tool" || step.name !== "delete_file") {
+    if (step?.kind !== "tool" || step.name !== "delete_file") {
       throw new Error("delete_file step not found");
     }
     if (!step.path || typeof step.restoreContent !== "string") {

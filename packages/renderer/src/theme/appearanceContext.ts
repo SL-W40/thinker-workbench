@@ -1,8 +1,9 @@
 /**
  * 外观 React Context（与 Provider / hooks 分文件，避免 Fast Refresh 整页重载白屏）。
  */
-import { createContext } from "react";
+
 import type { AppThemeId, CustomThemeRecord } from "@thinker-workbench/shared";
+import { createContext } from "react";
 
 export type AppearanceContextValue = {
   /** 用户偏好主题 id（可为 `system` 或 `custom_*`）。 */

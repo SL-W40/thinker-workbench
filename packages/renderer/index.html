@@ -122,7 +122,7 @@
         .boot-splash__mark,
         .boot-splash__char,
         #boot-splash.is-leaving {
-          animation: none !important;
+          animation: none;
           opacity: 1;
           transform: none;
           filter: none;
@@ -176,12 +176,11 @@
         };
         try {
           var general =
-            window.thinker &&
-            window.thinker.settings &&
+            window.thinker?.settings &&
             typeof window.thinker.settings.getGeneralSync === "function"
               ? window.thinker.settings.getGeneralSync()
               : null;
-          var pref = (general && general.uiTheme) || "light";
+          var pref = (general?.uiTheme) || "light";
           // 旧 id 映射，与 shared migrate / normalize 一致
           if (pref === "mono") pref = "light";
           if (pref === "dusk") pref = "aurora";
@@ -196,7 +195,7 @@
           if (!p && typeof visual === "string" && visual.indexOf("custom_") === 0 && general) {
             var customs = general.customThemes || [];
             for (var i = 0; i < customs.length; i++) {
-              if (customs[i] && customs[i].id === visual && customs[i].theme && customs[i].theme.ui) {
+              if (customs[i] && customs[i].id === visual && customs[i].theme?.ui) {
                 var ui = customs[i].theme.ui;
                 var bg = ui["--tw-bg"];
                 var ink = ui["--tw-fg"];

@@ -156,9 +156,7 @@ class TerminalSessionManager {
   }): TerminalSession {
     const pty = loadNodePty();
     const general = getGeneralSettings();
-    const profile = resolveShellProfile(
-      options?.profileId?.trim() || general.shellProfileId,
-    );
+    const profile = resolveShellProfile(options?.profileId?.trim() || general.shellProfileId);
     const cwd = options?.cwd?.trim() || getActiveWorkspaceRoot() || process.cwd();
     const cols = options?.cols ?? 120;
     const rows = options?.rows ?? 30;
@@ -193,9 +191,7 @@ class TerminalSessionManager {
   /**
    * 启动 Agent 命令（不阻塞）。login = 登录壳 + OSC；direct = 非交互子进程。
    */
-  async startAgentCommand(
-    options: StartAgentCommandOptions,
-  ): Promise<{ sessionId: string }> {
+  async startAgentCommand(options: StartAgentCommandOptions): Promise<{ sessionId: string }> {
     const execMode: ShellExecMode = options.execMode ?? "login";
     if (execMode === "direct") {
       return this.startDirect(options);
@@ -207,10 +203,7 @@ class TerminalSessionManager {
    * 订阅会话 settled：已 finalize 立即 complete；否则限时等待。
    * 超时只结束本次调用，不 finalize、不弃跟踪。
    */
-  waitAgentCommand(
-    sessionId: string,
-    options: WaitAgentCommandOptions,
-  ): Promise<PtyWaitResult> {
+  waitAgentCommand(sessionId: string, options: WaitAgentCommandOptions): Promise<PtyWaitResult> {
     const rec = this.sessions.get(sessionId);
     if (!rec) {
       const cached = this.finalResults.get(sessionId);
@@ -226,7 +219,7 @@ class TerminalSessionManager {
     }
 
     const pattern = options.pattern ? new RegExp(options.pattern, "m") : undefined;
-    if (pattern && pattern.test(rec.output)) {
+    if (pattern?.test(rec.output)) {
       this.markBackgrounded(sessionId, "pattern");
       return Promise.resolve(this.stillRunningResult(rec, "pattern"));
     }
@@ -259,9 +252,7 @@ class TerminalSessionManager {
 
       // 注册后若已 finalize（竞态），立刻收束
       if (rec.run?.finalized) {
-        this.finishWaiter(sessionId, requestId, () =>
-          this.completeResult(rec, "exit"),
-        );
+        this.finishWaiter(sessionId, requestId, () => this.completeResult(rec, "exit"));
       }
     });
   }
@@ -316,7 +307,7 @@ class TerminalSessionManager {
 
   write(sessionId: string, data: string): void {
     const rec = this.sessions.get(sessionId);
-    if (!rec || !rec.proc || rec.meta.status !== "running") {
+    if (!rec?.proc || rec.meta.status !== "running") {
       throw new Error(`Session not writable: ${sessionId}`);
     }
     // direct 无持久交互壳
@@ -449,9 +440,7 @@ class TerminalSessionManager {
 
   // ─── 内部：启动 ───────────────────────────────────────────
 
-  private async startLogin(
-    options: StartAgentCommandOptions,
-  ): Promise<{ sessionId: string }> {
+  private async startLogin(options: StartAgentCommandOptions): Promise<{ sessionId: string }> {
     const general = getGeneralSettings();
     const profile = resolveShellProfile(general.shellProfileId);
     const cwd = options.cwd?.trim() || getActiveWorkspaceRoot() || process.cwd();
@@ -517,9 +506,7 @@ class TerminalSessionManager {
     return { sessionId };
   }
 
-  private async startDirect(
-    options: StartAgentCommandOptions,
-  ): Promise<{ sessionId: string }> {
+  private async startDirect(options: StartAgentCommandOptions): Promise<{ sessionId: string }> {
     const general = getGeneralSettings();
     const profile = resolveShellProfile(general.shellProfileId);
     const cwd = options.cwd?.trim() || getActiveWorkspaceRoot() || process.cwd();
@@ -616,10 +603,7 @@ class TerminalSessionManager {
     const hadWaiters = rec.waiters.length > 0;
     this.flushWaiters(sessionId, () => snapshot);
     // 无 waiter 时把增量留给迟到的 shell_await；有 waiter 则只缓存终态元数据
-    this.finalResults.set(
-      sessionId,
-      hadWaiters ? { ...snapshot, output: "" } : snapshot,
-    );
+    this.finalResults.set(sessionId, hadWaiters ? { ...snapshot, output: "" } : snapshot);
 
     broadcast({
       type: "commandExited",
@@ -645,10 +629,7 @@ class TerminalSessionManager {
     }, 30_000);
   }
 
-  private markBackgrounded(
-    sessionId: string,
-    reason: ShellWakeReason = "timeout",
-  ): void {
+  private markBackgrounded(sessionId: string, reason: ShellWakeReason = "timeout"): void {
     const rec = this.sessions.get(sessionId);
     if (!rec) return;
     if (rec.run?.finalized) return;
@@ -714,15 +695,9 @@ class TerminalSessionManager {
     return stripDoneMarkers(raw);
   }
 
-  private completeResult(
-    rec: SessionRecord,
-    wakeReason: ShellWakeReason,
-  ): PtyWaitResult {
+  private completeResult(rec: SessionRecord, wakeReason: ShellWakeReason): PtyWaitResult {
     const exitCode =
-      rec.run?.exitCode ??
-      parseDoneExitCode(rec.output) ??
-      rec.meta.exitCode ??
-      null;
+      rec.run?.exitCode ?? parseDoneExitCode(rec.output) ?? rec.meta.exitCode ?? null;
     const output = this.takeIncrementalOutput(rec);
     return {
       sessionId: rec.meta.sessionId,
@@ -738,10 +713,7 @@ class TerminalSessionManager {
     };
   }
 
-  private stillRunningResult(
-    rec: SessionRecord,
-    wakeReason: ShellWakeReason,
-  ): PtyWaitResult {
+  private stillRunningResult(rec: SessionRecord, wakeReason: ShellWakeReason): PtyWaitResult {
     const output = this.takeIncrementalOutput(rec);
     return {
       sessionId: rec.meta.sessionId,
@@ -845,7 +817,7 @@ class TerminalSessionManager {
       }
 
       for (const w of [...cur.waiters]) {
-        if (w.pattern && w.pattern.test(cur.output)) {
+        if (w.pattern?.test(cur.output)) {
           this.finishWaiter(sessionId, w.requestId, () => {
             this.markBackgrounded(sessionId, "pattern");
             return this.stillRunningResult(cur, "pattern");
@@ -881,11 +853,7 @@ class TerminalSessionManager {
     });
   }
 
-  private finishWaiter(
-    sessionId: string,
-    requestId: string,
-    build: () => PtyWaitResult,
-  ): void {
+  private finishWaiter(sessionId: string, requestId: string, build: () => PtyWaitResult): void {
     const rec = this.sessions.get(sessionId);
     if (!rec) return;
     const idx = rec.waiters.findIndex((w) => w.requestId === requestId);
@@ -895,10 +863,7 @@ class TerminalSessionManager {
     w?.resolve(build());
   }
 
-  private flushWaiters(
-    sessionId: string,
-    build: () => PtyWaitResult,
-  ): void {
+  private flushWaiters(sessionId: string, build: () => PtyWaitResult): void {
     const rec = this.sessions.get(sessionId);
     if (!rec) return;
     const waiters = rec.waiters.splice(0, rec.waiters.length);

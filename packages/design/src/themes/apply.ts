@@ -104,8 +104,7 @@ export function applyDesignTheme(
 
   el.dataset.twTheme = resolved.id;
   el.style.colorScheme =
-    resolved.colorScheme ??
-    (resolved.id === "dark" || resolved.id === "aurora" ? "dark" : "light");
+    resolved.colorScheme ?? (resolved.id === "dark" || resolved.id === "aurora" ? "dark" : "light");
 
   for (const [key, value] of Object.entries(resolved.ui)) {
     if (typeof value === "string") el.style.setProperty(key, value);
@@ -123,8 +122,7 @@ export function applyDesignTheme(
 
   // UI / markdown 正文字体与 body 对齐，并写入 `--font` / `--display` 等遗留别名。
   const body =
-    resolved.ui["--tw-font-body"] ||
-    '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
+    resolved.ui["--tw-font-body"] || '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
   el.style.setProperty("--tw-font-ui", body);
   el.style.setProperty("--md-font", body);
   el.style.setProperty("--font", body);

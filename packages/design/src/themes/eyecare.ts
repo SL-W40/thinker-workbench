@@ -2,8 +2,8 @@
  * 护眼创意主题——柔和灰绿，适合长时间阅读。
  */
 import { eyecareTheme as mdEyecare } from "@thinker-workbench/markdown";
-import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
+import type { DesignTheme } from "./types";
 
 const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdEyecare.vars["--md-font-mono"] ?? "";

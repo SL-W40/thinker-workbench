@@ -4,16 +4,16 @@
 import { SegmentedControl, Select } from "@thinker-workbench/design/react";
 import {
   AI_LOCALES,
+  type AiLocale,
   APP_FONT_SCALE_IDS,
   APP_LOCALES,
-  type AiLocale,
   type AppFontScale,
 } from "@thinker-workbench/shared";
 import { useMemo } from "react";
 import { useI18n } from "../../i18n/useI18n";
 import { applyUiFontScale } from "../../theme/fontScale";
-import { ThemePicker } from "./ThemePicker";
 import { aiLocaleLabel, localeLabel } from "./generalLabels";
+import { ThemePicker } from "./ThemePicker";
 import { useGeneralSettings } from "./useGeneralSettings";
 
 type Props = {

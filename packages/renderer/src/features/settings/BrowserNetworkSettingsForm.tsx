@@ -1,10 +1,7 @@
 /**
  * 设置 →浏览器与网络：自动化目标、浏览器保护、本地链接、HTTP 兼容模式。 */
 import { Select, Switch } from "@thinker-workbench/design/react";
-import {
-  HTTP_COMPATIBILITY_MODES,
-  type HttpCompatibilityMode,
-} from "@thinker-workbench/shared";
+import { HTTP_COMPATIBILITY_MODES, type HttpCompatibilityMode } from "@thinker-workbench/shared";
 import { useEffect, useMemo, useState } from "react";
 import { browserGetState, onBrowserEvent } from "../../bridge/browser";
 import { useI18n } from "../../i18n/useI18n";

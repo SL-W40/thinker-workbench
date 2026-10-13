@@ -3,8 +3,9 @@
  * 各包 artifacts 被 gitignore；冷启动时 eng/desk esbuild 会抢跑并报
  * Could not resolve "@thinker-workbench/logger"。已存在则跳过，避免拖慢热启动。
  */
-import { existsSync } from "node:fs";
+
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,10 +19,7 @@ const steps = [
   },
   {
     pkg: "@thinker-workbench/logger",
-    files: [
-      "packages/logger/artifacts/index.js",
-      "packages/logger/artifacts/node/index.js",
-    ],
+    files: ["packages/logger/artifacts/index.js", "packages/logger/artifacts/node/index.js"],
   },
 ];
 

@@ -2,8 +2,8 @@
  * 基础浅色主题——黑白灰极简。
  */
 import { lightTheme as mdLight } from "@thinker-workbench/markdown";
-import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
+import type { DesignTheme } from "./types";
 
 const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdLight.vars["--md-font-mono"] ?? "";

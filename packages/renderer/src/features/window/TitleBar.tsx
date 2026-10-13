@@ -3,7 +3,7 @@
  * Windows 最右侧另绘窗口控件；macOS 用系统 traffic lights（左侧留白）。
  * 可点控件勿放进 drag 区，否则 Electron 不显示 pointer 小手。
  */
-import { useEffect, useState } from "react";
+
 import {
   ChevronLeftIcon,
   ChevronsRightIcon,
@@ -17,11 +17,12 @@ import {
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import { processPlatform, type WindowRole } from "@thinker-workbench/shared";
+import { useEffect, useState } from "react";
 import { brandGlyphSrc } from "../../brand/logo";
 import { windowApi } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
 import type { PageId } from "../nav/usePageStack";
-import { TOOL_TAB_IDS, toolTabIcon, toolTabLabel, type ToolTabId } from "../tools/ToolsPane";
+import { TOOL_TAB_IDS, type ToolTabId, toolTabIcon, toolTabLabel } from "../tools/ToolsPane";
 import "../tools/tools.less";
 
 /** macOS：原生红绿灯；其它平台：渲染进程画最小化 / 最大化 / 关闭。 */

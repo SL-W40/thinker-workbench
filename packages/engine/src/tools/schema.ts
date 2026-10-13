@@ -2,14 +2,11 @@
  * 把 ToolSpec 转成模型 API 需要的 ChatToolDefinition。
  * agent 节点通过 listChatTools() 把当前可用工具 schema 塞进请求。
  */
-import type { ChatToolDefinition } from "../model/types";
-import {
-  getAllowAiBrowser,
-  getAllowAiDeleteFiles,
-  getAllowAiShell,
-} from "../workspace";
-import { getMcpManager } from "../mcp/McpManager";
+
 import { isToolAllowedForChatMode } from "../chatMode";
+import { getMcpManager } from "../mcp/McpManager";
+import type { ChatToolDefinition } from "../model/types";
+import { getAllowAiBrowser, getAllowAiDeleteFiles, getAllowAiShell } from "../workspace";
 import { listTools } from "./registry";
 import type { ToolSpec } from "./types";
 
@@ -56,11 +53,7 @@ export function listChatTools(options?: {
     .filter((spec) => {
       if (!isToolAllowedForChatMode(spec.name, modeOpts)) return false;
       if (spec.name === "delete_file") return allowDelete;
-      if (
-        spec.name === "shell" ||
-        spec.name === "shell_await" ||
-        spec.name === "shell_write"
-      ) {
+      if (spec.name === "shell" || spec.name === "shell_await" || spec.name === "shell_write") {
         return allowShell;
       }
       if (BROWSER_TOOL_NAMES.has(spec.name)) return allowBrowser;

@@ -207,7 +207,12 @@ export function CodeBlockActions({ value, language }: Props) {
       </button>
       {open ? (
         <div className="tw-md-code-menu" id={menuId} role="menu" aria-label={labels.more}>
-          <button type="button" role="menuitem" className="tw-md-code-menu__item" onClick={() => void onCopy()}>
+          <button
+            type="button"
+            role="menuitem"
+            className="tw-md-code-menu__item"
+            onClick={() => void onCopy()}
+          >
             {labels.copy}
           </button>
           <button

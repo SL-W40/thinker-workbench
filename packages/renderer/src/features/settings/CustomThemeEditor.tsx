@@ -1,6 +1,6 @@
 /**
  * 自定义主题编辑器：Meta / UI / Markdown / Mermaid token，实时预览。 */
-import { useEffect, useMemo, useState } from "react";
+
 import { UI_TOKEN_KEYS } from "@thinker-workbench/design";
 import {
   Button,
@@ -13,8 +13,9 @@ import {
 } from "@thinker-workbench/design/react";
 import { MD_TOKEN_KEYS } from "@thinker-workbench/markdown";
 import type { CustomThemeRecord } from "@thinker-workbench/shared";
-import { useAppearance } from "../../theme/useAppearance";
+import { useEffect, useMemo, useState } from "react";
 import { useT } from "../../i18n/useI18n";
+import { useAppearance } from "../../theme/useAppearance";
 import { cloneCustomThemeRecord, looksLikeColor, toColorInputValue } from "./customThemeUtils";
 import "./CustomThemeEditor.less";
 
@@ -71,13 +72,7 @@ function TokenRow({
   );
 }
 
-export function CustomThemeEditor({
-  open,
-  record,
-  customsBaseline,
-  onClose,
-  onSave,
-}: Props) {
+export function CustomThemeEditor({ open, record, customsBaseline, onClose, onSave }: Props) {
   const t = useT();
   const { applyAppearance } = useAppearance();
   const [draft, setDraft] = useState<CustomThemeRecord | null>(null);
@@ -95,12 +90,9 @@ export function CustomThemeEditor({
     setDraft(next);
     setTab("meta");
     setVarsText(JSON.stringify(next.theme.mermaid.themeVariables ?? {}, null, 2));
-    const merged = [
-      ...customsBaseline.filter((c) => c.id !== next.id),
-      next,
-    ];
+    const merged = [...customsBaseline.filter((c) => c.id !== next.id), next];
     applyAppearance(next.id, merged);
-  }, [open, record?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, record?.id, customsBaseline.filter, record, applyAppearance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabOptions = useMemo(
     () =>
@@ -116,10 +108,7 @@ export function CustomThemeEditor({
   );
 
   function preview(next: CustomThemeRecord) {
-    const merged = [
-      ...customsBaseline.filter((c) => c.id !== next.id),
-      next,
-    ];
+    const merged = [...customsBaseline.filter((c) => c.id !== next.id), next];
     applyAppearance(next.id, merged);
   }
 
@@ -160,7 +149,7 @@ export function CustomThemeEditor({
           }
         }
       } catch {
- /* 保留?themeVariables */
+        /* 保留?themeVariables */
       }
       const toSave: CustomThemeRecord = {
         ...draft,

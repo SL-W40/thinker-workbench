@@ -92,9 +92,7 @@ export function pruneShellSpillDir(
   options?: { maxAgeMs?: number; excludeAbsolute?: string | null },
 ): void {
   const maxAgeMs = options?.maxAgeMs ?? SHELL_SPILL_MAX_AGE_MS;
-  const exclude = options?.excludeAbsolute
-    ? path.resolve(options.excludeAbsolute)
-    : null;
+  const exclude = options?.excludeAbsolute ? path.resolve(options.excludeAbsolute) : null;
   try {
     if (!fs.existsSync(dir)) return;
     const now = Date.now();

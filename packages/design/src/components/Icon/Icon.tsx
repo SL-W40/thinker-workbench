@@ -1,12 +1,7 @@
 /**
  * 图标基座：统一尺寸 / 描边 / 装饰性无障碍，供各具名 `*Icon` 组合使用。
  */
-import {
-  forwardRef,
-  type ComponentType,
-  type ReactNode,
-  type SVGProps,
-} from "react";
+import { type ComponentType, forwardRef, type ReactNode, type SVGProps } from "react";
 
 export type IconSize = "sm" | "md" | "lg" | "inherit";
 

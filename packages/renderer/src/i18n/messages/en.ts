@@ -34,14 +34,17 @@ export const en = {
     expand: "Expand",
     deleteWorkspace: "Delete workspace…",
     deleteWorkspaceTitle: "Delete workspace?",
-    deleteWorkspaceBody: "This removes the workspace and all of its chats (including checkpoints and Trace) from Thinker. Files on disk are not deleted.",
+    deleteWorkspaceBody:
+      "This removes the workspace and all of its chats (including checkpoints and Trace) from Thinker. Files on disk are not deleted.",
     clearWorkspace: "Clear chats…",
     clearWorkspaceTitle: "Clear all chats?",
-    clearWorkspaceBody: "This permanently removes every chat, checkpoint, and Trace in this workspace. The workspace folder stays.",
+    clearWorkspaceBody:
+      "This permanently removes every chat, checkpoint, and Trace in this workspace. The workspace folder stays.",
     confirmClear: "Clear",
     deleteSession: "Delete chat…",
     deleteSessionTitle: "Delete chat?",
-    deleteSessionBody: "This permanently removes the chat, messages, run checkpoints, and session Trace.",
+    deleteSessionBody:
+      "This permanently removes the chat, messages, run checkpoints, and session Trace.",
     newSessionAbove: "New chat above",
     copySessionId: "Copy session id",
     openInTrace: "Open in Trace",
@@ -116,9 +119,12 @@ export const en = {
       scopePar: "par (parallel)",
       scopeParShort: "par",
       ganttTitle: "Timeline",
-      callTreeHint: "Agent call tree + time bars (graph / model / tool / Task). Click a row for I/O.",
-      sequenceHint: "Arrows follow parent → child across lanes. Expand stacks Tasks; use the timeline for overlap.",
-      parallelHint: "Overlapping background Tasks form a par block; expand stacks each Task, swipe shows one.",
+      callTreeHint:
+        "Agent call tree + time bars (graph / model / tool / Task). Click a row for I/O.",
+      sequenceHint:
+        "Arrows follow parent → child across lanes. Expand stacks Tasks; use the timeline for overlap.",
+      parallelHint:
+        "Overlapping background Tasks form a par block; expand stacks each Task, swipe shows one.",
       parViewLabel: "Parallel view",
       parViewSwipe: "Swipe",
       parViewExpand: "Stack",
@@ -193,7 +199,8 @@ export const en = {
     openDocs: "Docs",
     section: {
       masonry: "Masonry",
-      masonryDesc: "Shortest-column waterfall. This page is laid out with it; the tiles below are a nested demo.",
+      masonryDesc:
+        "Shortest-column waterfall. This page is laid out with it; the tiles below are a nested demo.",
       input: "Input",
       inputDesc: "Spellcheck and browser autofill chrome are off by default.",
       textarea: "TextArea",
@@ -401,10 +408,10 @@ export const en = {
     jumpToLatest: "Jump to latest",
     /** Accessible label when clicking a sent user message. */
     editUserMessage: "Edit and resend",
-    editUserMessageHint: "Click to edit in place. Click away or press Esc to cancel; sending restarts from this message",
+    editUserMessageHint:
+      "Click to edit in place. Click away or press Esc to cancel; sending restarts from this message",
     welcomeLabel: "Welcome",
-    welcomeLead:
-      "Ask a question, explore this project, or pick a shortcut below to get started.",
+    welcomeLead: "Ask a question, explore this project, or pick a shortcut below to get started.",
     /** 工作空间无文件时的引导（勿假设已有项目）。 */
     welcomeLeadEmpty:
       "This workspace is empty. Ask anything, or pick a shortcut below to get started.",
@@ -413,8 +420,7 @@ export const en = {
       listFilesPrompt:
         "Give me a quick tour of this project — what it is and what's in the workspace.",
       projectOverview: "How does it work?",
-      projectOverviewPrompt:
-        "Explain how this project works and how the main pieces fit together.",
+      projectOverviewPrompt: "Explain how this project works and how the main pieces fit together.",
       findConfig: "Help me get started",
       findConfigPrompt:
         "I'm new here — what should I look at first to get productive in this project?",
@@ -533,7 +539,8 @@ export const en = {
       skills: "Skills",
       contextFiles: "@ files",
       conversation: "Conversation",
-      approxHint: "Estimates use OpenAI-family BPE; may differ slightly from your model’s tokenizer.",
+      approxHint:
+        "Estimates use OpenAI-family BPE; may differ slightly from your model’s tokenizer.",
     },
     errors: {
       missingApiKeyLead: "Model API key is not set. Open",
@@ -586,7 +593,8 @@ export const en = {
       },
       browser: {
         title: "Browser & Network",
-        description: "Built-in browser automation, protection, local links, and HTTP compatibility.",
+        description:
+          "Built-in browser automation, protection, local links, and HTTP compatibility.",
       },
       model: {
         title: "Model",
@@ -607,7 +615,8 @@ export const en = {
         statusConnected: "Connected to Browser Tab",
         statusReady: "Browser Tab ready",
         targetLabel: "Automation target",
-        targetDescription: "Where Agent browser tools run. Currently only the built-in Browser Tab.",
+        targetDescription:
+          "Where Agent browser tools run. Currently only the built-in Browser Tab.",
         targetTab: "Browser Tab",
       },
       protection: {
@@ -777,7 +786,8 @@ export const en = {
       },
       modelRetryMaxAttempts: {
         title: "Model retry attempts",
-        description: "Total tries for a chat completion (includes the first). Applies to retryable network/5xx errors.",
+        description:
+          "Total tries for a chat completion (includes the first). Applies to retryable network/5xx errors.",
       },
       modelRetryBaseDelayMs: {
         title: "Model retry base delay",
@@ -895,7 +905,8 @@ export const en = {
         pendingPath: "After save",
         save: "Save root directory…",
         discard: "Discard",
-        runningSessions: "{n} session(s) still running. Finish them before changing the root directory.",
+        runningSessions:
+          "{n} session(s) still running. Finish them before changing the root directory.",
         nestedPaths: "The new path cannot be inside or contain the current root directory.",
         migrateTitle: "Migrate existing data?",
         migrateLead: "Copy existing data into the new root? Settings always move with the switch.",
@@ -938,7 +949,8 @@ export const en = {
           "Record per-session call chains and I/O; inspect the sequence diagram in Console → Trace.",
         enabled: {
           title: "Enable session Trace",
-          description: "When off, no new spans or payloads are written; existing records stay readable.",
+          description:
+            "When off, no new spans or payloads are written; existing records stay readable.",
         },
         retention: {
           title: "Retention (days)",
@@ -1048,7 +1060,8 @@ export const en = {
       resetOk: "Reset to defaults.",
       saved: "Shortcut saved.",
       pressKeys: "Press keys…",
-      recordingHint: "Press a shortcut (Esc to cancel recording). Other shortcuts are blocked while recording.",
+      recordingHint:
+        "Press a shortcut (Esc to cancel recording). Other shortcuts are blocked while recording.",
       duplicate: "{key} is already used by “{action}”.",
       groups: {
         window: "Window",

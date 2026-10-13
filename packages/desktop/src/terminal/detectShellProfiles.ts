@@ -41,8 +41,7 @@ function which(name: string): string | null {
 function detectWindows(): ShellProfile[] {
   const out: ShellProfile[] = [];
   const ps =
-    which("powershell.exe") ||
-    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    which("powershell.exe") || "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
   if (isFile(ps)) {
     out.push({
       id: "powershell",
@@ -62,7 +61,12 @@ function detectWindows(): ShellProfile[] {
   }
   const gitBashCandidates = [
     path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe"),
-    path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
+    path.join(
+      process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+      "Git",
+      "bin",
+      "bash.exe",
+    ),
   ];
   for (const p of gitBashCandidates) {
     if (isFile(p)) {

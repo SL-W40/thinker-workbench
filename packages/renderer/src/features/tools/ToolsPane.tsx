@@ -1,7 +1,7 @@
 /**
  * 产品控制台内容区：Settings / Logs / Components。
  */
-import { lazy, Suspense, useEffect, type ReactNode } from "react";
+
 import {
   CodeIcon,
   ConsoleIcon,
@@ -10,8 +10,9 @@ import {
   SettingsIcon,
   Spinner,
 } from "@thinker-workbench/design/react";
-import { useT } from "../../i18n/useI18n";
+import { lazy, type ReactNode, Suspense, useEffect } from "react";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import { SettingsPane } from "../settings/SettingsPane";
 import type { SettingsSectionId } from "../settings/sections";
 import "./tools.less";

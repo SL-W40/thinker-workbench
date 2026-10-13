@@ -73,7 +73,7 @@ function isPipeTableLine(line: string): boolean {
 
 /** 当前行 + 下一行是否构成表头。 */
 function isTableHeaderAt(lines: string[], i: number): boolean {
-  return i + 1 < lines.length && lines[i]!.includes("|") && isTableSep(lines[i + 1]!);
+  return i + 1 < lines.length && lines[i]?.includes("|") && isTableSep(lines[i + 1]!);
 }
 
 function parseAligns(sep: string): Array<"left" | "center" | "right" | null> {
@@ -183,12 +183,12 @@ function parseList(
     if (!itemMatch || indentOf(line) !== baseIndent) break;
 
     // 内容列 = 缩进 + marker（含有序的 `.`）+ 随后空白
-    const indentWidth = itemMatch[1]!.replace(/\t/g, "    ").length;
+    const indentWidth = itemMatch[1]?.replace(/\t/g, "    ").length;
     const contentCol = ordered
-      ? indentWidth + itemOl![2]!.length + 1 + itemOl![4]!.length
-      : indentWidth + 1 + itemUl![3]!.length;
+      ? indentWidth + itemOl?.[2]?.length + 1 + itemOl?.[4]?.length
+      : indentWidth + 1 + itemUl?.[3]?.length;
 
-    let body = ordered ? itemOl![5]! : itemUl![4]!;
+    let body = (ordered ? itemOl?.[5] : itemUl?.[4]) ?? "";
     let task = false;
     let checked = false;
     const taskMatch = /^\[([ xX])\]\s+(.*)$/.exec(body);

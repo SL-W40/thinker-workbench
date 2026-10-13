@@ -1,7 +1,7 @@
 /**
  * 内置浏览器 IPC：导航 / bounds / 可见性 / 接管。
  */
-import { IpcChannels, type BrowserBounds } from "@thinker-workbench/shared";
+import { type BrowserBounds, IpcChannels } from "@thinker-workbench/shared";
 import type { IpcMain } from "electron";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
 
@@ -30,13 +30,10 @@ export function registerBrowserHandlers(ipcMain: IpcMain): void {
     return browserSessionManager.reload();
   });
 
-  ipcMain.handle(
-    IpcChannels.browserSetBounds,
-    async (_evt, bounds: BrowserBounds) => {
-      if (!bounds || typeof bounds !== "object") return;
-      browserSessionManager.setBounds(bounds);
-    },
-  );
+  ipcMain.handle(IpcChannels.browserSetBounds, async (_evt, bounds: BrowserBounds) => {
+    if (!bounds || typeof bounds !== "object") return;
+    browserSessionManager.setBounds(bounds);
+  });
 
   ipcMain.handle(IpcChannels.browserSetVisible, async (_evt, visible: boolean) => {
     browserSessionManager.setVisible(Boolean(visible));

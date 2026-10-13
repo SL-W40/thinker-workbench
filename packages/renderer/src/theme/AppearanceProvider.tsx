@@ -8,28 +8,19 @@
  * 注意：本文件只导出组件。hooks 见 `useAppearance.ts`——同文件混导出会让
  * Vite Fast Refresh 失败并触发整页 reload，Electron 下常表现为白屏。
  */
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+
 import { resolveUiTheme } from "@thinker-workbench/design";
 import { useDesignTheme } from "@thinker-workbench/design/react";
 import {
-  DEFAULT_APP_THEME,
-  normalizeUiTheme,
   type AppThemeId,
   type CustomThemeRecord,
+  DEFAULT_APP_THEME,
   type GeneralSettings,
+  normalizeUiTheme,
 } from "@thinker-workbench/shared";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings } from "../bridge/thinker";
-import {
-  AppearanceContext,
-  type AppearanceContextValue,
-} from "./appearanceContext";
+import { AppearanceContext, type AppearanceContextValue } from "./appearanceContext";
 import { applyUiFontScale } from "./fontScale";
 
 /** 当前 OS 是否偏好深色。 */

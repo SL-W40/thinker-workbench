@@ -6,32 +6,29 @@
  */
 import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
 import {
-  createId,
-  createRunId,
-  createThreadId,
-  createTraceId,
-  DEFAULT_CHAT_MODE,
-  emptyContextUsageSnapshot,
-  normalizeChatMode,
   type AgentEvent,
   type AgentResumeCommand,
   type AgentRunCommand,
   type ChatMode,
   type ContextUsageRequest,
   type ContextUsageSnapshot,
+  createId,
+  createRunId,
+  createThreadId,
+  createTraceId,
+  DEFAULT_CHAT_MODE,
+  emptyContextUsageSnapshot,
   type HitlResponse,
   type LogRecord,
   type ModelSelection,
+  normalizeChatMode,
   type RunResult,
   type UtilityBrowserRequest,
   type UtilityPtyRequest,
   type UtilityToChild,
 } from "@thinker-workbench/shared";
 import type { UtilityProcess } from "electron";
-import {
-  releaseBrowserLease,
-  tryAcquireBrowserLease,
-} from "../agent/resourceGovernor";
+import { releaseBrowserLease, tryAcquireBrowserLease } from "../agent/resourceGovernor";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
 import { getDataDir } from "../config/paths";
 import {
@@ -52,8 +49,8 @@ import {
   setSessionRunStatus,
   upsertSessionForRun,
 } from "../db/workspacesStore";
-import { desktopLog } from "../log/setup";
 import { broadcastThreadsChanged } from "../ipc/workspacesHandlers";
+import { desktopLog } from "../log/setup";
 import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
@@ -150,7 +147,8 @@ export class AgentBridge {
       }
       if (raw.kind === "mcpStatus") {
         try {
-          const { handleMcpStatusFromAgent } = require("../ipc/mcpHandlers") as typeof import("../ipc/mcpHandlers");
+          const { handleMcpStatusFromAgent } =
+            require("../ipc/mcpHandlers") as typeof import("../ipc/mcpHandlers");
           handleMcpStatusFromAgent(raw.status);
         } catch {
           /* ignore */
@@ -176,8 +174,7 @@ export class AgentBridge {
               attrs,
               input: s.input,
               startTs: s.startTs,
-              workspaceId:
-                typeof attrs.workspaceId === "string" ? attrs.workspaceId : undefined,
+              workspaceId: typeof attrs.workspaceId === "string" ? attrs.workspaceId : undefined,
               threadId: typeof attrs.threadId === "string" ? attrs.threadId : undefined,
               // 会话列表标题：优先 sessionTitle（emit 新键）；旧数据可能仍写在 title
               title:
@@ -696,8 +693,7 @@ export class AgentBridge {
     let workspaceId: string | undefined;
     let sessionTitle: string | undefined;
     try {
-      const existing =
-        (sessionId ? getSession(sessionId) : null) ?? getSessionByThreadId(threadId);
+      const existing = (sessionId ? getSession(sessionId) : null) ?? getSessionByThreadId(threadId);
       const session = upsertSessionForRun({
         threadId,
         workspaceId: existing?.workspaceId,

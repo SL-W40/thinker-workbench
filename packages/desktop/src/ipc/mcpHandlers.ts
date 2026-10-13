@@ -8,8 +8,7 @@ import {
 } from "@thinker-workbench/shared";
 import { BrowserWindow, dialog, type IpcMain } from "electron";
 import { canReloadMcpNow } from "../agent/resourceGovernor";
-import type { AgentBridge } from "../utility/AgentBridge";
-import { pushAgentHello } from "../utility/startAgentProcess";
+import { desktopLog } from "../log/setup";
 import {
   importMcpJsonFile,
   listEnabledMcpConfigs,
@@ -18,7 +17,8 @@ import {
   setMcpEnabled,
   upsertMcpConfig,
 } from "../mcp/mcpStore";
-import { desktopLog } from "../log/setup";
+import type { AgentBridge } from "../utility/AgentBridge";
+import { pushAgentHello } from "../utility/startAgentProcess";
 
 /** 缓存 engine 推送的运行时状态。 */
 const statusById = new Map<string, McpServerRuntimeStatus>();
@@ -101,14 +101,11 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
     reloadMcpOnAgent(bridge);
   });
 
-  ipcMain.handle(
-    IpcChannels.mcpSetEnabled,
-    (_evt, id: string, enabled: boolean) => {
-      const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled));
-      reloadMcpOnAgent(bridge);
-      return cfg;
-    },
-  );
+  ipcMain.handle(IpcChannels.mcpSetEnabled, (_evt, id: string, enabled: boolean) => {
+    const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled));
+    reloadMcpOnAgent(bridge);
+    return cfg;
+  });
 
   ipcMain.handle(IpcChannels.mcpTest, async (_evt, input: McpServerUpsertInput) => {
     // 临时写入再 reload 过重；改为让 engine 用单次配置测试：
@@ -185,9 +182,11 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
 }
 
 function sanitize(raw: string): string {
-  return String(raw ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "server";
+  return (
+    String(raw ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "server"
+  );
 }

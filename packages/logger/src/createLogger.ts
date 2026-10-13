@@ -1,6 +1,6 @@
 import { getLogContext } from "./context";
 import { levelEnabled } from "./levels";
-import type { CreateLoggerOptions, LogFields, LogLevel, Logger, LogRecord, LogSink } from "./types";
+import type { CreateLoggerOptions, LogFields, Logger, LogLevel, LogRecord, LogSink } from "./types";
 
 let sharedSinks: LogSink[] = [];
 let sharedMinLevel: LogLevel = "info";

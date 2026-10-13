@@ -49,7 +49,8 @@ export const SHORTCUT_CATALOG: ShortcutInfo[] = [
     id: "openConsole",
     group: "window",
     title: "Open console",
-    description: "Open the console (Settings / Logs / Components), or return to chat if already open.",
+    description:
+      "Open the console (Settings / Logs / Components), or return to chat if already open.",
   },
   {
     id: "goChat",
@@ -143,7 +144,7 @@ export type ThinkerShortcutsApi = {
    * 录制中主进程应跳过 reload 等 before-input 处理，避免抢走按键。
    */
   setShortcutRecording?(active: boolean): void;
-}
+};
 
 /**
  * 从磁盘 / IPC 原始值规范为完整 ShortcutsMap。

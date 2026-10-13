@@ -3,15 +3,15 @@
  * 对外暴露与 textarea 相近的 handle（focus / selection / caret 锚点）。
  */
 import {
+  type FormEvent,
   forwardRef,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
-  type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { parseMentionSegments, type ParseMentionMode } from "./composerMentions";
+import { type ParseMentionMode, parseMentionSegments } from "./composerMentions";
 
 export type ComposerEditorHandle = {
   focus: () => void;
@@ -81,11 +81,7 @@ export function serializeComposerEditor(root: HTMLElement): string {
   return raw.replace(/\n$/, "");
 }
 
-function fillEditor(
-  root: HTMLElement,
-  text: string,
-  mode: ParseMentionMode = "edit",
-): void {
+function fillEditor(root: HTMLElement, text: string, mode: ParseMentionMode = "edit"): void {
   root.replaceChildren();
   if (!text) return;
   const segs = parseMentionSegments(text, mode);
@@ -198,8 +194,7 @@ function getPlainCaret(root: HTMLElement): number {
 function caretAnchor(root: HTMLElement): { left: number; top: number; bottom: number } {
   const sel = window.getSelection();
   const rect = root.getBoundingClientRect();
-  const line =
-    Number.parseFloat(window.getComputedStyle(root).lineHeight) || 18;
+  const line = Number.parseFloat(window.getComputedStyle(root).lineHeight) || 18;
   if (!sel || sel.rangeCount === 0) {
     return { left: rect.left + 8, top: rect.top + 8, bottom: rect.top + 8 + line };
   }
@@ -224,168 +219,162 @@ function caretAnchor(root: HTMLElement): { left: number; top: number; bottom: nu
   };
 }
 
-export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(
-  function ComposerEditor(
-    { value, placeholder, className, onChange, onKeyDown, onCaretChange },
-    ref,
-  ) {
-    const elRef = useRef<HTMLDivElement>(null);
-    const skipSync = useRef(false);
-    const lastValue = useRef(value);
-    /** IME 组合中：禁止重建 DOM，否则拼音会被立刻固化。 */
-    const composingRef = useRef(false);
+export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function ComposerEditor(
+  { value, placeholder, className, onChange, onKeyDown, onCaretChange },
+  ref,
+) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const skipSync = useRef(false);
+  const lastValue = useRef(value);
+  /** IME 组合中：禁止重建 DOM，否则拼音会被立刻固化。 */
+  const composingRef = useRef(false);
 
-    useImperativeHandle(ref, () => ({
-      focus: () => elRef.current?.focus(),
-      blur: () => elRef.current?.blur(),
-      getValue: () => (elRef.current ? serializeComposerEditor(elRef.current) : ""),
-      getSelectionStart: () => (elRef.current ? getPlainCaret(elRef.current) : 0),
-      setSelectionRange: (start: number, _end?: number) => {
-        const el = elRef.current;
-        if (!el) return;
-        el.focus();
-        setPlainCaret(el, start);
-      },
-      getCaretAnchor: () =>
-        elRef.current
-          ? caretAnchor(elRef.current)
-          : { left: 0, top: 0, bottom: 0 },
-      getElement: () => elRef.current,
-    }));
-
-    // 受控同步：外部 value 变化时重绘芯片（保留光标）
-    useLayoutEffect(() => {
+  useImperativeHandle(ref, () => ({
+    focus: () => elRef.current?.focus(),
+    blur: () => elRef.current?.blur(),
+    getValue: () => (elRef.current ? serializeComposerEditor(elRef.current) : ""),
+    getSelectionStart: () => (elRef.current ? getPlainCaret(elRef.current) : 0),
+    setSelectionRange: (start: number, _end?: number) => {
       const el = elRef.current;
       if (!el) return;
-      // 组合输入期间勿同步，避免打断 IME
-      if (composingRef.current) return;
-      if (skipSync.current) {
-        skipSync.current = false;
-        lastValue.current = value;
-        // DOM 已一致才跳过；否则仍须同步（避免 skipSync 卡住时发完消息清不掉）
-        if (serializeComposerEditor(el) === value) return;
-      } else if (value === lastValue.current && serializeComposerEditor(el) === value) {
-        return;
-      }
-      const hadFocus = document.activeElement === el;
-      const caret = hadFocus ? getPlainCaret(el) : value.length;
-      // 外部写入用 display：行末完整 token 也固化为芯片
-      fillEditor(el, value, "display");
+      el.focus();
+      setPlainCaret(el, start);
+    },
+    getCaretAnchor: () =>
+      elRef.current ? caretAnchor(elRef.current) : { left: 0, top: 0, bottom: 0 },
+    getElement: () => elRef.current,
+  }));
+
+  // 受控同步：外部 value 变化时重绘芯片（保留光标）
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    if (!el) return;
+    // 组合输入期间勿同步，避免打断 IME
+    if (composingRef.current) return;
+    if (skipSync.current) {
+      skipSync.current = false;
       lastValue.current = value;
-      if (hadFocus) setPlainCaret(el, caret);
-      el.classList.toggle("is-empty", !value);
-    }, [value]);
+      // DOM 已一致才跳过；否则仍须同步（避免 skipSync 卡住时发完消息清不掉）
+      if (serializeComposerEditor(el) === value) return;
+    } else if (value === lastValue.current && serializeComposerEditor(el) === value) {
+      return;
+    }
+    const hadFocus = document.activeElement === el;
+    const caret = hadFocus ? getPlainCaret(el) : value.length;
+    // 外部写入用 display：行末完整 token 也固化为芯片
+    fillEditor(el, value, "display");
+    lastValue.current = value;
+    if (hadFocus) setPlainCaret(el, caret);
+    el.classList.toggle("is-empty", !value);
+  }, [value]);
 
-    useEffect(() => {
-      const el = elRef.current;
-      if (el) el.classList.toggle("is-empty", !value);
-    }, [value]);
+  useEffect(() => {
+    const el = elRef.current;
+    if (el) el.classList.toggle("is-empty", !value);
+  }, [value]);
 
-    /** 从 DOM 同步 draft；rebuild 时会重绘 mention 芯片。 */
-    function emitFromDom(rebuild: boolean) {
+  /** 从 DOM 同步 draft；rebuild 时会重绘 mention 芯片。 */
+  function emitFromDom(rebuild: boolean) {
+    const el = elRef.current;
+    if (!el) return;
+    const next = serializeComposerEditor(el);
+    if (rebuild) {
+      // 输入中用 edit：仅「后跟空白」的 token 固化，避免半截 /cre 成芯片
+      const caret = getPlainCaret(el);
+      fillEditor(el, next, "edit");
+      setPlainCaret(el, caret);
+    }
+    skipSync.current = true;
+    lastValue.current = next;
+    el.classList.toggle("is-empty", !next);
+    onChange(next);
+    onCaretChange?.();
+  }
+
+  function onInput(_e: FormEvent<HTMLDivElement>) {
+    if (composingRef.current) {
+      // 组合中只同步 draft，绝不 rebuild DOM
       const el = elRef.current;
       if (!el) return;
       const next = serializeComposerEditor(el);
-      if (rebuild) {
-        // 输入中用 edit：仅「后跟空白」的 token 固化，避免半截 /cre 成芯片
-        const caret = getPlainCaret(el);
-        fillEditor(el, next, "edit");
-        setPlainCaret(el, caret);
-      }
-      skipSync.current = true;
       lastValue.current = next;
       el.classList.toggle("is-empty", !next);
       onChange(next);
-      onCaretChange?.();
+      return;
     }
+    emitFromDom(true);
+  }
 
-    function onInput(_e: FormEvent<HTMLDivElement>) {
-      if (composingRef.current) {
-        // 组合中只同步 draft，绝不 rebuild DOM
-        const el = elRef.current;
-        if (!el) return;
-        const next = serializeComposerEditor(el);
-        lastValue.current = next;
-        el.classList.toggle("is-empty", !next);
-        onChange(next);
-        return;
-      }
-      emitFromDom(true);
+  function handleCompositionStart() {
+    composingRef.current = true;
+  }
+
+  function handleCompositionEnd() {
+    composingRef.current = false;
+    // 落字后再固化 mention 芯片
+    emitFromDom(true);
+  }
+
+  function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    // IME 选字中的按键（含 Enter / 数字键）勿拦截
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
     }
-
-    function handleCompositionStart() {
-      composingRef.current = true;
+    // 禁止富文本快捷键
+    if ((e.metaKey || e.ctrlKey) && ["b", "i", "u"].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      return;
     }
-
-    function handleCompositionEnd() {
-      composingRef.current = false;
-      // 落字后再固化 mention 芯片
-      emitFromDom(true);
+    onKeyDown?.(e);
+    // 菜单导航键已由上层 preventDefault，勿再刷 caret（避免菜单高亮被重置）
+    if (
+      e.defaultPrevented &&
+      (e.key === "ArrowDown" ||
+        e.key === "ArrowUp" ||
+        e.key === "Enter" ||
+        e.key === "Tab" ||
+        e.key === "Escape")
+    ) {
+      return;
     }
+    window.requestAnimationFrame(() => onCaretChange?.());
+  }
 
-    function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
-      // IME 选字中的按键（含 Enter / 数字键）勿拦截
-      if (e.nativeEvent.isComposing || e.keyCode === 229) {
-        return;
-      }
-      // 禁止富文本快捷键
-      if ((e.metaKey || e.ctrlKey) && ["b", "i", "u"].includes(e.key.toLowerCase())) {
-        e.preventDefault();
-        return;
-      }
-      onKeyDown?.(e);
-      // 菜单导航键已由上层 preventDefault，勿再刷 caret（避免菜单高亮被重置）
-      if (
-        e.defaultPrevented &&
-        (e.key === "ArrowDown" ||
+  function onPaste(e: React.ClipboardEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  }
+
+  return (
+    <div
+      ref={elRef}
+      className={["composer-input", "composer-input--chips", className].filter(Boolean).join(" ")}
+      contentEditable
+      role="textbox"
+      aria-multiline="true"
+      data-placeholder={placeholder ?? ""}
+      spellCheck={false}
+      suppressContentEditableWarning
+      onInput={onInput}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
+      onKeyDown={handleKeyDown}
+      onKeyUp={(e) => {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+        if (
+          e.key === "ArrowDown" ||
           e.key === "ArrowUp" ||
           e.key === "Enter" ||
           e.key === "Tab" ||
-          e.key === "Escape")
-      ) {
-        return;
-      }
-      window.requestAnimationFrame(() => onCaretChange?.());
-    }
-
-    function onPaste(e: React.ClipboardEvent<HTMLDivElement>) {
-      e.preventDefault();
-      const text = e.clipboardData.getData("text/plain");
-      document.execCommand("insertText", false, text);
-    }
-
-    return (
-      <div
-        ref={elRef}
-        className={["composer-input", "composer-input--chips", className]
-          .filter(Boolean)
-          .join(" ")}
-        contentEditable
-        role="textbox"
-        aria-multiline="true"
-        data-placeholder={placeholder ?? ""}
-        spellCheck={false}
-        suppressContentEditableWarning
-        onInput={onInput}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
-        onKeyDown={handleKeyDown}
-        onKeyUp={(e) => {
-          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-          if (
-            e.key === "ArrowDown" ||
-            e.key === "ArrowUp" ||
-            e.key === "Enter" ||
-            e.key === "Tab" ||
-            e.key === "Escape"
-          ) {
-            return;
-          }
-          onCaretChange?.();
-        }}
-        onClick={() => onCaretChange?.()}
-        onPaste={onPaste}
-      />
-    );
-  },
-);
+          e.key === "Escape"
+        ) {
+          return;
+        }
+        onCaretChange?.();
+      }}
+      onClick={() => onCaretChange?.()}
+      onPaste={onPaste}
+    />
+  );
+});

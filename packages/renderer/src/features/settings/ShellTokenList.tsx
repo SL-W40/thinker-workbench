@@ -44,12 +44,7 @@ export function ShellTokenList({
             onAdd();
           }}
         />
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={!draft.trim()}
-          onClick={onAdd}
-        >
+        <Button size="sm" variant="secondary" disabled={!draft.trim()} onClick={onAdd}>
           {addLabel}
         </Button>
       </div>

@@ -44,7 +44,8 @@ export function parseLineRange(args: {
   start_line?: unknown;
   end_line?: unknown;
 }): LineRange | null {
-  const hasStart = args.start_line !== undefined && args.start_line !== null && args.start_line !== "";
+  const hasStart =
+    args.start_line !== undefined && args.start_line !== null && args.start_line !== "";
   const hasEnd = args.end_line !== undefined && args.end_line !== null && args.end_line !== "";
   if (!hasStart && !hasEnd) return null;
   if (!hasStart || !hasEnd) {
@@ -93,8 +94,6 @@ export function formatNumberedSlice(lines: string[], range: LineRange): string {
  */
 export function replaceLineRange(lines: string[], range: LineRange, contents: string): string[] {
   const replacement =
-    contents.length === 0
-      ? []
-      : contents.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    contents.length === 0 ? [] : contents.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   return [...lines.slice(0, range.start - 1), ...replacement, ...lines.slice(range.end)];
 }

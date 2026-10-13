@@ -36,7 +36,8 @@ export const zh: MessageTree = {
     expand: "展开",
     deleteWorkspace: "删除工作空间…",
     deleteWorkspaceTitle: "删除工作空间？",
-    deleteWorkspaceBody: "将从 Thinker 移除该工作空间及其全部会话（含检查点与 Trace）。工作区磁盘文件不会被删除。",
+    deleteWorkspaceBody:
+      "将从 Thinker 移除该工作空间及其全部会话（含检查点与 Trace）。工作区磁盘文件不会被删除。",
     clearWorkspace: "清空会话…",
     clearWorkspaceTitle: "清空全部会话？",
     clearWorkspaceBody: "将永久删除该工作空间内的全部会话、检查点与 Trace。工作空间文件夹会保留。",
@@ -85,8 +86,7 @@ export const zh: MessageTree = {
     loading: "加载中",
     trace: {
       searchPlaceholder: "搜索会话…",
-      emptySessions:
-        "暂无会话 Trace。请在设置 → 数据中开启 Trace，发送消息后会出现在这里。",
+      emptySessions: "暂无会话 Trace。请在设置 → 数据中开启 Trace，发送消息后会出现在这里。",
       pickSession: "选择左侧会话以查看追踪",
       emptySpans: "该 run 尚无 span 记录",
       emptyRuns: "该会话尚无 run",
@@ -317,8 +317,7 @@ export const zh: MessageTree = {
     recovering: "正在恢复界面…",
     recoveringLabel: "正在恢复界面",
     stuckTitle: "界面未能恢复",
-    stuckDescription:
-      "{message}\n开发热更新出错时会出现此页；修代码后点重载即可。",
+    stuckDescription: "{message}\n开发热更新出错时会出现此页；修代码后点重载即可。",
     reload: "重新加载",
     retry: "再试一次",
   },
@@ -585,7 +584,8 @@ export const zh: MessageTree = {
       },
       mcp: {
         title: "MCP",
-        description: "以 stdio / HTTP 接入的 Model Context Protocol 服务端，作为聊天工具暴露给 Agent。",
+        description:
+          "以 stdio / HTTP 接入的 Model Context Protocol 服务端，作为聊天工具暴露给 Agent。",
       },
       shortcuts: {
         title: "快捷键",
@@ -808,8 +808,7 @@ export const zh: MessageTree = {
       },
       workspaceAccess: {
         title: "工作区访问",
-        description:
-          "相对路径始终相对当前工作区。本选项只控制文件工具能否用绝对路径访问工作区外。",
+        description: "相对路径始终相对当前工作区。本选项只控制文件工具能否用绝对路径访问工作区外。",
         workspace: "仅工作区（沙箱）",
         readOutside: "可读工作区外",
         full: "可读写工作区外",
@@ -842,7 +841,8 @@ export const zh: MessageTree = {
       },
       shellAllowlist: {
         title: "命令白名单",
-        description: "免审的命令首 token。清空后保持为空（不会自动恢复出厂默认）。与黑名单冲突时以黑名单为准。",
+        description:
+          "免审的命令首 token。清空后保持为空（不会自动恢复出厂默认）。与黑名单冲突时以黑名单为准。",
         placeholder: "添加 token（如 git）",
         add: "添加",
         remove: "移除",
@@ -909,7 +909,8 @@ export const zh: MessageTree = {
       },
       logTruncateLongContent: {
         title: "截断日志长内容",
-        description: "开启后，写入日志 meta 的长文本会被缩短。关闭则可在日志中保留更完整的回复与消息。",
+        description:
+          "开启后，写入日志 meta 的长文本会被缩短。关闭则可在日志中保留更完整的回复与消息。",
       },
       browse: "浏览…",
       useDefault: "恢复默认",
@@ -1070,8 +1071,7 @@ export const zh: MessageTree = {
     appearanceLead: "选择配色主题，可即时预览。",
     languageLead: "选择界面语言、Agent 回复语言，以及本机数据根目录（默认 ~/.thinker）。",
     dataDirTitle: "根目录",
-    dataDirDescription:
-      "本机数据根（settings.json、会话、日志、skills 等）。默认 ~/.thinker。",
+    dataDirDescription: "本机数据根（settings.json、会话、日志、skills 等）。默认 ~/.thinker。",
     dataDirPick: "选择根目录",
     skip: "跳过",
     back: "上一步",

@@ -19,9 +19,7 @@ function formatFootLive(t: ReturnType<typeof useT>, raw: string): string {
   if (s === "Thinking…") return t("chat.subagent.liveThinking");
   if (s.startsWith("Thinking…")) {
     const rest = s.slice("Thinking…".length).trim();
-    return rest
-      ? `${t("chat.subagent.liveThinking")} ${rest}`
-      : t("chat.subagent.liveThinking");
+    return rest ? `${t("chat.subagent.liveThinking")} ${rest}` : t("chat.subagent.liveThinking");
   }
   return s;
 }
@@ -39,10 +37,7 @@ export function SubagentCard({ step }: Props) {
   }, [step]);
 
   const displayTitle = subagentDisplayTitle(step);
-  const typeName =
-    !step.subagent.trim() || step.subagent === "…"
-      ? null
-      : step.subagent;
+  const typeName = !step.subagent.trim() || step.subagent === "…" ? null : step.subagent;
 
   const liveText = running ? formatFootLive(t, step.liveLine ?? "") : "";
   const settledFoot = !running
@@ -80,9 +75,7 @@ export function SubagentCard({ step }: Props) {
           </span>
         </div>
         <div className="run-subagent-card__meta">
-          {typeName ? (
-            <span className="run-subagent-card__chip">{typeName}</span>
-          ) : null}
+          {typeName ? <span className="run-subagent-card__chip">{typeName}</span> : null}
           {step.background && running ? (
             <span className="run-subagent-card__chip">{t("chat.subagent.background")}</span>
           ) : null}

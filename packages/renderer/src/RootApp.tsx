@@ -3,8 +3,9 @@
  *
  * 入口文件若同时含组件与 createRoot，Vite Fast Refresh 失败时会二次挂载导致 Electron 白屏。
  */
-import { StrictMode, useCallback, useState, type ReactNode } from "react";
+
 import { ThemeProvider } from "@thinker-workbench/design/react";
+import { type ReactNode, StrictMode, useCallback, useState } from "react";
 import { App } from "./App";
 import { readBootAppearance } from "./boot/readBootAppearance";
 import { ModelSecretGateProvider } from "./features/modelSecrets/ModelSecretGate";
@@ -32,10 +33,7 @@ export function RootApp() {
   return (
     <StrictMode>
       <ThemeProvider theme={boot.theme}>
-        <AppearanceProvider
-          initialThemeId={boot.themeId}
-          initialCustomThemes={boot.customThemes}
-        >
+        <AppearanceProvider initialThemeId={boot.themeId} initialCustomThemes={boot.customThemes}>
           <I18nProvider>
             <ModelSecretGateProvider>
               {import.meta.env.DEV ? (

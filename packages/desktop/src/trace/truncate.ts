@@ -122,7 +122,7 @@ export function truncateForTrace(value: unknown, limits: TruncateLimits): Trunca
 
   let next = walk(value);
   try {
-    let serialized = JSON.stringify(next) ?? "null";
+    const serialized = JSON.stringify(next) ?? "null";
     if (utf8Bytes(serialized) > limits.maxPayloadBytes) {
       truncated = true;
       // 整体再砍：保留摘要壳

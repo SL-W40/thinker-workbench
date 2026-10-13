@@ -3,9 +3,9 @@
  *
  * 启用「系统托盘图标」时，关窗可隐藏到托盘而不退出进程。
  */
-import { Menu, Tray, app, nativeImage } from "electron";
-import { getGeneralSettings } from "../config/settingsStore";
+import { app, Menu, nativeImage, Tray } from "electron";
 import { getAppIconPath } from "../config/paths";
+import { getGeneralSettings } from "../config/settingsStore";
 import { getMainWindow } from "./createWindow";
 import { trayCopy } from "./trayCopy";
 

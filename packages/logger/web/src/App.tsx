@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button, Checkbox, Input, Modal, Select } from "@thinker-workbench/design/react";
 import type { LogRecord } from "@thinker-workbench/logger";
-import { Button, Input, Select, Checkbox, Modal } from "@thinker-workbench/design/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchLogs, fetchMeta, fetchTraces, type LogFileInfo, type TraceSummary } from "./api";
 import { isEmbed } from "./boot";
-import { readLocale, t, type Locale } from "./i18n";
+import { type Locale, readLocale, t } from "./i18n";
 import { LogVirtualTable } from "./LogVirtualTable";
 
 const PAGE_SIZES = [50, 100, 200, 500] as const;
@@ -145,7 +145,7 @@ export function App({ hostLocale, focusTraceId = null, focusSeq = 0 }: AppProps 
   // 筛选条件变化时回到最新页
   useEffect(() => {
     setOffset(0);
-  }, [file, q, level, source, traceId, pageSize]);
+  }, []);
 
   useEffect(() => {
     if (!auto) return;
@@ -160,7 +160,7 @@ export function App({ hostLocale, focusTraceId = null, focusSeq = 0 }: AppProps 
   // 翻页 / 筛选后关掉详情，避免持有已卸载页的大对象
   useEffect(() => {
     setDetail(null);
-  }, [offset, pageSize, file, q, level, source, traceId]);
+  }, []);
 
   const fileOptions = useMemo(() => {
     const named = files.map((f) => ({
@@ -190,7 +190,7 @@ export function App({ hostLocale, focusTraceId = null, focusSeq = 0 }: AppProps 
     const id = focusTraceId?.trim();
     if (!id) return;
     selectTrace(id);
-  }, [focusTraceId, focusSeq]);
+  }, [focusTraceId, selectTrace]);
 
   return (
     <div className={`logs-app${embed ? " is-embed" : ""}`}>
@@ -207,9 +207,7 @@ export function App({ hostLocale, focusTraceId = null, focusSeq = 0 }: AppProps 
             {logDir ? <code className="logs-dir">{logDir}</code> : null}
           </div>
           <span className="logs-count">
-            {pageRange
-              ? t(locale, "range", pageRange)
-              : t(locale, "count", { n: total })}
+            {pageRange ? t(locale, "range", pageRange) : t(locale, "count", { n: total })}
           </span>
         </header>
       )}
@@ -364,9 +362,7 @@ export function App({ hostLocale, focusTraceId = null, focusSeq = 0 }: AppProps 
               />
             </label>
             <span className="logs-count">
-              {pageRange
-                ? t(locale, "range", pageRange)
-                : t(locale, "count", { n: total })}
+              {pageRange ? t(locale, "range", pageRange) : t(locale, "count", { n: total })}
             </span>
             <div className="logs-pager-actions">
               <Button

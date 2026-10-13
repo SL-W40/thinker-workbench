@@ -2,7 +2,7 @@
  * 瀑布流布局：按容器宽度分列，把每个子项放到当前最短列。
  * 用绝对定位 + ResizeObserver，避免 CSS column-count 在 Electron 里叠片。
  */
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 
 const DEFAULT_GAP = 16;
 
@@ -35,11 +35,7 @@ export type MasonryProps = {
 };
 
 /** 按容器宽度解析列数。 */
-function resolveColumns(
-  width: number,
-  columns: number,
-  breakpoints: MasonryBreakpoint[],
-): number {
+function resolveColumns(width: number, columns: number, breakpoints: MasonryBreakpoint[]): number {
   const sorted = [...breakpoints].sort((a, b) => a.maxWidth - b.maxWidth);
   for (const bp of sorted) {
     if (width <= bp.maxWidth) return Math.max(1, bp.columns);

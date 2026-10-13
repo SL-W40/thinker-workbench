@@ -1,16 +1,16 @@
 import {
-  lightTheme,
-  darkTheme,
-  notesTheme,
-  eyecareTheme,
   auroraTheme,
   type DesignTheme,
+  darkTheme,
+  eyecareTheme,
+  lightTheme,
+  notesTheme,
 } from "@thinker-workbench/design";
 import {
+  type AppThemeId,
   DEFAULT_APP_THEME,
   normalizeAppTheme,
   resolveVisualThemeId,
-  type AppThemeId,
 } from "@thinker-workbench/shared";
 
 function themeFromId(id: AppThemeId): DesignTheme {
@@ -38,7 +38,9 @@ export function readBootAppearance(): {
   const params = new URLSearchParams(location.search);
   const embed = params.get("embed") === "1";
   const rawTheme =
-    params.get("theme") || (!embed ? localStorage.getItem("tw-logs-theme") : null) || DEFAULT_APP_THEME;
+    params.get("theme") ||
+    (!embed ? localStorage.getItem("tw-logs-theme") : null) ||
+    DEFAULT_APP_THEME;
   const themeId = normalizeAppTheme(rawTheme, DEFAULT_APP_THEME);
   const visual = resolveVisualThemeId(themeId, readPrefersDark());
   document.documentElement.dataset.twTheme = visual;

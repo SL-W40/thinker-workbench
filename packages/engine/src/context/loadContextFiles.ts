@@ -4,10 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import {
-  getContextFilesMaxFileBytes,
-  getContextFilesMaxTotalBytes,
-} from "../config/runtimeLimits";
+import { getContextFilesMaxFileBytes, getContextFilesMaxTotalBytes } from "../config/runtimeLimits";
 
 /** 规范化相对路径并限制在 workspace 内。 */
 function resolveSafe(workspaceRoot: string, rel: string): string | null {
@@ -60,14 +57,18 @@ export function loadContextFilesBlock(
       try {
         names = fs.readdirSync(abs).sort((a, b) => a.localeCompare(b));
       } catch {
-        parts.push(`<directory path="${display.replace(/\/$/, "")}">\nskipped: read error\n</directory>`);
+        parts.push(
+          `<directory path="${display.replace(/\/$/, "")}">\nskipped: read error\n</directory>`,
+        );
         continue;
       }
       const dirPath = display.replace(/\/$/, "") || display;
       const listing = names.length ? names.join("\n") : "(empty)";
       const body = `${listing}\n`;
       if (total + Buffer.byteLength(body, "utf8") > getContextFilesMaxTotalBytes()) {
-        parts.push(`<directory path="${dirPath}">\nskipped: total context budget exceeded\n</directory>`);
+        parts.push(
+          `<directory path="${dirPath}">\nskipped: total context budget exceeded\n</directory>`,
+        );
         continue;
       }
       total += Buffer.byteLength(body, "utf8");
@@ -79,9 +80,7 @@ export function loadContextFilesBlock(
       continue;
     }
     if (st.size > getContextFilesMaxFileBytes()) {
-      parts.push(
-        `<file path="${display}">\nskipped: too large (${st.size} bytes)\n</file>`,
-      );
+      parts.push(`<file path="${display}">\nskipped: too large (${st.size} bytes)\n</file>`);
       continue;
     }
     if (total + st.size > getContextFilesMaxTotalBytes()) {

@@ -20,7 +20,7 @@ export function clampFileListWidth(n: number): number {
   return Math.min(FILE_LIST_WIDTH.max, Math.max(FILE_LIST_WIDTH.min, Math.round(n)));
 }
 
-export function useFileListWidth(initial: number = FILE_LIST_WIDTH.default, resetKey?: string) {
+export function useFileListWidth(initial: number = FILE_LIST_WIDTH.default, _resetKey?: string) {
   const [width, setWidth] = useState<number>(() => clampFileListWidth(initial));
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -30,7 +30,7 @@ export function useFileListWidth(initial: number = FILE_LIST_WIDTH.default, rese
   // 切换工作空间 / 外部恢复时重同步宽度
   useEffect(() => {
     setWidth(clampFileListWidth(initial));
-  }, [resetKey, initial]);
+  }, [initial]);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -74,7 +74,7 @@ export function useFileListWidth(initial: number = FILE_LIST_WIDTH.default, rese
  */
 export function useFileListOpen(
   autoMin: number = FILE_LIST_AUTO_PANE_MIN,
-  resetKey?: string,
+  _resetKey?: string,
   initialForced: boolean | null = null,
 ) {
   const [paneEl, setPaneEl] = useState<HTMLElement | null>(null);
@@ -88,7 +88,7 @@ export function useFileListOpen(
     setForced(initialForced);
     prevWide.current = null;
     skipClearOnReset.current = true;
-  }, [resetKey, initialForced]);
+  }, [initialForced]);
 
   const paneRef = useCallback((node: HTMLElement | null) => {
     setPaneEl(node);
@@ -99,11 +99,7 @@ export function useFileListOpen(
 
     const apply = (w: number) => {
       const next = w >= autoMin;
-      if (
-        !skipClearOnReset.current &&
-        prevWide.current !== null &&
-        prevWide.current !== next
-      ) {
+      if (!skipClearOnReset.current && prevWide.current !== null && prevWide.current !== next) {
         setForced(null);
       }
       skipClearOnReset.current = false;
@@ -118,7 +114,7 @@ export function useFileListOpen(
     });
     ro.observe(paneEl);
     return () => ro.disconnect();
-  }, [paneEl, autoMin, resetKey]);
+  }, [paneEl, autoMin]);
 
   const open = forced ?? autoOpen;
   const toggle = useCallback(() => {

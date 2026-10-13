@@ -151,12 +151,7 @@ export async function browserScrollTool(
   args: ToolArgs,
   ctx: ToolContext,
 ): Promise<ToolExecuteResult> {
-  const direction = str(args, "direction") as
-    | "up"
-    | "down"
-    | "left"
-    | "right"
-    | undefined;
+  const direction = str(args, "direction") as "up" | "down" | "left" | "right" | undefined;
   const result = await browserCall(
     "scroll",
     {
@@ -217,11 +212,7 @@ export async function browserGetStylesTool(
   } else if (Array.isArray(args.properties)) {
     properties = args.properties.filter((p): p is string => typeof p === "string");
   }
-  const result = await browserCall(
-    "getStyles",
-    { ref, selector, properties },
-    ctx.signal,
-  );
+  const result = await browserCall("getStyles", { ref, selector, properties }, ctx.signal);
   return { output: formatResult(result) };
 }
 

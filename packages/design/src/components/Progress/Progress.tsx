@@ -36,10 +36,7 @@ export function Progress({
       aria-valuemax={indeterminate ? undefined : safeMax}
       aria-valuenow={indeterminate ? undefined : clamped}
     >
-      <div
-        className="tw-progress__bar"
-        style={indeterminate ? undefined : { width: `${pct}%` }}
-      />
+      <div className="tw-progress__bar" style={indeterminate ? undefined : { width: `${pct}%` }} />
     </div>
   );
 }

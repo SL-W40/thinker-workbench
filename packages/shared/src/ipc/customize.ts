@@ -3,9 +3,7 @@
  */
 
 /** User = dataDir；Workspace = 指定工作区根下 .thinker。 */
-export type CustomizeScope =
-  | { kind: "user" }
-  | { kind: "workspace"; workspaceId: string };
+export type CustomizeScope = { kind: "user" } | { kind: "workspace"; workspaceId: string };
 
 /** 列表项来源标签。 */
 export type CustomizeSource = "thinker-user" | "thinker-workspace";

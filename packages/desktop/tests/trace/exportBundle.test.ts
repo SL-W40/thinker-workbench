@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { TraceSpanRecord } from "@thinker-workbench/shared";
 import { describe, it } from "vitest";
 import yauzl from "yauzl";
-import type { TraceSpanRecord } from "@thinker-workbench/shared";
 import {
   buildSessionExportFiles,
   redactKeysDeep,
@@ -127,7 +127,8 @@ describe("exportBundle", () => {
         ],
       },
       workspace: { id: "ws_1", name: "WS", rootPath: "C:/proj" },
-      payloadsJsonl: '{"id":"pl1","spanId":"s1","side":"out","ts":1,"bytes":2,"truncated":false,"json":{}}\n',
+      payloadsJsonl:
+        '{"id":"pl1","spanId":"s1","side":"out","ts":1,"bytes":2,"truncated":false,"json":{}}\n',
       traceSettings: {
         traceEnabled: true,
         apiKey: "should-not-leak",

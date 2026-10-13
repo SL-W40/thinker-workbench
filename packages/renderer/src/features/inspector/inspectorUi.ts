@@ -6,8 +6,8 @@ import {
   BROWSER_TAB_KEY,
   CHANGES_TAB_KEY,
   FILES_TAB_KEY,
-  TERMINAL_TAB_KEY,
   type StageTab,
+  TERMINAL_TAB_KEY,
 } from "./types";
 import { clampFileListWidth, FILE_LIST_WIDTH } from "./useFileListPanel";
 
@@ -48,12 +48,7 @@ function storageKey(workspaceId: string): string {
 function isStoredTab(value: unknown): value is StoredInspectorTab {
   if (!value || typeof value !== "object") return false;
   const v = value as { kind?: unknown; path?: unknown };
-  if (
-    v.kind === "changes" ||
-    v.kind === "files" ||
-    v.kind === "terminal" ||
-    v.kind === "browser"
-  ) {
+  if (v.kind === "changes" || v.kind === "files" || v.kind === "terminal" || v.kind === "browser") {
     return true;
   }
   return v.kind === "file" && typeof v.path === "string" && v.path.length > 0;
@@ -73,8 +68,7 @@ export function loadInspectorUi(workspaceId: string | null): StoredInspectorUi {
     return {
       tabs,
       activeKey: typeof parsed.activeKey === "string" ? parsed.activeKey : "",
-      filesListForced:
-        typeof parsed.filesListForced === "boolean" ? parsed.filesListForced : null,
+      filesListForced: typeof parsed.filesListForced === "boolean" ? parsed.filesListForced : null,
       filesListWidth:
         typeof parsed.filesListWidth === "number"
           ? clampFileListWidth(parsed.filesListWidth)

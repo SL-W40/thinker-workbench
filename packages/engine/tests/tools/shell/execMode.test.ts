@@ -3,10 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import {
-  normalizeShellWriteData,
-  resolveShellExecMode,
-} from "../../../src/tools/shell/execute";
+import { normalizeShellWriteData, resolveShellExecMode } from "../../../src/tools/shell/execute";
 
 describe("resolveShellExecMode", () => {
   it("auto：await=false → login；await=true → direct", () => {

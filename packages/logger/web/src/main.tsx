@@ -1,10 +1,11 @@
 /**
  * 日志查看器独立入口。
  */
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+
 import { applyDesignTheme, disableTabFocusNav } from "@thinker-workbench/design";
 import { ThemeProvider } from "@thinker-workbench/design/react";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 import "@thinker-workbench/design/styles.less";
 import "@thinker-workbench/design/controls.less";
 import { App } from "./App";

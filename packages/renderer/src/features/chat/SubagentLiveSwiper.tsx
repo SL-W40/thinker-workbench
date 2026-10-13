@@ -2,8 +2,8 @@
  * 子代理卡片底栏：活动文案单行上下滚动（swiper），
  * 按 markdown 解析但视觉统一为正文（无标题/代码块样式）。
  */
-import { parseInline, type InlineNode } from "@thinker-workbench/markdown";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { type InlineNode, parseInline } from "@thinker-workbench/markdown";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   /** 已本地化的活动文案 */
@@ -115,9 +115,7 @@ export function SubagentLiveSwiper({ text }: Props) {
 
   return (
     <div className="run-subagent-card__swiper" aria-live="polite">
-      <div
-        className={`run-subagent-card__swiper-track${phase === "slide" ? " is-sliding" : ""}`}
-      >
+      <div className={`run-subagent-card__swiper-track${phase === "slide" ? " is-sliding" : ""}`}>
         {outgoing != null ? (
           <div className="run-subagent-card__swiper-line is-out" aria-hidden>
             <LiveLine text={outgoing} />

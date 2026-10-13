@@ -7,10 +7,7 @@
 import type { UtilityHello } from "@thinker-workbench/shared";
 import { utilityProcess } from "electron";
 import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths";
-import {
-  getGeneralSettings,
-  getModelCatalogSnapshot,
-} from "../config/settingsStore";
+import { getGeneralSettings, getModelCatalogSnapshot } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
 import { onAgentUtilityExited } from "../ipc/agentHandlers";

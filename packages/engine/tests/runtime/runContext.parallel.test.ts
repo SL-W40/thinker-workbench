@@ -2,17 +2,17 @@
  * 并行 RunContext：交错 await 时 workspace / emit ids 不串。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
 import {
   DEFAULT_CHAT_MODE,
   DEFAULT_SHELL_ALLOWLIST,
   DEFAULT_SHELL_APPROVAL_MODE,
   DEFAULT_WORKSPACE_ACCESS,
 } from "@thinker-workbench/shared";
+import { describe, it } from "vitest";
+import { getChatMode } from "../../src/chatMode";
 import { buildRunContext } from "../../src/runtime/buildRunContext";
 import { runWithContext } from "../../src/runtime/runContext";
 import { getRunIds } from "../../src/runtime/runEmit";
-import { getChatMode } from "../../src/chatMode";
 import { getWorkspaceRoot } from "../../src/workspace";
 
 describe("RunContext 并行隔离", () => {
@@ -59,10 +59,7 @@ describe("RunContext 并行隔离", () => {
 
     await Promise.all([taskA, taskB]);
 
-    assert.deepEqual(seenA, [
-      "run_a:C:\\tmp\\workspace-a:ask",
-      "run_a:C:\\tmp\\workspace-a:ask",
-    ]);
+    assert.deepEqual(seenA, ["run_a:C:\\tmp\\workspace-a:ask", "run_a:C:\\tmp\\workspace-a:ask"]);
     assert.deepEqual(seenB, [
       "run_b:C:\\tmp\\workspace-b:agent",
       "run_b:C:\\tmp\\workspace-b:agent",

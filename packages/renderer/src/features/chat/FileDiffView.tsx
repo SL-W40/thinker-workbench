@@ -10,7 +10,7 @@ import { useT } from "../../i18n/useI18n";
 type Props = {
   path?: string;
   diff: string;
- /** 在右侧 Files 面板打开该路径*/
+  /** 在右侧 Files 面板打开该路径*/
   onOpenFile?: (path: string) => void;
 };
 
@@ -178,7 +178,6 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
       <div className="run-diff-body-wrap">
         <pre
           className="run-diff-body"
-          tabIndex={0}
           style={{ ["--diff-collapsed-lines" as string]: String(COLLAPSED_LINES) }}
         >
           {visibleRows.map((row, i) => (
@@ -205,10 +204,7 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
             aria-label={expanded ? t("chat.diffCollapse") : t("chat.diffExpand")}
             onClick={() => setExpanded((v) => !v)}
           >
-            <span
-              className={`run-diff-arrow${expanded ? " is-up" : ""}`}
-              aria-hidden="true"
-            />
+            <span className={`run-diff-arrow${expanded ? " is-up" : ""}`} aria-hidden="true" />
           </button>
         ) : null}
       </div>

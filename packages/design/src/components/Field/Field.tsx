@@ -30,9 +30,7 @@ export function Field({
   children,
 }: FieldProps) {
   return (
-    <div
-      className={`tw-field${className ? ` ${className}` : ""}${required ? " is-required" : ""}`}
-    >
+    <div className={`tw-field${className ? ` ${className}` : ""}${required ? " is-required" : ""}`}>
       {label != null ? (
         <label className="tw-field__label" htmlFor={htmlFor}>
           {label}

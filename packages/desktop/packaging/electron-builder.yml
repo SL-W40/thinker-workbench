@@ -1,24 +1,64 @@
-# 将来打 .app / .dmg 时交给 electron-builder 使用。
+# Thinker Workbench — electron-builder（从仓库根执行；Shell = .stage/app，Payload = extraResources）
 # Hardened Runtime + 公证前务必 asarUnpack 原生模块，并对 .node / spawn-helper 签名。
+# 路径相对仓库根（package.json scripts 的 cwd）。
 appId: com.thinker.workbench
 productName: Thinker Workbench
+# 原生模块已在 stage 时从本机 Electron ABI 拷入 .stage/app；勿再对 workspace 里的 .node 做 unlink/rebuild
+npmRebuild: false
+# 使用仓库已安装的 Electron，避免 @electron/get 缓存模式兼容问题
+electronDist: node_modules/electron/dist
 asar: true
 asarUnpack:
   - "**/*.node"
   - "**/spawn-helper"
   - "**/node-pty/**"
   - "**/better-sqlite3/**"
+
+directories:
+  app: packages/desktop/.stage/app
+  # 安装包产物放仓库根目录，方便取用；.stage 仍留在 desktop 包内
+  output: release
+  buildResources: packages/desktop/resources
+
 files:
-  - artifacts/**
-  - package.json
+  - "**/*"
+
+extraResources:
+  - from: packages/desktop/.stage/payload
+    to: payload
+
+# Windows：保留 winCodeSign 工具链（改 exe 资源 / 有证书时 Authenticode）。
+# 解压失败（Cannot create symbolic link）时请开「开发人员模式」并清空
+# %LOCALAPPDATA%\electron-builder\Cache\winCodeSign 后重试。勿随意关闭签名步骤。
+win:
+  icon: win/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
 mac:
   category: public.app-category.developer-tools
+  icon: mac/icon.png
   hardenedRuntime: true
   gatekeeperAssess: false
-  entitlements: entitlements.mac.plist
-  entitlementsInherit: entitlements.mac.plist
-  # 公证：设置 Apple ID / team / app 专用密码后启用
-  # notarize:
-  #   teamId: XXXXXXXXXX
-# 相对本 yml 所在 packaging/ → ../scripts/notarize-hint.mjs
-afterSign: ../scripts/notarize-hint.mjs
+  entitlements: packages/desktop/packaging/entitlements.mac.plist
+  entitlementsInherit: packages/desktop/packaging/entitlements.mac.plist
+  target:
+    - dmg
+    - zip
+
+linux:
+  icon: mac/icon.png
+  target:
+    - AppImage
+  category: Development
+
+afterSign: packages/desktop/scripts/notarize-hint.mjs

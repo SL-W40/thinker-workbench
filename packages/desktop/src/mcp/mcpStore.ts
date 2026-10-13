@@ -41,11 +41,8 @@ function normalizeConfig(raw: unknown, fallbackId: string): McpServerConfig | nu
   const id = sanitizeId(typeof o.id === "string" ? o.id : fallbackId);
   const command = typeof o.command === "string" ? o.command.trim() : "";
   if (!command) return null;
-  const transport: McpTransport =
-    o.transport === "stdio" || !o.transport ? "stdio" : "stdio";
-  const args = Array.isArray(o.args)
-    ? o.args.map((a) => String(a))
-    : [];
+  const transport: McpTransport = o.transport === "stdio" || !o.transport ? "stdio" : "stdio";
+  const args = Array.isArray(o.args) ? o.args.map((a) => String(a)) : [];
   const env: Record<string, string> = {};
   if (o.env && typeof o.env === "object" && !Array.isArray(o.env)) {
     for (const [k, v] of Object.entries(o.env as Record<string, unknown>)) {
@@ -107,10 +104,7 @@ export function upsertMcpConfig(input: McpServerUpsertInput): McpServerConfig {
     command: input.command.trim(),
     args: input.args ?? existing?.args ?? [],
     env: input.env ?? existing?.env ?? {},
-    cwd:
-      input.cwd !== undefined
-        ? input.cwd?.trim() || null
-        : (existing?.cwd ?? null),
+    cwd: input.cwd !== undefined ? input.cwd?.trim() || null : (existing?.cwd ?? null),
   };
   if (!next.command) throw new Error("MCP command is required.");
   fs.writeFileSync(filePathForId(id), `${JSON.stringify(next, null, 2)}\n`, "utf8");

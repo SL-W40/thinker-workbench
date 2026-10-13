@@ -31,7 +31,7 @@ export function HitlHost() {
       }
       if (event.phase === "request" && event.request) {
         if (isTimelineHitl(event.request.kind)) {
-          setPending((cur) => (cur?.hitlId === event.request!.hitlId ? null : cur));
+          setPending((cur) => (cur?.hitlId === event.request?.hitlId ? null : cur));
           return;
         }
         setPending(event.request);
@@ -46,9 +46,7 @@ export function HitlHost() {
     setBusy(true);
     try {
       const values =
-        pending.kind === "shell_secret_input" && actionId === "submit"
-          ? { secret }
-          : undefined;
+        pending.kind === "shell_secret_input" && actionId === "submit" ? { secret } : undefined;
       await respondHitl({ hitlId: pending.hitlId, actionId, values });
       setPending(null);
       setSecret("");
@@ -62,11 +60,7 @@ export function HitlHost() {
   const isSecret = pending?.kind === "shell_secret_input";
 
   return (
-    <Modal
-      open={open}
-      aria-labelledby={titleId}
-      panelClassName="hitl-host__panel"
-    >
+    <Modal open={open} aria-labelledby={titleId} panelClassName="hitl-host__panel">
       {pending ? (
         <div className="hitl-host">
           <h2 id={titleId} className="hitl-host__title">
@@ -101,9 +95,7 @@ export function HitlHost() {
                         ? "ghost"
                         : "secondary"
                 }
-                disabled={
-                  busy || (isSecret && action.id === "submit" && !secret.trim())
-                }
+                disabled={busy || (isSecret && action.id === "submit" && !secret.trim())}
                 onClick={() => void onAction(action.id)}
               >
                 {actionLabel(t, action.id, action.label)}

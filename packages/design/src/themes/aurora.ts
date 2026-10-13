@@ -2,8 +2,8 @@
  * Aurora 创意主题——深蓝夜空 + 青绿极光。
  */
 import { auroraTheme as mdAurora } from "@thinker-workbench/markdown";
-import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
+import type { DesignTheme } from "./types";
 
 const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdAurora.vars["--md-font-mono"] ?? "";

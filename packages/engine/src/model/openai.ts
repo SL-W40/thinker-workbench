@@ -8,21 +8,16 @@
  */
 import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
 import {
-  DEFAULT_AI_LOCALE,
-  normalizeAiLocale,
   type AiLocale,
+  DEFAULT_AI_LOCALE,
   type ModelSettings,
+  normalizeAiLocale,
 } from "@thinker-workbench/shared";
 import { getModelRetryMaxAttempts } from "../config/runtimeLimits";
 import { agentLog } from "../log/setup";
 import { buildSystemPrompt } from "../prompts/system";
 import { modelFetch } from "./httpFetch";
-import {
-  formatErrorMessage,
-  isRetryableError,
-  isRetryableHttpStatus,
-  sleepBackoff,
-} from "./retry";
+import { formatErrorMessage, isRetryableError, isRetryableHttpStatus, sleepBackoff } from "./retry";
 import type {
   ChatCompletionResult,
   ChatMessage,
@@ -138,10 +133,8 @@ function asNonNegInt(value: unknown): number | undefined {
 function parseUsage(raw: unknown): ChatUsage | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const u = raw as Record<string, unknown>;
-  const input =
-    asNonNegInt(u.prompt_tokens) ?? asNonNegInt(u.input_tokens) ?? 0;
-  const output =
-    asNonNegInt(u.completion_tokens) ?? asNonNegInt(u.output_tokens) ?? 0;
+  const input = asNonNegInt(u.prompt_tokens) ?? asNonNegInt(u.input_tokens) ?? 0;
+  const output = asNonNegInt(u.completion_tokens) ?? asNonNegInt(u.output_tokens) ?? 0;
   const total = asNonNegInt(u.total_tokens);
   if (input === 0 && output === 0 && (total == null || total === 0)) return undefined;
 
@@ -165,9 +158,7 @@ function parseUsage(raw: unknown): ChatUsage | undefined {
     asNonNegInt(u.cache_write_tokens) ??
     0;
   const reasoning =
-    asNonNegInt(completionDetails?.reasoning_tokens) ??
-    asNonNegInt(u.reasoning_tokens) ??
-    0;
+    asNonNegInt(completionDetails?.reasoning_tokens) ?? asNonNegInt(u.reasoning_tokens) ?? 0;
 
   return {
     inputTokens: input,
@@ -406,10 +397,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             const error = formatErrorMessage(err);
             log.error("fetch failed", { meta: { error, ms: Date.now() - started, attempt } });
             lastError = err;
-            if (
-              attempt < maxAttempts &&
-              isRetryableError(err, { emittedTokens })
-            ) {
+            if (attempt < maxAttempts && isRetryableError(err, { emittedTokens })) {
               continue;
             }
             throw new Error(error);
@@ -427,10 +415,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             });
             const httpErr = new Error(`OpenAI HTTP ${res.status}: ${errBody.slice(0, 400)}`);
             lastError = httpErr;
-            if (
-              attempt < maxAttempts &&
-              isRetryableHttpStatus(res.status)
-            ) {
+            if (attempt < maxAttempts && isRetryableHttpStatus(res.status)) {
               continue;
             }
             throw httpErr;
@@ -498,10 +483,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             } catch (err) {
               // 流已部分落地则不可重试，避免重复 token
               lastError = err;
-              if (
-                attempt < maxAttempts &&
-                isRetryableError(err, { emittedTokens })
-              ) {
+              if (attempt < maxAttempts && isRetryableError(err, { emittedTokens })) {
                 continue;
               }
               throw new Error(formatErrorMessage(err));
@@ -530,10 +512,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
           );
         } catch (err) {
           lastError = err;
-          if (
-            attempt < maxAttempts &&
-            isRetryableError(err, { emittedTokens })
-          ) {
+          if (attempt < maxAttempts && isRetryableError(err, { emittedTokens })) {
             continue;
           }
           throw err instanceof Error ? err : new Error(formatErrorMessage(err));
@@ -570,4 +549,3 @@ export function getChatModelFor(settings: ModelSettings): ChatModel {
     model: settings.model?.trim() || undefined,
   });
 }
-

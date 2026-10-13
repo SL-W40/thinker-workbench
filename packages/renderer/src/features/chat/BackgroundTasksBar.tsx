@@ -5,11 +5,8 @@ import { ChevronRightIcon, ConsoleIcon } from "@thinker-workbench/design/react";
 import type { TerminalSession } from "@thinker-workbench/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { requestOpenSubagent } from "../../bridge/subagent";
+import { listTerminalSessions, onTerminalEvent } from "../../bridge/terminal";
 import { onAgentEvent } from "../../bridge/thinker";
-import {
-  listTerminalSessions,
-  onTerminalEvent,
-} from "../../bridge/terminal";
 import { useT } from "../../i18n/useI18n";
 import "./BackgroundTasksBar.less";
 
@@ -46,15 +43,14 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
   const [shellTasks, setShellTasks] = useState<TerminalSession[]>([]);
   const [subagents, setSubagents] = useState<SubagentTask[]>([]);
   const [expanded, setExpanded] = useState(false);
- /** 已收束的 taskId：忽略迟到的 progress，避免停止后仍占后台条*/
+  /** 已收束的 taskId：忽略迟到的 progress，避免停止后仍占后台条*/
   const settledTaskIds = useRef(new Set<string>());
   const subagentsRef = useRef<SubagentTask[]>([]);
   subagentsRef.current = subagents;
 
   useEffect(() => {
     let cancelled = false;
-    const matchThread = (s: TerminalSession) =>
-      !threadId || !s.threadId || s.threadId === threadId;
+    const matchThread = (s: TerminalSession) => !threadId || !s.threadId || s.threadId === threadId;
     void listTerminalSessions().then((list) => {
       if (!cancelled) {
         setShellTasks(list.filter((s) => isBackgroundTask(s) && matchThread(s)));
@@ -87,11 +83,8 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
   useEffect(() => {
     const settled = settledTaskIds.current;
     return onAgentEvent((event) => {
- // 手动取消：仅清当前 thread 相关（无 threadId 时全清）
-      if (
-        event.type === "error" &&
-        /cancel/i.test(event.error || "")
-      ) {
+      // 手动取消：仅清当前 thread 相关（无 threadId 时全清）
+      if (event.type === "error" && /cancel/i.test(event.error || "")) {
         if (threadId && event.threadId && event.threadId !== threadId) return;
         for (const s of subagentsRef.current) settled.add(s.taskId);
         setSubagents([]);
@@ -99,11 +92,7 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
       }
       if (event.type !== "subagent" || !event.background) return;
       if (threadId && event.threadId && event.threadId !== threadId) return;
-      if (
-        event.phase === "finished" ||
-        event.phase === "failed" ||
-        event.phase === "cancelled"
-      ) {
+      if (event.phase === "finished" || event.phase === "failed" || event.phase === "cancelled") {
         settled.add(event.taskId);
         setSubagents((prev) => prev.filter((t) => t.taskId !== event.taskId));
         return;
@@ -136,7 +125,7 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
         });
       }
     });
-  }, []);
+  }, [threadId]);
 
   const total = shellTasks.length + subagents.length;
 
@@ -144,10 +133,7 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
     if (total === 0) setExpanded(false);
   }, [total]);
 
-  const title = useMemo(
-    () => t("chat.backgroundTasks.title", { n: String(total) }),
-    [t, total],
-  );
+  const title = useMemo(() => t("chat.backgroundTasks.title", { n: String(total) }), [t, total]);
 
   if (total === 0) return null;
 

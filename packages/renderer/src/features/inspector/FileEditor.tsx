@@ -6,11 +6,7 @@ import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import { useDesignTheme } from "@thinker-workbench/design/react";
 import { useEffect, useRef, useState } from "react";
 import "./monacoSetup";
-import {
-  applyMonacoTheme,
-  readMonacoFontFamily,
-  TW_MONACO_THEME,
-} from "./monacoTheme";
+import { applyMonacoTheme, readMonacoFontFamily, TW_MONACO_THEME } from "./monacoTheme";
 
 export type FileEditorProps = {
   value: string;
@@ -27,7 +23,7 @@ export type FileEditorProps = {
 function langFromPath(path?: string | null) {
   if (!path) return "plaintext";
   const base = path.replace(/\\/g, "/").split("/").pop() ?? path;
-  const ext = base.includes(".") ? base.split(".").pop()?.toLowerCase() ?? "" : "";
+  const ext = base.includes(".") ? (base.split(".").pop()?.toLowerCase() ?? "") : "";
   const map: Record<string, string> = {
     ts: "typescript",
     tsx: "typescript",
@@ -124,7 +120,7 @@ export function FileEditor({
     void loader.init().then((monaco) => {
       applyMonacoTheme(monaco, colorScheme);
     });
-  }, [themeId, colorScheme]);
+  }, [colorScheme]);
 
   // 按键绑定在 mount 时注册一次，经 ref 指向最新 onSave，避免闭包过期。
   const saveRef = useRef(onSave);

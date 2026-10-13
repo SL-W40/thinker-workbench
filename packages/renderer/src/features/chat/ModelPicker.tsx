@@ -1,7 +1,6 @@
 /**
  * Composer 左下角模型选用：紧凑触发器 + 按凭证分组的富面板。 */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+
 import { Badge } from "@thinker-workbench/design/react";
 import type {
   ModelCatalogPublic,
@@ -9,14 +8,16 @@ import type {
   ModelSelection,
   ModelTag,
 } from "@thinker-workbench/shared";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getModelSettings,
   getSessionModelSelection,
   setModelSettings,
   setSessionModelSelection,
 } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import "./ModelPicker.less";
 
 type Props = {
@@ -61,7 +62,7 @@ export function ModelPicker({ sessionId, disabled }: Props) {
         const cat = await getModelSettings();
         if (cancelled) return;
         setCatalog(cat);
- // 无会话覆盖时用全局；全局缺省为 Auto
+        // 无会话覆盖时用全局；全局缺省为 Auto
         let sel: ModelSelection = cat.selection ?? { mode: "auto" };
         if (sessionId) {
           const override = await getSessionModelSelection(sessionId);
@@ -181,9 +182,7 @@ export function ModelPicker({ sessionId, disabled }: Props) {
   }
 
   const selectedModel =
-    selection.mode === "manual"
-      ? catalog?.models.find((m) => m.id === selection.modelId)
-      : null;
+    selection.mode === "manual" ? catalog?.models.find((m) => m.id === selection.modelId) : null;
 
   // 未配置任何模型时不展示切换器
   if (!ready || !catalog || catalog.models.length === 0) {
@@ -260,12 +259,11 @@ export function ModelPicker({ sessionId, disabled }: Props) {
                   onClick={() => void apply({ mode: "auto" })}
                 >
                   <div className="composer-model-menu__item-main">
-                    <span className="composer-model-menu__name">
-                      {t("chat.modelPicker.auto")}
-                    </span>
+                    <span className="composer-model-menu__name">{t("chat.modelPicker.auto")}</span>
                     {selection.mode === "auto" ? (
                       <span className="composer-model-menu__check" aria-hidden>
-                        …?                      </span>
+                        …?{" "}
+                      </span>
                     ) : null}
                   </div>
                   <p className="composer-model-menu__desc">{t("chat.modelPicker.autoHint")}</p>
@@ -275,8 +273,7 @@ export function ModelPicker({ sessionId, disabled }: Props) {
                   <div key={group.label} className="composer-model-menu__group" role="group">
                     <div className="composer-model-menu__group-head">{group.label}</div>
                     {group.models.map((m) => {
-                      const selected =
-                        selection.mode === "manual" && selection.modelId === m.id;
+                      const selected = selection.mode === "manual" && selection.modelId === m.id;
                       return (
                         <button
                           key={m.id}
@@ -295,12 +292,11 @@ export function ModelPicker({ sessionId, disabled }: Props) {
                               }`}
                               aria-hidden
                             />
-                            <span className="composer-model-menu__name">
-                              {displayName(m)}
-                            </span>
+                            <span className="composer-model-menu__name">{displayName(m)}</span>
                             {selected ? (
                               <span className="composer-model-menu__check" aria-hidden>
-                                …?                              </span>
+                                …?{" "}
+                              </span>
                             ) : null}
                           </div>
                           <div className="composer-model-menu__meta">

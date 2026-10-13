@@ -105,7 +105,7 @@ function parseFrontmatter(raw: string): {
     if (listItem && listKey) {
       const prev = meta[listKey];
       const arr = Array.isArray(prev) ? [...prev] : typeof prev === "string" ? [prev] : [];
-      arr.push(stripQuotes(listItem[1]!.trim()));
+      arr.push(stripQuotes(listItem[1]?.trim()));
       meta[listKey] = arr;
       continue;
     }
@@ -113,7 +113,7 @@ function parseFrontmatter(raw: string): {
     const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
     if (!m) continue;
     const key = m[1]!;
-    const value = m[2]!.trim();
+    const value = m[2]?.trim();
     if (isBlockScalarIndicator(value)) {
       blockKey = key;
       blockFolded = value.startsWith(">");
@@ -140,10 +140,7 @@ function parseFrontmatter(raw: string): {
 }
 
 function stripQuotes(s: string): string {
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     return s.slice(1, -1);
   }
   return s;
@@ -188,13 +185,9 @@ function parseSkillFile(absPath: string, source: string): SkillDefinition | null
     typeof meta.name === "string" ? meta.name : folderName,
     folderName,
   );
-  const description =
-    typeof meta.description === "string" ? meta.description.trim() : "";
+  const description = typeof meta.description === "string" ? meta.description.trim() : "";
   if (!description) return null;
-  const paths = [
-    ...asStringList(meta.paths),
-    ...asStringList(meta.globs),
-  ];
+  const paths = [...asStringList(meta.paths), ...asStringList(meta.globs)];
   const disableModelInvocation = meta["disable-model-invocation"] === true;
   return {
     name,
@@ -211,6 +204,7 @@ function globMatch(pattern: string, text: string): boolean {
   const norm = pattern.replace(/\\/g, "/");
   const target = text.replace(/\\/g, "/");
   // 转成正则：双星 → .* ；单星 → [^/]*
+  const REGEX_SPECIAL = ".+?^${}()|[]\\";
   let re = "^";
   for (let i = 0; i < norm.length; i++) {
     const c = norm[i]!;
@@ -224,7 +218,7 @@ function globMatch(pattern: string, text: string): boolean {
       re += "[^/]*";
       continue;
     }
-    if (".+?^${}()|[]\\".includes(c)) re += `\\${c}`;
+    if (REGEX_SPECIAL.includes(c)) re += `\\${c}`;
     else re += c;
   }
   re += "$";
@@ -241,7 +235,7 @@ export function extractSlashSkillNames(userText: string): string[] {
   const re = /(?:^|[\s`])\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(userText))) {
-    names.push(m[1]!.toLowerCase());
+    names.push(m[1]?.toLowerCase());
   }
   return [...new Set(names)];
 }

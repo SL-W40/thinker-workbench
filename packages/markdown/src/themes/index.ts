@@ -6,23 +6,23 @@ import { auroraTheme } from "./aurora";
 import { darkTheme } from "./dark";
 import { eyecareTheme } from "./eyecare";
 import { lightTheme } from "./light";
-import { notesTheme } from "./notes";
 import { monoTheme } from "./mono";
+import { notesTheme } from "./notes";
 import type { MarkdownTheme, MarkdownThemeInput } from "./types";
 
+export {
+  type MarkdownThemeVars,
+  MD_TOKEN_KEYS,
+  type MdTokenKey,
+  mermaidVariablesFromCss,
+} from "./tokens";
 export type {
   MarkdownTheme,
   MarkdownThemeInput,
-  MermaidThemeName,
   MermaidLook,
+  MermaidThemeName,
 } from "./types";
-export {
-  MD_TOKEN_KEYS,
-  mermaidVariablesFromCss,
-  type MdTokenKey,
-  type MarkdownThemeVars,
-} from "./tokens";
-export { lightTheme, darkTheme, notesTheme, eyecareTheme, auroraTheme, monoTheme };
+export { auroraTheme, darkTheme, eyecareTheme, lightTheme, monoTheme, notesTheme };
 
 const builtins: Record<string, MarkdownTheme> = {
   light: lightTheme,

@@ -5,6 +5,8 @@
  * 通用设置保存后向**其它**窗口广播，供主题 / 语言跨窗同步。
  * 数据目录变更走专用 preview / apply 通道（不即时生效）。
  */
+
+import fs from "node:fs";
 import {
   type AttentionPreviewKind,
   type ChatMode,
@@ -15,9 +17,9 @@ import {
   type ModelSelection,
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
-import fs from "node:fs";
 import { BrowserWindow, dialog, type IpcMain } from "electron";
 import { applyDataDirChange, previewDataDirChange } from "../config/dataDirMigrate";
+import { probeModel } from "../config/probeModel";
 import {
   describeDataDirPaths,
   getGeneralSettings,
@@ -28,11 +30,7 @@ import {
   saveShortcutsSettings,
   unlockModelSecretsForRun,
 } from "../config/settingsStore";
-import { probeModel } from "../config/probeModel";
-import {
-  clearShortcutRecording,
-  setShortcutRecording,
-} from "../config/shortcutRecording";
+import { clearShortcutRecording, setShortcutRecording } from "../config/shortcutRecording";
 import {
   getSessionChatMode,
   getSessionModelSelection,
@@ -64,10 +62,8 @@ export function registerSettingsHandlers(
   ipcMain.handle(IpcChannels.settingsUnlockModelSecrets, (_evt, request?: { force?: boolean }) =>
     unlockModelSecretsForRun({ force: Boolean(request?.force) }),
   );
-  ipcMain.handle(
-    IpcChannels.settingsGetSessionModelSelection,
-    (_evt, sessionId: string) =>
-      getSessionModelSelection(typeof sessionId === "string" ? sessionId : ""),
+  ipcMain.handle(IpcChannels.settingsGetSessionModelSelection, (_evt, sessionId: string) =>
+    getSessionModelSelection(typeof sessionId === "string" ? sessionId : ""),
   );
   ipcMain.handle(
     IpcChannels.settingsSetSessionModelSelection,
@@ -79,18 +75,13 @@ export function registerSettingsHandlers(
       return getSessionModelSelection(typeof sessionId === "string" ? sessionId : "");
     },
   );
-  ipcMain.handle(
-    IpcChannels.settingsGetSessionChatMode,
-    (_evt, sessionId: string) =>
-      getSessionChatMode(typeof sessionId === "string" ? sessionId : ""),
+  ipcMain.handle(IpcChannels.settingsGetSessionChatMode, (_evt, sessionId: string) =>
+    getSessionChatMode(typeof sessionId === "string" ? sessionId : ""),
   );
   ipcMain.handle(
     IpcChannels.settingsSetSessionChatMode,
     (_evt, sessionId: string, chatMode: ChatMode) =>
-      setSessionChatMode(
-        typeof sessionId === "string" ? sessionId : "",
-        chatMode ?? "agent",
-      ),
+      setSessionChatMode(typeof sessionId === "string" ? sessionId : "", chatMode ?? "agent"),
   );
   ipcMain.handle(IpcChannels.settingsGetShortcuts, () => getShortcutsSettings());
   ipcMain.handle(IpcChannels.settingsSetShortcuts, (_evt, patch: Partial<ShortcutsMap>) => {
@@ -184,35 +175,32 @@ export function registerSettingsHandlers(
     return previewDataDirChange(typeof dataDir === "string" ? dataDir : "");
   });
 
-  ipcMain.handle(
-    IpcChannels.settingsApplyDataDirChange,
-    (evt, request: DataDirChangeRequest) => {
-      const sender = evt.sender;
-      const result = applyDataDirChange(
-        {
-          dataDir: typeof request?.dataDir === "string" ? request.dataDir : "",
-          migrate: Boolean(request?.migrate),
+  ipcMain.handle(IpcChannels.settingsApplyDataDirChange, (evt, request: DataDirChangeRequest) => {
+    const sender = evt.sender;
+    const result = applyDataDirChange(
+      {
+        dataDir: typeof request?.dataDir === "string" ? request.dataDir : "",
+        migrate: Boolean(request?.migrate),
+      },
+      {
+        onProgress: (progress) => {
+          if (!sender.isDestroyed()) {
+            sender.send(IpcChannels.settingsDataDirMigrateProgress, progress);
+          }
         },
-        {
-          onProgress: (progress) => {
-            if (!sender.isDestroyed()) {
-              sender.send(IpcChannels.settingsDataDirMigrateProgress, progress);
-            }
-          },
-          reopen: () => {
-            options?.onDataDirApplied?.(getGeneralSettings());
-          },
+        reopen: () => {
+          options?.onDataDirApplied?.(getGeneralSettings());
         },
-      );
-      if (result.ok && result.general) {
-        const senderId = sender.id;
-        for (const w of BrowserWindow.getAllWindows()) {
-          if (w.isDestroyed() || w.webContents.id === senderId) continue;
-          w.webContents.send(IpcChannels.settingsGeneralChanged, result.general);
-        }
-        options?.onGeneralSaved?.(result.general);
+      },
+    );
+    if (result.ok && result.general) {
+      const senderId = sender.id;
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (w.isDestroyed() || w.webContents.id === senderId) continue;
+        w.webContents.send(IpcChannels.settingsGeneralChanged, result.general);
       }
-      return result;
-    },
-  );
+      options?.onGeneralSaved?.(result.general);
+    }
+    return result;
+  });
 }

@@ -29,11 +29,7 @@ export function readXtermTheme(theme?: DesignTheme | null): ITheme {
   const codeBg = pick(ui, "--tw-code-bg", "--tw-code-bg", "");
   const elev = pick(ui, "--tw-bg-elev", "--tw-bg-elev", bg);
   // 终端面优先代码背景，其次 elev，避免浅色主题「白板一块」不像终端
-  const surface =
-    codeBg ||
-    cssVar("--md-pre-bg", "") ||
-    elev ||
-    bg;
+  const surface = codeBg || cssVar("--md-pre-bg", "") || elev || bg;
   const accent = pick(ui, "--tw-accent", "--tw-accent", cssVar("--accent", fg));
   const muted = pick(ui, "--tw-fg-muted", "--tw-fg-muted", cssVar("--muted", fg));
   const danger = pick(ui, "--tw-danger", "--tw-danger", cssVar("--danger", "#f07178"));

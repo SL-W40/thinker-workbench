@@ -20,10 +20,9 @@ export function Separator({
   className,
 }: SeparatorProps) {
   return (
-    <div
+    <hr
       className={`tw-separator tw-separator--${orientation}${className ? ` ${className}` : ""}`}
-      role="separator"
-      aria-orientation={orientation}
+      aria-orientation={decorative ? undefined : orientation}
       aria-hidden={decorative || undefined}
     />
   );

@@ -64,8 +64,7 @@ function buildParClusters(
   if (tasks.length === 0) return new Map();
 
   const sorted = [...tasks].sort((a, b) => a.startTs - b.startTs);
-  const useStrict =
-    sorted.some((t) => t.background) || sorted.some((t) => t.hasForeground);
+  const useStrict = sorted.some((t) => t.background) || sorted.some((t) => t.hasForeground);
   const canPair = (a: TaskInterval, b: TaskInterval): boolean => {
     if (!overlaps(a.startTs, a.endTs, b.startTs, b.endTs)) return false;
     if (!useStrict) return true;
@@ -106,9 +105,7 @@ function buildParClusters(
   const out = new Map<string, { key: string; size: number; colorIdx: number }>();
   for (const c of clusters) {
     if (c.length < 2) continue;
-    const ordered = [...c].sort(
-      (a, b) => a.startTs - b.startTs || a.id.localeCompare(b.id),
-    );
+    const ordered = [...c].sort((a, b) => a.startTs - b.startTs || a.id.localeCompare(b.id));
     const key = ordered
       .map((t) => t.id)
       .sort()
@@ -251,19 +248,14 @@ export function buildCallTreeRows(
   for (const s of spans) children.set(s.spanId, []);
   const roots: TraceSpanRecord[] = [];
   for (const s of spans) {
-    const p =
-      s.parentSpanId && byId.has(s.parentSpanId) ? s.parentSpanId : null;
+    const p = s.parentSpanId && byId.has(s.parentSpanId) ? s.parentSpanId : null;
     if (!p) roots.push(s);
-    else children.get(p)!.push(s);
+    else children.get(p)?.push(s);
   }
   for (const list of children.values()) {
-    list.sort(
-      (a, b) => a.startTs - b.startTs || a.spanId.localeCompare(b.spanId),
-    );
+    list.sort((a, b) => a.startTs - b.startTs || a.spanId.localeCompare(b.spanId));
   }
-  roots.sort(
-    (a, b) => a.startTs - b.startTs || a.spanId.localeCompare(b.spanId),
-  );
+  roots.sort((a, b) => a.startTs - b.startTs || a.spanId.localeCompare(b.spanId));
 
   type ParMeta = { key: string; size: number; colorIdx: number; taskId: string };
   const rows: CallTreeRow[] = [];
@@ -279,8 +271,7 @@ export function buildCallTreeRows(
         : undefined;
     // 子行缺 taskId 时沿用祖先 Task，保证同一 agent 子树同色
     const par = own ?? inherit;
-    const spanForRow =
-      par && !node.taskId ? { ...node, taskId: par.taskId } : node;
+    const spanForRow = par && !node.taskId ? { ...node, taskId: par.taskId } : node;
     rows.push({
       span: spanForRow,
       depth,

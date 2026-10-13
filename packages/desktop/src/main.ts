@@ -6,22 +6,23 @@
  */
 import { app, BrowserWindow, ipcMain, nativeImage, nativeTheme } from "electron";
 import { APP_NAME, APP_USER_MODEL_ID } from "./config/appIdentity";
+import { reloadSessionAfterDataDirChange } from "./config/dataDirMigrate";
 import { getAppIconPath } from "./config/paths";
 import { loadSession } from "./config/sessionStore";
 import { getGeneralSettings, loadSettings } from "./config/settingsStore";
-import { reloadSessionAfterDataDirChange } from "./config/dataDirMigrate";
 import { ensureBundledCustomize } from "./customize/ensureBundledCustomize";
 import { closeThinkerDb, openCatalogDb } from "./db/thinkerDb";
 import { ensureDefaultWorkspace, healRunningSessions } from "./db/workspacesStore";
 import { registerIpc } from "./ipc/register";
-import { ensureBundledSkills } from "./skills/ensureBundledSkills";
 import { broadcastThreadsChanged } from "./ipc/workspacesHandlers";
 import { closeLogsDb } from "./log/logsDb";
 import { pruneExpiredLogs } from "./log/retention";
 import { configureDesktopLog } from "./log/setup";
-import { pruneTraceStore } from "./trace/retention";
 import { ensureWindowsToastShortcut } from "./notify/windowsToastShortcut";
 import { applyContentSecurityPolicy } from "./security/csp";
+import { ensureBundledSkills } from "./skills/ensureBundledSkills";
+import { terminalSessionManager } from "./terminal/TerminalSessionManager";
+import { pruneTraceStore } from "./trace/retention";
 import { pushAgentHello, startAgentProcess } from "./utility/startAgentProcess";
 import {
   createWindow,
@@ -29,7 +30,6 @@ import {
   syncWindowBackgroundFromSettings,
 } from "./window/createWindow";
 import { startDevToolsPrefsBridge } from "./window/devToolsEnv";
-import { terminalSessionManager } from "./terminal/TerminalSessionManager";
 import { isAppQuitting, setTrayEnsureWindow, syncTrayFromSettings } from "./window/tray";
 
 app.setName(APP_NAME);
@@ -133,7 +133,8 @@ app.whenReady().then(() => {
         /* ignore */
       }
       try {
-        const { browserSessionManager } = require("./browser/BrowserSessionManager") as typeof import("./browser/BrowserSessionManager");
+        const { browserSessionManager } =
+          require("./browser/BrowserSessionManager") as typeof import("./browser/BrowserSessionManager");
         void browserSessionManager.refreshOverlayTheme();
       } catch {
         /* ignore */

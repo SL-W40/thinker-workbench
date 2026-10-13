@@ -2,13 +2,13 @@
  * 单选列表框：触发器 + Portal 菜单，自动上下定位。
  */
 import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -176,7 +176,7 @@ export function Select<T extends string = string>({
 
   useEffect(() => {
     if (open) listRef.current?.focus();
-  }, [open, coords]);
+  }, [open]);
 
   function choose(next: T) {
     onChange(next);
@@ -222,7 +222,6 @@ export function Select<T extends string = string>({
             ref={listRef}
             id={listId}
             className="tw-select__list"
-            role="listbox"
             tabIndex={-1}
             aria-activedescendant={`${listId}-${activeIndex}`}
             style={listStyle}

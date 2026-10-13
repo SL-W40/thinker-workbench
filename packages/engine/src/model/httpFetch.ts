@@ -4,10 +4,10 @@
  */
 import {
   DEFAULT_HTTP_COMPATIBILITY_MODE,
-  normalizeHttpCompatibilityMode,
   type HttpCompatibilityMode,
+  normalizeHttpCompatibilityMode,
 } from "@thinker-workbench/shared";
-import { Agent, fetch as undiciFetch, type RequestInit as UndiciRequestInit } from "undici";
+import { Agent, type RequestInit as UndiciRequestInit, fetch as undiciFetch } from "undici";
 
 /** 当前兼容模式。 */
 let mode: HttpCompatibilityMode = DEFAULT_HTTP_COMPATIBILITY_MODE;

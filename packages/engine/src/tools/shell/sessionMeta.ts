@@ -5,10 +5,7 @@
 const commands = new Map<string, string>();
 
 /** 记录 agent shell 启动时的原始命令。 */
-export function rememberShellSessionCommand(
-  sessionId: string,
-  command: string,
-): void {
+export function rememberShellSessionCommand(sessionId: string, command: string): void {
   const id = sessionId.trim();
   const cmd = command.trim();
   if (!id || !cmd) return;

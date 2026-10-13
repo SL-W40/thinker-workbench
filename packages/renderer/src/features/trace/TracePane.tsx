@@ -20,13 +20,13 @@ import type {
 } from "@thinker-workbench/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../../i18n/useI18n";
+import { CallTreeDiagram } from "./CallTreeDiagram";
 import {
   callTreeLabel,
   groupSpansByRun,
   type TraceRunGroup,
   UNKNOWN_RUN_ID,
 } from "./callTreeModel";
-import { CallTreeDiagram } from "./CallTreeDiagram";
 import { SequenceDiagram } from "./SequenceDiagram";
 import { TracePayloadView } from "./TracePayloadView";
 import "./trace.less";
@@ -177,10 +177,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
 
   /** 拉取会话 spans 并写入缓存；可选同步选中最新 run。 */
   const loadSessionSpans = useCallback(
-    async (
-      sessionId: string,
-      opts?: { quiet?: boolean; selectLatestRun?: boolean },
-    ) => {
+    async (sessionId: string, opts?: { quiet?: boolean; selectLatestRun?: boolean }) => {
       if (!api) return;
       if (!opts?.quiet) setLoadingSpans(true);
       try {
@@ -194,8 +191,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
           const groups = groupSpansByRun(rows);
           const runId = latestRunId(groups);
           setSelectedRunId(runId);
-          const runSpans =
-            groups.find((g) => g.runId === runId)?.spans ?? rows;
+          const runSpans = groups.find((g) => g.runId === runId)?.spans ?? rows;
           setSelectedSpanId(defaultSpanId(runSpans));
         }
       } finally {
@@ -238,7 +234,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
     if (selectedSessionId && sessions.some((s) => s.sessionId === selectedSessionId)) {
       return;
     }
-    const first = sessions[0]!.sessionId;
+    const first = sessions[0]?.sessionId;
     setSelectedSessionId(first);
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -270,9 +266,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
     void loadSessionSpans(selectedSessionId, { selectLatestRun: true });
   }, [active, selectedSessionId, spansBySession, loadSessionSpans]);
 
-  const sessionSpans = selectedSessionId
-    ? (spansBySession.get(selectedSessionId) ?? [])
-    : [];
+  const sessionSpans = selectedSessionId ? (spansBySession.get(selectedSessionId) ?? []) : [];
   const runGroups = useMemo(() => groupSpansByRun(sessionSpans), [sessionSpans]);
 
   // 当前会话的 run 列表变化时校正 selectedRunId
@@ -465,9 +459,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
   }
 
   const showMainLoading =
-    Boolean(selectedSessionId) &&
-    loadingSpans &&
-    !spansBySession.has(selectedSessionId!);
+    Boolean(selectedSessionId) && loadingSpans && !spansBySession.has(selectedSessionId!);
 
   return (
     <div
@@ -532,9 +524,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
                           {t("tools.trace.runCount", { n: String(s.runCount) })}
                         </span>
                       </span>
-                      <span className="trace-pane__session-time">
-                        {formatShortTs(s.lastTs)}
-                      </span>
+                      <span className="trace-pane__session-time">{formatShortTs(s.lastTs)}</span>
                     </span>
                   </button>
                   <div
@@ -548,8 +538,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
                         <p className="trace-pane__hint">{t("tools.trace.emptyRuns")}</p>
                       ) : (
                         groups.map((g, i) => {
-                          const selected =
-                            isSessionActive && selectedRunId === g.runId;
+                          const selected = isSessionActive && selectedRunId === g.runId;
                           return (
                             <button
                               key={g.runId}
@@ -740,11 +729,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
         <h2 className="components-modal-title">{t("tools.trace.deleteSessionTitle")}</h2>
         <p className="components-modal-body">{t("tools.trace.deleteSessionBody")}</p>
         <div className="components-row components-row--end">
-          <Button
-            variant="ghost"
-            disabled={deleting}
-            onClick={() => setPendingDelete(null)}
-          >
+          <Button variant="ghost" disabled={deleting} onClick={() => setPendingDelete(null)}>
             {t("tools.trace.deleteCancel")}
           </Button>
           <Button variant="danger" disabled={deleting} onClick={() => void confirmDelete()}>
@@ -755,4 +740,3 @@ export function TracePane({ active, focusSessionId = null }: Props) {
     </div>
   );
 }
-

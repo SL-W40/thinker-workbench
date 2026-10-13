@@ -33,7 +33,7 @@ function splitFence(
   format: FrontmatterFormat,
 ): FenceMatch | null {
   const start = open.exec(source);
-  if (!start || start.index !== 0) return null;
+  if (start?.index !== 0) return null;
   const afterOpen = source.slice(start[0].length);
   const end = close.exec(afterOpen);
   if (!end) return null;

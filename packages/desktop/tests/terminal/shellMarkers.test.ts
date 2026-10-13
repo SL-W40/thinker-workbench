@@ -36,10 +36,7 @@ describe("shellMarkers", () => {
 
     assert.match(wrapWithDoneMarker("cmd", "echo hi"), /__TW_DONE__/);
 
-    const fish = wrapWithDoneMarker(
-      { id: "shell", path: "/opt/homebrew/bin/fish" },
-      "echo hi",
-    );
+    const fish = wrapWithDoneMarker({ id: "shell", path: "/opt/homebrew/bin/fish" }, "echo hi");
     assert.match(fish, /fish_exit/);
     assert.match(fish, /666;done/);
     assert.doesNotMatch(fish, /trap '/);

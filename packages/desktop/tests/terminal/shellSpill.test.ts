@@ -31,10 +31,7 @@ describe("shellSpill", () => {
       sessionId: "term_abc",
     });
     assert.equal(loc.reportPath, ".thinker/shell-output/term_abc.log");
-    assert.equal(
-      loc.absolutePath,
-      path.join(ws, ".thinker", "shell-output", "term_abc.log"),
-    );
+    assert.equal(loc.absolutePath, path.join(ws, ".thinker", "shell-output", "term_abc.log"));
   });
 
   it("append / prune 过期 spill", () => {

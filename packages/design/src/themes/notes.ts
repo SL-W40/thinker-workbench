@@ -2,8 +2,8 @@
  * Notes 创意主题——暖色笔记纸面（原 paper / light）。
  */
 import { notesTheme as mdNotes } from "@thinker-workbench/markdown";
-import type { DesignTheme } from "./types";
 import { notesChrome } from "./chrome";
+import type { DesignTheme } from "./types";
 
 const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdNotes.vars["--md-font-mono"] ?? "";

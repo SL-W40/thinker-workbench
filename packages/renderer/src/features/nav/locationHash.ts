@@ -5,13 +5,14 @@
  * 旧 `#/settings/<section>` 解析为控制台 Settings 分区。
  * 写入使用 `location.replace`，避免堆浏览器历史，并便于 Electron 持久化 session URL。
  */
-import type { PageId } from "./usePageStack";
+
 import {
   DEFAULT_SETTINGS_SECTION,
   normalizeSettingsSection,
   type SettingsSectionId,
 } from "../settings/sections";
 import { isToolTabId, type ToolTabId } from "../tools/ToolsPane";
+import type { PageId } from "./usePageStack";
 
 /** 解析后的应用位置：当前页 + 控制台 tab + 设置分区。 */
 export type AppLocation = {
@@ -73,8 +74,7 @@ export function writeHash(
   if (page === "chat") {
     next = "#/chat";
   } else if (page === "tools" || page === "settings") {
-    next =
-      tab === "settings" ? `#/tools/settings/${section}` : `#/tools/${tab}`;
+    next = tab === "settings" ? `#/tools/settings/${section}` : `#/tools/${tab}`;
   } else {
     next = `#/${page}`;
   }

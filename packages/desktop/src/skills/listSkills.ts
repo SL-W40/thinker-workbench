@@ -6,11 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SkillListItem } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/paths";
-import {
-  metaString,
-  parseFrontmatter,
-  sanitizeKebabName,
-} from "../customize/frontmatter";
+import { metaString, parseFrontmatter, sanitizeKebabName } from "../customize/frontmatter";
 
 function walkSkillMd(root: string): string[] {
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];

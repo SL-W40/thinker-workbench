@@ -7,12 +7,12 @@ import {
   DatabaseIcon,
   EmptyState,
   GlobeIcon,
+  type IconProps,
   KeyboardIcon,
   PaletteIcon,
   Separator,
   ShieldIcon,
   SideNavItem,
-  type IconProps,
 } from "@thinker-workbench/design/react";
 import type { ComponentType } from "react";
 import { useT } from "../../i18n/useI18n";
@@ -23,12 +23,8 @@ import { DataSettingsForm } from "./DataSettingsForm";
 import { ModelSettingsForm } from "./ModelSettingsForm";
 import { NotificationsSettingsForm } from "./NotificationsSettingsForm";
 import { PermissionsSettingsForm } from "./PermissionsSettingsForm";
-import {
-  SETTINGS_NAV_GROUPS,
-  SETTINGS_SECTIONS,
-  type SettingsSectionId,
-} from "./sections";
 import { ShortcutsSettingsForm } from "./ShortcutsSettingsForm";
+import { SETTINGS_NAV_GROUPS, SETTINGS_SECTIONS, type SettingsSectionId } from "./sections";
 
 type Props = {
   /** 当前是否为可见的设置页（否则 CSS hidden，仍可保活）。*/
@@ -59,9 +55,7 @@ export function SettingsPane({ active, section, onSectionChange }: Props) {
         <nav className="settings-menu">
           {SETTINGS_NAV_GROUPS.map((group, groupIndex) => (
             <div key={group.id} className="settings-nav-group">
-              {groupIndex > 0 ? (
-                <Separator className="settings-nav-group-sep" />
-              ) : null}
+              {groupIndex > 0 ? <Separator className="settings-nav-group-sep" /> : null}
               <div className="settings-nav-group-items">
                 {group.items.map((item) => {
                   const Icon = SECTION_ICONS[item.id];

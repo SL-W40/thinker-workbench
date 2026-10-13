@@ -8,12 +8,12 @@
  * - 主窗口关闭时由 createWindow 调用 closeAllAuxWindows
  */
 import path from "node:path";
-import { BrowserWindow, app, screen } from "electron";
-import { IpcChannels, matchAccelerator, type AuxPageId } from "@thinker-workbench/shared";
+import { type AuxPageId, IpcChannels, matchAccelerator } from "@thinker-workbench/shared";
+import { app, BrowserWindow, screen } from "electron";
+import { APP_NAME } from "../config/appIdentity";
+import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
 import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStore";
 import { isShortcutRecording } from "../config/shortcutRecording";
-import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
-import { APP_NAME } from "../config/appIdentity";
 import { windowChromeOptions } from "./chromeOptions";
 import { windowMinSize } from "./defaultBounds";
 import { windowBackgroundForTheme } from "./themeBackground";
@@ -180,9 +180,7 @@ function createAuxWindow(page: AuxPageId): BrowserWindow {
 function navigateAuxHash(target: BrowserWindow, page: AuxPageId): void {
   const hash = auxHashFor(page);
   if (target.isDestroyed()) return;
-  void target.webContents.executeJavaScript(
-    `window.location.hash = ${JSON.stringify(hash)}`,
-  );
+  void target.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(hash)}`);
 }
 
 /**

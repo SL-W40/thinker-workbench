@@ -3,13 +3,14 @@
  *
  * 用于渲染进程启动前填充，以及无边框/半透明 chrome 背后的底色。
  */
-import { nativeTheme } from "electron";
+
 import type { AppThemeId, AppVisualThemeId, CustomThemeRecord } from "@thinker-workbench/shared";
 import {
   DEFAULT_APP_THEME,
   isCustomThemeId,
   resolveVisualThemeId,
 } from "@thinker-workbench/shared";
+import { nativeTheme } from "electron";
 import { getGeneralSettings } from "../config/settingsStore";
 
 /** 各内置视觉主题对应的原生窗口填充色。 */

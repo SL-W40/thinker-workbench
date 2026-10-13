@@ -26,7 +26,9 @@ function formatBytes(n: number): string {
 export function MediaPreview({ path, info }: Props) {
   const t = useT();
   const canPreview =
-    info.kind !== "binary" && typeof info.previewDataUrl === "string" && info.previewDataUrl.length > 0;
+    info.kind !== "binary" &&
+    typeof info.previewDataUrl === "string" &&
+    info.previewDataUrl.length > 0;
 
   return (
     <div className="editor-wrap media-preview">
@@ -40,7 +42,12 @@ export function MediaPreview({ path, info }: Props) {
           />
         ) : null}
         {canPreview && info.kind === "audio" ? (
-          <audio className="media-preview__audio" src={info.previewDataUrl!} controls preload="metadata" />
+          <audio
+            className="media-preview__audio"
+            src={info.previewDataUrl!}
+            controls
+            preload="metadata"
+          />
         ) : null}
         {canPreview && info.kind === "video" ? (
           <video

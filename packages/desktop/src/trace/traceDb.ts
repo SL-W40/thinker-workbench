@@ -6,9 +6,9 @@ import path from "node:path";
 import type {
   TraceListSessionsQuery,
   TraceSessionSummary,
-  TraceSpanRecord,
-  TraceSpanKind,
   TraceSource,
+  TraceSpanKind,
+  TraceSpanRecord,
   TraceSpanStatus,
 } from "@thinker-workbench/shared";
 import Database from "better-sqlite3";
@@ -30,9 +30,9 @@ export function openTraceDb(): Database.Database {
   db = new Database(file);
   db.pragma("journal_mode = WAL");
   db.exec(TRACE_SCHEMA_SQL);
-  const row = db
-    .prepare("SELECT value FROM schema_meta WHERE key = ?")
-    .get("version") as { value: string } | undefined;
+  const row = db.prepare("SELECT value FROM schema_meta WHERE key = ?").get("version") as
+    | { value: string }
+    | undefined;
   if (!row) {
     db.prepare("INSERT INTO schema_meta(key, value) VALUES (?, ?)").run(
       "version",
@@ -111,9 +111,7 @@ export function upsertSession(meta: {
   const d = openTraceDb();
   const existing = d
     .prepare("SELECT session_id, first_ts, run_count FROM sessions WHERE session_id = ?")
-    .get(meta.sessionId) as
-    | { session_id: string; first_ts: number; run_count: number }
-    | undefined;
+    .get(meta.sessionId) as { session_id: string; first_ts: number; run_count: number } | undefined;
   if (!existing) {
     d.prepare(
       `INSERT INTO sessions(session_id, workspace_id, thread_id, title, first_ts, last_ts, run_count)
@@ -221,23 +219,14 @@ export function updateSpanEnd(
       output_ref = COALESCE(?, output_ref),
       attrs_json = COALESCE(?, attrs_json)
      WHERE span_id = ?`,
-  ).run(
-    patch.status ?? null,
-    patch.summary ?? null,
-    endTs,
-    patch.outputRef ?? null,
-    attrs,
-    spanId,
-  );
+  ).run(patch.status ?? null, patch.summary ?? null, endTs, patch.outputRef ?? null, attrs, spanId);
   upsertSession({ sessionId: prev.session_id, ts: endTs });
   const next = d.prepare("SELECT * FROM spans WHERE span_id = ?").get(spanId) as SpanRow;
   return rowToSpan(next);
 }
 
 export function setSpanInputRef(spanId: string, inputRef: string): void {
-  openTraceDb()
-    .prepare("UPDATE spans SET input_ref = ? WHERE span_id = ?")
-    .run(inputRef, spanId);
+  openTraceDb().prepare("UPDATE spans SET input_ref = ? WHERE span_id = ?").run(inputRef, spanId);
 }
 
 export function listSessions(query: TraceListSessionsQuery = {}): TraceSessionSummary[] {

@@ -33,7 +33,7 @@ export type UseGeneralSettingsResult = {
   previewBusy: AttentionPreviewKind | null;
   tryPreview: (kind: AttentionPreviewKind) => Promise<void>;
   toggleBool: (id: BooleanToggleId) => Promise<void>;
- /** 根目?*/
+  /** 根目?*/
   dataDirDraft: string;
   setDataDirDraft: (value: string) => void;
   dataDirDirty: boolean;
@@ -76,7 +76,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
   const canApplyDataDir = Boolean(window.thinker?.settings?.applyDataDirChange);
   const dataDirDirty = dataDirDraft.trim() !== general.dataDir.trim();
 
- // 避免?apply* 放进加载 effect 依赖：Appearance 每次 apply 都可能换引用
+  // 避免?apply* 放进加载 effect 依赖：Appearance 每次 apply 都可能换引用
   const applyGeneralRef = useRef(applyGeneral);
   const applyAppearanceRef = useRef(applyAppearance);
   applyGeneralRef.current = applyGeneral;
@@ -112,9 +112,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
       if (!saved) return;
       setGeneral((prev) => {
         // 根目录草稿未改动时才跟随推送，避免输入过程中被清空
-        setDataDirDraft((draft) =>
-          draft.trim() === prev.dataDir.trim() ? saved.dataDir : draft,
-        );
+        setDataDirDraft((draft) => (draft.trim() === prev.dataDir.trim() ? saved.dataDir : draft));
         return saved;
       });
       applyGeneralRef.current(saved);
@@ -212,10 +210,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
         const code = result.error ?? "unknown";
         if (code.startsWith("running_sessions:")) {
           setError(
-            t("settings.general.dataDir.runningSessions").replace(
-              "{n}",
-              code.split(":")[1] ?? "?",
-            ),
+            t("settings.general.dataDir.runningSessions").replace("{n}", code.split(":")[1] ?? "?"),
           );
         } else if (code === "nested_paths") {
           setError(t("settings.general.dataDir.nestedPaths"));

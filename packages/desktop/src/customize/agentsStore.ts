@@ -11,7 +11,6 @@ import type {
   SubagentUpsertInput,
 } from "@thinker-workbench/shared";
 import { listWorkspaces } from "../db/workspacesStore";
-import { ensureDir, resolveWritableRoot } from "./paths";
 import {
   metaBool,
   metaString,
@@ -19,6 +18,7 @@ import {
   sanitizeKebabName,
   serializeFrontmatter,
 } from "./frontmatter";
+import { ensureDir, resolveWritableRoot } from "./paths";
 
 type ScanRoot = {
   root: string;
@@ -85,12 +85,9 @@ function collectRoots(workspaceRoot?: string | null): ScanRoot[] {
   const wsRoot = workspaceRoot?.trim() || null;
   if (wsRoot) {
     const ws = listWorkspaces().find(
-      (w) =>
-        path.resolve(w.rootPath).toLowerCase() === path.resolve(wsRoot).toLowerCase(),
+      (w) => path.resolve(w.rootPath).toLowerCase() === path.resolve(wsRoot).toLowerCase(),
     );
-    const scope: CustomizeScope = ws
-      ? { kind: "workspace", workspaceId: ws.id }
-      : { kind: "user" };
+    const scope: CustomizeScope = ws ? { kind: "workspace", workspaceId: ws.id } : { kind: "user" };
     roots.push({
       root: path.join(wsRoot, ".thinker", "agents"),
       scope,
@@ -121,7 +118,9 @@ export function upsertAgent(input: SubagentUpsertInput): SubagentDefinition {
   if (!name) throw new Error("Agent name is required.");
   const dir = ensureDir(resolveWritableRoot(input.scope, "agents"));
   const abs = path.join(dir, `${name}.md`);
-  const existing = fs.existsSync(abs) ? parseAgentFile(abs, input.scope, "thinker-user", true) : null;
+  const existing = fs.existsSync(abs)
+    ? parseAgentFile(abs, input.scope, "thinker-user", true)
+    : null;
   const readonly = input.readonly ?? existing?.readonly ?? false;
   const isBackground = input.isBackground ?? existing?.isBackground ?? false;
   const description = input.description ?? existing?.description ?? "";

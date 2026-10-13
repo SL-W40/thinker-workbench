@@ -5,25 +5,18 @@
 import {
   buildModelCandidates,
   classifyModelSwitchReason,
-  resolveModelSettings,
   type ModelCatalog,
   type ModelEntry,
   type ModelSelection,
   type ModelSettings,
   type ModelSwitchReason,
+  resolveModelSettings,
 } from "@thinker-workbench/shared";
 import { getRunContext, getRunTurn } from "../runtime/runContext";
 import { getRunEmitter } from "../runtime/runEmit";
 import { agentEndSpan, agentStartSpan } from "../trace/emit";
-import {
-  configureChatModel,
-  getChatModelFor,
-  MODEL_API_KEY_MISSING,
-} from "./openai";
-import {
-  formatErrorMessage,
-  isCancelError,
-} from "./retry";
+import { configureChatModel, getChatModelFor, MODEL_API_KEY_MISSING } from "./openai";
+import { formatErrorMessage, isCancelError } from "./retry";
 import type { ChatCompletionResult, ChatRequest } from "./types";
 
 /** model.chat 输入：始终带 messages，由 Main truncateForTrace 裁切。 */
@@ -35,8 +28,7 @@ function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
     .filter((n): n is string => typeof n === "string" && n.length > 0);
   const last = messages[messages.length - 1];
   const lastRole = last?.role;
-  const lastPreview =
-    typeof last?.content === "string" ? last.content.slice(0, 120) : undefined;
+  const lastPreview = typeof last?.content === "string" ? last.content.slice(0, 120) : undefined;
   return {
     messageCount: messages.length,
     toolNames,
@@ -199,177 +191,90 @@ export async function chatWithFailover(
   let lastError: unknown;
 
   for (let i = 0; i < candidates.length; i++) {
-      const entry = candidates[i];
-      if (!entry) continue;
-      if (skippedProviders.has(entry.providerId)) continue;
+    const entry = candidates[i];
+    if (!entry) continue;
+    if (skippedProviders.has(entry.providerId)) continue;
 
-      const settings = resolveModelSettings(cat, entry);
-      if (!settings) {
-        lastError = new Error(MODEL_API_KEY_MISSING);
-        continue;
-      }
+    const settings = resolveModelSettings(cat, entry);
+    if (!settings) {
+      lastError = new Error(MODEL_API_KEY_MISSING);
+      continue;
+    }
 
-      // 同步进程默认（非 ALS 路径）；本调用用 getChatModelFor 避免并行抢占
-      configureChatModel(settings);
+    // 同步进程默认（非 ALS 路径）；本调用用 getChatModelFor 避免并行抢占
+    configureChatModel(settings);
 
-      const candSpanId = agentStartSpan({
-        name: "model.candidate",
-        kind: "model",
-        summary: `model.candidate${turnLabel} · ${entry.id}`,
-        attrs: {
-          modelId: entry.id,
-          providerId: entry.providerId,
-          index: i,
-          ...(turn != null ? { turn } : {}),
-        },
+    const candSpanId = agentStartSpan({
+      name: "model.candidate",
+      kind: "model",
+      summary: `model.candidate${turnLabel} · ${entry.id}`,
+      attrs: {
+        modelId: entry.id,
+        providerId: entry.providerId,
+        index: i,
+        ...(turn != null ? { turn } : {}),
+      },
+    });
+
+    // 已向 UI 吐过 token 则不可换模型（避免重复半截回复）
+    let emittedTokens = false;
+    let replyBuf = "";
+    let thinkingBuf = "";
+    const wrapped: ChatRequest = {
+      ...request,
+      onToken: (text, channel) => {
+        emittedTokens = true;
+        if ((channel ?? "reply") === "thinking") thinkingBuf += text;
+        else replyBuf += text;
+        request.onToken?.(text, channel);
+      },
+    };
+
+    try {
+      const result = await getChatModelFor(settings).chat(wrapped, signal);
+      agentEndSpan(candSpanId, {
+        status: "ok",
+        attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
       });
-
-      // 已向 UI 吐过 token 则不可换模型（避免重复半截回复）
-      let emittedTokens = false;
-      let replyBuf = "";
-      let thinkingBuf = "";
-      const wrapped: ChatRequest = {
-        ...request,
-        onToken: (text, channel) => {
-          emittedTokens = true;
-          if ((channel ?? "reply") === "thinking") thinkingBuf += text;
-          else replyBuf += text;
-          request.onToken?.(text, channel);
-        },
-      };
-
-      try {
-        const result = await getChatModelFor(settings).chat(wrapped, signal);
+      agentEndSpan(modelSpanId, {
+        status: "ok",
+        summary: `model.chat${turnLabel} · ${entry.id}`,
+        output: modelChatOutput({
+          modelId: entry.id,
+          result,
+          replyBuf,
+          thinkingBuf,
+          partial: false,
+        }),
+        attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+      });
+      return result;
+    } catch (err) {
+      lastError = err;
+      if (isCancelError(err)) {
         agentEndSpan(candSpanId, {
-          status: "ok",
+          status: "cancelled",
+          error: formatErrorMessage(err),
           attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
         agentEndSpan(modelSpanId, {
-          status: "ok",
+          status: "cancelled",
+          error: formatErrorMessage(err),
           summary: `model.chat${turnLabel} · ${entry.id}`,
           output: modelChatOutput({
             modelId: entry.id,
-            result,
+            result: null,
             replyBuf,
             thinkingBuf,
-            partial: false,
+            partial: true,
           }),
           attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
-        return result;
-      } catch (err) {
-        lastError = err;
-        if (isCancelError(err)) {
-          agentEndSpan(candSpanId, {
-            status: "cancelled",
-            error: formatErrorMessage(err),
-            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
-          });
-          agentEndSpan(modelSpanId, {
-            status: "cancelled",
-            error: formatErrorMessage(err),
-            summary: `model.chat${turnLabel} · ${entry.id}`,
-            output: modelChatOutput({
-              modelId: entry.id,
-              result: null,
-              replyBuf,
-              thinkingBuf,
-              partial: true,
-            }),
-            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
-          });
-          throw err;
-        }
-        const msg = formatErrorMessage(err);
-        if (/MODEL_API_KEY_MISSING|api key is not set/i.test(msg)) {
-          agentEndSpan(candSpanId, { status: "error", error: msg });
-          agentEndSpan(modelSpanId, {
-            status: "error",
-            error: msg,
-            output: modelChatOutput({
-              modelId: entry.id,
-              result: null,
-              replyBuf,
-              thinkingBuf,
-              partial: true,
-            }),
-            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
-          });
-          throw err;
-        }
-
-        // 半截失败仍标异常，但不切换
-        if (emittedTokens) {
-          if (emit) {
-            emit({
-              type: "model_health",
-              modelId: entry.id,
-              health: "error",
-              error: msg.slice(0, 500),
-            });
-          }
-          agentEndSpan(candSpanId, { status: "error", error: msg, attrs: { modelId: entry.id } });
-          agentEndSpan(modelSpanId, {
-            status: "error",
-            error: msg,
-            summary: `model.chat${turnLabel} · ${entry.id}`,
-            output: modelChatOutput({
-              modelId: entry.id,
-              result: null,
-              replyBuf,
-              thinkingBuf,
-              partial: true,
-            }),
-            attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
-          });
-          throw err instanceof Error ? err : new Error(msg);
-        }
-
-        const reason: ModelSwitchReason = classifyModelSwitchReason(err);
-        // 鉴权失败：本轮跳过同 provider
-        if (reason === "auth") skippedProviders.add(entry.providerId);
-
-        // 找下一个未跳过的候选
-        let next: ModelEntry | undefined;
-        for (let j = i + 1; j < candidates.length; j++) {
-          const c = candidates[j];
-          if (c && !skippedProviders.has(c.providerId)) {
-            next = c;
-            break;
-          }
-        }
-
-        agentEndSpan(candSpanId, {
-          status: "error",
-          error: msg,
-          attrs: { modelId: entry.id, reason, switched: Boolean(next) },
-        });
-
-        // 通知 main 标异常；若有下一候选则切并继续
-        if (next && emit) {
-          emit({
-            type: "model_switch",
-            fromModelId: entry.id,
-            fromLabel: entry.label || entry.model,
-            toModelId: next.id,
-            toLabel: next.label || next.model,
-            reason,
-            detail: msg.slice(0, 300),
-            failedModelId: entry.id,
-            failedError: msg.slice(0, 500),
-          });
-          continue;
-        }
-
-        // 无下一候选：回写 health 后抛出
-        if (emit) {
-          emit({
-            type: "model_health",
-            modelId: entry.id,
-            health: "error",
-            error: msg.slice(0, 500),
-          });
-        }
+        throw err;
+      }
+      const msg = formatErrorMessage(err);
+      if (/MODEL_API_KEY_MISSING|api key is not set/i.test(msg)) {
+        agentEndSpan(candSpanId, { status: "error", error: msg });
         agentEndSpan(modelSpanId, {
           status: "error",
           error: msg,
@@ -382,14 +287,101 @@ export async function chatWithFailover(
           }),
           attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
+        throw err;
+      }
+
+      // 半截失败仍标异常，但不切换
+      if (emittedTokens) {
+        if (emit) {
+          emit({
+            type: "model_health",
+            modelId: entry.id,
+            health: "error",
+            error: msg.slice(0, 500),
+          });
+        }
+        agentEndSpan(candSpanId, { status: "error", error: msg, attrs: { modelId: entry.id } });
+        agentEndSpan(modelSpanId, {
+          status: "error",
+          error: msg,
+          summary: `model.chat${turnLabel} · ${entry.id}`,
+          output: modelChatOutput({
+            modelId: entry.id,
+            result: null,
+            replyBuf,
+            thinkingBuf,
+            partial: true,
+          }),
+          attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+        });
         throw err instanceof Error ? err : new Error(msg);
       }
-    }
 
-    const finalErr =
-      lastError instanceof Error
-        ? lastError
-        : new Error(formatErrorMessage(lastError) || MODEL_API_KEY_MISSING);
+      const reason: ModelSwitchReason = classifyModelSwitchReason(err);
+      // 鉴权失败：本轮跳过同 provider
+      if (reason === "auth") skippedProviders.add(entry.providerId);
+
+      // 找下一个未跳过的候选
+      let next: ModelEntry | undefined;
+      for (let j = i + 1; j < candidates.length; j++) {
+        const c = candidates[j];
+        if (c && !skippedProviders.has(c.providerId)) {
+          next = c;
+          break;
+        }
+      }
+
+      agentEndSpan(candSpanId, {
+        status: "error",
+        error: msg,
+        attrs: { modelId: entry.id, reason, switched: Boolean(next) },
+      });
+
+      // 通知 main 标异常；若有下一候选则切并继续
+      if (next && emit) {
+        emit({
+          type: "model_switch",
+          fromModelId: entry.id,
+          fromLabel: entry.label || entry.model,
+          toModelId: next.id,
+          toLabel: next.label || next.model,
+          reason,
+          detail: msg.slice(0, 300),
+          failedModelId: entry.id,
+          failedError: msg.slice(0, 500),
+        });
+        continue;
+      }
+
+      // 无下一候选：回写 health 后抛出
+      if (emit) {
+        emit({
+          type: "model_health",
+          modelId: entry.id,
+          health: "error",
+          error: msg.slice(0, 500),
+        });
+      }
+      agentEndSpan(modelSpanId, {
+        status: "error",
+        error: msg,
+        output: modelChatOutput({
+          modelId: entry.id,
+          result: null,
+          replyBuf,
+          thinkingBuf,
+          partial: true,
+        }),
+        attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
+      });
+      throw err instanceof Error ? err : new Error(msg);
+    }
+  }
+
+  const finalErr =
+    lastError instanceof Error
+      ? lastError
+      : new Error(formatErrorMessage(lastError) || MODEL_API_KEY_MISSING);
   agentEndSpan(modelSpanId, { status: "error", error: finalErr.message });
   throw finalErr;
 }

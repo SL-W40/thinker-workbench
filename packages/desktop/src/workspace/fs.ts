@@ -3,11 +3,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  WorkspaceFile,
-  WorkspaceMediaKind,
-  WorkspaceNode,
-} from "@thinker-workbench/shared";
+import type { WorkspaceFile, WorkspaceMediaKind, WorkspaceNode } from "@thinker-workbench/shared";
 
 const SKIP_NAMES = new Set(["node_modules", ".git", ".DS_Store", "diff-cache", "dist", ".next"]);
 
@@ -48,9 +44,9 @@ const VIDEO_MIME: Record<string, string> = {
 function detectMedia(filePath: string): { kind: WorkspaceMediaKind; mime: string } | null {
   const ext = path.extname(filePath).slice(1).toLowerCase();
   if (!ext) return null;
-  if (IMAGE_MIME[ext]) return { kind: "image", mime: IMAGE_MIME[ext]! };
-  if (AUDIO_MIME[ext]) return { kind: "audio", mime: AUDIO_MIME[ext]! };
-  if (VIDEO_MIME[ext]) return { kind: "video", mime: VIDEO_MIME[ext]! };
+  if (IMAGE_MIME[ext]) return { kind: "image", mime: IMAGE_MIME[ext] };
+  if (AUDIO_MIME[ext]) return { kind: "audio", mime: AUDIO_MIME[ext] };
+  if (VIDEO_MIME[ext]) return { kind: "video", mime: VIDEO_MIME[ext] };
   return null;
 }
 

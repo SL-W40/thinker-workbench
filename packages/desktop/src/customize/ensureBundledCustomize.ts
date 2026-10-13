@@ -5,21 +5,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getDataDir } from "../config/paths";
+import { getBundledCustomizeDir, getDataDir } from "../config/paths";
 
 type BundledKind = "rules" | "agents" | "mcps";
-
-/** 在 resources 旁路查找内置目录。 */
-function findBundledDir(kind: BundledKind): string {
-  const bases = [path.join(__dirname, "..", "resources"), __dirname];
-  for (const base of bases) {
-    const candidate = path.join(base, kind);
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-      return candidate;
-    }
-  }
-  return "";
-}
 
 /** 递归复制「仅当目标不存在」。 */
 function copyMissing(src: string, dest: string, installed: string[]): void {
@@ -52,7 +40,7 @@ export function ensureBundledCustomize(): string[] {
   const installed: string[] = [];
   const kinds: BundledKind[] = ["rules", "agents", "mcps"];
   for (const kind of kinds) {
-    const bundled = findBundledDir(kind);
+    const bundled = getBundledCustomizeDir(kind);
     if (!bundled) continue;
     const destRoot = path.join(dataDir, kind);
     fs.mkdirSync(destRoot, { recursive: true });

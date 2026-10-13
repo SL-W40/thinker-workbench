@@ -1,13 +1,7 @@
 /**
  * Markdown React 渲染入口：解析 AST 并输出 `.tw-md` 文章树。
  */
-import {
-  useMemo,
-  useState,
-  type CSSProperties,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import { type CSSProperties, type MouseEvent, type ReactNode, useMemo, useState } from "react";
 import { parseMarkdownDocument } from "../parse/blocks";
 import { parseMarkdownStreaming } from "../stream";
 import { resolveTheme } from "../themes";
@@ -16,8 +10,8 @@ import type { BlockNode, FootnoteDef, InlineNode, ListItem } from "../types";
 import { CodeBlock } from "./CodeBlock";
 import {
   MarkdownLinkClickContext,
-  useMarkdownLinkClick,
   type MarkdownLinkClickHandler,
+  useMarkdownLinkClick,
 } from "./LinkClickContext";
 import { MathView } from "./MathView";
 import { MermaidDiagram } from "./MermaidDiagram";
@@ -108,12 +102,7 @@ function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
         );
       case "link":
         return (
-          <a
-            key={index}
-            href={node.href}
-            title={node.title}
-            onClick={onAnchorClick(node.href)}
-          >
+          <a key={index} href={node.href} title={node.title} onClick={onAnchorClick(node.href)}>
             <InlineView nodes={node.children} />
           </a>
         );
@@ -164,7 +153,7 @@ function Blocks({ nodes }: { nodes: BlockNode[] }): ReactNode {
 
 function ListItemView({ item }: { item: ListItem }) {
   const body =
-    item.children.length === 1 && item.children[0]!.type === "paragraph" ? (
+    item.children.length === 1 && item.children[0]?.type === "paragraph" ? (
       <InlineView nodes={item.children[0].children} />
     ) : (
       <Blocks nodes={item.children} />

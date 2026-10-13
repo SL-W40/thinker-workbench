@@ -5,11 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import {
-  getCatalogDbPath,
-  getWorkspaceChatDbPath,
-  getWorkspaceDataDir,
-} from "../config/paths";
+import { getCatalogDbPath, getWorkspaceChatDbPath, getWorkspaceDataDir } from "../config/paths";
 import {
   CATALOG_SCHEMA_SQL,
   CATALOG_SCHEMA_VERSION,

@@ -4,14 +4,14 @@
  * 优先 preload 的 `settings.getGeneralSync`；工具嵌入（`?tool=1`）读 URL
  * `theme`；浏览器预览下走默认主题。
  */
-import { resolveUiTheme, type DesignTheme } from "@thinker-workbench/design";
+import { type DesignTheme, resolveUiTheme } from "@thinker-workbench/design";
 import {
-  DEFAULT_APP_THEME,
-  normalizeAppFontScale,
-  normalizeUiTheme,
   type AppFontScale,
   type AppThemeId,
   type CustomThemeRecord,
+  DEFAULT_APP_THEME,
+  normalizeAppFontScale,
+  normalizeUiTheme,
 } from "@thinker-workbench/shared";
 
 /** 启动外观：主题 id、字体档位以及已解析的 DesignTheme。 */

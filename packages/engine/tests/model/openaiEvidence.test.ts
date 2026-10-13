@@ -3,8 +3,8 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, describe, it, vi } from "vitest";
-import { createOpenAIModel } from "../../src/model/openai";
 import * as httpFetch from "../../src/model/httpFetch";
+import { createOpenAIModel } from "../../src/model/openai";
 
 function sseBody(chunks: string[]): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();

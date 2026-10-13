@@ -13,10 +13,7 @@ export type BadgeProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
 
 export function Badge({ variant = "neutral", className, children, ...rest }: BadgeProps) {
   return (
-    <span
-      className={`tw-badge tw-badge--${variant}${className ? ` ${className}` : ""}`}
-      {...rest}
-    >
+    <span className={`tw-badge tw-badge--${variant}${className ? ` ${className}` : ""}`} {...rest}>
       {children}
     </span>
   );

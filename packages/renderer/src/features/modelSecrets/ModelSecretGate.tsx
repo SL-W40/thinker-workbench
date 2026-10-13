@@ -8,14 +8,7 @@
  * 需完全退出应用后再试。
  */
 import { Button, Callout, Modal } from "@thinker-workbench/design/react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { unlockModelSecrets } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
 
@@ -126,9 +119,7 @@ export function ModelSecretGateProvider({ children }: ProviderProps) {
           {t("chat.errors.secretDeniedTitle")}
         </h2>
         <p className="components-modal-body">{t("chat.errors.secretDenied")}</p>
-        {feedback === "ok" ? (
-          <Callout tone="info">{t("chat.errors.secretRetryOk")}</Callout>
-        ) : null}
+        {feedback === "ok" ? <Callout tone="info">{t("chat.errors.secretRetryOk")}</Callout> : null}
         {feedback === "still-denied" ? (
           <Callout tone="warning">{t("chat.errors.secretRetryStillDenied")}</Callout>
         ) : null}
@@ -136,7 +127,11 @@ export function ModelSecretGateProvider({ children }: ProviderProps) {
           <Button variant="ghost" onClick={dismiss} disabled={retrying || feedback === "ok"}>
             {t("chat.errors.secretUnlockCancel")}
           </Button>
-          <Button variant="primary" onClick={() => void retryUnlock()} disabled={retrying || feedback === "ok"}>
+          <Button
+            variant="primary"
+            onClick={() => void retryUnlock()}
+            disabled={retrying || feedback === "ok"}
+          >
             {retrying ? t("chat.errors.secretRetrying") : t("chat.errors.secretRetryUnlock")}
           </Button>
         </div>

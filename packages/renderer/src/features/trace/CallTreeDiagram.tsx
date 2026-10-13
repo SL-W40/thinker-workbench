@@ -6,23 +6,23 @@ import {
   CodeIcon,
   ConsoleIcon,
   DebugModeIcon,
+  type IconProps,
   InfoIcon,
   LanesIcon,
   LogsIcon,
   MaximizeIcon,
   MultitaskModeIcon,
-  type IconProps,
 } from "@thinker-workbench/design/react";
 import type { TraceSpanKind, TraceSpanRecord } from "@thinker-workbench/shared";
-import { Fragment, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { type ComponentType, Fragment, type ReactNode, useMemo, useState } from "react";
 import { useT } from "../../i18n/useI18n";
 import {
   buildCallTreeRows,
+  type CallTreeRow,
   callTreeLabel,
   formatDuration,
   spanDurationMs,
   spanTurn,
-  type CallTreeRow,
 } from "./callTreeModel";
 
 type Props = {
@@ -33,7 +33,7 @@ type Props = {
 
 /** ?kind 对应设计系统图标（默认展示；可展开行悬停换成箭头）。*/
 const KIND_ICON: Record<TraceSpanKind, ComponentType<IconProps>> = {
- // 图节点：泳道式阶段；工具调用：带 ?的步骤条（区别于 pty 终端窗）
+  // 图节点：泳道式阶段；工具调用：带 ?的步骤条（区别于 pty 终端窗）
   graph: LanesIcon,
   model: AskModeIcon,
   tool: LogsIcon,
@@ -111,9 +111,7 @@ function chunkByPar(rows: CallTreeRow[]): RowChunk[] {
 
 function KindGlyph({ kind }: { kind: TraceSpanKind }) {
   const Icon = KIND_ICON[kind] ?? InfoIcon;
-  return (
-    <Icon size="sm" className="trace-calltree__kind-icon" aria-hidden />
-  );
+  return <Icon size="sm" className="trace-calltree__kind-icon" aria-hidden />;
 }
 
 export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
@@ -143,11 +141,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
     const label = callTreeLabel(s);
     const turn = spanTurn(s);
     const statusClass =
-      s.status === "cancelled"
-        ? " is-cancelled"
-        : s.status === "error"
-          ? " is-error"
-          : "";
+      s.status === "cancelled" ? " is-cancelled" : s.status === "error" ? " is-error" : "";
     const dur = spanDurationMs(s);
     const left = ((s.startTs - tMin) / totalMs) * 100;
     const width = Math.max(0.15, (dur / totalMs) * 100);
@@ -163,13 +157,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
             type="button"
             className={`trace-calltree__twisty${row.hasKids ? " is-expandable" : ""}`}
             disabled={!row.hasKids}
-            aria-label={
-              row.hasKids
-                ? row.collapsed
-                  ? "expand"
-                  : "collapse"
-                : undefined
-            }
+            aria-label={row.hasKids ? (row.collapsed ? "expand" : "collapse") : undefined}
             onClick={(e) => {
               e.stopPropagation();
               if (row.hasKids) toggle(s.spanId);
@@ -214,9 +202,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
           {marks.map((f) => (
             <span
               key={f}
-              className={
-                f === 0 ? "is-start" : f === 1 ? "is-end" : undefined
-              }
+              className={f === 0 ? "is-start" : f === 1 ? "is-end" : undefined}
               style={{ left: `${f * 100}%` }}
             >
               {formatDuration(totalMs * f)}
@@ -232,10 +218,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
             const bannerPad = 8 + Math.max(0, parDepth) * 14;
             return (
               <div key={`par-${chunk.key}`} className="trace-calltree__par-band">
-                <div
-                  className="trace-calltree__par-banner"
-                  style={{ paddingLeft: bannerPad }}
-                >
+                <div className="trace-calltree__par-banner" style={{ paddingLeft: bannerPad }}>
                   {t("tools.trace.scopePar")} · {chunk.size}
                 </div>
                 {chunk.tasks.map((task) => (
@@ -249,11 +232,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
               </div>
             );
           }
-          return (
-            <Fragment key={`plain-${i}`}>
-              {chunk.rows.map(renderRow)}
-            </Fragment>
-          );
+          return <Fragment key={`plain-${i}`}>{chunk.rows.map(renderRow)}</Fragment>;
         })}
       </div>
     </div>

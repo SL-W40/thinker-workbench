@@ -1,8 +1,9 @@
 /**
  * Icon 模块导出：基座、具名图标、目录。
  */
-export { Icon, createIcon, type IconProps, type IconSize } from "./Icon";
-export { listDesignIcons, DESIGN_ICONS, type DesignIconEntry } from "./catalog";
+
+export { DESIGN_ICONS, type DesignIconEntry, listDesignIcons } from "./catalog";
+export { createIcon, Icon, type IconProps, type IconSize } from "./Icon";
 export {
   AgentModeIcon,
   AskModeIcon,

@@ -1,11 +1,7 @@
 /**
  * 渲染进程终端 API 薄封装（preload `window.thinker.terminal`）。
  */
-import type {
-  ShellProfile,
-  TerminalEvent,
-  TerminalSession,
-} from "@thinker-workbench/shared";
+import type { ShellProfile, TerminalEvent, TerminalSession } from "@thinker-workbench/shared";
 
 /** 时间线「跳转终端」自定义事件名。 */
 export const OPEN_TERMINAL_EVENT = "tw:open-terminal";
@@ -75,11 +71,7 @@ export function writeTerminal(sessionId: string, data: string): Promise<void> {
 }
 
 /** 调整 PTY 尺寸。 */
-export function resizeTerminal(
-  sessionId: string,
-  cols: number,
-  rows: number,
-): Promise<void> {
+export function resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void> {
   return api()?.resize(sessionId, cols, rows) ?? Promise.resolve();
 }
 

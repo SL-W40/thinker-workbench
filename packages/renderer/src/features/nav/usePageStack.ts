@@ -3,8 +3,9 @@
  *
  * 与浏览器 history 分离：栈状态在 React 内维护，hash 仅作书签 / 会话恢复。
  */
-import { useState } from "react";
+
 import type { PageStackSnapshot } from "@thinker-workbench/shared";
+import { useState } from "react";
 
 /** 可导航的主页面 id（`settings` 为旧 id，渲染层映射到控制台 `tools`）。 */
 export type PageId = "chat" | "settings" | "components" | "tools";

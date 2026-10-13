@@ -44,7 +44,7 @@ export async function deleteFileTool(args: ToolArgs, ctx: ToolContext): Promise<
     throw new Error("delete_file cannot remove the workspace root.");
   }
 
-  let info;
+  let info: Awaited<ReturnType<typeof stat>>;
   try {
     info = await stat(target);
   } catch {

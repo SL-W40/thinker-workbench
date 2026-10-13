@@ -7,18 +7,14 @@
  * - 纯文本回复则 pending 为空，图结束
  */
 import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
+import { getMaxAgentSteps } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
 import { agentLog } from "../../log/setup";
 import { chatWithFailover } from "../../model/catalog";
-import {
-  getAiLocale,
-  getAllowEmoji,
-  getContextWindow,
-} from "../../model/openai";
+import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
 import { setRunTurn } from "../../runtime/runContext";
 import { getRunEmitter } from "../../runtime/runEmit";
-import { getMaxAgentSteps } from "../../config/runtimeLimits";
 import type { GraphState } from "../types";
 
 /** 一轮模型回合：可能流式文本，也可能请求工具。 */

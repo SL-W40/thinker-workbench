@@ -5,14 +5,14 @@
 import { withJsonPreview, withTextPreview } from "@thinker-workbench/logger";
 import { agentLog } from "../../log/setup";
 import type { ChatMessage, ChatToolCall } from "../../model/types";
-import { getRunEmitter } from "../../runtime/runEmit";
 import { getRunTurn } from "../../runtime/runContext";
-import { agentEndSpan, agentStartSpan } from "../../trace/emit";
+import { getRunEmitter } from "../../runtime/runEmit";
 import { runTool } from "../../tools/runTool";
+import { buildUnifiedDiff } from "../../tools/shared/diff";
 import { peekTaskLaunchesInBackground } from "../../tools/task/execute";
 import { deriveTaskTitle } from "../../tools/task/title";
-import { buildUnifiedDiff } from "../../tools/shared/diff";
 import type { ToolArgs } from "../../tools/types";
+import { agentEndSpan, agentStartSpan } from "../../trace/emit";
 import type { GraphState } from "../types";
 
 /**

@@ -88,7 +88,7 @@ function McpToolsRail({ serverId, tools }: { serverId: string; tools: ToolInfo[]
       el.removeEventListener("scroll", update);
       ro.disconnect();
     };
-  }, [tools]);
+  }, []);
 
   return (
     <div
@@ -268,7 +268,7 @@ export function McpSettingsForm({ workspaces }: Props) {
     return onMcpStatus((st) => {
       setStatuses((prev) => ({ ...prev, [st.id]: st }));
     });
-  }, [available]);
+  }, [available, refresh]);
 
   const groups = useMemo(() => {
     return groupsDef.map((g) => {
@@ -382,10 +382,7 @@ export function McpSettingsForm({ workspaces }: Props) {
   }
 
   const saveDisabled =
-    busy ||
-    (draft.transport === "stdio"
-      ? !draft.command.trim()
-      : !draft.url.trim());
+    busy || (draft.transport === "stdio" ? !draft.command.trim() : !draft.url.trim());
 
   if (!available) {
     return (
@@ -431,11 +428,7 @@ export function McpSettingsForm({ workspaces }: Props) {
                 >
                   {t("settings.mcp.importFile")}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void onExport(group.scope)}
-                >
+                <Button size="sm" variant="secondary" onClick={() => void onExport(group.scope)}>
                   {t("settings.mcp.export")}
                 </Button>
               </>
@@ -460,9 +453,7 @@ export function McpSettingsForm({ workspaces }: Props) {
                         </Badge>
                         <Badge variant={statusVariant(status?.state)}>
                           {status?.state ?? "stopped"}
-                          {typeof status?.toolCount === "number"
-                            ? ` · ${status.toolCount}`
-                            : ""}
+                          {typeof status?.toolCount === "number" ? ` · ${status.toolCount}` : ""}
                         </Badge>
                       </div>
                       <div className="mcp-settings__row-actions">
@@ -559,20 +550,14 @@ export function McpSettingsForm({ workspaces }: Props) {
                   onChange={(e) => setDraft((d) => ({ ...d, command: e.target.value }))}
                 />
               </Field>
-              <Field
-                label={t("settings.mcp.fieldArgs")}
-                description={t("settings.mcp.argsHint")}
-              >
+              <Field label={t("settings.mcp.fieldArgs")} description={t("settings.mcp.argsHint")}>
                 <TextArea
                   rows={3}
                   value={draft.argsText}
                   onChange={(e) => setDraft((d) => ({ ...d, argsText: e.target.value }))}
                 />
               </Field>
-              <Field
-                label={t("settings.mcp.fieldEnv")}
-                description={t("settings.mcp.envHint")}
-              >
+              <Field label={t("settings.mcp.fieldEnv")} description={t("settings.mcp.envHint")}>
                 <TextArea
                   rows={3}
                   value={draft.envText}
@@ -606,10 +591,7 @@ export function McpSettingsForm({ workspaces }: Props) {
             </>
           ) : (
             <>
-              <Field
-                label={t("settings.mcp.fieldUrl")}
-                description={t("settings.mcp.urlHint")}
-              >
+              <Field label={t("settings.mcp.fieldUrl")} description={t("settings.mcp.urlHint")}>
                 <Input
                   value={draft.url}
                   onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}

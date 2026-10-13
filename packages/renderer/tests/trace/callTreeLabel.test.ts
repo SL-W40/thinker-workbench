@@ -2,8 +2,8 @@
  * Call Tree：短标签，不贴长 summary。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
 import type { TraceSpanRecord } from "@thinker-workbench/shared";
+import { describe, it } from "vitest";
 import { callTreeLabel } from "../../src/features/trace/callTreeModel";
 
 function span(partial: Partial<TraceSpanRecord>): TraceSpanRecord {
@@ -24,7 +24,7 @@ describe("callTreeLabel", () => {
       span({
         kind: "tool",
         name: "tool:read_file",
-        summary: "read_file · " + "a".repeat(200),
+        summary: `read_file · ${"a".repeat(200)}`,
       }),
     );
     assert.equal(label, "read_file");

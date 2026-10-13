@@ -2,7 +2,7 @@
  * 右侧 agent inspector（对齐 v1 WorkspacePane agent 分支）：
  * 起始磁贴 → Tab 条（Changes / Files / file:*）→ 对应壳层。
  */
-import type { GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
+
 import {
   Button,
   ContextMenu,
@@ -11,6 +11,7 @@ import {
   Input,
   Modal,
 } from "@thinker-workbench/design/react";
+import type { GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
 import {
   type Dispatch,
   type MouseEvent as ReactMouseEvent,
@@ -22,6 +23,26 @@ import {
   useState,
 } from "react";
 import {
+  consumePendingOpenBrowser,
+  OPEN_BROWSER_EVENT,
+  type OpenBrowserDetail,
+  onBrowserEvent,
+} from "../../bridge/browser";
+import {
+  CLEAR_SUBAGENT_TABS_EVENT,
+  consumePendingOpenSubagent,
+  consumePendingRestoreSubagent,
+  forgetSubagentStep,
+  getSubagentStep,
+  OPEN_SUBAGENT_EVENT,
+  peekOpenSubagents,
+  RESTORE_SUBAGENT_TABS_EVENT,
+  setActiveSubagentTask,
+  subagentTabKey,
+  subscribeSubagentSteps,
+} from "../../bridge/subagent";
+import { OPEN_TERMINAL_EVENT, type OpenTerminalDetail } from "../../bridge/terminal";
+import {
   workspaceGitInit,
   workspaceGitStatus,
   workspaceReadFile,
@@ -29,38 +50,14 @@ import {
   workspaceWriteFile,
 } from "../../bridge/workspaceFs";
 import { useT } from "../../i18n/useI18n";
-import {
-  CHANGES_ACTION_PROMPTS,
-  ChangesPane,
-  type ChangesPromptActionId,
-} from "./ChangesPane";
-import { FileEditor } from "./FileEditor";
-import { FileTree } from "./FileTree";
-import { FilesHome } from "./FilesHome";
-import { MediaPreview, type MediaPreviewInfo } from "./MediaPreview";
-import { loadFileRecents, pushFileRecent } from "./fileRecents";
-import {
-  OPEN_BROWSER_EVENT,
-  consumePendingOpenBrowser,
-  onBrowserEvent,
-  type OpenBrowserDetail,
-} from "../../bridge/browser";
-import { OPEN_TERMINAL_EVENT, type OpenTerminalDetail } from "../../bridge/terminal";
-import {
-  CLEAR_SUBAGENT_TABS_EVENT,
-  OPEN_SUBAGENT_EVENT,
-  RESTORE_SUBAGENT_TABS_EVENT,
-  consumePendingOpenSubagent,
-  consumePendingRestoreSubagent,
-  forgetSubagentStep,
-  getSubagentStep,
-  peekOpenSubagents,
-  setActiveSubagentTask,
-  subagentTabKey,
-  subscribeSubagentSteps,
-} from "../../bridge/subagent";
 import { BrowserPane } from "../browser/BrowserPane";
+import { subagentDisplayTitle } from "../chat/subagentTitle";
 import { TerminalPane } from "../terminal/TerminalPane";
+import { CHANGES_ACTION_PROMPTS, ChangesPane, type ChangesPromptActionId } from "./ChangesPane";
+import { FileEditor } from "./FileEditor";
+import { FilesHome } from "./FilesHome";
+import { FileTree } from "./FileTree";
+import { loadFileRecents, pushFileRecent } from "./fileRecents";
 import {
   BrowserStartIcon,
   FileStartIcon,
@@ -68,8 +65,6 @@ import {
   SubagentStartIcon,
   TerminalStartIcon,
 } from "./icons";
-import { subagentDisplayTitle } from "../chat/subagentTitle";
-import { SubagentInspectorPane } from "./SubagentInspectorPane";
 import {
   hydrateTabs,
   loadInspectorUi,
@@ -77,19 +72,21 @@ import {
   resolveActiveKey,
   serializeTabs,
 } from "./inspectorUi";
+import { MediaPreview, type MediaPreviewInfo } from "./MediaPreview";
+import { SubagentInspectorPane } from "./SubagentInspectorPane";
 import {
   applyTreeSelection,
   filterWorkspaceTree,
   selectionJoinFlags,
-  visibleTreePaths,
   type TreeSelectGesture,
+  visibleTreePaths,
 } from "./treeSelection";
 import {
   BROWSER_TAB_KEY,
   CHANGES_TAB_KEY,
   FILES_TAB_KEY,
-  TERMINAL_TAB_KEY,
   type StageTab,
+  TERMINAL_TAB_KEY,
 } from "./types";
 import {
   FILE_LIST_AUTO_PANE_MIN,
@@ -103,7 +100,7 @@ type Props = {
   workspaceId: string | null;
   /** Changes CTA：把固定英文 prompt 发给当前会话。*/
   onSendPrompt?: (prompt: string) => void;
- /** 外部请求打开的工作空间相对路径（如聊?diff 点文件名）；消费后回调清空。*/
+  /** 外部请求打开的工作空间相对路径（如聊?diff 点文件名）；消费后回调清空。*/
   pendingOpenPath?: string | null;
   onPendingOpenPathConsumed?: () => void;
   /** 外部请求打开 Terminal 并可选聚焦会话。*/
@@ -165,13 +162,7 @@ async function loadFileBuffers(
   },
 ): Promise<boolean> {
   const key = fileTabKey(path);
-  const {
-    setDrafts,
-    setSaved,
-    setUnsaved,
-    setMediaByKey,
-    setReadOnlyByPath,
-  } = setters;
+  const { setDrafts, setSaved, setUnsaved, setMediaByKey, setReadOnlyByPath } = setters;
   try {
     const file = await workspaceReadFile(workspaceId, path);
     if (file.missing) return false;
@@ -226,7 +217,7 @@ export function RightInspector({
   const t = useT();
   const tabsRef = useRef<HTMLDivElement>(null);
   const draftSeq = useRef(0);
- /** 跳过恢复后的首次写回，避免用空态覆?localStorage。*/
+  /** 跳过恢复后的首次写回，避免用空态覆?localStorage。*/
   const skipPersist = useRef(true);
 
   const restoredUi = useMemo(() => loadInspectorUi(workspaceId), [workspaceId]);
@@ -257,7 +248,7 @@ export function RightInspector({
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [unsaved, setUnsaved] = useState<Record<string, boolean>>({});
   const [readOnlyByPath, setReadOnlyByPath] = useState<Record<string, boolean>>({});
- /** 媒体 / 二进制预览缓存（?file: tab key）。*/
+  /** 媒体 / 二进制预览缓存（?file: tab key）。*/
   const [mediaByKey, setMediaByKey] = useState<Record<string, MediaPreviewInfo>>({});
 
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -269,11 +260,7 @@ export function RightInspector({
     forced: filesListForced,
     setOpen: setFilesListOpen,
     paneRef: filesPaneRef,
-  } = useFileListOpen(
-    FILE_LIST_AUTO_PANE_MIN,
-    workspaceId ?? "",
-    restoredUi.filesListForced,
-  );
+  } = useFileListOpen(FILE_LIST_AUTO_PANE_MIN, workspaceId ?? "", restoredUi.filesListForced);
   const {
     width: filesListWidth,
     dragging: filesListDragging,
@@ -333,17 +320,14 @@ export function RightInspector({
       terminal: t("inspector.section.terminal"),
       browser: t("inspector.section.browser"),
     });
- // 合并当前会话已打开?Task（按会话落盘，不?inspectorUi 里）
+    // 合并当前会话已打开?Task（按会话落盘，不?inspectorUi 里）
     const openSub = peekOpenSubagents();
     const subTabs: Extract<StageTab, { kind: "subagent" }>[] = [];
     for (const taskId of openSub.taskIds) {
       const step = getSubagentStep(taskId);
       if (!step) continue;
       const typeRaw = step.subagent.trim();
-      const typeName =
-        !typeRaw || typeRaw === "…"
-          ? t("chat.subagent.pendingName")
-          : typeRaw;
+      const typeName = !typeRaw || typeRaw === "…" ? t("chat.subagent.pendingName") : typeRaw;
       subTabs.push({
         key: subagentTabKey(taskId),
         kind: "subagent",
@@ -354,8 +338,7 @@ export function RightInspector({
     }
     const mergedTabs = [...nextTabs, ...subTabs];
     const preferSub =
-      openSub.activeTaskId &&
-      subTabs.some((tab) => tab.taskId === openSub.activeTaskId)
+      openSub.activeTaskId && subTabs.some((tab) => tab.taskId === openSub.activeTaskId)
         ? subagentTabKey(openSub.activeTaskId)
         : "";
     const nextActive = preferSub || resolveActiveKey(mergedTabs, restoredUi.activeKey);
@@ -401,9 +384,7 @@ export function RightInspector({
       // 会话里记下的文件若已删，丢掉对应 tab，避免空壳与反复读失败
       if (missing.size > 0) {
         setTabs((prev) => {
-          const kept = prev.filter(
-            (tab) => !(tab.kind === "file" && missing.has(tab.path)),
-          );
+          const kept = prev.filter((tab) => !(tab.kind === "file" && missing.has(tab.path)));
           queueMicrotask(() => {
             setActiveTab((cur) => resolveActiveKey(kept, cur));
           });
@@ -429,16 +410,9 @@ export function RightInspector({
       filesListWidth,
       openDirs: [...openDirs],
     });
-  }, [
-    workspaceId,
-    tabs,
-    activeTab,
-    filesListForced,
-    filesListWidth,
-    openDirs,
-  ]);
+  }, [workspaceId, tabs, activeTab, filesListForced, filesListWidth, openDirs]);
 
- // Git：聚?+ 12s 轮询（有 Changes 标签或空起始屏时：
+  // Git：聚?+ 12s 轮询（有 Changes 标签或空起始屏时：
   useEffect(() => {
     if (!workspaceId) return;
     void refreshGit();
@@ -458,8 +432,8 @@ export function RightInspector({
     onPendingOpenPathConsumed?.();
     setFilesListOpen(true);
     void openFile(path);
- // openFile 读最?state；仅?pending 变化时触? // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOpenPath]);
+    // openFile 读最?state；仅?pending 变化时触? // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenPath, openFile, setFilesListOpen, onPendingOpenPathConsumed]);
 
   // 外部 / 时间线：打开 Terminal 标签（细节由 TerminalPane 消费：
   useEffect(() => {
@@ -470,7 +444,7 @@ export function RightInspector({
     window.addEventListener(OPEN_TERMINAL_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_TERMINAL_EVENT, onOpen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [openTerminal]);
 
   // Markdown 链接 / agent / 主进程：打开 Browser 标签
   useEffect(() => {
@@ -489,18 +463,15 @@ export function RightInspector({
       off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [openBrowser]);
 
- // Task 卡片 / 后台?/ 会话恢复：子代理时间?tab
+  // Task 卡片 / 后台?/ 会话恢复：子代理时间?tab
   useEffect(() => {
     function tabFromTaskId(taskId: string): Extract<StageTab, { kind: "subagent" }> | null {
       const step = getSubagentStep(taskId);
       if (!step) return null;
       const typeRaw = step.subagent.trim();
-      const typeName =
-        !typeRaw || typeRaw === "…"
-          ? t("chat.subagent.pendingName")
-          : typeRaw;
+      const typeName = !typeRaw || typeRaw === "…" ? t("chat.subagent.pendingName") : typeRaw;
       return {
         key: subagentTabKey(taskId),
         kind: "subagent",
@@ -528,12 +499,14 @@ export function RightInspector({
         return next;
       });
     }
- /** 刷新或切回会话：重建已打开?Task tab，并按需激活。*/
+    /** 刷新或切回会话：重建已打开?Task tab，并按需激活。*/
     function onRestore(e: Event) {
-      const detail = (e as CustomEvent<{
-        taskIds: string[];
-        activeTaskId: string | null;
-      }>).detail;
+      const detail = (
+        e as CustomEvent<{
+          taskIds: string[];
+          activeTaskId: string | null;
+        }>
+      ).detail;
       const taskIds = detail?.taskIds ?? [];
       const restored = taskIds
         .map((id) => tabFromTaskId(id))
@@ -555,10 +528,7 @@ export function RightInspector({
           const step = getSubagentStep(tab.taskId);
           if (!step) return tab;
           const typeRaw = step.subagent.trim();
-          const typeName =
-            !typeRaw || typeRaw === "…"
-              ? t("chat.subagent.pendingName")
-              : typeRaw;
+          const typeName = !typeRaw || typeRaw === "…" ? t("chat.subagent.pendingName") : typeRaw;
           const title = subagentDisplayTitle(step);
           if (tab.title === title && tab.subagent === typeName) return tab;
           changed = true;
@@ -573,9 +543,7 @@ export function RightInspector({
     const unsubSteps = subscribeSubagentSteps(syncTabTitles);
     const pendingRestore = consumePendingRestoreSubagent();
     if (pendingRestore) {
-      onRestore(
-        new CustomEvent(RESTORE_SUBAGENT_TABS_EVENT, { detail: pendingRestore }),
-      );
+      onRestore(new CustomEvent(RESTORE_SUBAGENT_TABS_EVENT, { detail: pendingRestore }));
     }
     const pending = consumePendingOpenSubagent();
     if (pending?.taskId) openByTaskId(pending.taskId);
@@ -586,9 +554,9 @@ export function RightInspector({
       window.removeEventListener(RESTORE_SUBAGENT_TABS_EVENT, onRestore);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ensureTab, t]);
 
- // 激活非 Task 时清?activeTaskId，避免刷新后强行抢回 Task
+  // 激活非 Task 时清?activeTaskId，避免刷新后强行抢回 Task
   useEffect(() => {
     if (!activeTab) return; // 初始…?key，勿冲掉会话恢复…?activeTaskId
     if (activeTab.startsWith("subagent:")) {
@@ -604,7 +572,7 @@ export function RightInspector({
     onPendingOpenTerminalConsumed?.();
     openTerminal(id || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOpenTerminalSessionId]);
+  }, [pendingOpenTerminalSessionId, openTerminal, onPendingOpenTerminalConsumed]);
 
   // Tab 条：纵向滚轮 →横向滚动
   useEffect(() => {
@@ -618,7 +586,7 @@ export function RightInspector({
     }
     strip.addEventListener("wheel", onWheel, { passive: false });
     return () => strip.removeEventListener("wheel", onWheel);
-  }, [inspectorEmpty, tabs.length]);
+  }, [inspectorEmpty]);
 
   function ensureTab(tab: StageTab) {
     setTabs((prev) => {
@@ -627,10 +595,7 @@ export function RightInspector({
       // 子代理标题可能从 draft 完善：已存在则合并更
       if (tab.kind === "subagent") {
         const cur = prev[idx]!;
-        if (
-          cur.kind === "subagent" &&
-          (cur.title !== tab.title || cur.subagent !== tab.subagent)
-        ) {
+        if (cur.kind === "subagent" && (cur.title !== tab.title || cur.subagent !== tab.subagent)) {
           const next = [...prev];
           next[idx] = { ...cur, title: tab.title, subagent: tab.subagent };
           return next;
@@ -756,9 +721,7 @@ export function RightInspector({
       setReadOnlyByPath((d) => ({ ...d, [path]: false }));
     } else {
       setTabs((prev) =>
-        prev.map((tab) =>
-          tab.key === key && tab.kind === "file" ? { ...tab, title, path } : tab,
-        ),
+        prev.map((tab) => (tab.key === key && tab.kind === "file" ? { ...tab, title, path } : tab)),
       );
       setSaved((d) => ({ ...d, [key]: content }));
       setUnsaved((d) => ({ ...d, [key]: false }));
@@ -779,7 +742,7 @@ export function RightInspector({
     if (!workspaceId || currentTab?.kind !== "file") return;
     const key = currentTab.key;
     if (currentTab.path && readOnlyByPath[currentTab.path]) return;
- // 未命名：先弹路径再落盘（Electron ?window.prompt：
+    // 未命名：先弹路径再落盘（Electron ?window.prompt：
     if (!currentTab.path || isDraftTabKey(key)) {
       setSaveAs({ key, draft: "untitled.ts" });
       return;
@@ -821,7 +784,7 @@ export function RightInspector({
       const next = prev.filter((t) => t.key !== key);
       const idx = prev.findIndex((t) => t.key === key);
       const fallback = next[Math.max(0, idx - 1)] ?? next[0];
- // 用函数式读最?activeTab，避?save+close 草稿?key 后闭包过?
+      // 用函数式读最?activeTab，避?save+close 草稿?key 后闭包过?
       setActiveTab((current) => (current === key ? (fallback?.key ?? "") : current));
       return next;
     });
@@ -845,7 +808,7 @@ export function RightInspector({
     const key = closeDirtyKey;
     const tab = tabs.find((t) => t.key === key);
     setCloseDirtyKey(null);
-    if (!tab || tab.kind !== "file") return;
+    if (tab?.kind !== "file") return;
     if (!tab.path || isDraftTabKey(key)) {
       setSaveAs({
         key,
@@ -967,8 +930,7 @@ export function RightInspector({
   }
 
   const totals = gitStatus?.totals;
-  const showFileShell =
-    currentTab?.kind === "files" || currentTab?.kind === "file";
+  const showFileShell = currentTab?.kind === "files" || currentTab?.kind === "file";
   const showFilesHome = currentTab?.kind === "files";
 
   return (
@@ -1170,9 +1132,7 @@ export function RightInspector({
             {showFileShell ? (
               <div
                 ref={filesPaneRef}
-                className={`agent-files${
-                  !showFilesHome && filesListOpen ? " has-side" : ""
-                }`}
+                className={`agent-files${!showFilesHome && filesListOpen ? " has-side" : ""}`}
               >
                 <div className="agent-files__main">
                   {showFilesHome ? (
@@ -1194,9 +1154,7 @@ export function RightInspector({
                           path={currentTab.path || null}
                           modelPath={currentTab.key}
                           value={drafts[currentTab.key] ?? ""}
-                          readOnly={Boolean(
-                            currentTab.path && readOnlyByPath[currentTab.path],
-                          )}
+                          readOnly={Boolean(currentTab.path && readOnlyByPath[currentTab.path])}
                           onChange={onFileDraftChange}
                           onSave={() => void saveFile()}
                         />
@@ -1240,13 +1198,11 @@ export function RightInspector({
                       />
                     </label>
                     <div className="agent-files__tree">
-                      {filteredTree ?? tree ? (
+                      {(filteredTree ?? tree) ? (
                         <FileTree
                           node={(filteredTree ?? tree)!}
                           openDirs={effectiveOpenDirs}
-                          focusPath={
-                            currentTab?.kind === "file" ? currentTab.path : null
-                          }
+                          focusPath={currentTab?.kind === "file" ? currentTab.path : null}
                           selectedPaths={selectedPaths}
                           selectionJoins={selectionJoins}
                           onSelect={onTreeSelect}
@@ -1267,11 +1223,7 @@ export function RightInspector({
                     </div>
                     <ContextMenu
                       open={Boolean(treeCtxMenu)}
-                      anchor={
-                        treeCtxMenu
-                          ? { x: treeCtxMenu.x, y: treeCtxMenu.y }
-                          : null
-                      }
+                      anchor={treeCtxMenu ? { x: treeCtxMenu.x, y: treeCtxMenu.y } : null}
                       onClose={() => setTreeCtxMenu(null)}
                       aria-label={t("inspector.files.fileMenu")}
                       items={
@@ -1345,8 +1297,7 @@ export function RightInspector({
         <p className="components-modal-body">
           {t("inspector.files.discardConfirmBody", {
             name:
-              tabs.find((tab) => tab.key === closeDirtyKey)?.title ||
-              t("inspector.files.untitled"),
+              tabs.find((tab) => tab.key === closeDirtyKey)?.title || t("inspector.files.untitled"),
           })}
         </p>
         <div className="components-row components-row--end">

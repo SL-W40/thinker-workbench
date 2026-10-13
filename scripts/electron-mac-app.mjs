@@ -117,13 +117,13 @@ function ensureNamedApp(identity) {
   applyProductIcon(dest, plist);
 }
 
-/** 产品 PNG 路径（与桌面 resources 共用）。 */
+/** 产品 PNG 路径（macOS 用 `resources/mac/icon.png`）。 */
 function productIconPng() {
-  return path.join(root, "packages", "desktop", "resources", "icon.png");
+  return path.join(root, "packages", "desktop", "resources", "mac", "icon.png");
 }
 
 /**
- * 把 icon.png 转成 icns，写入克隆 .app 的 CFBundleIconFile。
+ * 把 mac/icon.png 转成 icns，写入克隆 .app 的 CFBundleIconFile。
  * 转换结果缓存在 electron/dist，PNG 更新后才会重跑 sips/iconutil。
  * @param {string} destApp
  * @param {string} plist
@@ -131,7 +131,9 @@ function productIconPng() {
 function applyProductIcon(destApp, plist) {
   const png = productIconPng();
   if (!fs.existsSync(png)) {
-    console.warn("[electron-mac] packages/desktop/resources/icon.png missing; skip bundle icon.");
+    console.warn(
+      "[electron-mac] packages/desktop/resources/mac/icon.png missing; skip bundle icon.",
+    );
     return;
   }
 
@@ -147,7 +149,10 @@ function applyProductIcon(destApp, plist) {
     // 让 Launch Services 刷新图标缓存（系统通知左侧图标依赖 bundle icns）
     execFileSync("touch", [destApp], { stdio: "ignore" });
   } catch (err) {
-    console.warn("[electron-mac] failed to apply product icon:", err instanceof Error ? err.message : err);
+    console.warn(
+      "[electron-mac] failed to apply product icon:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 

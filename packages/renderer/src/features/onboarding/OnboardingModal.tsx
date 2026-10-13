@@ -4,23 +4,20 @@
  * 选择过程中即时预览外观与语言；完成或跳过时写入通用设置并标记 `onboardingCompleted`。
  * 根目录（dataDir）不走 setGeneral，须经 applyDataDirChange。
  */
-import { useId, useMemo, useState } from "react";
+
 import { Button, Input, Modal, Select } from "@thinker-workbench/design/react";
 import {
   AI_LOCALES,
+  type AiLocale,
   APP_LOCALES,
+  type AppLocale,
+  type AppThemeId,
   DEFAULT_AI_LOCALE,
   DEFAULT_APP_LOCALE,
   DEFAULT_APP_THEME,
-  type AiLocale,
-  type AppLocale,
-  type AppThemeId,
 } from "@thinker-workbench/shared";
-import {
-  applyDataDirChange,
-  pickDirectory,
-  setGeneralSettings,
-} from "../../bridge/thinker";
+import { useId, useMemo, useState } from "react";
+import { applyDataDirChange, pickDirectory, setGeneralSettings } from "../../bridge/thinker";
 import { useI18n } from "../../i18n/useI18n";
 import { useAppearance } from "../../theme/useAppearance";
 import { ThemePicker } from "../settings/ThemePicker";

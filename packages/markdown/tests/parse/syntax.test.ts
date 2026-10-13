@@ -3,9 +3,9 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { parseMarkdownStreaming } from "../../src/stream";
-import { parseInline } from "../../src/parse/inline";
 import { parseMarkdown, parseMarkdownDocument } from "../../src/parse/blocks";
+import { parseInline } from "../../src/parse/inline";
+import { parseMarkdownStreaming } from "../../src/stream";
 
 describe("parseInline", () => {
   it("strips backslash escapes", () => {
@@ -40,10 +40,7 @@ describe("parseInline", () => {
   it("does not emphasize intraword underscores", () => {
     const nodes = parseInline("foo_bar_baz");
     assert.ok(nodes.every((n) => n.type === "text"));
-    assert.equal(
-      nodes.map((n) => (n.type === "text" ? n.value : "")).join(""),
-      "foo_bar_baz",
-    );
+    assert.equal(nodes.map((n) => (n.type === "text" ? n.value : "")).join(""), "foo_bar_baz");
   });
 
   it("parses *** as strong wrapping emphasis", () => {
@@ -81,7 +78,7 @@ describe("parseMarkdownDocument", () => {
   it("extracts footnotes", () => {
     const doc = parseMarkdownDocument(`正文[^a]。\n\n[^a]: 脚注内容`);
     assert.equal(doc.footnotes.length, 1);
-    assert.equal(doc.footnotes[0]!.id, "a");
+    assert.equal(doc.footnotes[0]?.id, "a");
     assert.ok(
       doc.blocks.every((b) => b.type !== "paragraph" || !JSON.stringify(b).includes("[^a]:")),
     );
@@ -92,7 +89,7 @@ describe("parseMarkdownDocument", () => {
     assert.equal(blocks[0]?.type, "definitionList");
     if (blocks[0]?.type === "definitionList") {
       assert.equal(blocks[0].items.length, 1);
-      assert.ok(blocks[0].items[0]!.definitions.length >= 1);
+      assert.ok(blocks[0].items[0]?.definitions.length >= 1);
     }
   });
 
@@ -135,8 +132,8 @@ describe("parseMarkdownDocument", () => {
     assert.equal(blocks[0]?.type, "table");
     if (blocks[0]?.type !== "table") return;
     assert.equal(blocks[0].headers.length, 2);
-    const headerText = blocks[0].headers[0]!
-      .map((n) => (n.type === "text" ? n.value : ""))
+    const headerText = blocks[0].headers[0]
+      ?.map((n) => (n.type === "text" ? n.value : ""))
       .join("");
     assert.equal(headerText, "a|b");
   });

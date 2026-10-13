@@ -2,8 +2,8 @@
  * Engine → main 内置浏览器请求客户端（requestId 往返）。
  */
 import {
-  createId,
   type BrowserRequestAction,
+  createId,
   type UtilityBrowserEvent,
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";

@@ -2,28 +2,16 @@
  * Customize IPC：skills / rules / agents 的列表与 CRUD。
  */
 import {
+  type CustomizeScope,
   IpcChannels,
   normalizeCustomizeScope,
-  type CustomizeScope,
+  type RuleUpsertInput,
   type SkillUpsertInput,
   type SubagentUpsertInput,
-  type RuleUpsertInput,
 } from "@thinker-workbench/shared";
 import type { IpcMain } from "electron";
-import {
-  copyAgentToScope,
-  listAgents,
-  removeAgent,
-  upsertAgent,
-} from "../customize/agentsStore";
-import type { AgentBridge } from "../utility/AgentBridge";
-import { pushAgentHello } from "../utility/startAgentProcess";
-import {
-  copyRuleToScope,
-  listRules,
-  removeRule,
-  upsertRule,
-} from "../customize/rulesStore";
+import { copyAgentToScope, listAgents, removeAgent, upsertAgent } from "../customize/agentsStore";
+import { copyRuleToScope, listRules, removeRule, upsertRule } from "../customize/rulesStore";
 import {
   copySkillToScope,
   listSkillsDetailed,
@@ -32,6 +20,8 @@ import {
   upsertSkill,
 } from "../customize/skillsCrud";
 import { assertWorkspaceRoot } from "../db/workspacesStore";
+import type { AgentBridge } from "../utility/AgentBridge";
+import { pushAgentHello } from "../utility/startAgentProcess";
 
 /** 规范化可选工作区根（未登记则当作仅全局）。 */
 function normalizeWorkspaceRoot(workspaceRoot?: string | null): string | null {
@@ -73,12 +63,9 @@ export function registerCustomizeHandlers(ipcMain: IpcMain, bridge?: AgentBridge
     });
   });
 
-  ipcMain.handle(
-    IpcChannels.skillsRemove,
-    (_evt, scope: CustomizeScope, name: string) => {
-      removeSkill(asScope(scope), String(name ?? ""));
-    },
-  );
+  ipcMain.handle(IpcChannels.skillsRemove, (_evt, scope: CustomizeScope, name: string) => {
+    removeSkill(asScope(scope), String(name ?? ""));
+  });
 
   ipcMain.handle(
     IpcChannels.skillsCopyToScope,
@@ -98,12 +85,9 @@ export function registerCustomizeHandlers(ipcMain: IpcMain, bridge?: AgentBridge
     });
   });
 
-  ipcMain.handle(
-    IpcChannels.rulesRemove,
-    (_evt, scope: CustomizeScope, relPath: string) => {
-      removeRule(asScope(scope), String(relPath ?? ""));
-    },
-  );
+  ipcMain.handle(IpcChannels.rulesRemove, (_evt, scope: CustomizeScope, relPath: string) => {
+    removeRule(asScope(scope), String(relPath ?? ""));
+  });
 
   ipcMain.handle(
     IpcChannels.rulesCopyToScope,
@@ -125,13 +109,10 @@ export function registerCustomizeHandlers(ipcMain: IpcMain, bridge?: AgentBridge
     return next;
   });
 
-  ipcMain.handle(
-    IpcChannels.agentsRemove,
-    (_evt, scope: CustomizeScope, name: string) => {
-      removeAgent(asScope(scope), String(name ?? ""));
-      reloadSubagents();
-    },
-  );
+  ipcMain.handle(IpcChannels.agentsRemove, (_evt, scope: CustomizeScope, name: string) => {
+    removeAgent(asScope(scope), String(name ?? ""));
+    reloadSubagents();
+  });
 
   ipcMain.handle(
     IpcChannels.agentsCopyToScope,

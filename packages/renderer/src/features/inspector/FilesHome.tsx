@@ -50,12 +50,7 @@ function fuzzyMatch(query: string, target: string): boolean {
   return true;
 }
 
-export function FilesHome({
-  recents,
-  fileCandidates = [],
-  onOpenFile,
-  onNewFile,
-}: Props) {
+export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
   const q = query.trim();
@@ -139,16 +134,8 @@ export function FilesHome({
             const folder = dirName(path);
             return (
               <li key={path}>
-                <button
-                  type="button"
-                  className="files-home__row"
-                  onClick={() => onOpenFile(path)}
-                >
-                  <span
-                    className="files-home__badge"
-                    style={{ color: badge.color }}
-                    aria-hidden
-                  >
+                <button type="button" className="files-home__row" onClick={() => onOpenFile(path)}>
+                  <span className="files-home__badge" style={{ color: badge.color }} aria-hidden>
                     {badge.label}
                   </span>
                   <span className="files-home__name">{baseName(path)}</span>

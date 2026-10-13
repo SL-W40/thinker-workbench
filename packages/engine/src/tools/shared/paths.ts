@@ -47,8 +47,7 @@ export function resolveWorkspacePath(
 
   const intent = options?.access ?? "write";
   const mode = getWorkspaceAccess();
-  const allowed =
-    mode === "full" || (mode === "readOutside" && intent === "read");
+  const allowed = mode === "full" || (mode === "readOutside" && intent === "read");
   if (!allowed) {
     throw new Error(`Path escapes workspace (${intent}): ${raw}`);
   }

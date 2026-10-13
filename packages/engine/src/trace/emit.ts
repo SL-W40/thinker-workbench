@@ -6,8 +6,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createSpanId,
-  type TraceSpanKind,
   type TraceSource,
+  type TraceSpanKind,
   type TraceSpanStatus,
 } from "@thinker-workbench/shared";
 import { postToParent } from "../host/port";

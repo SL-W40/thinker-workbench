@@ -1,8 +1,9 @@
 /**
  * 进程内活跃 RunHandle 注册表：cancel / HITL / Task 按 runId 定位。
  */
-import type { RunContext } from "./runContext";
+
 import type { RunController } from "./RunController";
+import type { RunContext } from "./runContext";
 
 export type RunHandle = {
   context: RunContext;

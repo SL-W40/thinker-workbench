@@ -4,25 +4,25 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  IpcChannels,
-  resolveVisualThemeId,
   type BrowserBounds,
   type BrowserEvent,
   type BrowserState,
+  IpcChannels,
+  resolveVisualThemeId,
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";
-import { BrowserWindow, WebContentsView, nativeTheme, session } from "electron";
+import { BrowserWindow, nativeTheme, session, WebContentsView } from "electron";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { getMainWindow } from "../window/createWindow";
 import { maybeOpenLocalLinkExternally } from "./localLinks";
 import { buildOverlayDataUrl, overlayTokensForVisual } from "./overlayHtml";
 import {
-  SNAPSHOT_SCRIPT,
   clickScript,
   fillScript,
   getStylesScript,
   pressKeyScript,
+  SNAPSHOT_SCRIPT,
   scrollScript,
   typeScript,
 } from "./pageScripts";
@@ -66,12 +66,8 @@ class BrowserSessionManager {
       url: wc && !wc.isDestroyed() ? wc.getURL() : ABOUT_BLANK,
       title: wc && !wc.isDestroyed() ? wc.getTitle() : "",
       loading: this.loading,
-      canGoBack: Boolean(
-        wc && !wc.isDestroyed() && wc.navigationHistory.canGoBack(),
-      ),
-      canGoForward: Boolean(
-        wc && !wc.isDestroyed() && wc.navigationHistory.canGoForward(),
-      ),
+      canGoBack: Boolean(wc && !wc.isDestroyed() && wc.navigationHistory.canGoBack()),
+      canGoForward: Boolean(wc && !wc.isDestroyed() && wc.navigationHistory.canGoForward()),
       locked: this.locked,
       visible: this.visible && this.bounds.width > 0 && this.bounds.height > 0,
       viewportWidth: this.viewportWidth || this.bounds.width,
@@ -172,10 +168,7 @@ class BrowserSessionManager {
   private async loadOverlayHtml(): Promise<void> {
     const overlay = this.ensureOverlay();
     const general = getGeneralSettings();
-    const visual = resolveVisualThemeId(
-      general.uiTheme,
-      nativeTheme.shouldUseDarkColors,
-    );
+    const visual = resolveVisualThemeId(general.uiTheme, nativeTheme.shouldUseDarkColors);
     const tokens = overlayTokensForVisual(String(visual));
     const copy = this.overlayCopy();
     const url = buildOverlayDataUrl({ tokens, ...copy });
@@ -194,14 +187,9 @@ class BrowserSessionManager {
   }
 
   private applyBounds(): void {
-    const empty =
-      !this.visible || this.bounds.width < 2 || this.bounds.height < 2;
+    const empty = !this.visible || this.bounds.width < 2 || this.bounds.height < 2;
     if (this.view) {
-      this.view.setBounds(
-        empty
-          ? { x: 0, y: 0, width: 0, height: 0 }
-          : { ...this.bounds },
-      );
+      this.view.setBounds(empty ? { x: 0, y: 0, width: 0, height: 0 } : { ...this.bounds });
     }
     if (this.overlay) {
       if (this.locked && !empty) {
@@ -312,9 +300,7 @@ class BrowserSessionManager {
     return (await view.webContents.executeJavaScript(script, true)) as T;
   }
 
-  private async maybeScreenshot(
-    take: boolean | undefined,
-  ): Promise<string | undefined> {
+  private async maybeScreenshot(take: boolean | undefined): Promise<string | undefined> {
     if (!take) return undefined;
     return this.screenshot();
   }
@@ -412,26 +398,20 @@ class BrowserSessionManager {
       case "type": {
         if (!req.ref?.trim()) throw new Error("ref is required");
         if (typeof req.text !== "string") throw new Error("text is required");
-        const result = await this.evalPage(
-          typeScript({ ref: req.ref, text: req.text }),
-        );
+        const result = await this.evalPage(typeScript({ ref: req.ref, text: req.text }));
         const shot = await this.maybeScreenshot(req.takeScreenshotAfterwards);
         return { output: JSON.stringify(result), screenshotPath: shot };
       }
       case "fill": {
         if (!req.ref?.trim()) throw new Error("ref is required");
         if (typeof req.value !== "string") throw new Error("value is required");
-        const result = await this.evalPage(
-          fillScript({ ref: req.ref, value: req.value }),
-        );
+        const result = await this.evalPage(fillScript({ ref: req.ref, value: req.value }));
         const shot = await this.maybeScreenshot(req.takeScreenshotAfterwards);
         return { output: JSON.stringify(result), screenshotPath: shot };
       }
       case "pressKey": {
         if (!req.key?.trim()) throw new Error("key is required");
-        const result = await this.evalPage(
-          pressKeyScript({ key: req.key, ref: req.ref }),
-        );
+        const result = await this.evalPage(pressKeyScript({ key: req.key, ref: req.ref }));
         const shot = await this.maybeScreenshot(req.takeScreenshotAfterwards);
         return { output: JSON.stringify(result), screenshotPath: shot };
       }
@@ -484,9 +464,7 @@ class BrowserSessionManager {
         };
       }
       default:
-        throw new Error(
-          `Unknown browser action: ${(req as { action: string }).action}`,
-        );
+        throw new Error(`Unknown browser action: ${(req as { action: string }).action}`);
     }
   }
 

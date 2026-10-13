@@ -160,8 +160,8 @@ describe("trace emit parallel Task", () => {
     for (const t of tasks) {
       assert.equal(t.span.parentSpanId, "span_graph_tools");
     }
-    assert.notEqual(tasks[0]!.span.spanId, tasks[1]!.span.parentSpanId);
-    assert.notEqual(tasks[1]!.span.spanId, tasks[0]!.span.parentSpanId);
+    assert.notEqual(tasks[0]?.span.spanId, tasks[1]?.span.parentSpanId);
+    assert.notEqual(tasks[1]?.span.spanId, tasks[0]?.span.parentSpanId);
   });
 
   it("task 栈空时 parent 回落到 tool:Task 锚点", async () => {

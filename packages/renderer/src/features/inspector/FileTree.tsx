@@ -8,8 +8,7 @@ import { sortTreeNodes, type TreeSelectGesture } from "./treeSelection";
 
 type SelectionJoin = { joinAbove: boolean; joinBelow: boolean };
 
-const isMac =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
 
 function selectedRowClass(
   base: string,

@@ -13,10 +13,7 @@ describe("shellKind", () => {
   });
 
   it("id=shell 时按可执行文件名识别 fish", () => {
-    assert.equal(
-      isFishShell({ id: "shell", path: "/opt/homebrew/bin/fish" }),
-      true,
-    );
+    assert.equal(isFishShell({ id: "shell", path: "/opt/homebrew/bin/fish" }), true);
     assert.equal(isFishShell({ id: "shell", path: "/bin/zsh" }), false);
   });
 });

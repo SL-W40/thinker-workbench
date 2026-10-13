@@ -4,7 +4,7 @@
 import type { CustomizeScope, SkillListItem, WorkspaceRecord } from "@thinker-workbench/shared";
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/useI18n";
-import { MdResourcePanel, type MdListRow } from "./MdResourcePanel";
+import { type MdListRow, MdResourcePanel } from "./MdResourcePanel";
 import { buildScopeGroups, customizeScopeKey, sameCustomizeScope } from "./scopeHelpers";
 import { useLoadWhen } from "./useLoadWhen";
 

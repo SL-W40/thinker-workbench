@@ -5,17 +5,14 @@
  */
 import { Button, ChevronRightIcon, Kbd, useDesignTheme } from "@thinker-workbench/design/react";
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
-import type {
-  ChatTimelineResultPathKind,
-  ChatTimelineStep,
-} from "@thinker-workbench/shared";
+import type { ChatTimelineResultPathKind, ChatTimelineStep } from "@thinker-workbench/shared";
 import {
+  type CSSProperties,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
@@ -23,9 +20,9 @@ import { useT } from "../../i18n/useI18n";
 import { FileGlyph, IconFolder } from "../inspector/icons";
 import { DeleteFileCard } from "./DeleteFileCard";
 import { FileDiffView } from "./FileDiffView";
+import { classifyRunError, isSoftStopCode } from "./runErrors";
 import { ShellCard } from "./ShellCard";
 import { SubagentCard } from "./SubagentCard";
-import { classifyRunError, isSoftStopCode } from "./runErrors";
 import { isMissingApiKeyError } from "./systemErrors";
 import {
   type ExploreGroup,
@@ -129,9 +126,9 @@ type Props = {
   steps: ChatTimelineStep[];
   /** 本轮助手气泡仍在 pending：空闲时末行临时显示规划中*/
   live?: boolean;
- /** 缺 API key 错误行上的设置跳转。*/
+  /** 缺 API key 错误行上的设置跳转。*/
   onOpenModelSettings?: () => void;
- /** 在右侧 Files 面板打开工作空间文件*/
+  /** 在右侧 Files 面板打开工作空间文件*/
   onOpenFile?: (path: string) => void;
   /** 打开右侧 Terminal，可选聚焦会话并带上时间线输出预览*/
   onOpenTerminal?: (detail?: {
@@ -139,9 +136,9 @@ type Props = {
     previewOutput?: string;
     title?: string;
   }) => void;
- /** 时间线 delete_file「恢复」：写回删前正文*/
+  /** 时间线 delete_file「恢复」：写回删前正文*/
   onRestoreDeletedFile?: (stepId: string) => void | Promise<void>;
- /** 手动停止后「继续」：从 checkpoint 续跑。*/
+  /** 手动停止后「继续」：从 checkpoint 续跑。*/
   onResume?: () => void;
   /** 是否可继续（忙碌时禁用按钮）*/
   canResume?: boolean;
@@ -181,7 +178,7 @@ function ToolLabel({
   const search = isSearchToolName(step.name);
   const primary = search ? step.summary : step.path;
   const secondary = search ? step.path : step.summary;
- // 搜索：路径在 secondary；其它：路径在 primary
+  // 搜索：路径在 secondary；其它：路径在 primary
   const pathIsPrimary = !search;
 
   function pathBit(text: string, asPath: boolean) {
@@ -332,9 +329,7 @@ function placeResultPathsPanel(
   const spaceAbove = trigger.top - RESULT_PATHS_GAP - RESULT_PATHS_PAD;
   const openBelow = spaceBelow >= Math.min(panelH, 120) || spaceBelow >= spaceAbove;
 
-  let top = openBelow
-    ? trigger.bottom + RESULT_PATHS_GAP
-    : trigger.top - RESULT_PATHS_GAP - panelH;
+  let top = openBelow ? trigger.bottom + RESULT_PATHS_GAP : trigger.top - RESULT_PATHS_GAP - panelH;
   if (top + panelH > vh - RESULT_PATHS_PAD) {
     top = Math.max(RESULT_PATHS_PAD, vh - RESULT_PATHS_PAD - panelH);
   }
@@ -384,7 +379,7 @@ function ToolResultPathsPanel({
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [open, paths, anchorRef]);
+  }, [open, anchorRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -431,12 +426,7 @@ function ToolResultPathsPanel({
         {paths.map((path, index) => {
           const kind = resolvePathKind(path, kinds?.[index]);
           const name = pathBasename(path.replace(/[/\\]+$/, ""));
-          const icon =
-            kind === "dir" ? (
-              <IconFolder />
-            ) : (
-              <FileGlyph name={name || path} />
-            );
+          const icon = kind === "dir" ? <IconFolder /> : <FileGlyph name={name || path} />;
           const canOpen = Boolean(onOpenFile) && kind !== "dir";
           const body = (
             <>
@@ -447,7 +437,7 @@ function ToolResultPathsPanel({
             </>
           );
           return (
-            <li key={`${path}-${index}`} role="option">
+            <li key={`${path}-${index}`}>
               {canOpen ? (
                 <button
                   type="button"
@@ -464,7 +454,10 @@ function ToolResultPathsPanel({
                   {body}
                 </button>
               ) : (
-                <span className="run-timeline-explore-files__item is-path-only is-static" title={path}>
+                <span
+                  className="run-timeline-explore-files__item is-path-only is-static"
+                  title={path}
+                >
                   {body}
                 </span>
               )}
@@ -693,7 +686,7 @@ function ThinkingBody({ text }: { text: string }) {
       el.removeEventListener("scroll", updateFades);
       ro?.disconnect();
     };
-  }, [text]);
+  }, []);
 
   return (
     <div
@@ -797,11 +790,7 @@ function ModelSwitchStepRow({
 }
 
 /** 子代理 Task 生命周期行。*/
-function SubagentStepRow({
-  step,
-}: {
-  step: Extract<ChatTimelineStep, { kind: "subagent" }>;
-}) {
+function SubagentStepRow({ step }: { step: Extract<ChatTimelineStep, { kind: "subagent" }> }) {
   return (
     <li
       className={`run-timeline-item run-timeline-item--subagent${step.active ? " is-active" : ""}`}
@@ -824,22 +813,18 @@ function ErrorStepRow({
   step: Extract<ChatTimelineStep, { kind: "error" }>;
   onOpenModelSettings?: () => void;
   onResume?: () => void;
- /** 无 checkpoint / 不可续跑时不展示「继续」。*/
+  /** 无 checkpoint / 不可续跑时不展示「继续」。*/
   canResume?: boolean;
 }) {
   const t = useT();
   const softCode =
-    step.code && isSoftStopCode(step.code)
-      ? step.code
-      : classifyRunError(step.message);
+    step.code && isSoftStopCode(step.code) ? step.code : classifyRunError(step.message);
   const softStop = isSoftStopCode(softCode);
-  const missingKey =
-    step.code === "MODEL_API_KEY_MISSING" || isMissingApiKeyError(step.message);
+  const missingKey = step.code === "MODEL_API_KEY_MISSING" || isMissingApiKeyError(step.message);
 
   if (softStop) {
- // 软中断文案跟 code 走 i18n，避免英文 bridge 原文盖住中文界面
-    const label =
-      softCode === "PROCESS_EXIT" ? t("chat.abnormalExit") : t("chat.stopped");
+    // 软中断文案跟 code 走 i18n，避免英文 bridge 原文盖住中文界面
+    const label = softCode === "PROCESS_EXIT" ? t("chat.abnormalExit") : t("chat.stopped");
     return (
       <li className="run-timeline-item run-timeline-item--stopped">
         <div className="run-timeline-stopped">
@@ -867,7 +852,9 @@ function ErrorStepRow({
           {step.code ? (
             <span className="run-timeline-badge run-timeline-badge--err">{step.code}</span>
           ) : (
-            <span className="run-timeline-badge run-timeline-badge--err">{t("chat.toolFailed")}</span>
+            <span className="run-timeline-badge run-timeline-badge--err">
+              {t("chat.toolFailed")}
+            </span>
           )}
         </div>
         {missingKey ? (
@@ -910,7 +897,7 @@ function ToolStepRow({
   onRestoreDeletedFile?: (stepId: string) => void | Promise<void>;
 }) {
   const t = useT();
- /** TTL 到期后 bump，立刻藏掉「恢复」按钮。*/
+  /** TTL 到期后 bump，立刻藏掉「恢复」按钮。*/
   const [, setRestoreTick] = useState(0);
   const running = step.phase === "start" && step.active;
   const failed = step.phase === "end" && step.ok === false;
@@ -966,7 +953,7 @@ function ToolStepRow({
     return () => window.clearTimeout(timer);
   }, [isDelete, step.restoreContent, step.restoreCachedAt]);
 
- // Task 启动由 subagent 行展示，避免重复
+  // Task 启动由 subagent 行展示，避免重复
   if (step.name === "Task") {
     return null;
   }
@@ -993,9 +980,7 @@ function ToolStepRow({
       >
         <div className="run-timeline-tool">
           <div className="run-timeline-tool-head">
-            <span
-              className={`run-timeline-label${running ? " run-timeline-label--shimmer" : ""}`}
-            >
+            <span className={`run-timeline-label${running ? " run-timeline-label--shimmer" : ""}`}>
               <span className="run-timeline-tool-name">{label}</span>
               {idShort ? (
                 <span className="run-timeline-tool-bit is-await-id">{idShort}</span>
@@ -1065,7 +1050,7 @@ function ToolStepRow({
     }
   }
 
- // 成功结束不再标 Done，避免和摘要糊成一行；只标 Running / Failed
+  // 成功结束不再标 Done，避免和摘要糊成一行；只标 Running / Failed
   const badge = running ? (
     <span className="run-timeline-badge">{t("chat.toolRunning")}</span>
   ) : failed ? (

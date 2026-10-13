@@ -556,7 +556,7 @@ const SPECIAL_NAME_GLYPH: Record<string, FileGlyphKind> = {
   "rust-toolchain.toml": "rs",
   "composer.json": "json",
   "composer.lock": "lock",
-  "pipfile": "py",
+  pipfile: "py",
   "pipfile.lock": "lock",
   "poetry.lock": "lock",
   "pyproject.toml": "py",
@@ -566,7 +566,7 @@ const SPECIAL_NAME_GLYPH: Record<string, FileGlyphKind> = {
   "setup.cfg": "config",
   "tox.ini": "config",
   "manifest.in": "config",
-  "podfile": "config",
+  podfile: "config",
   "podfile.lock": "lock",
   "pubspec.yaml": "config",
   "pubspec.lock": "lock",
@@ -581,10 +581,10 @@ const SPECIAL_NAME_GLYPH: Record<string, FileGlyphKind> = {
   "project.clj": "py",
   "deps.edn": "py",
   "package.swift": "ts",
-  "cartfile": "config",
+  cartfile: "config",
   "cartfile.resolved": "lock",
   // CI / 云
-  "jenkinsfile": "sh",
+  jenkinsfile: "sh",
   "azure-pipelines.yml": "config",
   "azure-pipelines.yaml": "config",
   "buildkite.yml": "config",
@@ -606,7 +606,7 @@ const SPECIAL_NAME_GLYPH: Record<string, FileGlyphKind> = {
   "readme.mdx": "md",
   "readme.txt": "md",
   "readme.rst": "md",
-  "codeowners": "git",
+  codeowners: "git",
   "security.md": "md",
   "contributing.md": "md",
   "authors.md": "md",
@@ -950,8 +950,12 @@ const MI = {
   ),
   rename: <MenuIcon d="M10.7 3.3a1.6 1.6 0 0 1 2.3 2.3L6 12.6l-3 .7.7-3zM9.5 4.5l2.3 2.3" />,
   copy: <MenuIcon d="M5.5 5.5h7v7h-7zM10.5 5.5v-2h-7v7h2" />,
-  scissors: <MenuIcon d="M5 3.5a2 2 0 1 1-1.4 3.4L7 10l-3.4 3.1A2 2 0 1 1 5 16.5M7 10l5.5-5M7 10l5.5 5" />,
-  clipboard: <MenuIcon d="M6 2.5h4a1 1 0 0 1 1 1V4h1.5A1.5 1.5 0 0 1 14 5.5v7A1.5 1.5 0 0 1 12.5 14h-9A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4H5V3.5a1 1 0 0 1 1-1zM6 4h4" />,
+  scissors: (
+    <MenuIcon d="M5 3.5a2 2 0 1 1-1.4 3.4L7 10l-3.4 3.1A2 2 0 1 1 5 16.5M7 10l5.5-5M7 10l5.5 5" />
+  ),
+  clipboard: (
+    <MenuIcon d="M6 2.5h4a1 1 0 0 1 1 1V4h1.5A1.5 1.5 0 0 1 14 5.5v7A1.5 1.5 0 0 1 12.5 14h-9A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4H5V3.5a1 1 0 0 1 1-1zM6 4h4" />
+  ),
   selectAll: <MenuIcon d="M2.5 2.5h4v4h-4zM9.5 2.5h4v4h-4zM2.5 9.5h4v4h-4zM9.5 9.5h4v4h-4z" />,
   duplicate: <MenuIcon d="M4 2h5l3.5 3.5V14H4zM9 2v4h4M6.5 9.5h4M6.5 11.5h2.5" />,
   del: <MenuIcon d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5 5.2 13h5.6l.7-8.5M6.8 7v3.6M9.2 7v3.6" />,
@@ -1004,15 +1008,7 @@ function FileStartIcon() {
 function TerminalStartIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <rect
-        x="2.5"
-        y="3"
-        width="11"
-        height="10"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
       <path
         d="M5 6.5 7 8.5 5 10.5M8.5 10.5h2.5"
         stroke="currentColor"
@@ -1023,7 +1019,6 @@ function TerminalStartIcon() {
     </svg>
   );
 }
-
 
 function BrowserStartIcon() {
   return (

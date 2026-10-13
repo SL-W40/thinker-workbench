@@ -8,8 +8,9 @@
  *
  * 本文件刻意不导出组件：与 createRoot 同文件会导致 Fast Refresh 二次挂载白屏。
  */
-import { createRoot, type Root } from "react-dom/client";
+
 import { applyDesignTheme, disableTabFocusNav } from "@thinker-workbench/design";
+import { createRoot, type Root } from "react-dom/client";
 import "@thinker-workbench/design/styles.less";
 import "@thinker-workbench/design/controls.less";
 import "@thinker-workbench/markdown/styles.less";

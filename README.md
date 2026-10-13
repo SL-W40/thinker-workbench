@@ -54,6 +54,16 @@ pnpm run dev -- --devtools    # open DevTools on launch             (THINKER_OPE
 | `pnpm run format` / `lint` | Format write / lint only |
 | `pnpm run dev:logger:web` | Log viewer → http://127.0.0.1:5181 |
 | `pnpm run pack:zip` | Zip the repo (respects `.gitignore`) |
+| `pnpm run stage:desktop` | Assemble `.stage/app` + `.stage/payload` (after `pnpm build`) |
+| `pnpm run pack:desktop` | Build → stage → electron-builder for the current OS |
+| `pnpm run pack:desktop:win` / `pack:desktop:mac` | Windows-only / macOS-only targets |
+| `pnpm run pack:desktop:dir` | Same but `--dir` (unpacked app only) |
+
+Desktop installers land in repo-root `release/`. Packaged layout: Shell in `app.asar`, Payload under `Resources/payload/` (`layout.json` + renderer/engine/bundled). `pack:zip` is source zip only — not a desktop installer.
+
+CI: `.github/workflows/pack.yml` builds on `windows-latest` and `macos-latest` (manual `workflow_dispatch` or push `v*` tags). Artifacts: `thinker-workbench-win` / `thinker-workbench-mac`. Unsigned when no signing certs are configured.
+
+**Windows packaging / signing toolchain:** `electron-builder` downloads `winCodeSign` (exe resource editing; Authenticode when a cert is present). That archive contains symlinks — if you see `Cannot create symbolic link` / privilege errors, enable **Settings → System → For developers → Developer Mode** (or run an elevated shell), delete `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign`, then re-run `pnpm run pack:desktop`. Without a code-signing cert the toolchain still runs for resource updates; ship with your own cert for production. macOS notarization: see `notarize-hint`.
 
 Tests live under each package’s `tests/` (mirrors `src/`), named `*.test.ts`. Config: [`vitest.config.ts`](vitest.config.ts). Per-package: `pnpm --filter @thinker-workbench/<pkg> test`.
 

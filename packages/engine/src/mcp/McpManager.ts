@@ -11,10 +11,7 @@ import type {
   McpServerRuntimeStatus,
   McpToolSummary,
 } from "@thinker-workbench/shared";
-import {
-  getMcpCallTimeoutMs,
-  getMcpConnectTimeoutMs,
-} from "../config/runtimeLimits";
+import { getMcpCallTimeoutMs, getMcpConnectTimeoutMs } from "../config/runtimeLimits";
 import { agentLog } from "../log/setup";
 import type { ChatToolDefinition } from "../model/types";
 import type { ToolArgs, ToolResult } from "../tools/types";
@@ -138,10 +135,7 @@ export class McpManager {
       await Promise.race([
         client.connect(transport),
         new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("MCP connect timeout")),
-            getMcpConnectTimeoutMs(),
-          ),
+          setTimeout(() => reject(new Error("MCP connect timeout")), getMcpConnectTimeoutMs()),
         ),
       ]);
       const listed = await client.listTools();
@@ -204,31 +198,21 @@ export class McpManager {
   }
 
   /** 调用 MCP 工具。 */
-  async callTool(
-    name: string,
-    args: ToolArgs,
-    signal?: AbortSignal,
-  ): Promise<ToolResult | null> {
+  async callTool(name: string, args: ToolArgs, signal?: AbortSignal): Promise<ToolResult | null> {
     const parsed = parseMcpToolName(name);
     if (!parsed) return null;
     const session = this.sessions.get(parsed.serverId);
     if (!session) {
       return { ok: false, output: `MCP server not connected: ${parsed.serverId}` };
     }
-    const tool = session.tools.find(
-      (t) => t.name === name || t.remoteName === parsed.toolName,
-    );
+    const tool = session.tools.find((t) => t.name === name || t.remoteName === parsed.toolName);
     const remoteName = tool?.remoteName ?? parsed.toolName;
     if (signal?.aborted) {
       return { ok: false, output: "Cancelled." };
     }
     try {
       const result = await Promise.race([
-        session.client.callTool(
-          { name: remoteName, arguments: args },
-          undefined,
-          { signal },
-        ),
+        session.client.callTool({ name: remoteName, arguments: args }, undefined, { signal }),
         new Promise<never>((_, reject) => {
           const timer = setTimeout(
             () => reject(new Error("MCP call timeout")),

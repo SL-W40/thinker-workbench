@@ -6,6 +6,13 @@ packages/*/src/**/*.js
 packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
+packages/desktop/.stage/
+# 桌面安装包产物（electron-builder output）
+/release/
+/release-out/
+# 旧路径（若本地还留着）
+packages/desktop/release/
+packages/desktop/release-out/
 .DS_Store
 *.log
 .env
@@ -16,3 +23,4 @@ yarn.lock
 *.zip
 test-results/
 coverage/
+.biome-report.json

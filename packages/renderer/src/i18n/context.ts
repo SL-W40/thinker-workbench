@@ -1,8 +1,9 @@
 /**
  * i18n React Context（与 Provider / hooks 分文件，避免 Fast Refresh 整页重载白屏）。
  */
-import { createContext } from "react";
+
 import type { AppLocale, GeneralSettings } from "@thinker-workbench/shared";
+import { createContext } from "react";
 import type { MessageKey } from "./translate";
 
 export type I18nContextValue = {

@@ -5,26 +5,26 @@
  * 关闭时写 session / 可选隐藏到托盘，以及开发态等待 Vite 后再 loadURL。
  */
 import path from "node:path";
-import { BrowserWindow, app, nativeImage, screen } from "electron";
 import { IpcChannels, matchAccelerator } from "@thinker-workbench/shared";
-import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStore";
-import { isShortcutRecording } from "../config/shortcutRecording";
+import { app, BrowserWindow, nativeImage, screen } from "electron";
+import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
 import {
   getSessionHash,
   getSessionWindow,
-  saveSessionNow,
   type SessionWindow,
+  saveSessionNow,
   updateSessionHash,
   updateSessionWindow,
 } from "../config/sessionStore";
-import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
-import { clearApplicationMenu } from "./menu";
-import { ensureTrayForHide, shouldHideToTray } from "./tray";
+import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStore";
+import { isShortcutRecording } from "../config/shortcutRecording";
+import { closeAllAuxWindows, syncAuxWindowBackgrounds } from "./auxWindows";
 import { windowChromeOptions } from "./chromeOptions";
 import { fitWindowToDisplay, windowMinSize } from "./defaultBounds";
+import { clearApplicationMenu } from "./menu";
 import { windowBackgroundForTheme } from "./themeBackground";
+import { ensureTrayForHide, shouldHideToTray } from "./tray";
 import { waitForRenderer } from "./waitForRenderer";
-import { closeAllAuxWindows, syncAuxWindowBackgrounds } from "./auxWindows";
 import { registerMainWindow, unregisterContents } from "./windowRoles";
 
 /** 主窗是否允许导航到该 URL（应用自身 / 错误页）。 */
@@ -194,12 +194,14 @@ export function createWindow(): BrowserWindow {
   win.webContents.on("will-navigate", (event, url) => {
     if (isAppNavigationUrl(url)) return;
     event.preventDefault();
-    const { browserSessionManager } = require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
+    const { browserSessionManager } =
+      require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
     void browserSessionManager.navigate(url, { reveal: true });
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isAppNavigationUrl(url)) return { action: "allow" };
-    const { browserSessionManager } = require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
+    const { browserSessionManager } =
+      require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
     void browserSessionManager.navigate(url, { reveal: true });
     return { action: "deny" };
   });
@@ -222,7 +224,8 @@ export function createWindow(): BrowserWindow {
   });
 
   win.on("closed", () => {
-    const { browserSessionManager } = require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
+    const { browserSessionManager } =
+      require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
     browserSessionManager.dispose();
     unregisterContents(contentsId);
     win = null;

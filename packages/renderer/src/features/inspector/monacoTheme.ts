@@ -107,7 +107,11 @@ export function applyMonacoTheme(
       { token: "FAKESECRET_i3j4k5l6m7n8o9p0q1r2", foreground: ruleFg(literal) },
       { token: "FAKESECRET_u3v4w5x6y7z8a9b0c1d2", foreground: ruleFg(number) },
       { token: "FAKESECRET_k3l4m5n6o7p8q9r0s1t2", foreground: ruleFg(keyword) },
-      { token: "FAKESECRET_i1j2k3l4m5n6o7p8q9r0", foreground: ruleFg(comment), fontStyle: "italic" },
+      {
+        token: "FAKESECRET_i1j2k3l4m5n6o7p8q9r0",
+        foreground: ruleFg(comment),
+        fontStyle: "italic",
+      },
       { token: "FAKESECRET_k2l3m4n5o6p7q8r9s0t1", foreground: ruleFg(keyword) },
       { token: "FAKESECRET_i1j2k3l4m5n6o7p8q9r0", foreground: ruleFg(attr) },
       { token: "FAKESECRET_u1v2w3x4y5z6a7b8c9d0", foreground: ruleFg(string) },
@@ -155,7 +159,7 @@ export function applyMonacoTheme(
       "editorBracketMatch.border": accent,
       "scrollbarSlider.background": border,
       "scrollbarSlider.hoverBackground": muted,
-      "focusBorder": "#00000000",
+      focusBorder: "#00000000",
     },
   });
   monaco.editor.setTheme(TW_MONACO_THEME);

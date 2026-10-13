@@ -4,9 +4,9 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import * as catalog from "../../../src/model/catalog";
-import { configureAgentTrace } from "../../../src/trace/emit";
 import * as runToolMod from "../../../src/tools/runTool";
 import { runChildAgent } from "../../../src/tools/task/execute";
+import { configureAgentTrace } from "../../../src/trace/emit";
 
 type SpanStart = {
   channel: string;
@@ -86,7 +86,7 @@ describe("runChildAgent tool spans", () => {
     assert.equal(result.ok, true);
     const toolSpan = starts.find((s) => s.span.name === "tool:list_dir");
     assert.ok(toolSpan, "expected tool:list_dir span");
-    assert.equal(toolSpan!.span.attrs?.turn, 1);
-    assert.equal(toolSpan!.span.attrs?.callId, "call_1");
+    assert.equal(toolSpan?.span.attrs?.turn, 1);
+    assert.equal(toolSpan?.span.attrs?.callId, "call_1");
   });
 });

@@ -19,13 +19,11 @@ export const readFileToolSpec = defineTool({
       },
       start_line: {
         type: "number",
-        description:
-          "Optional 1-based start line (inclusive). Must be paired with end_line.",
+        description: "Optional 1-based start line (inclusive). Must be paired with end_line.",
       },
       end_line: {
         type: "number",
-        description:
-          "Optional 1-based end line (inclusive). Must be paired with start_line.",
+        description: "Optional 1-based end line (inclusive). Must be paired with start_line.",
       },
       max_chars: {
         type: "number",

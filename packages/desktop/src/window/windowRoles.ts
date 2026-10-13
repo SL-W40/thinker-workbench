@@ -7,8 +7,9 @@
  * `closed` 时 BrowserWindow 可能已销毁，禁止再读 `win.webContents`；
  * 登记时记下 contents id，注销只按 id 删除。
  */
-import type { BrowserWindow } from "electron";
+
 import type { AuxPageId, WindowRole } from "@thinker-workbench/shared";
+import type { BrowserWindow } from "electron";
 
 /** webContents.id → 角色。 */
 const roles = new Map<number, WindowRole>();

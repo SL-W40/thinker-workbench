@@ -1,8 +1,9 @@
 /**
  * Mermaid 图表渲染：成品渲染、流式软预览与加载骨架。
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+
 import mermaid from "mermaid";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { mermaidVariablesFromCss } from "../themes/tokens";
 import { StreamChrome } from "./StreamChrome";
 import { useMarkdownTheme } from "./ThemeContext";

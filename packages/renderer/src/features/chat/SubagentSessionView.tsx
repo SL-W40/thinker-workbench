@@ -8,7 +8,7 @@ import { RunTimeline } from "./RunTimeline";
 
 type Props = {
   step: ChatTimelineSubagentStep;
- /** 探索路径点击时打开 Files（由右侧 inspector 传入）*/
+  /** 探索路径点击时打开 Files（由右侧 inspector 传入）*/
   onOpenFile?: (path: string) => void;
 };
 
@@ -34,11 +34,7 @@ export function SubagentSessionView({ step, onOpenFile }: Props) {
           )}
           {showSummary ? (
             <div className="bubble-body">
-              <StreamingMarkdownView
-                markdown={summary}
-                theme={markdownTheme}
-                streaming={false}
-              />
+              <StreamingMarkdownView markdown={summary} theme={markdownTheme} streaming={false} />
             </div>
           ) : null}
         </div>

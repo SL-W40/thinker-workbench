@@ -4,19 +4,14 @@
  * 注意：本文件只导出组件。hooks 见 `useI18n.ts`——同文件混导出会让
  * Vite Fast Refresh 失败并触发整页 reload，Electron 下常表现为白屏。
  */
+
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import {
+  type AppLocale,
   DEFAULT_APP_LOCALE,
   DEFAULT_GENERAL_SETTINGS,
-  type AppLocale,
   type GeneralSettings,
 } from "@thinker-workbench/shared";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings } from "../bridge/thinker";
 import { I18nContext, type I18nContextValue } from "./context";
 import { translate } from "./translate";

@@ -5,10 +5,7 @@ import type { CustomizeScope, WorkspaceRecord } from "@thinker-workbench/shared"
 import { customizeScopeKey } from "@thinker-workbench/shared";
 
 /** 两个作用域是否相同（缺省视为 user）。 */
-export function sameCustomizeScope(
-  a: CustomizeScope | undefined,
-  b: CustomizeScope,
-): boolean {
+export function sameCustomizeScope(a: CustomizeScope | undefined, b: CustomizeScope): boolean {
   if (!a) return b.kind === "user";
   if (a.kind === "user" || b.kind === "user") {
     return a.kind === "user" && b.kind === "user";

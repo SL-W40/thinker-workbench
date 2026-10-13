@@ -187,9 +187,7 @@ export function loadSession(): SessionState {
       const stack = normalizeStack(parsed.stack);
       const settingsSection = normalizeSection(parsed.settingsSection);
       const current = stack.entries[stack.index] ?? "chat";
-      const rawHash = parsed.hash
-        ? normalizeHash(parsed.hash)
-        : hashFor(current, settingsSection);
+      const rawHash = parsed.hash ? normalizeHash(parsed.hash) : hashFor(current, settingsSection);
       cached = {
         // 与栈对齐，但保留 tools 下的 tab / settings section
         hash: alignHash(rawHash, current, settingsSection),

@@ -5,7 +5,12 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { GitChangedFile, GitFileDiff, GitStatus, GitStatusReason } from "@thinker-workbench/shared";
+import type {
+  GitChangedFile,
+  GitFileDiff,
+  GitStatus,
+  GitStatusReason,
+} from "@thinker-workbench/shared";
 
 const execFileAsync = promisify(execFile);
 
@@ -134,7 +139,10 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
   let behind = 0;
   const ab = await git(cwd, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]);
   if (ab.ok) {
-    const [b, a] = ab.stdout.trim().split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
+    const [b, a] = ab.stdout
+      .trim()
+      .split(/\s+/)
+      .map((n) => Number.parseInt(n, 10) || 0);
     behind = b ?? 0;
     ahead = a ?? 0;
   }

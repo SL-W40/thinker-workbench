@@ -6,9 +6,9 @@ import {
   type AgentEvent,
   type ChatMessage,
   type ChatTimelineStep,
-  type HitlRequest,
   createId,
   DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
+  type HitlRequest,
 } from "@thinker-workbench/shared";
 
 const THINKING_SUMMARY_MAX = 140;
@@ -276,7 +276,7 @@ export function appendThinkingText(steps: ChatTimelineStep[], text: string): Cha
   }
 
   const step = next[idx];
-  if (!step || step.kind !== "status") return next;
+  if (step?.kind !== "status") return next;
 
   const fullText = `${step.text ?? ""}${text}`;
   const stillActive = step.active;
@@ -305,9 +305,7 @@ export function applyToolEvent(
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
 
   const isShellTool =
-    event.name === "shell" ||
-    event.name === "shell_await" ||
-    event.name === "shell_write";
+    event.name === "shell" || event.name === "shell_await" || event.name === "shell_write";
   let matchIndex = -1;
   if (event.callId) {
     matchIndex = next.findIndex(
@@ -320,17 +318,14 @@ export function applyToolEvent(
       (s) =>
         s.kind === "tool" &&
         Boolean(s.hitl) &&
-        (s.name === "shell" ||
-          s.name === "shell_await" ||
-          s.name === "shell_write") &&
+        (s.name === "shell" || s.name === "shell_await" || s.name === "shell_write") &&
         s.phase === "start" &&
         s.active,
     );
   }
   if (matchIndex < 0) {
     matchIndex = next.findIndex(
-      (s) =>
-        s.kind === "tool" && s.name === event.name && s.phase === "start" && s.active,
+      (s) => s.kind === "tool" && s.name === event.name && s.phase === "start" && s.active,
     );
   }
 
@@ -445,9 +440,7 @@ export function appendShellLiveOutput(
       const s = steps[i];
       if (
         s.kind === "tool" &&
-        (s.name === "shell" ||
-          s.name === "shell_await" ||
-          s.name === "shell_write") &&
+        (s.name === "shell" || s.name === "shell_await" || s.name === "shell_write") &&
         s.phase === "start" &&
         s.active
       ) {
@@ -461,9 +454,7 @@ export function appendShellLiveOutput(
   if (prev.kind !== "tool") return steps;
   const merged = `${prev.liveOutput ?? ""}${chunk}`;
   const liveOutput =
-    merged.length > LIVE_OUTPUT_CAP
-      ? merged.slice(merged.length - LIVE_OUTPUT_CAP)
-      : merged;
+    merged.length > LIVE_OUTPUT_CAP ? merged.slice(merged.length - LIVE_OUTPUT_CAP) : merged;
   const copy = [...steps];
   copy[idx] = {
     ...prev,
@@ -484,13 +475,9 @@ export function applyHitlRequest(
     return steps;
   }
   const parentCommand =
-    typeof request.payload?.parentCommand === "string"
-      ? request.payload.parentCommand.trim()
-      : "";
+    typeof request.payload?.parentCommand === "string" ? request.payload.parentCommand.trim() : "";
   const dataPreview =
-    typeof request.payload?.dataPreview === "string"
-      ? request.payload.dataPreview
-      : "";
+    typeof request.payload?.dataPreview === "string" ? request.payload.dataPreview : "";
   const command =
     typeof request.payload?.command === "string"
       ? request.payload.command.trim()
@@ -504,9 +491,7 @@ export function applyHitlRequest(
   const toolName = request.kind === "shell_write_approval" ? "shell_write" : "shell";
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
   // 已有同 hitlId 则刷新
-  const existing = next.findIndex(
-    (s) => s.kind === "tool" && s.hitl?.hitlId === request.hitlId,
-  );
+  const existing = next.findIndex((s) => s.kind === "tool" && s.hitl?.hitlId === request.hitlId);
   const hitl = {
     hitlId: request.hitlId,
     title: request.title,
@@ -519,16 +504,11 @@ export function applyHitlRequest(
     parentCommand: parentCommand || undefined,
     dataPreview: dataPreview || undefined,
   };
-  const sessionId =
-    typeof request.payload?.sessionId === "string" ? request.payload.sessionId : "";
+  const sessionId = typeof request.payload?.sessionId === "string" ? request.payload.sessionId : "";
 
   // 时间线里同 session 的 shell 命令，补全 parentCommand（引擎缓存未命中时）
   let resolvedHitl = hitl;
-  if (
-    request.kind === "shell_write_approval" &&
-    !resolvedHitl.parentCommand &&
-    sessionId
-  ) {
+  if (request.kind === "shell_write_approval" && !resolvedHitl.parentCommand && sessionId) {
     for (let i = next.length - 1; i >= 0; i--) {
       const s = next[i];
       if (
@@ -564,12 +544,7 @@ export function applyHitlRequest(
   // 挂到已有 Running 的同名工具卡，避免「Running」+「待确认」两张
   for (let i = next.length - 1; i >= 0; i--) {
     const s = next[i];
-    if (
-      s.kind === "tool" &&
-      s.name === toolName &&
-      s.phase === "start" &&
-      s.active
-    ) {
+    if (s.kind === "tool" && s.name === toolName && s.phase === "start" && s.active) {
       const copy = [...next];
       copy[i] = {
         ...s,
@@ -630,9 +605,7 @@ export function applyShellCommandBackgrounded(
   sessionId: string,
 ): ChatTimelineStep[] {
   if (!sessionId) return steps;
-  const idx = steps.findIndex(
-    (s) => s.kind === "tool" && s.sessionId === sessionId,
-  );
+  const idx = steps.findIndex((s) => s.kind === "tool" && s.sessionId === sessionId);
   if (idx < 0) return steps;
   const prev = steps[idx];
   if (prev.kind !== "tool") return steps;
@@ -648,9 +621,7 @@ export function applyShellCommandExited(
   exitCode: number | null,
 ): ChatTimelineStep[] {
   if (!sessionId) return steps;
-  const idx = steps.findIndex(
-    (s) => s.kind === "tool" && s.sessionId === sessionId,
-  );
+  const idx = steps.findIndex((s) => s.kind === "tool" && s.sessionId === sessionId);
   if (idx < 0) return steps;
   const prev = steps[idx];
   if (prev.kind !== "tool") return steps;
@@ -872,9 +843,7 @@ export function applySubagentEvent(
   event: Extract<AgentEvent, { type: "subagent" }>,
 ): ChatTimelineStep[] {
   const next = [...steps];
-  const idx = next.findIndex(
-    (s) => s.kind === "subagent" && s.taskId === event.taskId,
-  );
+  const idx = next.findIndex((s) => s.kind === "subagent" && s.taskId === event.taskId);
   const prev =
     idx >= 0 && next[idx]?.kind === "subagent"
       ? (next[idx] as Extract<ChatTimelineStep, { kind: "subagent" }>)
@@ -882,9 +851,7 @@ export function applySubagentEvent(
   // 已收束（含会话停止）后忽略迟到的 progress
   if (
     prev &&
-    (prev.phase === "finished" ||
-      prev.phase === "failed" ||
-      prev.phase === "cancelled") &&
+    (prev.phase === "finished" || prev.phase === "failed" || prev.phase === "cancelled") &&
     (event.phase === "started" || event.phase === "progress")
   ) {
     return steps;
@@ -907,11 +874,7 @@ export function applySubagentEvent(
   if (event.childEvent) {
     childTimeline = applySubagentChildEvent(childTimeline, event);
   }
-  if (
-    event.phase === "finished" ||
-    event.phase === "failed" ||
-    event.phase === "cancelled"
-  ) {
+  if (event.phase === "finished" || event.phase === "failed" || event.phase === "cancelled") {
     childTimeline = deactivateAll(childTimeline);
   }
   const patch: Extract<ChatTimelineStep, { kind: "subagent" }> = {
@@ -924,9 +887,7 @@ export function applySubagentEvent(
     phase: event.phase,
     background: event.background ?? prev?.background,
     summary:
-      event.phase === "finished" ||
-      event.phase === "failed" ||
-      event.phase === "cancelled"
+      event.phase === "finished" || event.phase === "failed" || event.phase === "cancelled"
         ? (event.summary ?? prev?.summary)
         : prev?.summary,
     liveLine,
@@ -934,9 +895,7 @@ export function applySubagentEvent(
     childTimeline: childTimeline.length ? childTimeline : undefined,
     error:
       event.error ??
-      (event.phase === "failed" || event.phase === "cancelled"
-        ? event.summary
-        : undefined),
+      (event.phase === "failed" || event.phase === "cancelled" ? event.summary : undefined),
     active,
   };
   if (idx >= 0) next[idx] = patch;

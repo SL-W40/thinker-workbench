@@ -19,10 +19,7 @@ export function registerTerminalHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle(
     IpcChannels.terminalCreate,
-    async (
-      _evt,
-      options?: { cwd?: string; cols?: number; rows?: number; profileId?: string },
-    ) => {
+    async (_evt, options?: { cwd?: string; cols?: number; rows?: number; profileId?: string }) => {
       const cwd = options?.cwd?.trim() || getActiveWorkspaceRoot() || undefined;
       return terminalSessionManager.createInteractive({
         cwd,

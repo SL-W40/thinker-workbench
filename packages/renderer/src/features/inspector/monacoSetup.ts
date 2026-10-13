@@ -75,9 +75,11 @@ export function ensureMonaco(): void {
   loader.config({ monaco });
   configureLanguageServices(monaco);
 
-  (globalThis as typeof globalThis & {
-    MonacoEnvironment?: { getWorker: (workerId: string, label: string) => Worker };
-  }).MonacoEnvironment = {
+  (
+    globalThis as typeof globalThis & {
+      MonacoEnvironment?: { getWorker: (workerId: string, label: string) => Worker };
+    }
+  ).MonacoEnvironment = {
     getWorker(_workerId: string, label: string) {
       if (label === "json") return new jsonWorker();
       if (label === "css" || label === "scss" || label === "less") return new cssWorker();

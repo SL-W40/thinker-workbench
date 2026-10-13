@@ -9,11 +9,11 @@ import {
   shellCommandBaseToken,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, Notification } from "electron";
+import { getNotificationIconPath } from "../config/paths";
 import { getGeneralSettings, saveGeneralSettings } from "../config/settingsStore";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { pushAgentHello } from "../utility/startAgentProcess";
 import { showMainWindow } from "../window/tray";
-import { getNotificationIconPath } from "../config/paths";
 
 /** 已答复的 hitlId，防双提交。 */
 const resolved = new Set<string>();
@@ -35,9 +35,7 @@ function escapeXml(value: string): string {
 
 /** Windows Toast：标题 + 正文 + 最多两个操作按钮。 */
 function windowsHitlToastXml(req: HitlRequest): string {
-  const actions = req.actions
-    .filter((a) => a.id === "allow" || a.id === "deny")
-    .slice(0, 2);
+  const actions = req.actions.filter((a) => a.id === "allow" || a.id === "deny").slice(0, 2);
   const actionXml = actions
     .map(
       (a) =>
@@ -66,8 +64,7 @@ export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
   pending.delete(response.hitlId);
 
   if (response.actionId === "allow_and_whitelist" && req) {
-    const command =
-      typeof req.payload?.command === "string" ? req.payload.command : "";
+    const command = typeof req.payload?.command === "string" ? req.payload.command : "";
     const token = shellCommandBaseToken(command);
     if (token) {
       const general = getGeneralSettings();

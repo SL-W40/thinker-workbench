@@ -6,16 +6,16 @@ import {
   Children,
   cloneElement,
   createContext,
-  isValidElement,
-  useContext,
-  useMemo,
-  useState,
   type DragEvent,
   type HTMLAttributes,
+  isValidElement,
   type ReactElement,
   type ReactNode,
   type TdHTMLAttributes,
   type ThHTMLAttributes,
+  useContext,
+  useMemo,
+  useState,
 } from "react";
 
 export type TableDensity = "default" | "compact";
@@ -253,9 +253,8 @@ function TableRow({
   const handle =
     sortable && isBody && index >= 0 ? (
       <td className="tw-table__td tw-table__td--drag tw-table__td--fit">
-        <span
-          role="button"
-          tabIndex={0}
+        <button
+          type="button"
           className="tw-table__drag-handle"
           aria-label={sortHandleLabel}
           title={sortHandleLabel}
@@ -275,7 +274,7 @@ function TableRow({
           }}
         >
           <GripIcon />
-        </span>
+        </button>
       </td>
     ) : sortable && !isBody ? (
       <th className="tw-table__th tw-table__th--drag" aria-hidden />

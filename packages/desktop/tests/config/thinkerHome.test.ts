@@ -5,15 +5,8 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, it } from "vitest";
-import {
-  bootstrapSettingsPath,
-  describeDataDirPaths,
-} from "../../src/config/settingsStore";
-import {
-  bootstrapThinkerDir,
-  defaultDataDir,
-  resolveDataDir,
-} from "../../src/config/thinkerHome";
+import { bootstrapSettingsPath, describeDataDirPaths } from "../../src/config/settingsStore";
+import { bootstrapThinkerDir, defaultDataDir, resolveDataDir } from "../../src/config/thinkerHome";
 
 beforeEach(() => {
   // 避免并行用例留下的 THINKER_HOME 干扰默认根断言

@@ -35,12 +35,7 @@ export function truncateDirLeft(dir: string, max = 44): string {
 /**
  * 简易模糊分：越高越靠前。
  */
-export function scoreFilePath(
-  path: string,
-  query: string,
-  recent: boolean,
-  isDir = false,
-): number {
+export function scoreFilePath(path: string, query: string, recent: boolean, isDir = false): number {
   const q = query.trim().toLowerCase().replace(/\\/g, "/").replace(/\/+$/, "");
   const norm = path.replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "");
   const { name, dir } = splitFilePath(norm);

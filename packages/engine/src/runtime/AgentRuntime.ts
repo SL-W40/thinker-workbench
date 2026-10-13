@@ -25,10 +25,10 @@ import { agentEndSpan, agentStartSpan, configureAgentTrace } from "../trace/emit
 import { getWorkspaceRootOrNull, setWorkspaceRoot } from "../workspace";
 import { buildRunContext } from "./buildRunContext";
 import { EventBus } from "./EventBus";
-import { runWithContext, type RunContext } from "./runContext";
-import { registerRun, unregisterRun } from "./runRegistry";
 import { RunController } from "./RunController";
+import { type RunContext, runWithContext } from "./runContext";
 import { bindRuntimeEmitter } from "./runEmit";
+import { registerRun, unregisterRun } from "./runRegistry";
 import type { AgentRuntimeOptions, RunRequest } from "./types";
 
 export class AgentRuntime {
@@ -67,10 +67,7 @@ export class AgentRuntime {
    * - tools 仍有 pending：进程可能死在 tools 执行中，重进 tools
    * - 否则：上一节点已完整落盘，沿边走到下一节点
    */
-  private resolveResumeNodeId(checkpoint: {
-    nodeId: string;
-    state: GraphState;
-  }): string | null {
+  private resolveResumeNodeId(checkpoint: { nodeId: string; state: GraphState }): string | null {
     const state = checkpoint.state;
     if (checkpoint.nodeId === "tools" && state.pendingToolCalls.length > 0) {
       return "tools";

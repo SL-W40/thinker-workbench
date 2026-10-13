@@ -11,6 +11,9 @@
 
 import type { PageStackSnapshot, WindowRole } from "@thinker-workbench/shared";
 import { useEffect, useState } from "react";
+import { OPEN_BROWSER_EVENT, onBrowserEvent } from "./bridge/browser";
+import { OPEN_SUBAGENT_EVENT, RESTORE_SUBAGENT_TABS_EVENT } from "./bridge/subagent";
+import { requestOpenTerminal } from "./bridge/terminal";
 import { ChatSidePanel } from "./features/chat/ChatSidePanel";
 import { ChatStage } from "./features/chat/ChatStage";
 import { Composer } from "./features/chat/Composer";
@@ -18,6 +21,7 @@ import { useChatPanels } from "./features/chat/useChatPanels";
 import { useChatSession } from "./features/chat/useChatSession";
 import { WorkspaceSidebar } from "./features/chat/WorkspaceSidebar";
 import { ComponentsPane } from "./features/components/ComponentsPane";
+import { HitlHost } from "./features/hitl/HitlHost";
 import { RightInspector } from "./features/inspector/RightInspector";
 import { ensureHash, parseHash, writeHash } from "./features/nav/locationHash";
 import { type PageId, usePageStack } from "./features/nav/usePageStack";
@@ -25,11 +29,7 @@ import { OnboardingGate } from "./features/onboarding/OnboardingGate";
 import { normalizeSettingsSection, type SettingsSectionId } from "./features/settings/sections";
 import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
 import { ToolsPane, type ToolTabId } from "./features/tools/ToolsPane";
-import { HitlHost } from "./features/hitl/HitlHost";
 import { TitleBar } from "./features/window/TitleBar";
-import { OPEN_BROWSER_EVENT, onBrowserEvent } from "./bridge/browser";
-import { OPEN_SUBAGENT_EVENT, RESTORE_SUBAGENT_TABS_EVENT } from "./bridge/subagent";
-import { requestOpenTerminal } from "./bridge/terminal";
 import { useT } from "./i18n/useI18n";
 import { bootstrapAppLog } from "./log/sessionLog";
 
@@ -78,9 +78,7 @@ function readBoot(role: WindowRole): {
     const section = normalizeSettingsSection(
       saved.settingsSection ?? fromSaved.section ?? fromHash.section,
     );
-    const entries = saved.stack.entries.map((p) =>
-      normalizePage(p as PageId),
-    ) as PageId[];
+    const entries = saved.stack.entries.map((p) => normalizePage(p as PageId)) as PageId[];
     const visited = (saved.stack.visited ?? entries).map((p) =>
       normalizePage(p as PageId),
     ) as PageId[];
@@ -118,9 +116,7 @@ export function App() {
   const panels = useChatPanels();
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(boot.section);
   const [toolsTab, setToolsTab] = useState<ToolTabId>(boot.toolsTab);
-  const [toolsVisited, setToolsVisited] = useState<Set<ToolTabId>>(
-    () => new Set([boot.toolsTab]),
-  );
+  const [toolsVisited, setToolsVisited] = useState<Set<ToolTabId>>(() => new Set([boot.toolsTab]));
   /** 聊天 diff 点文件名 → 右侧 inspector 打开该路径 */
   const [pendingOpenPath, setPendingOpenPath] = useState<string | null>(null);
   /** 从聊天跳转 Trace 时聚焦的会话 id */
@@ -139,11 +135,7 @@ export function App() {
     setPendingOpenPath(path);
   }
 
-  function openTerminal(detail?: {
-    sessionId?: string;
-    previewOutput?: string;
-    title?: string;
-  }) {
+  function openTerminal(detail?: { sessionId?: string; previewOutput?: string; title?: string }) {
     panels.setRightOpen(true);
     requestOpenTerminal(detail);
   }
@@ -219,7 +211,7 @@ export function App() {
     writeHash(nav.current, settingsSection, toolsTab);
   }, [nav.current, settingsSection, toolsTab]);
 
-  const stackKey = JSON.stringify(nav.snapshot);
+  const _stackKey = JSON.stringify(nav.snapshot);
   // 主窗：将页面栈与设置分区持久化到主进程 session；辅助窗 / 工具嵌入跳过
   useEffect(() => {
     if (isAux || toolEmbed) return;
@@ -242,7 +234,7 @@ export function App() {
     });
     // snapshot 对象每帧都会变；用 stackKey 稳定内容后再写入
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stackKey, settingsSection, toolsTab, nav.current, isAux, toolEmbed]);
+  }, [settingsSection, toolsTab, nav.current, isAux, toolEmbed, nav.snapshot]);
 
   // 响应浏览器/外部改 hash：替换当前栈顶页，并同步设置分区与控制台 tab
   useEffect(() => {
@@ -257,7 +249,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", onHash);
     // replaceCurrent 闭包依赖稳定；勿把 nav 整对象塞进 deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAux, toolEmbed]);
+  }, [isAux, toolEmbed, selectToolsTab, nav.replaceCurrent]);
 
   /** 打开聊天页并聚焦输入框。 */
   function focusComposer() {

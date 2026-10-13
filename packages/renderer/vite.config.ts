@@ -1,6 +1,6 @@
 ﻿import path from "node:path";
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 const designSrc = path.resolve(__dirname, "../design/src");
 const markdownSrc = path.resolve(__dirname, "../markdown/src");
@@ -8,8 +8,7 @@ const logSrc = path.resolve(__dirname, "../logger/src");
 const logWebSrc = path.resolve(__dirname, "../logger/web/src");
 
 /** `pnpm run dev -- --no-hot` 时由 scripts/dev.mjs 注入。 */
-const noHot =
-  process.env.TW_DEV_NO_HOT === "1" || process.env.TW_DEV_NO_HOT === "true";
+const noHot = process.env.TW_DEV_NO_HOT === "1" || process.env.TW_DEV_NO_HOT === "true";
 
 export default defineConfig({
   // --no-hot 时必须关掉 Fast Refresh：否则仍注入 /@react-refresh，入口模块加载失败、闪屏卡死

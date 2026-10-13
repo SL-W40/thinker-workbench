@@ -92,7 +92,7 @@ export function WorkspaceSidebar({
   const [expandedMore, setExpandedMore] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
- /** 会话重命名弹窗*/
+  /** 会话重命名弹窗*/
   const [renameEdit, setRenameEdit] = useState<{ id: string; draft: string } | null>(null);
   /** 工作空间别名弹窗（不改磁盘目录） */
   const [aliasEdit, setAliasEdit] = useState<{ id: string; draft: string } | null>(null);
@@ -123,9 +123,9 @@ export function WorkspaceSidebar({
       u1();
       u2();
     };
- // 挂载时订阅变更；refresh 闭包读取最新 setState
+    // 挂载时订阅变更；refresh 闭包读取最新 setState
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -141,7 +141,7 @@ export function WorkspaceSidebar({
   const grouped = useMemo(() => {
     return workspaces.map((w) => ({
       workspace: w,
- // 与 listThreads 一致：置顶优先，再按末条消息时间降序
+      // 与 listThreads 一致：置顶优先，再按末条消息时间降序
       sessions: threads
         .filter((th) => th.workspaceId === w.id)
         .sort((a, b) => {
@@ -253,8 +253,7 @@ export function WorkspaceSidebar({
               {
                 label: t("workspaces.deleteWorkspace"),
                 danger: true,
-                onSelect: () =>
-                  setConfirm({ kind: "delete-workspace", id: ws.id, name: ws.name }),
+                onSelect: () => setConfirm({ kind: "delete-workspace", id: ws.id, name: ws.name }),
               },
             ]),
       ];
@@ -399,7 +398,11 @@ export function WorkspaceSidebar({
                     </span>
                   </span>
                   <span className="ws-workspace__name">{w.name}</span>
-                  {w.pinned ? <span className="ws-workspace__pin" aria-hidden>📌</span> : null}
+                  {w.pinned ? (
+                    <span className="ws-workspace__pin" aria-hidden>
+                      📌
+                    </span>
+                  ) : null}
                   <IconButton
                     aria-label={t("workspaces.newSession")}
                     size="sm"
@@ -468,7 +471,11 @@ export function WorkspaceSidebar({
                             }`}
                           />
                           <span className="ws-session__title">{th.title}</span>
-                          {th.pinned ? <span className="ws-session__pin" aria-hidden>📌</span> : null}
+                          {th.pinned ? (
+                            <span className="ws-session__pin" aria-hidden>
+                              📌
+                            </span>
+                          ) : null}
                           <span className="ws-session__meta">
                             {formatRelativeTime(th.updatedAt, now)}
                           </span>
@@ -622,7 +629,7 @@ export function WorkspaceSidebar({
                 if (c.kind === "delete-workspace") await removeWorkspace(c.id);
                 else if (c.kind === "clear-workspace") await clearWorkspace(c.id);
                 else await removeSession(c.id);
- // 主区域 useChatSession 监听 onThreadsChanged 做 reconcile
+                // 主区域 useChatSession 监听 onThreadsChanged 做 reconcile
                 await refresh();
                 onSessionsMutated?.();
               })();

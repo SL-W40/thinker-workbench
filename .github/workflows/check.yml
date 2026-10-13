@@ -1,0 +1,27 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Biome 不需要原生模块；跳过 postinstall（electron / better-sqlite3 rebuild）
+      - name: Install
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Biome check
+        run: pnpm check

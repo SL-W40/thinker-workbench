@@ -19,7 +19,7 @@ export const taskToolSpec = defineTool({
       title: {
         type: "string",
         description:
-          "Short UI label for this task (≤60 chars), unique among parallel Tasks. Emit right after subagent, before prompt. Example: \"Map Customize IPC\".",
+          'Short UI label for this task (≤60 chars), unique among parallel Tasks. Emit right after subagent, before prompt. Example: "Map Customize IPC".',
       },
       prompt: {
         type: "string",

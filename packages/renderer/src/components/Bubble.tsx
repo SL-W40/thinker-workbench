@@ -5,20 +5,17 @@ import { IconButton, RestartIcon, useDesignTheme } from "@thinker-workbench/desi
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
 import type { ChatMessage, ChatTimelineStep } from "@thinker-workbench/shared";
 import {
-  useLayoutEffect,
-  useRef,
-  useState,
   type FocusEvent,
   type KeyboardEvent,
   type RefObject,
+  useLayoutEffect,
+  useRef,
+  useState,
 } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../bridge/browser";
-import { SendGlyph } from "../features/chat/Composer";
 import { ChatUsageBar } from "../features/chat/ChatUsageBar";
-import {
-  ComposerEditor,
-  type ComposerEditorHandle,
-} from "../features/chat/ComposerEditor";
+import { SendGlyph } from "../features/chat/Composer";
+import { ComposerEditor, type ComposerEditorHandle } from "../features/chat/ComposerEditor";
 import { MentionsRichText } from "../features/chat/MentionsRichText";
 import { ModelPicker } from "../features/chat/ModelPicker";
 import { normalizeChatMessage } from "../features/chat/messageModel";
@@ -58,7 +55,7 @@ function UserPromptBody({
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     ro?.observe(el);
     return () => ro?.disconnect();
-  }, [text]);
+  }, []);
 
   return (
     <div className={`user-prompt__body${overflows ? " has-fade" : ""}`}>
@@ -179,10 +176,7 @@ export function Bubble({
       };
       return (
         <li className="bubble role-user">
-          <div
-            className="user-prompt user-prompt--editing composer-shell"
-            onBlur={leaveIfOutside}
-          >
+          <div className="user-prompt user-prompt--editing composer-shell" onBlur={leaveIfOutside}>
             <ComposerEditor
               ref={editInputRef}
               value={editDraft}

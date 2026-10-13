@@ -3,10 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import {
-  isMissingApiKeyError,
-  isUnlockDeniedError,
-} from "../../../src/features/chat/systemErrors";
+import { isMissingApiKeyError, isUnlockDeniedError } from "../../../src/features/chat/systemErrors";
 
 describe("systemErrors", () => {
   it("区分 missing 与 unlock denied", () => {

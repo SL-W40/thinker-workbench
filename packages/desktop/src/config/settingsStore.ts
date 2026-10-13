@@ -14,14 +14,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   apiKeyHint,
+  buildModelCandidates,
   createId,
   emptyModelCatalog,
-  migrateLegacyModelSettings,
-  normalizeGeneral,
-  normalizeModelSelection,
-  normalizeModelTags,
-  normalizeShortcuts,
-  THEME_CATALOG_VERSION,
   type GeneralSettings,
   type ModelCatalog,
   type ModelCatalogPatch,
@@ -31,9 +26,14 @@ import {
   type ModelProvider,
   type ModelSelection,
   type ModelSettings,
-  type ShortcutsMap,
+  migrateLegacyModelSettings,
+  normalizeGeneral,
+  normalizeModelSelection,
+  normalizeModelTags,
+  normalizeShortcuts,
   resolveModelSettings,
-  buildModelCandidates,
+  type ShortcutsMap,
+  THEME_CATALOG_VERSION,
   type UnlockModelSecretsResult,
 } from "@thinker-workbench/shared";
 import { decryptSecret, encryptSecret } from "./secretCrypto";
@@ -177,7 +177,7 @@ function ensureSecretsUnlocked(force = false): { denied: boolean } {
     // force：先清空，避免误以为已解锁而跳过系统交互
     if (force) provider.apiKey = "";
     const plain = decryptSecret(enc);
-    if (plain != null && plain.trim()) {
+    if (plain?.trim()) {
       provider.apiKey = plain;
     } else {
       denied = true;
@@ -195,9 +195,7 @@ function ensureSecretsUnlocked(force = false): { denied: boolean } {
 export function hasLockedModelSecrets(): boolean {
   loadSettings();
   hydrateEncFromDisk();
-  return loadSettings().model.providers.some(
-    (p) => !p.apiKey.trim() && hasPendingSecret(p.id),
-  );
+  return loadSettings().model.providers.some((p) => !p.apiKey.trim() && hasPendingSecret(p.id));
 }
 
 /**
@@ -207,9 +205,7 @@ export function hasLockedModelSecrets(): boolean {
  * 注意：macOS 若已在本进程点过「拒绝」，系统常**不再弹**密码框，decrypt 会立刻失败；
  * 需完全退出应用后再试。`force: true`（Retry）会强制再调一次 decrypt。
  */
-export function unlockModelSecretsForRun(options?: {
-  force?: boolean;
-}): UnlockModelSecretsResult {
+export function unlockModelSecretsForRun(options?: { force?: boolean }): UnlockModelSecretsResult {
   try {
     // 延迟导入避免 settingsStore ↔ electron 循环；仅主进程调用
     const { app } = require("electron") as typeof import("electron");
@@ -253,9 +249,7 @@ export function bootstrapSettingsPath(): string {
 function samePath(a: string, b: string): boolean {
   const na = path.resolve(a);
   const nb = path.resolve(b);
-  return process.platform === "win32"
-    ? na.toLowerCase() === nb.toLowerCase()
-    : na === nb;
+  return process.platform === "win32" ? na.toLowerCase() === nb.toLowerCase() : na === nb;
 }
 
 /**
@@ -305,9 +299,7 @@ function peekDataDirFromBootstrap(): string {
  * 默认 dataDir 时与引导路径相同。
  */
 export function settingsPath(): string {
-  const dataDir = cached
-    ? resolveDataDir(cached.general.dataDir)
-    : peekDataDirFromBootstrap();
+  const dataDir = cached ? resolveDataDir(cached.general.dataDir) : peekDataDirFromBootstrap();
   return path.join(dataDir, "settings.json");
 }
 
@@ -356,11 +348,10 @@ function readProviderFromDisk(raw: DiskProvider): {
 function readEntryFromDisk(raw: DiskModelEntry, index: number): ModelEntry {
   const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : createId("mdl");
   const providerId =
-    typeof raw.providerId === "string" && raw.providerId.trim()
-      ? raw.providerId.trim()
-      : "";
+    typeof raw.providerId === "string" && raw.providerId.trim() ? raw.providerId.trim() : "";
   const model = typeof raw.model === "string" ? raw.model : "";
-  const label = typeof raw.label === "string" && raw.label.trim() ? raw.label : model || `Model ${index + 1}`;
+  const label =
+    typeof raw.label === "string" && raw.label.trim() ? raw.label : model || `Model ${index + 1}`;
   const health: ModelHealth = raw.health === "error" ? "error" : "ok";
   const contextWindow =
     typeof raw.contextWindow === "number" &&
@@ -372,9 +363,8 @@ function readEntryFromDisk(raw: DiskModelEntry, index: number): ModelEntry {
     typeof raw.lastCheckedAt === "number" && Number.isFinite(raw.lastCheckedAt)
       ? Math.floor(raw.lastCheckedAt)
       : undefined;
-  const lastError = typeof raw.lastError === "string" && raw.lastError.trim()
-    ? raw.lastError.trim()
-    : undefined;
+  const lastError =
+    typeof raw.lastError === "string" && raw.lastError.trim() ? raw.lastError.trim() : undefined;
 
   return {
     id,
@@ -406,11 +396,8 @@ function readModelFromDisk(raw: unknown): { model: ModelCatalog; needsMigrate: b
   if (isLegacyDiskModel(raw)) {
     const obj = raw as DiskLegacyModel;
     let apiKey = "";
-    let needsMigrate = true;
     const enc =
-      typeof obj.apiKeyEnc === "string" && obj.apiKeyEnc.trim()
-        ? obj.apiKeyEnc.trim()
-        : "";
+      typeof obj.apiKeyEnc === "string" && obj.apiKeyEnc.trim() ? obj.apiKeyEnc.trim() : "";
     if (enc) {
       // 旧密文不在此解密；占位非空以便 migrate 建出 provider，再清明文
       apiKey = ".";
@@ -595,9 +582,7 @@ export function loadSettings(): StoredSettings {
     cached = chosen.settings;
     const hasAnyKey = chosen.settings.model.providers.some((p) => p.apiKey.trim());
     const needsRewrite =
-      chosen.needsMigrate ||
-      chosen.needsThemeMigrate ||
-      (!primaryIsBootstrap && !primaryParsed);
+      chosen.needsMigrate || chosen.needsThemeMigrate || (!primaryIsBootstrap && !primaryParsed);
     if (needsRewrite) {
       if (chosen.needsMigrate && hasAnyKey) {
         // 确认至少一个 key 能加密，否则不强制重写以免丢钥
@@ -700,9 +685,7 @@ export function resolvePrimaryModelSettings(
   if (!first) {
     return { apiKey: "", baseUrl: "", model: "", allowEmoji: catalog.allowEmoji };
   }
-  return (
-    resolveModelSettings(catalog, first) ?? resolvePrimaryModelMeta(catalog, sel, options)
-  );
+  return resolveModelSettings(catalog, first) ?? resolvePrimaryModelMeta(catalog, sel, options);
 }
 
 /** 读取可下发给渲染进程的公开模型目录（不解锁密文；有密文时仍标 hasApiKey）。 */
@@ -766,8 +749,7 @@ export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic 
     for (const p of patch.providers) {
       const id = typeof p.id === "string" && p.id.trim() ? p.id.trim() : createId("prov");
       const existing = current.model.providers.find((x) => x.id === id);
-      const keyFromPatch =
-        typeof p.apiKey === "string" && p.apiKey.trim() ? p.apiKey.trim() : null;
+      const keyFromPatch = typeof p.apiKey === "string" && p.apiKey.trim() ? p.apiKey.trim() : null;
       if (keyFromPatch) {
         const enc = encryptSecret(keyFromPatch);
         if (enc === null) {
@@ -776,9 +758,12 @@ export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic 
       }
       nextProviders.push({
         id,
-        label: typeof p.label === "string" ? p.label.trim() || "Provider" : existing?.label || "Provider",
+        label:
+          typeof p.label === "string"
+            ? p.label.trim() || "Provider"
+            : existing?.label || "Provider",
         apiKey: keyFromPatch ?? existing?.apiKey ?? "",
-        baseUrl: typeof p.baseUrl === "string" ? p.baseUrl.trim() : existing?.baseUrl ?? "",
+        baseUrl: typeof p.baseUrl === "string" ? p.baseUrl.trim() : (existing?.baseUrl ?? ""),
       });
     }
   } else {
@@ -838,8 +823,7 @@ export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic 
     providers: nextProviders,
     models: nextModels,
     selection,
-    allowEmoji:
-      typeof patch.allowEmoji === "boolean" ? patch.allowEmoji : current.model.allowEmoji,
+    allowEmoji: typeof patch.allowEmoji === "boolean" ? patch.allowEmoji : current.model.allowEmoji,
   };
   // 已删除的 provider 清掉密文缓存
   const keepIds = new Set(nextProviders.map((p) => p.id));

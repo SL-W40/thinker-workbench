@@ -9,8 +9,8 @@ import {
   type UtilityPtyEvent,
   type UtilityPtyRequest,
 } from "@thinker-workbench/shared";
-import { postToParent } from "./port";
 import { getRunIds } from "../runtime/runEmit";
+import { postToParent } from "./port";
 
 type Pending = {
   resolve: (event: UtilityPtyEvent) => void;
@@ -51,8 +51,7 @@ export type PtyExecResult = {
 
 function eventToResult(event: UtilityPtyEvent, fallbackSessionId = ""): PtyExecResult {
   const outcome: PtyShellOutcome =
-    event.outcome ??
-    (event.backgrounded ? "still_running" : "complete");
+    event.outcome ?? (event.backgrounded ? "still_running" : "complete");
   return {
     sessionId: event.sessionId ?? fallbackSessionId,
     output: event.output ?? "",

@@ -2,12 +2,9 @@
  * Trace：按 runId 分组。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
 import type { TraceSpanRecord } from "@thinker-workbench/shared";
-import {
-  groupSpansByRun,
-  UNKNOWN_RUN_ID,
-} from "../../src/features/trace/callTreeModel";
+import { describe, it } from "vitest";
+import { groupSpansByRun, UNKNOWN_RUN_ID } from "../../src/features/trace/callTreeModel";
 
 function span(
   partial: Partial<TraceSpanRecord> & Pick<TraceSpanRecord, "spanId" | "startTs">,
@@ -29,10 +26,10 @@ describe("groupSpansByRun", () => {
       span({ spanId: "c", startTs: 150, runId: "run_a" }),
     ]);
     assert.equal(groups.length, 2);
-    assert.equal(groups[0]!.runId, "run_a");
-    assert.equal(groups[0]!.startTs, 100);
-    assert.equal(groups[0]!.spans.length, 2);
-    assert.equal(groups[1]!.runId, "run_b");
+    assert.equal(groups[0]?.runId, "run_a");
+    assert.equal(groups[0]?.startTs, 100);
+    assert.equal(groups[0]?.spans.length, 2);
+    assert.equal(groups[1]?.runId, "run_b");
   });
 
   it("缺 runId 归入 UNKNOWN_RUN_ID", () => {
@@ -41,7 +38,7 @@ describe("groupSpansByRun", () => {
       span({ spanId: "y", startTs: 2, runId: "  " }),
     ]);
     assert.equal(groups.length, 1);
-    assert.equal(groups[0]!.runId, UNKNOWN_RUN_ID);
-    assert.equal(groups[0]!.spans.length, 2);
+    assert.equal(groups[0]?.runId, UNKNOWN_RUN_ID);
+    assert.equal(groups[0]?.spans.length, 2);
   });
 });

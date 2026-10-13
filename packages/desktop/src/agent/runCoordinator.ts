@@ -4,9 +4,9 @@
  * 并行上限读自 GeneralSettings.maxParallelRuns。
  */
 import {
+  type ChatSessionRecord,
   DEFAULT_MAX_PARALLEL_RUNS,
   normalizeMaxParallelRuns,
-  type ChatSessionRecord,
 } from "@thinker-workbench/shared";
 import { getGeneralSettings } from "../config/settingsStore";
 import {
@@ -54,8 +54,7 @@ export type AdmitRunErr = {
 export type AdmitRunResult = AdmitRunOk | AdmitRunErr;
 
 const NO_SESSION = "No chat session. Create or select a session before sending.";
-const NO_WORKSPACE =
-  "No workspace open. Open a workspace and start a chat before sending.";
+const NO_WORKSPACE = "No workspace open. Open a workspace and start a chat before sending.";
 const THREAD_BUSY = "This session already has a running agent. Stop it or wait.";
 
 function parallelLimitError(max: number): string {
@@ -110,10 +109,7 @@ export function admitRun(request: AdmitRunRequest): AdmitRunResult {
 }
 
 /** 按 sessionId 或 threadId 解析会话（优先 sessionId）。 */
-export function resolveSession(
-  sessionId?: string,
-  threadId?: string,
-): ChatSessionRecord | null {
+export function resolveSession(sessionId?: string, threadId?: string): ChatSessionRecord | null {
   const sid = sessionId?.trim();
   if (sid) {
     const byId = getSession(sid);

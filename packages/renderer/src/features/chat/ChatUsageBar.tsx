@@ -9,14 +9,7 @@ import {
   Separator,
 } from "@thinker-workbench/design/react";
 import type { ModelUsage } from "@thinker-workbench/shared";
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../../i18n/useI18n";
 import {
@@ -81,7 +74,7 @@ type Props = {
   usage: ModelUsage;
   /** 已累计结束轮次耗时（ms）*/
   durationMs: number;
- /** 当前轮开始时间；忙碌时叠加 live 段*/
+  /** 当前轮开始时间；忙碌时叠加 live 段*/
   runStartedAt: number | null;
   busy: boolean;
   /** `message`：气泡内；默认会话底栏布局*/
@@ -201,7 +194,7 @@ export function ChatUsageBar({
     };
   }, [open]);
 
- // 聊天页 keep-alive（hidden）时 portal 仍挂在 body，需在切换页 / 触发器被藏时主动关掉
+  // 聊天页 keep-alive（hidden）时 portal 仍挂在 body，需在切换页 / 触发器被藏时主动关掉
   useEffect(() => {
     if (!open) return;
     const trigger = pillRef.current;
@@ -227,8 +220,7 @@ export function ChatUsageBar({
     };
   }, [open]);
 
-  const liveExtra =
-    busy && runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
+  const liveExtra = busy && runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
   const displayMs = durationMs + liveExtra;
   const total = totalTokens(usage);
   const miss = cacheMissTokens(usage);
@@ -335,10 +327,7 @@ export function ChatUsageBar({
                   aria-label={t("chat.usage.hitRate")}
                 >
                   {hitShare > 0 ? (
-                    <span
-                      className="chat-usage-bar-meter__seg is-hit"
-                      style={{ flex: hitShare }}
-                    />
+                    <span className="chat-usage-bar-meter__seg is-hit" style={{ flex: hitShare }} />
                   ) : null}
                   {writeShare > 0 ? (
                     <span

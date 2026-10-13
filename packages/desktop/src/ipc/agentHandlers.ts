@@ -76,13 +76,8 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
 
     // 广播前尽量补上 chatSessionId，便于 renderer 按会话路由
     const chatSessionId =
-      event.chatSessionId?.trim() ||
-      getSessionByThreadId(event.threadId)?.id ||
-      undefined;
-    const enriched =
-      chatSessionId && !event.chatSessionId
-        ? { ...event, chatSessionId }
-        : event;
+      event.chatSessionId?.trim() || getSessionByThreadId(event.threadId)?.id || undefined;
+    const enriched = chatSessionId && !event.chatSessionId ? { ...event, chatSessionId } : event;
 
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IpcChannels.agentEvent, enriched);
@@ -99,10 +94,9 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
         flushPendingMcpReload(bridge);
       } else if (enriched.type === "error") {
         const cancelled = /cancel/i.test(enriched.error);
-        const crashed =
-          /utilityProcess exited|ready timeout|Process exited|EPIPE|\bcrash\b/i.test(
-            enriched.error,
-          );
+        const crashed = /utilityProcess exited|ready timeout|Process exited|EPIPE|\bcrash\b/i.test(
+          enriched.error,
+        );
         // 手动取消 → cancelled；进程异常 → crashed（可 Resume）；其它 → failed
         setSessionRunStatus(
           enriched.threadId,
@@ -110,11 +104,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
           {
             byThread: true,
             activeRunId: null,
-            interruptReason: cancelled
-              ? "cancelled"
-              : crashed
-                ? "crash"
-                : enriched.error,
+            interruptReason: cancelled ? "cancelled" : crashed ? "crash" : enriched.error,
           },
         );
         broadcastThreadsChanged();
@@ -177,10 +167,8 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   });
 
   ipcMain.handle(IpcChannels.agentCancel, async (_evt, payload?: AgentCancelCommand | string) => {
-    const runId =
-      typeof payload === "string" ? payload.trim() : payload?.runId?.trim() ?? "";
-    const sessionId =
-      typeof payload === "string" ? undefined : payload?.sessionId?.trim();
+    const runId = typeof payload === "string" ? payload.trim() : (payload?.runId?.trim() ?? "");
+    const sessionId = typeof payload === "string" ? undefined : payload?.sessionId?.trim();
     if (!runId) {
       // 禁止 cancel-all：必须带 runId
       return;
@@ -244,7 +232,9 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
 
   ipcMain.handle(IpcChannels.contextUsage, async (_evt, payload?: ContextUsageRequest) => {
     const contextPaths = Array.isArray(payload?.contextPaths)
-      ? payload.contextPaths.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+      ? payload.contextPaths.filter(
+          (p): p is string => typeof p === "string" && p.trim().length > 0,
+        )
       : undefined;
     let workspaceRoot: string | undefined;
     if (payload?.workspaceRoot?.trim()) {

@@ -2,9 +2,9 @@
  * 设置 →通知：系统通知、托盘、完成音。 */
 import { Button, Switch } from "@thinker-workbench/design/react";
 import type { AttentionPreviewKind } from "@thinker-workbench/shared";
-import { useI18n } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
-import { useGeneralSettings, type BooleanToggleId } from "./useGeneralSettings";
+import { useI18n } from "../../i18n/useI18n";
+import { type BooleanToggleId, useGeneralSettings } from "./useGeneralSettings";
 
 type Props = {
   active?: boolean;

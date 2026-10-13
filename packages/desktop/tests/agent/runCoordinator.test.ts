@@ -2,8 +2,8 @@
  * RunCoordinator 默认并行上限（实际值读自 GeneralSettings）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
 import { DEFAULT_MAX_PARALLEL_RUNS } from "@thinker-workbench/shared";
+import { describe, it } from "vitest";
 import { MAX_PARALLEL_RUNS } from "../../src/agent/runCoordinator";
 
 describe("RunCoordinator 默认并行上限", () => {

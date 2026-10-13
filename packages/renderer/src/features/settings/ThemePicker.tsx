@@ -2,29 +2,30 @@
  * 通用设置中的主题色卡片选择器（基础 / 创意 / 自定义）。
  * 用 `applyAppearance` 即时预览；`onSelect` 返回 false 时回滚到已保存主题。
  */
-import { useRef, useState } from "react";
+
 import {
   Button,
   ChoiceCard,
-  Modal,
-  Select,
   listDesignThemes,
+  Modal,
   resolveDesignTheme,
   resolveUiTheme,
+  Select,
 } from "@thinker-workbench/design/react";
 import {
   APP_THEME_BASE_IDS,
   APP_THEME_CREATIVE_IDS,
-  MAX_CUSTOM_THEMES,
-  parseCustomThemeExport,
-  toCustomThemeExport,
   type AppThemeId,
   type BuiltinAppThemeId,
   type CustomThemeRecord,
+  MAX_CUSTOM_THEMES,
+  parseCustomThemeExport,
+  toCustomThemeExport,
 } from "@thinker-workbench/shared";
-import { useAppearance } from "../../theme/useAppearance";
-import { useI18n } from "../../i18n/useI18n";
+import { useRef, useState } from "react";
 import type { MessageKey } from "../../i18n/translate";
+import { useI18n } from "../../i18n/useI18n";
+import { useAppearance } from "../../theme/useAppearance";
 import { CustomThemeEditor } from "./CustomThemeEditor";
 import { forkCustomTheme } from "./customThemeUtils";
 
@@ -68,13 +69,7 @@ type Props = {
 };
 
 /** 主题色卡色板：`system` 用浅/深各半示意。 */
-function ThemeSwatch({
-  id,
-  customs,
-}: {
-  id: AppThemeId;
-  customs: readonly CustomThemeRecord[];
-}) {
+function ThemeSwatch({ id, customs }: { id: AppThemeId; customs: readonly CustomThemeRecord[] }) {
   if (id === "system") {
     const light = resolveDesignTheme("light");
     const dark = resolveDesignTheme("dark");
@@ -112,7 +107,10 @@ function ThemeSwatch({
       aria-hidden
     >
       <span className="settings-theme-swatch-bar" style={{ background: theme.ui["--tw-panel"] }} />
-      <span className="settings-theme-swatch-chip" style={{ background: theme.ui["--tw-accent"] }} />
+      <span
+        className="settings-theme-swatch-chip"
+        style={{ background: theme.ui["--tw-accent"] }}
+      />
     </span>
   );
 }
@@ -188,7 +186,9 @@ export function ThemePicker({
   /** 从指定源克隆并打开编辑器（不先持久化）。*/
   function openForkedEditor(sourceId: string) {
     if (customs.length >= MAX_CUSTOM_THEMES) {
-      setActionError(t("settings.general.theme.custom.limitReached", { n: String(MAX_CUSTOM_THEMES) }));
+      setActionError(
+        t("settings.general.theme.custom.limitReached", { n: String(MAX_CUSTOM_THEMES) }),
+      );
       return;
     }
     setActionError(null);
@@ -236,14 +236,16 @@ export function ThemePicker({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${record.name.replace(/[^\w\-]+/g, "_") || record.id}.theme.json`;
+    a.download = `${record.name.replace(/[^\w-]+/g, "_") || record.id}.theme.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   async function onImportFile(file: File) {
     if (customs.length >= MAX_CUSTOM_THEMES) {
-      setActionError(t("settings.general.theme.custom.limitReached", { n: String(MAX_CUSTOM_THEMES) }));
+      setActionError(
+        t("settings.general.theme.custom.limitReached", { n: String(MAX_CUSTOM_THEMES) }),
+      );
       return;
     }
     try {
@@ -346,7 +348,9 @@ export function ThemePicker({
           </div>
           {actionError ? <p className="settings-err">{actionError}</p> : null}
           {customs.length === 0 ? (
-            <p className="settings-theme-custom-empty">{t("settings.general.theme.custom.empty")}</p>
+            <p className="settings-theme-custom-empty">
+              {t("settings.general.theme.custom.empty")}
+            </p>
           ) : (
             <div
               className="settings-theme-grid"

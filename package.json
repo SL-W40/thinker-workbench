@@ -32,9 +32,15 @@
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check .",
+    "check:fix": "biome check --write .",
     "test": "vitest run",
     "test:report": "vitest run --coverage",
-    "pack:zip": "node scripts/pack-zip.mjs"
+    "pack:zip": "node scripts/pack-zip.mjs",
+    "stage:desktop": "node scripts/stage-desktop-app.mjs",
+    "pack:desktop": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml",
+    "pack:desktop:win": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --win",
+    "pack:desktop:mac": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --mac",
+    "pack:desktop:dir": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --dir"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
@@ -43,6 +49,7 @@
     "@vitest/ui": "^3.2.4",
     "concurrently": "^9.1.2",
     "electron": "^37.10.3",
+    "electron-builder": "^25.1.8",
     "nodemon": "^3.1.14",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3",

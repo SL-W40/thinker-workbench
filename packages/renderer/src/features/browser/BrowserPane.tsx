@@ -25,9 +25,9 @@ import { useT } from "../../i18n/useI18n";
 import "./BrowserPane.less";
 
 type Props = {
- /** 面板是否为当前激?tab。*/
+  /** 面板是否为当前激?tab。*/
   active?: boolean;
- /** 外部请求导航?URL（消费后清空）。*/
+  /** 外部请求导航?URL（消费后清空）。*/
   pendingUrl?: string | null;
   onPendingUrlConsumed?: () => void;
 };
@@ -44,11 +44,7 @@ const EMPTY_STATE: BrowserState = {
   viewportHeight: 0,
 };
 
-export function BrowserPane({
-  active = true,
-  pendingUrl = null,
-  onPendingUrlConsumed,
-}: Props) {
+export function BrowserPane({ active = true, pendingUrl = null, onPendingUrlConsumed }: Props) {
   const t = useT();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BrowserState>(EMPTY_STATE);
@@ -182,12 +178,8 @@ export function BrowserPane({
             }}
           />
         </div>
-        {state.locked ? (
-          <span className="browser-pane__badge">{t("browser.aiBadge")}</span>
-        ) : null}
-        {state.loading ? (
-          <span className="browser-pane__badge">{t("browser.loading")}</span>
-        ) : null}
+        {state.locked ? <span className="browser-pane__badge">{t("browser.aiBadge")}</span> : null}
+        {state.loading ? <span className="browser-pane__badge">{t("browser.loading")}</span> : null}
       </div>
       <div className="browser-pane__viewport" ref={viewportRef}>
         {blank && active ? (

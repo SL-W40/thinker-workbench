@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import { chatWithFailover, configureModelCatalog } from "../../src/model/catalog";
 import * as openai from "../../src/model/openai";
-import { configureAgentTrace } from "../../src/trace/emit";
 import type { ChatModel } from "../../src/model/types";
+import { configureAgentTrace } from "../../src/trace/emit";
 
 type SpanEnd = {
   channel: string;
@@ -98,12 +98,10 @@ describe("chatWithFailover cancel partial", () => {
       /cancel/i,
     );
 
-    const modelEnd = ends.find(
-      (e) => e.output && typeof e.output.partial === "boolean",
-    );
+    const modelEnd = ends.find((e) => e.output && typeof e.output.partial === "boolean");
     assert.ok(modelEnd, "expected model.chat end with output");
-    assert.equal(modelEnd!.status, "cancelled");
-    assert.equal(modelEnd!.output?.partial, true);
-    assert.equal(modelEnd!.output?.content, "half-reply");
+    assert.equal(modelEnd?.status, "cancelled");
+    assert.equal(modelEnd?.output?.partial, true);
+    assert.equal(modelEnd?.output?.content, "half-reply");
   });
 });

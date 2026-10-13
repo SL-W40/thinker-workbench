@@ -1,0 +1,55 @@
+# 在对应系统 runner 上打桌面安装包（未配置证书时仍会产出未签名包）。
+# 触发：手动 / 打 v* tag。不在每次 push 跑，避免过重。
+name: Pack
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/init-proj
+    tags:
+      - "v*"
+
+jobs:
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 需要 better-sqlite3 / node-pty 按当前 Electron ABI rebuild
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack ${{ matrix.platform }}
+        run: pnpm run pack:desktop:${{ matrix.platform }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: thinker-workbench-${{ matrix.platform }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/*.yml
+          if-no-files-found: error
+          retention-days: 14

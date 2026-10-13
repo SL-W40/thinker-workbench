@@ -17,10 +17,10 @@ export function parseLogLine(line: string): LogRecord | null {
   const ts = Date.parse(m[1]!);
   if (!Number.isFinite(ts)) return null;
 
-  const level = m[2]!.toLowerCase() as LogLevel;
+  const level = m[2]?.toLowerCase() as LogLevel;
   if (!LEVELS.has(level)) return null;
 
-  const source = m[3]!.toLowerCase() as LogSource;
+  const source = m[3]?.toLowerCase() as LogSource;
   if (!SOURCES.has(source)) return null;
 
   const scope = m[4]!;

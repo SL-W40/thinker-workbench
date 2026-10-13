@@ -4,29 +4,27 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { app, BrowserWindow, dialog } from "electron";
 import { DEFAULT_TRACE_REDACT_KEYS } from "@thinker-workbench/shared";
+import { app, type BrowserWindow, dialog } from "electron";
 import { getGeneralSettings } from "../config/settingsStore";
 import { getSessionWithMessages, getWorkspace } from "../db/workspacesStore";
 import {
+  type BuildExportBundleInput,
   buildSessionExportFiles,
   defaultExportFileName,
   writeExportZip,
-  type BuildExportBundleInput,
 } from "./exportBundle";
 import { sessionJsonlPath } from "./sessionJsonl";
 import { listSessionSpans, listSessions } from "./traceDb";
 
-export type ExportSessionResult =
-  | { ok: true; path: string }
-  | { ok: false; error: string };
+export type ExportSessionResult = { ok: true; path: string } | { ok: false; error: string };
 
 export {
   buildSessionExportFiles,
   buildTraceSummary,
+  defaultExportFileName,
   redactKeysDeep,
   writeExportZip,
-  defaultExportFileName,
 } from "./exportBundle";
 
 function collectFromDisk(sessionId: string): BuildExportBundleInput {
@@ -53,9 +51,7 @@ function collectFromDisk(sessionId: string): BuildExportBundleInput {
     spans,
     sessionSummary,
     chat,
-    workspace: ws
-      ? { id: ws.id, name: ws.name, rootPath: ws.rootPath }
-      : null,
+    workspace: ws ? { id: ws.id, name: ws.name, rootPath: ws.rootPath } : null,
     payloadsJsonl,
     traceSettings: {
       traceEnabled: general.traceEnabled,

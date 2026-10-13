@@ -5,32 +5,32 @@
 import { Button, Callout, FolderIcon, IconButton } from "@thinker-workbench/design/react";
 import type { ChatMessage, SkillListItem } from "@thinker-workbench/shared";
 import {
+  type KeyboardEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
-  type RefObject,
 } from "react";
 import { listSkills } from "../../bridge/thinker";
 import { workspaceTree } from "../../bridge/workspaceFs";
 import { useT } from "../../i18n/useI18n";
+import { loadFileRecents } from "../inspector/fileRecents";
 import { BackgroundTasksBar } from "./BackgroundTasksBar";
+import { ComposerEditor, type ComposerEditorHandle } from "./ComposerEditor";
+import { ComposerMentionPopup, type MentionItem } from "./ComposerMentionPopup";
+import { ContextUsageControl } from "./ContextUsageControl";
 import {
+  type ActiveMention,
   applyMentionInsert,
   detectActiveMention,
   formatAtPath,
   formatSlashSkill,
-  type ActiveMention,
 } from "./composerMentions";
-import { ComposerEditor, type ComposerEditorHandle } from "./ComposerEditor";
-import { ComposerMentionPopup, type MentionItem } from "./ComposerMentionPopup";
-import { ContextUsageControl } from "./ContextUsageControl";
-import { ModePicker } from "./ModePicker";
-import { ModelPicker } from "./ModelPicker";
 import { rankFileMentions, truncateDirLeft } from "./fileMentionRank";
-import { loadFileRecents } from "../inspector/fileRecents";
+import { ModelPicker } from "./ModelPicker";
+import { ModePicker } from "./ModePicker";
 
 type Props = {
   draft: string;
@@ -144,16 +144,12 @@ export function Composer({
   const t = useT();
   const [mention, setMention] = useState<ActiveMention | null>(null);
   const [highlight, setHighlight] = useState(0);
-  const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number } | null>(null);
   const [skills, setSkills] = useState<SkillListItem[]>([]);
   const [mentionPaths, setMentionPaths] = useState<{ path: string; isDir: boolean }[]>([]);
   const [skillsExpanded, setSkillsExpanded] = useState(false);
- /** Esc / 点外侧关掉后，同一触发段（自 start）不再弹，直到离开该段*/
-  const dismissedMentionRef = useRef<{ kind: ActiveMention["kind"]; start: number } | null>(
-    null,
-  );
+  /** Esc / 点外侧关掉后，同一触发段（自 start）不再弹，直到离开该段*/
+  const dismissedMentionRef = useRef<{ kind: ActiveMention["kind"]; start: number } | null>(null);
 
   const dismissMention = useCallback((active: ActiveMention | null) => {
     if (active) {
@@ -163,7 +159,7 @@ export function Composer({
     setAnchor(null);
   }, []);
 
- // 预加载 skills / 文件树（含目录，供 @ 检索）
+  // 预加载 skills / 文件树（含目录，供 @ 检索）
   useEffect(() => {
     let cancelled = false;
     void listSkills(workspaceRoot).then((list) => {
@@ -206,8 +202,7 @@ export function Composer({
     if (dismissed) {
       const ch = value[dismissed.start];
       const stillThere =
-        (dismissed.kind === "at" && ch === "@") ||
-        (dismissed.kind === "slash" && ch === "/");
+        (dismissed.kind === "at" && ch === "@") || (dismissed.kind === "slash" && ch === "/");
       if (!stillThere) dismissedMentionRef.current = null;
     }
 
@@ -219,13 +214,13 @@ export function Composer({
       dismissedMentionRef.current = null;
     }
 
- // 同一触发段内只更新锚点，勿重置 highlight（否则 ↑↓ 会被 keyup 打回第 0 项）
+    // 同一触发段内只更新锚点，勿重置 highlight（否则 ↑↓ 会被 keyup 打回第 0 项）
     setMention((prev) => {
       const same =
         Boolean(prev && next) &&
-        prev!.kind === next!.kind &&
-        prev!.start === next!.start &&
-        prev!.query === next!.query;
+        prev?.kind === next?.kind &&
+        prev?.start === next?.start &&
+        prev?.query === next?.query;
       if (next && !same) {
         setSkillsExpanded(false);
         setHighlight(0);
@@ -238,22 +233,16 @@ export function Composer({
 
   useEffect(() => {
     refreshMention();
-  }, [draft, refreshMention]);
+  }, [refreshMention]);
 
-  const recentPaths = useMemo(
-    () => loadFileRecents(workspaceId),
-    [workspaceId, mention?.kind],
-  );
+  const recentPaths = useMemo(() => loadFileRecents(workspaceId), [workspaceId]);
 
   const items: MentionItem[] = useMemo(() => {
     if (!mention) return [];
     const q = mention.query.toLowerCase();
     if (mention.kind === "slash") {
       const filtered = skills.filter(
-        (s) =>
-          !q ||
-          s.name.includes(q) ||
-          s.description.toLowerCase().includes(q),
+        (s) => !q || s.name.includes(q) || s.description.toLowerCase().includes(q),
       );
       const visible = skillsExpanded ? filtered : filtered.slice(0, SKILLS_PAGE);
       return visible.map((s) => ({
@@ -285,24 +274,13 @@ export function Composer({
       query: q,
       isDir: hit.isDir,
     }));
-  }, [
-    mention,
-    skills,
-    skillsExpanded,
-    workspaceId,
-    recentPaths,
-    mentionPaths,
-    t,
-  ]);
+  }, [mention, skills, skillsExpanded, workspaceId, recentPaths, mentionPaths]);
 
   const skillsHiddenCount = useMemo(() => {
-    if (!mention || mention.kind !== "slash" || skillsExpanded) return 0;
+    if (mention?.kind !== "slash" || skillsExpanded) return 0;
     const q = mention.query.toLowerCase();
     const filtered = skills.filter(
-      (s) =>
-        !q ||
-        s.name.includes(q) ||
-        s.description.toLowerCase().includes(q),
+      (s) => !q || s.name.includes(q) || s.description.toLowerCase().includes(q),
     );
     return Math.max(0, filtered.length - SKILLS_PAGE);
   }, [mention, skills, skillsExpanded]);
@@ -311,9 +289,7 @@ export function Composer({
     (item: MentionItem) => {
       if (!mention) return;
       const insert =
-        mention.kind === "slash"
-          ? formatSlashSkill(item.label)
-          : formatAtPath(item.label);
+        mention.kind === "slash" ? formatSlashSkill(item.label) : formatAtPath(item.label);
       const { text, caret } = applyMentionInsert(draft, mention, insert);
       onDraftChange(text);
       setMention(null);
@@ -329,7 +305,7 @@ export function Composer({
   );
 
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
- // IME 组合中勿抢占方向键 / Enter，否则无法选字
+    // IME 组合中勿抢占方向键 / Enter，否则无法选字
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (mention) {
       if (items.length > 0) {
@@ -352,7 +328,7 @@ export function Composer({
       }
       if (e.key === "Escape") {
         e.preventDefault();
- // 关掉后同一段 `@`/`/` 保持原文，不再自动弹搜索
+        // 关掉后同一段 `@`/`/` 保持原文，不再自动弹搜索
         dismissMention(mention);
         return;
       }
@@ -366,10 +342,7 @@ export function Composer({
 
   return (
     <footer className="composer-dock">
-      <BackgroundTasksBar
-        threadId={threadId ?? undefined}
-        onOpenTerminal={onOpenTerminal}
-      />
+      <BackgroundTasksBar threadId={threadId ?? undefined} onOpenTerminal={onOpenTerminal} />
       {gateMessage ? (
         <Callout
           tone="warning"
@@ -400,11 +373,7 @@ export function Composer({
             <ModelPicker sessionId={sessionId} disabled={busy} />
           </div>
           <div className="composer-bar-right">
-            <ContextUsageControl
-              messages={messages}
-              draft={draft}
-              workspaceRoot={workspaceRoot}
-            />
+            <ContextUsageControl messages={messages} draft={draft} workspaceRoot={workspaceRoot} />
             <IconButton
               className={`composer-send${busy ? " composer-send--stop" : ""}`}
               size="lg"

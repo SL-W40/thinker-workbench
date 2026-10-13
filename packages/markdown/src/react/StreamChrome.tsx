@@ -27,14 +27,7 @@ type Props = {
   footer?: ReactNode;
 };
 
-export function StreamChrome({
-  kind,
-  label,
-  status = "ready",
-  children,
-  actions,
-  footer,
-}: Props) {
+export function StreamChrome({ kind, label, status = "ready", children, actions, footer }: Props) {
   const live = status === "streaming" || status === "loading" || status === "preview";
   const statusText = STATUS_LABEL[status];
 

@@ -29,11 +29,7 @@ export function MentionsRichText({ text, onOpenFile, className }: MentionsRichTe
         }
         if (seg.kind === "slash") {
           return (
-            <span
-              key={i}
-              className="mention-chip mention-chip--slash"
-              title={`/${seg.name}`}
-            >
+            <span key={i} className="mention-chip mention-chip--slash" title={`/${seg.name}`}>
               <span className="mention-chip__mark">/</span>
               <span className="mention-chip__label">{seg.name}</span>
             </span>

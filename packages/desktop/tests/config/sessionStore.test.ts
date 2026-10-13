@@ -17,7 +17,10 @@ describe("sessionStore tools tab + section", () => {
     process.env.THINKER_HOME = tmp;
     // 清模块缓存，使 getDataDir / session 读到新 HOME
     for (const key of Object.keys(require.cache)) {
-      if (key.includes(`${path.sep}config${path.sep}sessionStore`) || key.includes(`${path.sep}config${path.sep}paths`)) {
+      if (
+        key.includes(`${path.sep}config${path.sep}sessionStore`) ||
+        key.includes(`${path.sep}config${path.sep}paths`)
+      ) {
         delete require.cache[key];
       }
     }
@@ -34,12 +37,8 @@ describe("sessionStore tools tab + section", () => {
   });
 
   it("setSnapshot 保留 #/tools/logs 与 notifications 分区", async () => {
-    const {
-      setUiSessionSnapshot,
-      getUiSessionSnapshot,
-      resetSessionCache,
-      saveSessionNow,
-    } = await import("../../src/config/sessionStore.js");
+    const { setUiSessionSnapshot, getUiSessionSnapshot, resetSessionCache, saveSessionNow } =
+      await import("../../src/config/sessionStore.js");
     resetSessionCache(false);
     setUiSessionSnapshot({
       hash: "#/tools/logs",
@@ -54,12 +53,8 @@ describe("sessionStore tools tab + section", () => {
   });
 
   it("setSnapshot 保留 #/tools/settings/browser", async () => {
-    const {
-      setUiSessionSnapshot,
-      getUiSessionSnapshot,
-      resetSessionCache,
-      saveSessionNow,
-    } = await import("../../src/config/sessionStore.js");
+    const { setUiSessionSnapshot, getUiSessionSnapshot, resetSessionCache, saveSessionNow } =
+      await import("../../src/config/sessionStore.js");
     resetSessionCache(false);
     setUiSessionSnapshot({
       hash: "#/tools/settings/browser",

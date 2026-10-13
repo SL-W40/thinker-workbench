@@ -1,7 +1,7 @@
 /**
  * Design 体系的 React 导出面：ThemeProvider 与全部共享控件。
  */
-export { ThemeProvider, useDesignTheme } from "./ThemeProvider";
+
 export { Badge, type BadgeProps, type BadgeVariant } from "../components/Badge/Badge";
 export {
   Button,
@@ -20,19 +20,6 @@ export {
 export { EmptyState, type EmptyStateProps } from "../components/EmptyState/EmptyState";
 export { Field, type FieldProps } from "../components/Field/Field";
 export {
-  IconButton,
-  type IconButtonProps,
-  type IconButtonSize,
-  type IconButtonVariant,
-} from "../components/IconButton/IconButton";
-export {
-  Icon,
-  createIcon,
-  listDesignIcons,
-  DESIGN_ICONS,
-  type DesignIconEntry,
-  type IconProps,
-  type IconSize,
   AgentModeIcon,
   AskModeIcon,
   BellIcon,
@@ -44,18 +31,25 @@ export {
   CodeIcon,
   ConsoleIcon,
   CubeIcon,
+  createIcon,
   DatabaseIcon,
+  DESIGN_ICONS,
   DebugModeIcon,
+  type DesignIconEntry,
   DownloadIcon,
   FilterIcon,
   FolderIcon,
   FolderPlusIcon,
   GlobeIcon,
   GridIcon,
+  Icon,
+  type IconProps,
+  type IconSize,
   InfoIcon,
   KeyboardIcon,
   LanesIcon,
   LogsIcon,
+  listDesignIcons,
   MaximizeIcon,
   MinimizeIcon,
   MultitaskModeIcon,
@@ -72,6 +66,12 @@ export {
   StopIcon,
   TrashIcon,
 } from "../components/Icon";
+export {
+  IconButton,
+  type IconButtonProps,
+  type IconButtonSize,
+  type IconButtonVariant,
+} from "../components/IconButton/IconButton";
 export { Input, type InputProps } from "../components/Input/Input";
 export { Kbd, type KbdProps } from "../components/Kbd/Kbd";
 export {
@@ -97,8 +97,8 @@ export { SideNavItem, type SideNavItemProps } from "../components/SideNavItem/Si
 export { Spinner, type SpinnerProps, type SpinnerSize } from "../components/Spinner/Spinner";
 export { Switch, type SwitchProps } from "../components/Switch/Switch";
 export {
-  Table,
   reorderTableRows,
+  Table,
   type TableCellOverflow,
   type TableCellProps,
   type TableDensity,
@@ -111,11 +111,12 @@ export {
 export { TextArea, type TextAreaProps } from "../components/TextArea/TextArea";
 export { TitleTooltipHost } from "../components/TitleTooltipHost/TitleTooltipHost";
 export {
+  type CustomThemeLike,
+  type DesignTheme,
+  type DesignThemeId,
   listDesignThemes,
   resolveDesignTheme,
   resolveUiTheme,
   windowBgFromTheme,
-  type CustomThemeLike,
-  type DesignTheme,
-  type DesignThemeId,
 } from "../themes";
+export { ThemeProvider, useDesignTheme } from "./ThemeProvider";

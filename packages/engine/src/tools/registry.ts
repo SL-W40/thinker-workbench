@@ -22,11 +22,7 @@ import { grepToolSpec } from "./grep/tool";
 import { listDirToolSpec } from "./list_dir/tool";
 import { readFileToolSpec } from "./read_file/tool";
 import { searchFilesToolSpec } from "./search_files/tool";
-import {
-  shellAwaitToolSpec,
-  shellToolSpec,
-  shellWriteToolSpec,
-} from "./shell/tool";
+import { shellAwaitToolSpec, shellToolSpec, shellWriteToolSpec } from "./shell/tool";
 import { taskAwaitToolSpec, taskToolSpec } from "./task/tool";
 import { timeToolSpec } from "./time/tool";
 import type { ToolSpec } from "./types";

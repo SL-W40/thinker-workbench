@@ -16,10 +16,7 @@ export type DirectExecInvocation = {
  * - fish → -c（不用 -lc；fish 对合并 flag 不标准）
  * - 其余（bash/zsh/git-bash/…）→ -lc
  */
-export function buildDirectExecArgs(
-  profile: ShellProfile,
-  command: string,
-): DirectExecInvocation {
+export function buildDirectExecArgs(profile: ShellProfile, command: string): DirectExecInvocation {
   if (isPowerShell(profile)) {
     return {
       file: profile.path,

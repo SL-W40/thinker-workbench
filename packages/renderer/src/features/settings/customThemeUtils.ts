@@ -1,11 +1,11 @@
 /**
  * 自定义主题：从现有色板克隆快照、颜色值检测等纯函数。
  */
-import { resolveUiTheme, type DesignTheme } from "@thinker-workbench/design";
+import { type DesignTheme, resolveUiTheme } from "@thinker-workbench/design";
 import {
-  createCustomThemeId,
   type CustomThemeRecord,
   type CustomThemeSnapshot,
+  createCustomThemeId,
 } from "@thinker-workbench/shared";
 
 /** 将 DesignTheme 转为可持久化快照（强制 id）。 */

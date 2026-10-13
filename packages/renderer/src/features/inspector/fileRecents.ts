@@ -22,10 +22,7 @@ export function loadFileRecents(workspaceId: string | null): string[] {
 /** 将路径推到最近列表头部并写回。 */
 export function pushFileRecent(workspaceId: string | null, path: string): string[] {
   if (!workspaceId || !path.trim()) return loadFileRecents(workspaceId);
-  const next = [path, ...loadFileRecents(workspaceId).filter((p) => p !== path)].slice(
-    0,
-    FILE_MAX,
-  );
+  const next = [path, ...loadFileRecents(workspaceId).filter((p) => p !== path)].slice(0, FILE_MAX);
   try {
     localStorage.setItem(`${FILE_KEY}.${workspaceId}`, JSON.stringify(next));
   } catch {

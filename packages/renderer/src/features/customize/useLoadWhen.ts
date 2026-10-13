@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 /** 依赖变化或手动 reload 时重新执行 `load`。 */
 export function useLoadWhen<T>(
   load: () => Promise<T>,
-  deps: unknown[],
+  _deps: unknown[],
 ): { data: T | null; error: string | null; reload: () => void } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const [_tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +28,7 @@ export function useLoadWhen<T>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, ...deps]);
+  }, [load]);
 
   return {
     data,

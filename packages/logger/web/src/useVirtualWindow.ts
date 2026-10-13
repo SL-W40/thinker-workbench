@@ -1,7 +1,7 @@
 /**
  * 定高虚拟窗口：只根据滚动位置计算可见区间，避免长列表挂载全部 DOM。
  */
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 
 export type VirtualWindow = {
   start: number;
@@ -46,7 +46,7 @@ export function useVirtualWindow(options: Options): {
     if (!el) return;
     el.scrollTop = 0;
     setScrollTop(0);
-  }, [resetKey]);
+  }, []);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;

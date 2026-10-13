@@ -28,11 +28,7 @@ import { getGeneralSettings } from "../config/settingsStore";
 import { peekThreadCheckpoint } from "./checkpointClear";
 import { activityAtFromMessages } from "./sessionActivity";
 import { purgeSessionArtifacts } from "./sessionArtifacts";
-import {
-  destroyWorkspaceChatDb,
-  openCatalogDb,
-  openWorkspaceChatDb,
-} from "./thinkerDb";
+import { destroyWorkspaceChatDb, openCatalogDb, openWorkspaceChatDb } from "./thinkerDb";
 
 type WsRow = {
   id: string;
@@ -133,7 +129,13 @@ function mapSession(row: SessionRow): ChatSessionRecord {
 
 /** 读盘时迁移旧 `interrupted` → cancelled / crashed。 */
 function normalizeRunStatus(value: string, interruptReason?: string | null): SessionRunStatus {
-  if (value === "idle" || value === "running" || value === "cancelled" || value === "crashed" || value === "failed") {
+  if (
+    value === "idle" ||
+    value === "running" ||
+    value === "cancelled" ||
+    value === "crashed" ||
+    value === "failed"
+  ) {
     return value;
   }
   if (value === "interrupted") {
@@ -294,7 +296,9 @@ export function setWorkspacePinned(id: string, pinned: boolean): WorkspaceRecord
 }
 
 export function reorderWorkspaces(input: ReorderInput): void {
-  const upd = catalog().prepare("UPDATE workspaces SET sort_order = ?, updated_at = ? WHERE id = ?");
+  const upd = catalog().prepare(
+    "UPDATE workspaces SET sort_order = ?, updated_at = ? WHERE id = ?",
+  );
   const now = Date.now();
   const tx = catalog().transaction((ids: string[]) => {
     for (let index = 0; index < ids.length; index++) {
@@ -539,9 +543,7 @@ export function healRunningSessions(): number {
     for (const row of rows) {
       const ckpt = peekThreadCheckpoint(row.thread_id);
       if (ckpt) {
-        const dirtyReason = /no pending interrupt|tool_approval/i.test(
-          row.interrupt_reason ?? "",
-        );
+        const dirtyReason = /no pending interrupt|tool_approval/i.test(row.interrupt_reason ?? "");
         const alreadyCrashed = row.run_status === "crashed" && !dirtyReason;
         const alreadyCancelled =
           row.run_status === "cancelled" &&
@@ -656,9 +658,7 @@ function finalizeOrphanPendingMessages(
     .all(sessionId) as Array<{ id: string; text: string; payload_json: string | null }>;
   if (rows.length === 0) return;
 
-  const upd = db.prepare(
-    `UPDATE chat_messages SET pending = 0, payload_json = ? WHERE id = ?`,
-  );
+  const upd = db.prepare(`UPDATE chat_messages SET pending = 0, payload_json = ? WHERE id = ?`);
   const tx = db.transaction(() => {
     for (const row of rows) {
       let timeline: unknown[] = [];
@@ -711,9 +711,7 @@ export function setSessionPinned(sessionId: string, pinned: boolean): ChatSessio
 }
 
 export function reorderSessions(workspaceId: string, input: ReorderInput): void {
-  const upd = chatDb(workspaceId).prepare(
-    "UPDATE chat_sessions SET sort_order = ? WHERE id = ?",
-  );
+  const upd = chatDb(workspaceId).prepare("UPDATE chat_sessions SET sort_order = ? WHERE id = ?");
   const tx = chatDb(workspaceId).transaction((ids: string[]) => {
     for (let index = 0; index < ids.length; index++) {
       const id = ids[index];
@@ -738,9 +736,7 @@ export function moveSession(input: MoveSessionInput): ChatSessionRecord {
 
   const messages = loadMessages(input.sessionId);
   const sortOrder =
-    typeof input.sortOrder === "number"
-      ? input.sortOrder
-      : nextSessionSortOrder(input.workspaceId);
+    typeof input.sortOrder === "number" ? input.sortOrder : nextSessionSortOrder(input.workspaceId);
 
   const dest = chatDb(input.workspaceId);
   dest

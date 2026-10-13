@@ -111,17 +111,9 @@ export function LogVirtualTable({
         <div role="columnheader">message</div>
         <div role="columnheader">trace</div>
       </div>
-      <div
-        className="logs-vtable-scroll"
-        ref={scrollRef}
-        onScroll={onScroll}
-        role="rowgroup"
-      >
+      <div className="logs-vtable-scroll" ref={scrollRef} onScroll={onScroll} role="rowgroup">
         <div className="logs-vtable-space" style={{ height: totalHeight }}>
-          <div
-            className="logs-vtable-window"
-            style={{ transform: `translateY(${offsetY}px)` }}
-          >
+          <div className="logs-vtable-window" style={{ transform: `translateY(${offsetY}px)` }}>
             {records.slice(start, end).map((r, j) => {
               const i = start + j;
               const summary = summarizeMeta(r.meta);

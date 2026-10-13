@@ -3,20 +3,19 @@
  * 所有消息固定 `channel: "utility"`，用 `kind` 区分方向与语义；勿与 renderer IPC channel 混淆。
  */
 
+import type { SubagentDefinition } from "./agents";
+import type { ChatMode } from "./chatMode";
 import type { AgentCancelCommand, AgentResumeCommand, AgentRunCommand } from "./commands";
 import type { ContextUsageRequest, ContextUsageSnapshot } from "./contextUsage";
 import type { AgentEvent } from "./events";
-import type { ShellApprovalMode, WorkspaceAccess } from "./general";
+import type { HttpCompatibilityMode, ShellApprovalMode, WorkspaceAccess } from "./general";
 import type { HitlRequest, HitlResponse } from "./hitl";
 import type { AiLocale } from "./locale";
 import type { LogRecord } from "./log";
 import type { McpServerConfig, McpServerRuntimeStatus } from "./mcp";
-import type { ChatMode } from "./chatMode";
-import type { HttpCompatibilityMode } from "./general";
-import type { SubagentDefinition } from "./agents";
 import type { ModelCatalog, ModelSelection, ModelSettings } from "./settings";
-import type { TraceSpanMessage } from "./trace";
 import type { ShellProfile } from "./terminal";
+import type { TraceSpanMessage } from "./trace";
 
 /** 主进程 → 子进程：握手，下发检查点目录与初始模型 / 语言。 */
 export type UtilityHello = {

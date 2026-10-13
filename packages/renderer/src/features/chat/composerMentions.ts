@@ -63,8 +63,7 @@ export function applyMentionInsert(
  */
 export function extractContextPaths(text: string): string[] {
   const out: string[] = [];
-  const re =
-    /(?:^|[\s])@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))/g;
+  const re = /(?:^|[\s])@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const p = (m[1] || m[2] || m[3] || "")
@@ -109,8 +108,7 @@ export function parseMentionSegments(
   if (!text) return [];
   // 全局交替匹配：@ 引用 或 /skill（行首/空白后）。
   // `\b` 只挂在 skill 上——路径常以 `/` 结尾，`/` 与空白之间没有词边界。
-  const re =
-    /(?:^|[\s])(?:@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))|\/([a-z0-9]+(?:-[a-z0-9]+)*)\b)/gi;
+  const re = /(?:^|[\s])(?:@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))|\/([a-z0-9]+(?:-[a-z0-9]+)*)\b)/gi;
   const out: MentionSegment[] = [];
   let last = 0;
   let m: RegExpExecArray | null;

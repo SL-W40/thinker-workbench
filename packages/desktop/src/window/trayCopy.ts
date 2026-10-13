@@ -3,7 +3,7 @@
  *
  * 字符串本身按语言保留 en/zh 内容；本模块注释为中文。
  */
-import { DEFAULT_APP_LOCALE, type AppLocale } from "@thinker-workbench/shared";
+import { type AppLocale, DEFAULT_APP_LOCALE } from "@thinker-workbench/shared";
 import { APP_NAME } from "../config/appIdentity";
 import { getGeneralSettings } from "../config/settingsStore";
 

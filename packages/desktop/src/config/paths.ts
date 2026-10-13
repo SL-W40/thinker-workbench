@@ -1,11 +1,19 @@
 /**
  * 桌面主进程用到的路径常量与解析。
  *
- * 涵盖 agent 入口、checkpoint 目录、渲染 index.html、各类图标，以及开发态渲染 URL。
+ * 打包态：`Resources/payload` + layout.json；开发态：monorepo 各包 artifacts。
+ * 业务侧优先 `resolveAppPaths()`，避免手写兄弟包相对路径。
  */
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
+import {
+  type AppPaths,
+  appPathsFromPayloadRoot,
+  monorepoAppPaths,
+  PAYLOAD_DIR_NAME,
+  readAppLayoutFile,
+} from "../packaging/appLayout";
 import { getGeneralSettings } from "./settingsStore";
 import {
   bootstrapThinkerDir,
@@ -13,14 +21,49 @@ import {
   resolveLogDir as resolveLogDirUnderData,
 } from "./thinkerHome";
 
-/** 兄弟包构建产物目录：`packages/<pkg>/artifacts`。 */
-function packageArtifacts(pkg: string): string {
-  return path.join(__dirname, "..", "..", pkg, "artifacts");
+/** 缓存：同进程内 layout 不变。 */
+let cachedPaths: AppPaths | null = null;
+
+/**
+ * 解析应用资源绝对路径（renderer / engine / bundled / icons）。
+ * 打包态读 `process.resourcesPath/payload/layout.json`；开发态指向 monorepo artifacts。
+ */
+export function resolveAppPaths(): AppPaths {
+  if (cachedPaths) return cachedPaths;
+  cachedPaths = app.isPackaged ? resolvePackagedAppPaths() : resolveMonorepoAppPaths();
+  return cachedPaths;
 }
 
-/** Agent utilityProcess 的入口脚本路径（`packages/engine/artifacts/entry.js`）。 */
+/** 仅测试用：清空路径缓存。 */
+export function resetAppPathsCacheForTests(): void {
+  cachedPaths = null;
+}
+
+/** 仅测试用：注入 AppPaths（含图标搜索根）。 */
+export function setAppPathsForTests(paths: AppPaths): void {
+  cachedPaths = paths;
+}
+
+function resolveMonorepoAppPaths(): AppPaths {
+  const desktopArtifacts = __dirname;
+  const packagesRoot = path.join(__dirname, "..", "..");
+  return monorepoAppPaths(desktopArtifacts, packagesRoot);
+}
+
+function resolvePackagedAppPaths(): AppPaths {
+  const payloadRoot = path.join(process.resourcesPath, PAYLOAD_DIR_NAME);
+  const layoutPath = path.join(payloadRoot, "layout.json");
+  if (!fs.existsSync(layoutPath)) {
+    throw new Error(`Missing packaged layout: ${layoutPath}`);
+  }
+  const layout = readAppLayoutFile(layoutPath);
+  // Shell asar 内也可能有图标副本（解锁/早期窗口用）
+  return appPathsFromPayloadRoot(payloadRoot, layout, [__dirname]);
+}
+
+/** Agent utilityProcess 的入口脚本路径。 */
 export function getAgentEntryPath(): string {
-  return path.join(packageArtifacts("engine"), "entry.js");
+  return resolveAppPaths().engineEntry;
 }
 
 /** 用户数据下的 checkpoint 目录。 */
@@ -60,8 +103,28 @@ export function getTraceDir(): string {
 
 /** 打包内置 skills 资源目录；不存在时返回 null。 */
 export function getBundledSkillsDir(): string | null {
-  const dir = path.join(__dirname, "..", "resources", "skills");
-  return fs.existsSync(dir) ? dir : null;
+  const dir = path.join(resolveAppPaths().bundledRoot, "skills");
+  if (fs.existsSync(dir)) return dir;
+  // 开发态：artifacts 尚未 copy 时回退源 resources
+  if (!app.isPackaged) {
+    const fallback = path.join(__dirname, "..", "resources", "skills");
+    return fs.existsSync(fallback) ? fallback : null;
+  }
+  return null;
+}
+
+/**
+ * 内置 Customize 目录（rules / agents / mcps）。
+ * 打包态在 payload/bundled；开发态优先 artifacts，再 resources。
+ */
+export function getBundledCustomizeDir(kind: "rules" | "agents" | "mcps"): string | null {
+  const primary = path.join(resolveAppPaths().bundledRoot, kind);
+  if (fs.existsSync(primary) && fs.statSync(primary).isDirectory()) return primary;
+  if (!app.isPackaged) {
+    const fallback = path.join(__dirname, "..", "resources", kind);
+    if (fs.existsSync(fallback) && fs.statSync(fallback).isDirectory()) return fallback;
+  }
+  return null;
 }
 
 /**
@@ -72,34 +135,54 @@ export function getDefaultWorkspaceRoot(): string {
   return path.join(bootstrapThinkerDir(), "workspace");
 }
 
-/** 打包后应用渲染入口 `index.html`。 */
+/** 应用渲染入口 `index.html`（打包态为 payload 内文件；开发窗口通常走 Vite URL）。 */
 export function getAppIndexHtml(): string {
-  return path.join(packageArtifacts("renderer"), "index.html");
+  return resolveAppPaths().rendererIndexHtml;
 }
 
-/** 图标文件搜索根：主进程旁目录，以及包内 `resources`。 */
-function desktopResourceBases(): string[] {
-  return [__dirname, path.join(__dirname, "..", "resources")];
+/**
+ * OS 图标子目录：Windows 用旧版大图标（`win/`），macOS 用新版（`mac/`）。
+ * Linux 先试 `mac/`，再回落 `win/`。
+ */
+function iconPlatformDirs(): readonly string[] {
+  if (process.platform === "win32") return ["win"];
+  if (process.platform === "darwin") return ["mac"];
+  return ["mac", "win"];
 }
 
 /**
  * 按候选文件名在资源根中查找第一个存在的图标路径。
- * 均不存在时回退到 `__dirname` 下第一个候选名（便于报错定位）。
+ * 优先 `win/` / `mac/` 平台子目录，再回落根目录（如共享 `logo-glyph`）。
+ * 均不存在时回退到第一个搜索根下第一个候选名（便于报错定位）。
  */
 function resolveIcon(names: readonly string[]): string {
-  for (const base of desktopResourceBases()) {
+  const roots = resolveAppPaths().iconSearchRoots;
+  const platformDirs = iconPlatformDirs();
+  for (const base of roots) {
+    for (const dir of platformDirs) {
+      for (const name of names) {
+        const candidate = path.join(base, dir, name);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+  }
+  for (const base of roots) {
     for (const name of names) {
       const candidate = path.join(base, name);
       if (fs.existsSync(candidate)) return candidate;
     }
   }
-  return path.join(__dirname, names[0]!);
+  const fallbackRoot = roots[0] ?? __dirname;
+  const platform = platformDirs[0];
+  if (platform && names[0]) {
+    return path.join(fallbackRoot, platform, names[0]);
+  }
+  return names[0] ? path.join(fallbackRoot, names[0]) : path.join(fallbackRoot, "icon.png");
 }
 
 /**
  * 应用主图标（圆角；圆角外透明）。
- * 优先使用与打包主进程同目录的副本，开发态回退到 package resources。
- * Windows 优先 `.ico`，其它平台优先圆角 PNG。
+ * Windows 优先 `.ico`（旧版大图标），其它平台优先 PNG。
  */
 export function getAppIconPath(): string {
   const names =

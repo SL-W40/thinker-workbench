@@ -15,8 +15,7 @@ export function deriveTaskTitle(
 ): string | undefined {
   const explicit = typeof titleArg === "string" ? titleArg.trim() : "";
   const raw =
-    explicit ||
-    (typeof prompt === "string" ? prompt.trim().split(/\r?\n/)[0]?.trim() || "" : "");
+    explicit || (typeof prompt === "string" ? prompt.trim().split(/\r?\n/)[0]?.trim() || "" : "");
   if (!raw) return undefined;
   const one = raw.replace(/\s+/g, " ").trim();
   if (one.length <= max) return one;

@@ -6,7 +6,7 @@
  * - 描边 1.5 / round 端点（`.tw-icon`）
  * - 复杂面性图标与简单笔画尽量同视觉重量
  */
-import { Icon, createIcon, type IconProps } from "./Icon";
+import { createIcon, Icon, type IconProps } from "./Icon";
 
 const VB = "0 0 16 16";
 
@@ -99,10 +99,7 @@ const FOLDER_OPEN =
   "M2.5 13V4.85A1.2 1.2 0 0 1 3.7 3.65h2.1l.95 1.1h4.55A1.2 1.2 0 0 1 12.5 5.95v1.2M4.15 9.35l1.1-2.15A1.2 1.2 0 0 1 6.3 6.55h6.85a1.2 1.2 0 0 1 1.15 1.5l-1.15 4.35A1.2 1.2 0 0 1 12 13.5H3.7A1.2 1.2 0 0 1 2.5 12.3";
 
 /** 工作区文件夹；`open` 为展开态，默认闭合。 */
-export function FolderIcon({
-  open = false,
-  ...rest
-}: IconProps & { open?: boolean }) {
+export function FolderIcon({ open = false, ...rest }: IconProps & { open?: boolean }) {
   return (
     <Icon name="FolderIcon" viewBox={VB} {...rest}>
       <path d={open ? FOLDER_OPEN : FOLDER_CLOSED} />
@@ -114,19 +111,12 @@ export function FolderIcon({
  * 打开工作区：打开态文件夹。
  * 与文案「打开」一致，不再叠加号（16px 下易挤、易跑偏）。
  */
-export const FolderPlusIcon = createIcon(
-  "FolderPlusIcon",
-  <path d={FOLDER_OPEN} />,
-  VB,
-);
+export const FolderPlusIcon = createIcon("FolderPlusIcon", <path d={FOLDER_OPEN} />, VB);
 
 // —— 布局 / 工具 ——
 
 /** 左侧栏；`open` 时填充侧栏块。 */
-export function SidebarLeftIcon({
-  open = false,
-  ...rest
-}: IconProps & { open?: boolean }) {
+export function SidebarLeftIcon({ open = false, ...rest }: IconProps & { open?: boolean }) {
   return (
     <Icon name="SidebarLeftIcon" viewBox={VB} {...rest}>
       <rect x="2.75" y="3.25" width="10.5" height="9.5" rx="1.35" />
@@ -140,10 +130,7 @@ export function SidebarLeftIcon({
 }
 
 /** 右侧栏（镜像左侧）。 */
-export function SidebarRightIcon({
-  open = false,
-  ...rest
-}: IconProps & { open?: boolean }) {
+export function SidebarRightIcon({ open = false, ...rest }: IconProps & { open?: boolean }) {
   return (
     <Icon name="SidebarRightIcon" viewBox={VB} {...rest}>
       <rect x="2.75" y="3.25" width="10.5" height="9.5" rx="1.35" />
@@ -157,10 +144,7 @@ export function SidebarRightIcon({
 }
 
 /** 设置滑块；`active` 时圆点实心。 */
-export function SettingsIcon({
-  active = false,
-  ...rest
-}: IconProps & { active?: boolean }) {
+export function SettingsIcon({ active = false, ...rest }: IconProps & { active?: boolean }) {
   const fill = active ? "tw-icon__fill" : undefined;
   return (
     <Icon name="SettingsIcon" viewBox={VB} {...rest}>
@@ -175,10 +159,7 @@ export function SettingsIcon({
 /**
  * 控制台：带顶栏的终端窗；`active` 时顶栏圆点实心。
  */
-export function ConsoleIcon({
-  active = false,
-  ...rest
-}: IconProps & { active?: boolean }) {
+export function ConsoleIcon({ active = false, ...rest }: IconProps & { active?: boolean }) {
   const fill = active ? "tw-icon__fill" : undefined;
   return (
     <Icon name="ConsoleIcon" viewBox={VB} {...rest}>
@@ -230,11 +211,7 @@ export const LanesIcon = createIcon(
 );
 
 /** 播放：线框三角，光学框与 Stop 对齐。 */
-export const PlayIcon = createIcon(
-  "PlayIcon",
-  <path d="M5.5 3.75v8.5L12.25 8z" />,
-  VB,
-);
+export const PlayIcon = createIcon("PlayIcon", <path d="M5.5 3.75v8.5L12.25 8z" />, VB);
 
 /** 停止：线框圆角方块，与 Play 同量级。 */
 export const StopIcon = createIcon(

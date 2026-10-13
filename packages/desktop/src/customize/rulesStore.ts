@@ -25,11 +25,7 @@ function toPosix(rel: string): string {
 }
 
 function sanitizeRelPath(relPath: string): string {
-  const cleaned = relPath
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\.\./g, "")
-    .trim();
+  const cleaned = relPath.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\.\./g, "").trim();
   if (!cleaned || cleaned.includes("\0")) throw new Error("Invalid rule path.");
   const withExt = cleaned.toLowerCase().endsWith(".md") ? cleaned : `${cleaned}.md`;
   return withExt;
@@ -68,12 +64,9 @@ function collectRoots(workspaceRoot?: string | null): ScanRoot[] {
   const wsRoot = workspaceRoot?.trim() || null;
   if (wsRoot) {
     const ws = listWorkspaces().find(
-      (w) =>
-        path.resolve(w.rootPath).toLowerCase() === path.resolve(wsRoot).toLowerCase(),
+      (w) => path.resolve(w.rootPath).toLowerCase() === path.resolve(wsRoot).toLowerCase(),
     );
-    const scope: CustomizeScope = ws
-      ? { kind: "workspace", workspaceId: ws.id }
-      : { kind: "user" };
+    const scope: CustomizeScope = ws ? { kind: "workspace", workspaceId: ws.id } : { kind: "user" };
     roots.push({
       root: path.join(wsRoot, ".thinker", "rules"),
       scope,

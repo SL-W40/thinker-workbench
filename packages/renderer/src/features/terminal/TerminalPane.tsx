@@ -23,9 +23,9 @@ import {
   killTerminal,
   listShellProfiles,
   listTerminalSessions,
-  onTerminalEvent,
   OPEN_TERMINAL_EVENT,
   type OpenTerminalDetail,
+  onTerminalEvent,
   resizeTerminal,
   writeTerminal,
 } from "../../bridge/terminal";
@@ -51,9 +51,9 @@ function resolveDefaultProfile(
 }
 
 type Props = {
- /** 面板是否可见（不可见时跳?fit，显示时补一次）。*/
+  /** 面板是否可见（不可见时跳?fit，显示时补一次）。*/
   active?: boolean;
- /** 外部请求聚焦的会?id。*/
+  /** 外部请求聚焦的会?id。*/
   focusSessionId?: string | null;
   onFocusSessionConsumed?: () => void;
 };
@@ -90,7 +90,7 @@ export function TerminalPane({
     sessionsRef.current = sessions;
   }, [sessions]);
 
- // 初始?xterm
+  // 初始?xterm
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -99,11 +99,10 @@ export function TerminalPane({
       convertEol: true,
       cursorBlink: true,
       fontSize: 13,
-      fontFamily:
-        'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
       theme: readXtermTheme(theme),
       allowTransparency: false,
- // xterm 6 自绘滚动条宽度（默认 14）；略宽于全局 7px，避免胶囊边再削后过? overviewRuler: { width: 10 },
+      // xterm 6 自绘滚动条宽度（默认 14）；略宽于全局 7px，避免胶囊边再削后过? overviewRuler: { width: 10 },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -117,7 +116,7 @@ export function TerminalPane({
       const id = activeIdRef.current;
       if (!id || id.startsWith("preview:")) return;
       const meta = sessionsRef.current.find((s) => s.sessionId === id);
- // 已退出的会话不再写入；运行中可交互（?Ctrl+C：
+      // 已退出的会话不再写入；运行中可交互（?Ctrl+C：
       if (meta && meta.status !== "running" && meta.status !== "starting") return;
       void writeTerminal(id, data);
     });
@@ -146,11 +145,11 @@ export function TerminalPane({
       termRef.current = null;
       fitRef.current = null;
     };
- // 仅挂载一次；主题变更由下?effect 同步
+    // 仅挂载一次；主题变更由下?effect 同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [theme]);
 
- // 外观变更时同?xterm + 宿主底色
+  // 外观变更时同?xterm + 宿主底色
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -158,7 +157,7 @@ export function TerminalPane({
     term.options.theme = next;
     applyTerminalHostColors(hostRef.current, theme);
     term.refresh(0, Math.max(0, term.rows - 1));
-  }, [theme, themeId]);
+  }, [theme]);
 
   // 可见时补 fit
   useEffect(() => {
@@ -175,7 +174,7 @@ export function TerminalPane({
         /* ignore */
       }
     });
-  }, [active, activeId]);
+  }, [active]);
 
   // 加载本机 shell profiles（新建下拉）
   useEffect(() => {
@@ -195,7 +194,7 @@ export function TerminalPane({
       if (cancelled) return;
       setSessions(list);
       if (!activeIdRef.current && list.length > 0) {
-        setActiveId(list[list.length - 1]!.sessionId);
+        setActiveId(list[list.length - 1]?.sessionId);
       }
     });
 
@@ -270,7 +269,7 @@ export function TerminalPane({
   function focusSession(detail: OpenTerminalDetail) {
     const id = detail.sessionId?.trim();
     if (id) {
- // 有真?sessionId 时以主进程缓冲为准，不用时间线截断预览覆?
+      // 有真?sessionId 时以主进程缓冲为准，不用时间线截断预览覆?
       setSessions((prev) => {
         if (prev.some((s) => s.sessionId === id)) return prev;
         return [
@@ -299,7 +298,7 @@ export function TerminalPane({
       });
       return;
     }
- // ?sessionId：用预览造本地只读会
+    // ?sessionId：用预览造本地只读会
     if (detail.previewOutput?.trim()) {
       const ghostId = `preview:${Date.now()}`;
       buffersRef.current.set(ghostId, detail.previewOutput);
@@ -325,7 +324,7 @@ export function TerminalPane({
     const pending = consumePendingOpenTerminal();
     if (pending) focusSession(pending);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [focusSession]);
 
   // 外部聚焦
   useEffect(() => {
@@ -333,29 +332,27 @@ export function TerminalPane({
     focusSession({ sessionId: focusSessionId });
     onFocusSessionConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusSessionId, onFocusSessionConsumed]);
+  }, [focusSessionId, onFocusSessionConsumed, focusSession]);
 
   // 全局「打开终端」事件（面板已挂载时：
   useEffect(() => {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<OpenTerminalDetail>).detail ?? {};
- // 事件已派发则清空 pending，避?mount 消费重复
+      // 事件已派发则清空 pending，避?mount 消费重复
       consumePendingOpenTerminal();
       focusSession(detail);
     }
     window.addEventListener(OPEN_TERMINAL_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_TERMINAL_EVENT, onOpen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t]);
+  }, [focusSession]);
 
   async function onNew(profileId?: string) {
     if (creating) return;
     setCreating(true);
     setNewMenuOpen(false);
     try {
-      const session = await createTerminal(
-        profileId ? { profileId } : undefined,
-      );
+      const session = await createTerminal(profileId ? { profileId } : undefined);
       if (session) {
         setSessions((prev) => {
           if (prev.some((s) => s.sessionId === session.sessionId)) return prev;
@@ -375,7 +372,7 @@ export function TerminalPane({
   }
 
   async function onKill(sessionId: string) {
- // 先本地移除，避免 kill ?exit 事件把会话又写回列表
+    // 先本地移除，避免 kill ?exit 事件把会话又写回列表
     const wasActive = activeIdRef.current === sessionId;
     buffersRef.current.delete(sessionId);
     setSessions((prev) => {
@@ -404,8 +401,7 @@ export function TerminalPane({
       ? t("terminal.fromAgent")
       : t("terminal.fromUser")
     : null;
-  const shellProfileId =
-    window.thinker?.settings?.getGeneralSync?.()?.shellProfileId ?? "default";
+  const shellProfileId = window.thinker?.settings?.getGeneralSync?.()?.shellProfileId ?? "default";
   const defaultProfile = resolveDefaultProfile(shellProfiles, shellProfileId);
   const defaultShellLabel = defaultProfile?.name?.trim() || "…";
   const showEmpty = !activeId;

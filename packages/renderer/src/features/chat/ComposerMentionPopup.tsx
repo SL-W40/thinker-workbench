@@ -2,10 +2,10 @@
  * Composer `/` Skills 与 `@` 文件弹出菜单。
  */
 import { CodeIcon, FolderIcon } from "@thinker-workbench/design/react";
-import { useEffect, useId, useMemo, useRef, type ReactNode } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import { FileGlyph, IconFolder } from "../inspector/icons";
 import type { MentionKind } from "./composerMentions";
 import "./ComposerMentionPopup.less";
@@ -47,7 +47,7 @@ type Props = {
   kind: MentionKind;
   items: MentionItem[];
   highlight: number;
- /** 锚点：textarea 内 caret 附近屏幕坐标*/
+  /** 锚点：textarea 内 caret 附近屏幕坐标*/
   anchor: { left: number; top: number; bottom: number } | null;
   onHighlight: (index: number) => void;
   onSelect: (item: MentionItem) => void;
@@ -219,9 +219,11 @@ export function ComposerMentionPopup({
 
 /**
  * 粗算 textarea 内 caret 的屏幕坐标（mirror 法）。 */
-export function getTextareaCaretAnchor(
-  el: HTMLTextAreaElement,
-): { left: number; top: number; bottom: number } {
+export function getTextareaCaretAnchor(el: HTMLTextAreaElement): {
+  left: number;
+  top: number;
+  bottom: number;
+} {
   const rect = el.getBoundingClientRect();
   const style = window.getComputedStyle(el);
   const div = document.createElement("div");

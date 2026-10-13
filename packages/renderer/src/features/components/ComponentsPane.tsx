@@ -1,6 +1,6 @@
 /**
  * 设计系统组件目录页：在应用内展示 `@thinker-workbench/design/react` 控件样例。 * 点击卡片标题可打开弹窗，用自研 Markdown 渲染对应组件说明文档。 * 路由一般为 `#/components`；非激活时 CSS hidden 保活。 */
-import { useId, useState, type ReactNode } from "react";
+
 import {
   Badge,
   Button,
@@ -32,8 +32,9 @@ import {
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import { MarkdownView } from "@thinker-workbench/markdown/react";
-import { useT } from "../../i18n/useI18n";
+import { type ReactNode, useId, useState } from "react";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import { getComponentDoc } from "./componentDocs";
 import "./components.less";
 
@@ -96,7 +97,7 @@ export function ComponentsPane({ active }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [ctxOpen, setCtxOpen] = useState(false);
   const [ctxAnchor, setCtxAnchor] = useState<{ x: number; y: number } | null>(null);
- /** 切换 Input ?invalid 态，演示错误描边。*/
+  /** 切换 Input ?invalid 态，演示错误描边。*/
   const [invalid, setInvalid] = useState(false);
   const [segment, setSegment] = useState("one");
   const [choice, setChoice] = useState("a");
@@ -105,7 +106,7 @@ export function ComponentsPane({ active }: Props) {
   /** Kbd 录制高亮开关（演示 recording 视觉）。*/
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(42);
- /** 当前打开的组件说明文?id；null 表示关闭。*/
+  /** 当前打开的组件说明文?id；null 表示关闭。*/
   const [docId, setDocId] = useState<string | null>(null);
 
   const docsHint = t("components.openDocs");
@@ -129,7 +130,10 @@ export function ComponentsPane({ active }: Props) {
       </header>
 
       <Masonry className="components-grid" gap={16}>
-        {card("Masonry", "components.section.masonry", "components.section.masonryDesc", (
+        {card(
+          "Masonry",
+          "components.section.masonry",
+          "components.section.masonryDesc",
           <Masonry
             className="components-masonry-demo"
             columns={3}
@@ -154,10 +158,13 @@ export function ComponentsPane({ active }: Props) {
             <div className="components-masonry-tile" style={{ height: 88 }}>
               F
             </div>
-          </Masonry>
-        ))}
+          </Masonry>,
+        )}
 
-        {card("Input", "components.section.input", "components.section.inputDesc", (
+        {card(
+          "Input",
+          "components.section.input",
+          "components.section.inputDesc",
           <>
             <Input
               id={nameId}
@@ -172,20 +179,26 @@ export function ComponentsPane({ active }: Props) {
                 {invalid ? t("components.demo.clearInvalid") : t("components.demo.markInvalid")}
               </Button>
             </div>
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("TextArea", "components.section.textarea", "components.section.textareaDesc", (
+        {card(
+          "TextArea",
+          "components.section.textarea",
+          "components.section.textareaDesc",
           <TextArea
             id={notesId}
             value={notes}
             placeholder={t("components.demo.notesPlaceholder")}
             onChange={(e) => setNotes(e.target.value)}
             aria-label={t("components.demo.notes")}
-          />
-        ))}
+          />,
+        )}
 
-        {card("Field", "components.section.field", "components.section.fieldDesc", (
+        {card(
+          "Field",
+          "components.section.field",
+          "components.section.fieldDesc",
           <Field
             label={t("components.demo.notes")}
             htmlFor={fieldId}
@@ -197,10 +210,13 @@ export function ComponentsPane({ active }: Props) {
               placeholder={t("components.demo.notesPlaceholder")}
               onChange={(e) => setFieldValue(e.target.value)}
             />
-          </Field>
-        ))}
+          </Field>,
+        )}
 
-        {card("Button", "components.section.button", "components.section.buttonDesc", (
+        {card(
+          "Button",
+          "components.section.button",
+          "components.section.buttonDesc",
           <>
             <div className="components-row">
               <Button variant="primary">{t("components.demo.primary")}</Button>
@@ -215,10 +231,13 @@ export function ComponentsPane({ active }: Props) {
               <Button size="lg">{t("components.demo.large")}</Button>
               <Button disabled>{t("components.demo.disabled")}</Button>
             </div>
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("IconButton", "components.section.iconButton", "components.section.iconButtonDesc", (
+        {card(
+          "IconButton",
+          "components.section.iconButton",
+          "components.section.iconButtonDesc",
           <div className="components-row">
             <IconButton aria-label={t("nav.back")} title={t("nav.back")}>
               <ChevronLeftIcon />
@@ -226,10 +245,13 @@ export function ComponentsPane({ active }: Props) {
             <IconButton variant="secondary" aria-label={t("nav.forward")} title={t("nav.forward")}>
               <ChevronRightIcon />
             </IconButton>
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("Icon", "components.section.icon", "components.section.iconDesc", (
+        {card(
+          "Icon",
+          "components.section.icon",
+          "components.section.iconDesc",
           <div className="components-icon-grid">
             {DESIGN_ICON_GALLERY.map(({ name, Icon: Glyph }) => (
               <div key={name} className="components-icon-cell" title={name}>
@@ -237,18 +259,24 @@ export function ComponentsPane({ active }: Props) {
                 <span>{name.replace(/Icon$/, "")}</span>
               </div>
             ))}
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("Spinner", "components.section.spinner", "components.section.spinnerDesc", (
+        {card(
+          "Spinner",
+          "components.section.spinner",
+          "components.section.spinnerDesc",
           <div className="components-row">
             <Spinner size="sm" label={t("components.demo.loading")} />
             <Spinner size="md" label={t("components.demo.loading")} />
             <Spinner size="lg" label={t("components.demo.loading")} />
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("Select", "components.section.select", "components.section.selectDesc", (
+        {card(
+          "Select",
+          "components.section.select",
+          "components.section.selectDesc",
           <Field label={t("components.demo.locale")}>
             <Select
               value={locale}
@@ -259,42 +287,49 @@ export function ComponentsPane({ active }: Props) {
               onChange={setLocale}
               aria-label={t("components.demo.locale")}
             />
-          </Field>
-        ))}
+          </Field>,
+        )}
 
         {card(
           "SegmentedControl",
           "components.section.segmented",
           "components.section.segmentedDesc",
-          (
-            <Field label={t("components.demo.segmented")}>
-              <SegmentedControl
-                value={segment}
-                options={[
-                  { value: "one", label: t("components.demo.radioOne") },
-                  { value: "two", label: t("components.demo.radioTwo") },
-                ]}
-                onChange={setSegment}
-                aria-label={t("components.demo.segmented")}
-              />
-            </Field>
-          ),
+          <Field label={t("components.demo.segmented")}>
+            <SegmentedControl
+              value={segment}
+              options={[
+                { value: "one", label: t("components.demo.radioOne") },
+                { value: "two", label: t("components.demo.radioTwo") },
+              ]}
+              onChange={setSegment}
+              aria-label={t("components.demo.segmented")}
+            />
+          </Field>,
         )}
 
-        {card("Switch", "components.section.switch", "components.section.switchDesc", (
+        {card(
+          "Switch",
+          "components.section.switch",
+          "components.section.switchDesc",
           <div className="components-row components-row--between">
             <span>{t("components.demo.switch")}</span>
             <Switch checked={on} onChange={setOn} aria-label={t("components.demo.switch")} />
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("Checkbox", "components.section.checkbox", "components.section.checkboxDesc", (
+        {card(
+          "Checkbox",
+          "components.section.checkbox",
+          "components.section.checkboxDesc",
           <Checkbox checked={checked} onChange={setChecked}>
             {t("components.demo.checkbox")}
-          </Checkbox>
-        ))}
+          </Checkbox>,
+        )}
 
-        {card("RadioGroup", "components.section.radio", "components.section.radioDesc", (
+        {card(
+          "RadioGroup",
+          "components.section.radio",
+          "components.section.radioDesc",
           <RadioGroup
             name="components-radio"
             value={radio}
@@ -304,19 +339,25 @@ export function ComponentsPane({ active }: Props) {
             ]}
             onChange={setRadio}
             aria-label={t("components.demo.radio")}
-          />
-        ))}
+          />,
+        )}
 
-        {card("Badge", "components.section.badge", "components.section.badgeDesc", (
+        {card(
+          "Badge",
+          "components.section.badge",
+          "components.section.badgeDesc",
           <div className="components-row">
             <Badge>{t("components.demo.badgeNeutral")}</Badge>
             <Badge variant="accent">{t("components.demo.badgeAccent")}</Badge>
             <Badge variant="success">{t("components.demo.badgeSuccess")}</Badge>
             <Badge variant="danger">{t("components.demo.badgeDanger")}</Badge>
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("Kbd", "components.section.kbd", "components.section.kbdDesc", (
+        {card(
+          "Kbd",
+          "components.section.kbd",
+          "components.section.kbdDesc",
           <div className="components-row">
             <Kbd
               recording={recording}
@@ -325,10 +366,13 @@ export function ComponentsPane({ active }: Props) {
             >
               {recording ? t("settings.shortcuts.pressKeys") : "Ctrl+R"}
             </Kbd>
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("ChoiceCard", "components.section.choice", "components.section.choiceDesc", (
+        {card(
+          "ChoiceCard",
+          "components.section.choice",
+          "components.section.choiceDesc",
           <div className="components-choice-grid">
             <ChoiceCard selected={choice === "a"} onSelect={() => setChoice("a")}>
               <strong>{t("components.demo.choiceA")}</strong>
@@ -338,10 +382,13 @@ export function ComponentsPane({ active }: Props) {
               <strong>{t("components.demo.choiceB")}</strong>
               <span>{t("components.demo.choiceBDesc")}</span>
             </ChoiceCard>
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("SideNavItem", "components.section.nav", "components.section.navDesc", (
+        {card(
+          "SideNavItem",
+          "components.section.nav",
+          "components.section.navDesc",
           <div className="components-nav-demo">
             <SideNavItem selected={nav === "general"} onClick={() => setNav("general")}>
               {t("settings.sections.general.title")}
@@ -349,19 +396,25 @@ export function ComponentsPane({ active }: Props) {
             <SideNavItem selected={nav === "model"} onClick={() => setNav("model")}>
               {t("settings.sections.model.title")}
             </SideNavItem>
-          </div>
-        ))}
+          </div>,
+        )}
 
-        {card("Callout", "components.section.callout", "components.section.calloutDesc", (
+        {card(
+          "Callout",
+          "components.section.callout",
+          "components.section.calloutDesc",
           <>
             <Callout tone="info" title={t("components.demo.calloutInfo")}>
               {t("components.demo.calloutBody")}
             </Callout>
             <Callout tone="warning">{t("components.demo.calloutWarn")}</Callout>
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("Progress", "components.section.progress", "components.section.progressDesc", (
+        {card(
+          "Progress",
+          "components.section.progress",
+          "components.section.progressDesc",
           <>
             <Progress value={progress} aria-label={t("components.demo.progress")} />
             <Progress indeterminate aria-label={t("components.demo.progressIndeterminate")} />
@@ -374,10 +427,13 @@ export function ComponentsPane({ active }: Props) {
                 {t("components.demo.progressMore")}
               </Button>
             </div>
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("EmptyState", "components.section.empty", "components.section.emptyDesc", (
+        {card(
+          "EmptyState",
+          "components.section.empty",
+          "components.section.emptyDesc",
           <EmptyState
             icon={<FolderIcon size="lg" />}
             title={t("components.demo.emptyTitle")}
@@ -387,18 +443,24 @@ export function ComponentsPane({ active }: Props) {
                 {t("components.demo.emptyAction")}
               </Button>
             }
-          />
-        ))}
+          />,
+        )}
 
-        {card("Separator", "components.section.separator", "components.section.separatorDesc", (
+        {card(
+          "Separator",
+          "components.section.separator",
+          "components.section.separatorDesc",
           <>
             <p className="components-card-desc">{t("components.demo.separatorAbove")}</p>
             <Separator />
             <p className="components-card-desc">{t("components.demo.separatorBelow")}</p>
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("Modal", "components.section.modal", "components.section.modalDesc", (
+        {card(
+          "Modal",
+          "components.section.modal",
+          "components.section.modalDesc",
           <>
             <Button variant="primary" onClick={() => setModalOpen(true)}>
               {t("components.demo.openModal")}
@@ -423,10 +485,13 @@ export function ComponentsPane({ active }: Props) {
                 </Button>
               </div>
             </Modal>
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("ContextMenu", "components.section.contextMenu", "components.section.contextMenuDesc", (
+        {card(
+          "ContextMenu",
+          "components.section.contextMenu",
+          "components.section.contextMenuDesc",
           <>
             <Button
               variant="secondary"
@@ -465,10 +530,13 @@ export function ComponentsPane({ active }: Props) {
                 },
               ]}
             />
-          </>
-        ))}
+          </>,
+        )}
 
-        {card("Table", "components.section.table", "components.section.tableDesc", (
+        {card(
+          "Table",
+          "components.section.table",
+          "components.section.tableDesc",
           <Table density="compact" scroll={false} cellOverflow="ellipsis">
             <Table.Head>
               <Table.Row>
@@ -501,8 +569,8 @@ export function ComponentsPane({ active }: Props) {
                 </Table.Cell>
               </Table.Row>
             </Table.Body>
-          </Table>
-        ))}
+          </Table>,
+        )}
       </Masonry>
 
       <Modal

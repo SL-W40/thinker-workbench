@@ -52,8 +52,6 @@ export function workspaceGitFileDiff(
 }
 
 /** git init。 */
-export function workspaceGitInit(
-  workspaceId: string,
-): Promise<{ ok: boolean; error?: string }> {
+export function workspaceGitInit(workspaceId: string): Promise<{ ok: boolean; error?: string }> {
   return requireApi().gitInit(workspaceId);
 }

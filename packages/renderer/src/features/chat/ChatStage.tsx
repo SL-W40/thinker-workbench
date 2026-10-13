@@ -9,24 +9,20 @@
 import { Button, ChevronRightIcon, useDesignTheme } from "@thinker-workbench/design/react";
 import type { ChatMessage } from "@thinker-workbench/shared";
 import {
+  type KeyboardEvent,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent,
-  type RefObject,
 } from "react";
 import { brandGlyphSrc } from "../../brand/logo";
 import { bindSubagentSession } from "../../bridge/subagent";
 import { workspaceTree } from "../../bridge/workspaceFs";
 import { Bubble } from "../../components/Bubble";
-import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
-import {
-  isNearBottom,
-  scrollElementToBottom,
-  scrollToBottomIfStuck,
-} from "./chatStickScroll";
+import { useT } from "../../i18n/useI18n";
+import { isNearBottom, scrollElementToBottom, scrollToBottomIfStuck } from "./chatStickScroll";
 
 type Props = {
   empty: boolean;
@@ -174,7 +170,7 @@ export function ChatStage({
     el.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => el.removeEventListener("scroll", onScroll);
-  }, [scroller, empty]);
+  }, [scroller]);
 
   /**
    * 强制贴底：stickNonce 递增（发送 / 切会话 / 续跑）。
@@ -191,7 +187,7 @@ export function ChatStage({
       return;
     }
     scrollToBottomIfStuck(el, stuckRef.current, "auto");
-  }, [messages, busy, empty, scroller, stickNonce]);
+  }, [empty, scroller, stickNonce]);
 
   /** 气泡内增高（思考展开、markdown）：贴底则跟上，否则显示「回到最新」*/
   useEffect(() => {
@@ -207,7 +203,7 @@ export function ChatStage({
     });
     ro.observe(thread);
     return () => ro.disconnect();
-  }, [scroller, empty, messages.length]);
+  }, [scroller]);
 
   function jumpToLatest() {
     const el = scroller.current;
@@ -220,7 +216,7 @@ export function ChatStage({
   const leadKey: MessageKey = workspaceEmpty ? "chat.welcomeLeadEmpty" : "chat.welcomeLead";
   const shortcuts = workspaceEmpty ? EMPTY_WORKSPACE_SHORTCUTS : PROJECT_SHORTCUTS;
 
- // 切换 / 刷新会话：绑定并恢复该会话下已打开的 Task tab
+  // 切换 / 刷新会话：绑定并恢复该会话下已打开的 Task tab
   useEffect(() => {
     bindSubagentSession(sessionId ?? null);
   }, [sessionId]);
@@ -230,13 +226,7 @@ export function ChatStage({
       <main className="stage" ref={scroller}>
         {empty ? (
           <section className="chat-welcome" aria-label={t("chat.welcomeLabel")}>
-            <img
-              className="chat-welcome__mascot"
-              src={glyphSrc}
-              alt=""
-              width={96}
-              height={96}
-            />
+            <img className="chat-welcome__mascot" src={glyphSrc} alt="" width={96} height={96} />
             <p className="chat-welcome__lead">{t(leadKey)}</p>
             <ul className="chat-welcome__shortcuts">
               {shortcuts.map((item) => (
@@ -265,9 +255,7 @@ export function ChatStage({
                 onOpenFile={onOpenFile}
                 onOpenTerminal={onOpenTerminal}
                 onRestoreDeletedFile={
-                  onRestoreDeletedFile
-                    ? (stepId) => onRestoreDeletedFile(m.id, stepId)
-                    : undefined
+                  onRestoreDeletedFile ? (stepId) => onRestoreDeletedFile(m.id, stepId) : undefined
                 }
                 onResume={onResume}
                 canResume={canResume}

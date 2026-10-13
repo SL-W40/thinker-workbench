@@ -14,16 +14,12 @@ import type {
   DataDirMigrateProgress,
   GeneralSettings,
 } from "@thinker-workbench/shared";
-import { countRunningSessions } from "../db/workspacesStore";
 import { closeThinkerDb } from "../db/thinkerDb";
+import { countRunningSessions } from "../db/workspacesStore";
 import { closeLogsDb } from "../log/logsDb";
 import { getDataDir } from "./paths";
 import { resetSessionCache, saveSessionNow } from "./sessionStore";
-import {
-  commitDataDirSetting,
-  getGeneralSettings,
-  settingsPath,
-} from "./settingsStore";
+import { commitDataDirSetting, getGeneralSettings, settingsPath } from "./settingsStore";
 import { resolveDataDir } from "./thinkerHome";
 
 /** 已知顶层目录/文件的展示名（其余顶层项也会一并迁移）。 */
@@ -94,9 +90,7 @@ function collectFiles(root: string): Array<{ abs: string; rel: string; size: num
 function samePath(a: string, b: string): boolean {
   const na = path.resolve(a);
   const nb = path.resolve(b);
-  return process.platform === "win32"
-    ? na.toLowerCase() === nb.toLowerCase()
-    : na === nb;
+  return process.platform === "win32" ? na.toLowerCase() === nb.toLowerCase() : na === nb;
 }
 
 function isNested(parent: string, child: string): boolean {
@@ -113,8 +107,7 @@ export function listMigratableItems(fromDataDir: string): DataDirMigrateItem[] {
   const settings = settingsPath();
   const settingsAlreadyUnderFrom =
     fs.existsSync(settings) &&
-    (samePath(path.dirname(settings), fromDataDir) ||
-      isNested(fromDataDir, settings));
+    (samePath(path.dirname(settings), fromDataDir) || isNested(fromDataDir, settings));
 
   // 引导 settings 不在当前 dataDir 内时单独列入；已在根下则由顶层扫描覆盖
   if (!settingsAlreadyUnderFrom) {
@@ -172,10 +165,7 @@ export function previewDataDirChange(configured: string): DataDirChangePreview {
   };
 }
 
-function emit(
-  onProgress: ProgressFn | undefined,
-  progress: DataDirMigrateProgress,
-): void {
+function emit(onProgress: ProgressFn | undefined, progress: DataDirMigrateProgress): void {
   onProgress?.(progress);
 }
 
@@ -244,9 +234,7 @@ export function applyDataDirChange(
         }
         for (const f of collectFiles(item.sourcePath)) {
           // collectFiles 对目录会把 basename 放进 rel 前缀
-          const rel = fs.statSync(item.sourcePath).isDirectory()
-            ? f.rel
-            : item.destRelative;
+          const rel = fs.statSync(item.sourcePath).isDirectory() ? f.rel : item.destRelative;
           jobs.push({
             abs: f.abs,
             dest: path.join(preview.to, rel),

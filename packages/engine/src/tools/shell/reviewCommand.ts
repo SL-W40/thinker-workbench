@@ -12,7 +12,7 @@ export async function reviewCommand(
   command: string,
   signal: AbortSignal,
 ): Promise<{ decision: ReviewDecision; reason: string }> {
-  let model;
+  let model: ReturnType<typeof getChatModel>;
   try {
     model = getChatModel();
   } catch {

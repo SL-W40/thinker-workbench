@@ -1,10 +1,7 @@
 /**
  * 右侧 inspector：子代理时间?tab（头部固定，正文可滚、无横向滚动）。 */
 import { useSyncExternalStore } from "react";
-import {
-  getSubagentStep,
-  subscribeSubagentSteps,
-} from "../../bridge/subagent";
+import { getSubagentStep, subscribeSubagentSteps } from "../../bridge/subagent";
 import { useT } from "../../i18n/useI18n";
 import { SubagentSessionView } from "../chat/SubagentSessionView";
 import { subagentDisplayTitle } from "../chat/subagentTitle";
@@ -32,9 +29,7 @@ export function SubagentInspectorPane({ taskId, subagent, onOpenFile }: Props) {
     if (!raw || raw === "…") return null;
     return raw;
   })();
-  const phaseKey = step
-    ? (`chat.subagent.phase.${step.phase}` as const)
-    : null;
+  const phaseKey = step ? (`chat.subagent.phase.${step.phase}` as const) : null;
 
   return (
     <div className="agent-subagent-pane">
@@ -43,9 +38,7 @@ export function SubagentInspectorPane({ taskId, subagent, onOpenFile }: Props) {
           {title}
         </h2>
         <p className="agent-subagent-pane__meta">
-          {typeName ? (
-            <span>{t("chat.subagent.typeChip", { name: typeName })}</span>
-          ) : null}
+          {typeName ? <span>{t("chat.subagent.typeChip", { name: typeName })}</span> : null}
           {phaseKey ? (
             <>
               {typeName ? (
@@ -70,9 +63,7 @@ export function SubagentInspectorPane({ taskId, subagent, onOpenFile }: Props) {
         {step ? (
           <SubagentSessionView step={step} onOpenFile={onOpenFile} />
         ) : (
-          <p className="agent-subagent-pane__empty">
-            {t("chat.subagent.timelineEmpty")}
-          </p>
+          <p className="agent-subagent-pane__empty">{t("chat.subagent.timelineEmpty")}</p>
         )}
       </div>
     </div>

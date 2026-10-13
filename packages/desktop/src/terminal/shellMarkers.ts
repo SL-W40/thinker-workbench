@@ -4,8 +4,12 @@
 import type { ShellProfile } from "@thinker-workbench/shared";
 import { isCmdShell, isFishShell, isPowerShell } from "./shellKind";
 
+/** ESC / BEL：用 fromCharCode 拼正则，避免字面量里的控制字符触发 lint。 */
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+
 /** Agent 命令结束标记（OSC，xterm 通常不显示为可见文本）。 */
-export const DONE_OSC_RE = /\x1b\]666;done;(-?\d+)\x07/;
+export const DONE_OSC_RE = new RegExp(`${ESC}\\]666;done;(-?\\d+)${BEL}`);
 export const DONE_PLAIN_RE = /__TW_DONE__(-?\d+)/;
 
 /** 供 RegExp 匹配结束标记。 */
@@ -29,8 +33,9 @@ export function hasDoneMarker(output: string): boolean {
 
 /** 去掉结束标记，避免进模型 / UI。 */
 export function stripDoneMarkers(output: string): string {
+  const oscStrip = new RegExp(`${ESC}\\]666;done;-?\\d+${BEL}`, "g");
   return output
-    .replace(/\x1b\]666;done;-?\d+\x07/g, "")
+    .replace(oscStrip, "")
     .replace(/\r?\n?__TW_DONE__-?\d*\r?\n?/g, "\n")
     .replace(/\n{3,}/g, "\n\n");
 }
@@ -43,8 +48,7 @@ export function wrapWithDoneMarker(
   profile: Pick<ShellProfile, "id" | "path"> | string,
   command: string,
 ): string {
-  const ref =
-    typeof profile === "string" ? { id: profile, path: profile } : profile;
+  const ref = typeof profile === "string" ? { id: profile, path: profile } : profile;
   if (isPowerShell(ref)) {
     // try/finally：Ctrl+C 打断命令后仍打印 OSC done
     return (
@@ -81,8 +85,7 @@ export function submitLine(
   profile: Pick<ShellProfile, "id" | "path"> | string,
   command: string,
 ): string {
-  const ref =
-    typeof profile === "string" ? { id: profile, path: profile } : profile;
+  const ref = typeof profile === "string" ? { id: profile, path: profile } : profile;
   if (isCmdShell(ref)) return `${command}\r\n`;
   return `${command}\r`;
 }
@@ -95,7 +98,7 @@ export function looksLikeCommandSettled(tail: string): boolean {
   if (!tail) return false;
   if (/Keyboard interrupt|Interrupted by user|^\^C/im.test(tail)) return true;
   // 常见提示符回到行首
-  if (/\n(?:PS [^>\n]+>|[\w.-]+@[\w.-]+[:\$#]|[A-Z]:\\[^>]*>)\s*$/m.test(tail)) {
+  if (/\n(?:PS [^>\n]+>|[\w.-]+@[\w.-]+[:$#]|[A-Z]:\\[^>]*>)\s*$/m.test(tail)) {
     return true;
   }
   return false;

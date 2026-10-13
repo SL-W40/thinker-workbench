@@ -1,17 +1,13 @@
 /**
  * 会话 Trace 时序图：全程共用全局 7 泳道坐标；箭头落点对齐表头生命线。 * 并行 par：展开=?Task 分块连排（避免按墙钟交织出现 AAA…BBB…AAA）；滑动=只看当前 Task。 */
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  IconButton,
-} from "@thinker-workbench/design/react";
+import { ChevronLeftIcon, ChevronRightIcon, IconButton } from "@thinker-workbench/design/react";
 import type { TraceSpanKind, TraceSpanRecord } from "@thinker-workbench/shared";
 import {
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useT } from "../../i18n/useI18n";
 import { callTreeLabel } from "./callTreeModel";
@@ -25,24 +21,9 @@ type Props = {
   onSelect: (spanId: string) => void;
 };
 
-type LaneId =
-  | "renderer"
-  | "desktop"
-  | "runtime"
-  | "graph"
-  | "model"
-  | "tool"
-  | "subagent";
+type LaneId = "renderer" | "desktop" | "runtime" | "graph" | "model" | "tool" | "subagent";
 
-const LANES: LaneId[] = [
-  "renderer",
-  "desktop",
-  "runtime",
-  "graph",
-  "model",
-  "tool",
-  "subagent",
-];
+const LANES: LaneId[] = ["renderer", "desktop", "runtime", "graph", "model", "tool", "subagent"];
 
 const LANE_LABEL: Record<LaneId, string> = {
   renderer: "Renderer",
@@ -90,7 +71,7 @@ type DrawnRow =
       subtitle?: string;
       collapsed?: boolean;
       taskIds?: string[];
- /** par ?Task 分块条（矮条 + 色标）。*/
+      /** par ?Task 分块条（矮条 + 色标）。*/
       parTask?: boolean;
       taskTag?: string;
       taskColorIdx?: number;
@@ -159,8 +140,7 @@ function estimateLabelW(label: string): number {
 
 function scopeOf(span: TraceSpanRecord, all: TraceSpanRecord[]): "main" | string {
   if (span.taskId?.trim()) return span.taskId.trim();
-  const callId =
-    typeof span.attrs?.callId === "string" ? span.attrs.callId.trim() : "";
+  const callId = typeof span.attrs?.callId === "string" ? span.attrs.callId.trim() : "";
   if (span.kind === "tool" && /task/i.test(span.name) && callId) {
     if (all.some((s) => s.taskId === callId)) return callId;
   }
@@ -385,15 +365,13 @@ function buildSegments(
       .join("|");
     if (emittedClusters.has(key)) continue;
     emittedClusters.add(key);
- // 重新分配 par 内色?A/B/…
+    // 重新分配 par 内色?A/B/…
     const tagged = ev.cluster.map((tk, i) => ({ ...tk, tag: tagForIndex(i) }));
     if (tagged.length >= 2) {
       segments.push({
         type: "par",
         tasks: tagged,
-        collapsed: new Set(
-          [...collapsed].filter((id) => tagged.some((t) => t.id === id)),
-        ),
+        collapsed: new Set([...collapsed].filter((id) => tagged.some((t) => t.id === id))),
       });
     } else {
       const task = tagged[0]!;
@@ -455,8 +433,8 @@ function expandSegments(
         taskIds: seg.tasks.map((tk) => tk.id),
       });
       if (collapsed) continue;
- // ?Task 启动顺序分块连排：墙钟交织会在「一侧卡?model.chat」时
- // 打出 AAA…BBB…AAA，叙事断裂；分块可读性更好，时间线仍看上?Gantt。
+      // ?Task 启动顺序分块连排：墙钟交织会在「一侧卡?model.chat」时
+      // 打出 AAA…BBB…AAA，叙事断裂；分块可读性更好，时间线仍看上?Gantt。
       const ordered = [...seg.tasks].sort((a, b) => a.startTs - b.startTs);
       for (let i = 0; i < ordered.length; i++) {
         const tk = ordered[i]!;
@@ -508,11 +486,9 @@ function expandSegments(
       });
     }
   }
- // 按当前可见顺序重编号，避免分块后序号?A/B 间乱
+  // 按当前可见顺序重编号，避免分块后序号?A/B 间乱
   let seq = 1;
-  return rows.map((r) =>
-    r.kind === "msg" ? { ...r, msg: { ...r.msg, seq: seq++ } } : r,
-  );
+  return rows.map((r) => (r.kind === "msg" ? { ...r, msg: { ...r.msg, seq: seq++ } } : r));
 }
 
 /**
@@ -539,7 +515,7 @@ function arrowEndpoints(
       labelY: number;
       arrowY: number;
     } {
- // 行内分层：标签上 / 箭头?/ 不把徽章放标签上
+  // 行内分层：标签上 / 箭头?/ 不把徽章放标签上
   const arrowY = y + 6;
   const labelY = y - 10;
   if (Math.abs(x2 - x1) < MIN_ARROW_DX) {
@@ -571,7 +547,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [hostW, setHostW] = useState(0);
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(() => new Set());
- /** par ?→当前滑动页下?*/
+  /** par ?→当前滑动页下?*/
   const [parSlide, setParSlide] = useState<Record<string, number>>({});
   const [parView, setParView] = useState<ParViewMode>("expand");
   const swipeRef = useRef<{
@@ -642,31 +618,25 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
   const gantt = useMemo(() => {
     if (taskMetas.length < 1) return null;
     const mainMsgs = msgs.filter((m) => m.scope === "main");
-    const t0 = Math.min(
-      ...msgs.map((m) => m.span.startTs),
-      ...taskMetas.map((x) => x.startTs),
-    );
+    const t0 = Math.min(...msgs.map((m) => m.span.startTs), ...taskMetas.map((x) => x.startTs));
     const t1 = Math.max(
       ...msgs.map((m) => m.span.endTs ?? m.span.startTs),
       ...taskMetas.map((x) => x.endTs),
       t0 + 1,
     );
-    const mainStart = mainMsgs.length
-      ? Math.min(...mainMsgs.map((m) => m.span.startTs))
-      : t0;
+    const mainStart = mainMsgs.length ? Math.min(...mainMsgs.map((m) => m.span.startTs)) : t0;
     const mainEnd = mainMsgs.length
       ? Math.max(...mainMsgs.map((m) => m.span.endTs ?? m.span.startTs))
       : t0;
     return { t0, t1, mainStart, mainEnd, tasks: taskMetas };
   }, [msgs, taskMetas]);
 
- // 行高需容纳：标?+ 徽章间隙 + 箭头，避免上下行叠字
+  // 行高需容纳：标?+ 徽章间隙 + 箭头，避免上下行叠字
   const rowH = 52;
   const scopeH = 32;
   const parTaskH = 24;
   const headH = 36;
-  const ganttH =
-    gantt && gantt.tasks.length > 0 ? 18 + (1 + gantt.tasks.length) * 16 + 8 : 0;
+  const ganttH = gantt && gantt.tasks.length > 0 ? 18 + (1 + gantt.tasks.length) * 16 + 8 : 0;
   // 泳道均分容器宽度（不设最小总宽，避免撑出横向滚动）
   const padL = 0;
   const fallbackW = LANES.length * 80;
@@ -676,8 +646,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
   const chartW = LANES.length * laneW;
   const width = chartLeft + chartW + padL;
 
-  const laneCenterX = (lane: LaneId) =>
-    chartLeft + LANES.indexOf(lane) * laneW + laneW / 2;
+  const laneCenterX = (lane: LaneId) => chartLeft + LANES.indexOf(lane) * laneW + laneW / 2;
 
   const rowHOf = (r: DrawnRow | undefined) => {
     if (r?.kind !== "banner") return rowH;
@@ -695,10 +664,9 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
     const top = rowTop(yi);
     return top + rowHOf(rows[yi]) / 2;
   };
-  const totalH =
-    headH + ganttH + rows.reduce((acc, r) => acc + rowHOf(r), 0) + 16;
+  const totalH = headH + ganttH + rows.reduce((acc, r) => acc + rowHOf(r), 0) + 16;
 
- /** 并行区整块底色：?par 横幅到其内部消息?*/
+  /** 并行区整块底色：?par 横幅到其内部消息?*/
   const parBands: { y: number; h: number }[] = [];
   {
     let startYi: number | null = null;
@@ -737,18 +705,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
     inPar: boolean;
     taskColorIdx?: number;
   }) {
-    const {
-      msg: m,
-      x1,
-      x2,
-      yMid,
-      top,
-      selected,
-      onPath,
-      inTask,
-      inPar,
-      taskColorIdx = 0,
-    } = opts;
+    const { msg: m, x1, x2, yMid, top, selected, onPath, inTask, inPar, taskColorIdx = 0 } = opts;
     const statusClass =
       m.span.status === "error"
         ? " is-error"
@@ -1057,12 +1014,8 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
               const trackW = Math.max(40, barW - labelW - 4);
               const span = Math.max(1, gantt.t1 - gantt.t0);
               const yMain = 18;
-              const mx =
-                trackLeft + ((gantt.mainStart - gantt.t0) / span) * trackW;
-              const mw = Math.max(
-                4,
-                ((gantt.mainEnd - gantt.mainStart) / span) * trackW,
-              );
+              const mx = trackLeft + ((gantt.mainStart - gantt.t0) / span) * trackW;
+              const mw = Math.max(4, ((gantt.mainEnd - gantt.mainStart) / span) * trackW);
               const items = [
                 {
                   key: "main",
@@ -1073,12 +1026,8 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                   cls: "is-main",
                 },
                 ...gantt.tasks.map((task, i) => {
-                  const x =
-                    trackLeft + ((task.startTs - gantt.t0) / span) * trackW;
-                  const w = Math.max(
-                    4,
-                    ((task.endTs - task.startTs) / span) * trackW,
-                  );
+                  const x = trackLeft + ((task.startTs - gantt.t0) / span) * trackW;
+                  const w = Math.max(4, ((task.endTs - task.startTs) / span) * trackW);
                   return {
                     key: task.id,
                     label: task.title.slice(0, 12),
@@ -1135,19 +1084,11 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
             const isParTask = Boolean(r.parTask);
             const bannerH = isParTask ? parTaskH : scopeH;
             const clickable = !isMain && (!isPar || isParTask);
-            const parKey =
-              isPar && r.taskIds?.length
-                ? [...r.taskIds].sort().join("|")
-                : "";
-            const cluster = parKey
-              ? parClusters.find((c) => c.key === parKey)
-              : undefined;
+            const parKey = isPar && r.taskIds?.length ? [...r.taskIds].sort().join("|") : "";
+            const cluster = parKey ? parClusters.find((c) => c.key === parKey) : undefined;
             const hasParControls = Boolean(cluster && cluster.tasks.length >= 2);
             const idx = cluster
-              ? Math.max(
-                  0,
-                  Math.min(cluster.tasks.length - 1, parSlide[parKey] ?? 0),
-                )
+              ? Math.max(0, Math.min(cluster.tasks.length - 1, parSlide[parKey] ?? 0))
               : 0;
             return (
               <g
@@ -1174,12 +1115,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                     {r.subtitle ? ` …${r.subtitle}` : ""}
                   </text>
                 ) : isPar && hasParControls ? (
-                  <foreignObject
-                    x={chartLeft}
-                    y={y + 2}
-                    width={chartW}
-                    height={bannerH - 4}
-                  >
+                  <foreignObject x={chartLeft} y={y + 2} width={chartW} height={bannerH - 4}>
                     <div
                       className="trace-seq__par-bar"
                       // foreignObject 内需 xhtml 命名空间
@@ -1191,9 +1127,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                       }
                       onPointerDown={(e) => onParPointerDown(parKey, e)}
                       onPointerMove={onParPointerMove}
-                      onPointerUp={(e) =>
-                        onParPointerUp(cluster!.tasks.length, e)
-                      }
+                      onPointerUp={(e) => onParPointerUp(cluster?.tasks.length, e)}
                       onPointerCancel={() => {
                         swipeRef.current = null;
                         setSlideOffset(0);
@@ -1217,23 +1151,19 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                             size="sm"
                             aria-label={t("tools.trace.parSwipePrev")}
                             disabled={idx <= 0}
-                            onClick={() =>
-                              goPar(parKey, cluster!.tasks.length, -1)
-                            }
+                            onClick={() => goPar(parKey, cluster?.tasks.length, -1)}
                           >
                             <ChevronLeftIcon />
                           </IconButton>
                           <span>
-                            {idx + 1}/{cluster!.tasks.length}
+                            {idx + 1}/{cluster?.tasks.length}
                           </span>
                           <IconButton
                             variant="ghost"
                             size="sm"
                             aria-label={t("tools.trace.parSwipeNext")}
-                            disabled={idx >= cluster!.tasks.length - 1}
-                            onClick={() =>
-                              goPar(parKey, cluster!.tasks.length, 1)
-                            }
+                            disabled={idx >= cluster?.tasks.length - 1}
+                            onClick={() => goPar(parKey, cluster?.tasks.length, 1)}
                           >
                             <ChevronRightIcon />
                           </IconButton>
@@ -1266,11 +1196,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                     x={chartLeft + 10}
                     y={y + bannerH / 2 + 3}
                     className={`trace-seq__scope-title${isMain ? " is-main" : isPar ? " is-par" : " is-task"}`}
-                    onClick={
-                      isPar
-                        ? () => toggleTasks(r.taskIds)
-                        : undefined
-                    }
+                    onClick={isPar ? () => toggleTasks(r.taskIds) : undefined}
                     style={isPar ? { cursor: "pointer" } : undefined}
                   >
                     {r.collapsed ? "…" : !isMain ? "…" : ""}

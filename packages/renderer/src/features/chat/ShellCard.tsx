@@ -51,10 +51,11 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
   const isWriteApproval = Boolean(awaiting && (writeParent || writePreview));
   const reviewNote = isWriteApproval
     ? ""
-    : hitlBody &&
-        command &&
-        hitlBody.startsWith(command.slice(0, Math.min(command.length, 400)))
-      ? hitlBody.slice(command.slice(0, 400).length).replace(/^\s*\n+/, "").trim()
+    : hitlBody && command && hitlBody.startsWith(command.slice(0, Math.min(command.length, 400)))
+      ? hitlBody
+          .slice(command.slice(0, 400).length)
+          .replace(/^\s*\n+/, "")
+          .trim()
       : hitlBody && hitlBody !== command
         ? hitlBody
         : "";
@@ -66,7 +67,7 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
       return;
     }
     setOverflows(el.scrollHeight > el.clientHeight + 2);
-  }, [displayOut, expanded]);
+  }, []);
 
   const showMore = Boolean(displayOut) && (overflows || expanded);
 
@@ -123,22 +124,16 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
             <div className="run-shell-card__write-ctx">
               {writeParent ? (
                 <>
-                  <p className="run-shell-card__note">
-                    {t("chat.shellWriteIntoCommand")}
-                  </p>
+                  <p className="run-shell-card__note">{t("chat.shellWriteIntoCommand")}</p>
                   <pre className="run-shell-card__write-cmd">{writeParent}</pre>
                 </>
               ) : null}
               <p className="run-shell-card__note">{t("chat.shellWriteWillSend")}</p>
-              <pre className="run-shell-card__write-data">
-                {writePreview || "(empty)"}
-              </pre>
+              <pre className="run-shell-card__write-data">{writePreview || "(empty)"}</pre>
             </div>
-          ) : (
-            <>
-              {reviewNote ? <p className="run-shell-card__note">{reviewNote}</p> : null}
-            </>
-          )}
+          ) : reviewNote ? (
+            <p className="run-shell-card__note">{reviewNote}</p>
+          ) : null}
           <div className="run-shell-card__actions">
             {hitl.actions.map((action) => (
               <Button
@@ -164,9 +159,7 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
       ) : null}
 
       {displayOut ? (
-        <div
-          className={`run-shell-card__body${expanded ? " is-expanded" : " is-collapsed"}`}
-        >
+        <div className={`run-shell-card__body${expanded ? " is-expanded" : " is-collapsed"}`}>
           <pre
             ref={outputRef}
             className="run-shell-card__output"

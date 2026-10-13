@@ -2,26 +2,27 @@
  * 设计主题 React 宿主：挂载时 apply CSS 变量，并提供 `useDesignTheme`。
  * 同时挂载 `TitleTooltipHost`，用主题化浮层替代原生 `title`。
  */
+
+import type { MarkdownTheme } from "@thinker-workbench/markdown";
 import {
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
+import { TitleTooltipHost } from "../components/TitleTooltipHost/TitleTooltipHost";
 import {
   applyDesignTheme,
   createDesignTheme,
+  type DesignTheme,
+  type DesignThemeInput,
   lightTheme,
   resolveDesignTheme,
   toMarkdownTheme,
-  type DesignTheme,
-  type DesignThemeInput,
 } from "../themes";
-import type { MarkdownTheme } from "@thinker-workbench/markdown";
-import { TitleTooltipHost } from "../components/TitleTooltipHost/TitleTooltipHost";
 
 type ThemeContextValue = {
   /** 当前完整设计主题。 */

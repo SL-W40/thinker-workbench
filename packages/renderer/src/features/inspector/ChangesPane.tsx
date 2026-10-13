@@ -1,16 +1,17 @@
 /**
  * Changes 面板：Git 状态、懒加载 diff、侧栏文件列表与 CTA prompt。
  */
-import type { GitChangedFile, GitStatus } from "@thinker-workbench/shared";
+
 import { ContextMenu, EmptyState } from "@thinker-workbench/design/react";
 import { highlightCode } from "@thinker-workbench/markdown";
+import type { GitChangedFile, GitStatus } from "@thinker-workbench/shared";
 import {
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-  type RefObject,
   memo,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
   startTransition,
   useEffect,
   useLayoutEffect,
@@ -19,21 +20,17 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { workspaceGitFileDiff } from "../../bridge/workspaceFs";
+import { useT } from "../../i18n/useI18n";
+import { buildChangeTree, type ChangeTreeNode, filterChangeTree } from "./changesTree";
+import { FileGlyph, IconChevron, IconPanelHide, MI } from "./icons";
+import { loadInspectorUi, patchInspectorUi } from "./inspectorUi";
 import {
   FILE_LIST_AUTO_PANE_MIN,
   FILE_LIST_WIDTH,
   useFileListOpen,
   useFileListWidth,
 } from "./useFileListPanel";
-import { workspaceGitFileDiff } from "../../bridge/workspaceFs";
-import { useT } from "../../i18n/useI18n";
-import {
-  buildChangeTree,
-  filterChangeTree,
-  type ChangeTreeNode,
-} from "./changesTree";
-import { FileGlyph, IconChevron, IconPanelHide, MI } from "./icons";
-import { loadInspectorUi, patchInspectorUi } from "./inspectorUi";
 
 const MENU_GAP = 6;
 const MENU_VIEW_PAD = 8;
@@ -45,10 +42,7 @@ type FloatingMenuCoords = {
 };
 
 /** 右对齐触发器，必要时夹入视口，避免被侧栏 overflow 裁切（配?portal）。*/
-function placeFloatingMenu(
-  trigger: DOMRect,
-  minWidth: number,
-): FloatingMenuCoords {
+function placeFloatingMenu(trigger: DOMRect, minWidth: number): FloatingMenuCoords {
   const vw = window.innerWidth;
   const width = Math.max(minWidth, trigger.width);
   let left = trigger.right - width;
@@ -171,7 +165,7 @@ function scheduleIdle(cb: () => void): () => void {
 /** 全局高亮队列：多文件同时在视口时轮转分片，避免并行打满主线程。*/
 type HighlightJob = {
   cancelled: boolean;
- /** 执行一片；还有剩余则返?true。*/
+  /** 执行一片；还有剩余则返?true。*/
   tick: () => boolean;
 };
 
@@ -201,7 +195,7 @@ function pumpHighlightQueue() {
       if (!more || job.cancelled) {
         highlightQueue.shift();
       } else {
- // 轮转到队尾，让其它文件也有机会推? highlightQueue.push(highlightQueue.shift()!);
+        // 轮转到队尾，让其它文件也有机会推? highlightQueue.push(highlightQueue.shift()!);
         break;
       }
     }
@@ -238,8 +232,7 @@ export const CHANGES_ACTION_PROMPTS: Record<ChangesPromptActionId, string> = {
   createBranchCommitAndPush:
     "Create a new branch, commit the current changes, and push to the remote.",
   createBranch: "Create a new branch for the current uncommitted changes.",
-  commitAndPush:
-    "Commit the current changes with an appropriate message and push to the remote.",
+  commitAndPush: "Commit the current changes with an appropriate message and push to the remote.",
   commit: "Commit the current changes with an appropriate message.",
   commitAndCreatePr: "Commit the current changes and open a pull request.",
 };
@@ -383,10 +376,7 @@ const DiffCodeLine = memo(function DiffCodeLine({
       <span className="changes-diff__mark" aria-hidden>
         {kind === "add" ? "+" : kind === "del" ? "−" : " "}
       </span>
-      <code
-        className="changes-diff__text hljs"
-        dangerouslySetInnerHTML={{ __html: html || " " }}
-      />
+      <code className="changes-diff__text hljs" dangerouslySetInnerHTML={{ __html: html || " " }} />
     </div>
   );
 });
@@ -629,7 +619,7 @@ const ChangedFileRow = memo(function ChangedFileRow({
   useEffect(() => {
     if (!open || !inView || patch !== null || loadingRef.current) return;
     void loadDiff(false);
-  }, [open, inView, patch, workspaceId, path]);
+  }, [open, inView, patch, loadDiff]);
 
   // 离屏前记下高度，挂占位避免滚动条跳动。
   useLayoutEffect(() => {
@@ -640,7 +630,7 @@ const ChangedFileRow = memo(function ChangedFileRow({
     if (inView && diffWrapRef.current) {
       setSpacerHeight(diffWrapRef.current.offsetHeight);
     }
-  }, [open, inView, patch, full, loading, err, wordWrap]);
+  }, [open, inView]);
 
   const showDiff = open && inView && (loading || patch !== null || err);
   const showSpacer =
@@ -655,7 +645,9 @@ const ChangedFileRow = memo(function ChangedFileRow({
           onClick={() => void toggle()}
           title={open ? t("inspector.changes.collapseDiff") : t("inspector.changes.expandDiff")}
           aria-expanded={open}
-          aria-label={open ? t("inspector.changes.collapseDiff") : t("inspector.changes.expandDiff")}
+          aria-label={
+            open ? t("inspector.changes.collapseDiff") : t("inspector.changes.expandDiff")
+          }
         >
           <span className="changes-pane__lead" aria-hidden>
             <span className="changes-pane__file-ico">
@@ -666,11 +658,7 @@ const ChangedFileRow = memo(function ChangedFileRow({
             </span>
           </span>
         </button>
-        <button
-          type="button"
-          className="changes-pane__file-name"
-          onClick={() => onOpenFile(path)}
-        >
+        <button type="button" className="changes-pane__file-name" onClick={() => onOpenFile(path)}>
           {path}
         </button>
         <span className="changes-pane__file-stats">
@@ -747,11 +735,7 @@ function ChangesFileList({
     kind: "file" | "dir";
   } | null>(null);
 
-  function openCtxMenu(
-    e: ReactMouseEvent,
-    path: string,
-    kind: "file" | "dir",
-  ) {
+  function openCtxMenu(e: ReactMouseEvent, path: string, kind: "file" | "dir") {
     e.preventDefault();
     e.stopPropagation();
     setCtxMenu({ x: e.clientX, y: e.clientY, path, kind });
@@ -851,7 +835,12 @@ function ChangesFileList({
         <span className="changes-filelist__search-ico" aria-hidden>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
             <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.55" />
-            <path d="M10.4 10.4 13.6 13.6" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
+            <path
+              d="M10.4 10.4 13.6 13.6"
+              stroke="currentColor"
+              strokeWidth="1.55"
+              strokeLinecap="round"
+            />
           </svg>
         </span>
         <input
@@ -945,20 +934,19 @@ export function ChangesPane({
   const viewMenuCoords = useFloatingMenuCoords(viewMenuOpen, viewWrapRef, 200);
   const ctaMenuCoords = useFloatingMenuCoords(ctaMenuOpen, ctaSplitRef, 240);
 
-  const restoredUi = useMemo(
-    () => loadInspectorUi(workspaceId ?? null),
-    [workspaceId],
-  );
+  const restoredUi = useMemo(() => loadInspectorUi(workspaceId ?? null), [workspaceId]);
   const skipPersist = useRef(true);
-  const { open: listOpen, forced: listForced, toggle: toggleList, paneRef } = useFileListOpen(
-    FILE_LIST_AUTO_PANE_MIN,
-    workspaceId ?? "",
-    restoredUi.changesListForced,
-  );
-  const { width: listWidth, dragging: listDragging, onResizePointerDown } = useFileListWidth(
-    restoredUi.changesListWidth,
-    workspaceId ?? "",
-  );
+  const {
+    open: listOpen,
+    forced: listForced,
+    toggle: toggleList,
+    paneRef,
+  } = useFileListOpen(FILE_LIST_AUTO_PANE_MIN, workspaceId ?? "", restoredUi.changesListForced);
+  const {
+    width: listWidth,
+    dragging: listDragging,
+    onResizePointerDown,
+  } = useFileListWidth(restoredUi.changesListWidth, workspaceId ?? "");
 
   useEffect(() => {
     skipPersist.current = true;
@@ -966,7 +954,7 @@ export function ChangesPane({
       skipPersist.current = false;
     }, 0);
     return () => window.clearTimeout(id);
-  }, [workspaceId]);
+  }, []);
 
   useEffect(() => {
     if (!workspaceId || skipPersist.current) return;
@@ -1011,7 +999,7 @@ export function ChangesPane({
     return () => window.removeEventListener("mousedown", onPointer, true);
   }, [viewMenuOpen, ctaMenuOpen]);
 
- // 聊天?keep-alive（hidden）时 portal 菜单仍挂?body，切页时主动关掉
+  // 聊天?keep-alive（hidden）时 portal 菜单仍挂?body，切页时主动关掉
   useEffect(() => {
     if (!viewMenuOpen && !ctaMenuOpen) return;
     const triggers = [viewWrapRef.current, ctaSplitRef.current].filter(
@@ -1062,7 +1050,11 @@ export function ChangesPane({
           title={t("inspector.changes.errorTitle")}
           description={error}
           action={
-            <button type="button" className="changes-pane__primary" onClick={() => void onRefresh()}>
+            <button
+              type="button"
+              className="changes-pane__primary"
+              onClick={() => void onRefresh()}
+            >
               {t("inspector.refresh")}
             </button>
           }
@@ -1078,7 +1070,11 @@ export function ChangesPane({
           title={t("inspector.changes.gitMissingTitle")}
           description={t("inspector.changes.gitMissingBody")}
           action={
-            <button type="button" className="changes-pane__primary" onClick={() => void onRefresh()}>
+            <button
+              type="button"
+              className="changes-pane__primary"
+              onClick={() => void onRefresh()}
+            >
               {t("inspector.refresh")}
             </button>
           }
@@ -1110,10 +1106,7 @@ export function ChangesPane({
   }
 
   return (
-    <div
-      ref={paneRef}
-      className={`changes-pane${listOpen && !noChanges ? " has-filelist" : ""}`}
-    >
+    <div ref={paneRef} className={`changes-pane${listOpen && !noChanges ? " has-filelist" : ""}`}>
       <div className="changes-pane__head">
         <div className="changes-pane__toolbar">
           <div className="changes-pane__meta">
@@ -1172,10 +1165,7 @@ export function ChangesPane({
                   onClick={() => setWordWrap((v) => !v)}
                 >
                   <span>{t("inspector.changes.wordWrap")}</span>
-                  <span
-                    className={`changes-pane__switch${wordWrap ? " is-on" : ""}`}
-                    aria-hidden
-                  />
+                  <span className={`changes-pane__switch${wordWrap ? " is-on" : ""}`} aria-hidden />
                 </button>
                 <button
                   type="button"

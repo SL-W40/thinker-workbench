@@ -31,8 +31,7 @@ export function filterWorkspaceTree(
 
   function walk(node: WorkspaceNode): WorkspaceNode | null {
     if (node.type === "file") {
-      const hit =
-        node.name.toLowerCase().includes(q) || node.path.toLowerCase().includes(q);
+      const hit = node.name.toLowerCase().includes(q) || node.path.toLowerCase().includes(q);
       return hit ? node : null;
     }
 

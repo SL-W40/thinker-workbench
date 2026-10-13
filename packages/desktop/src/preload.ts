@@ -3,35 +3,36 @@
  *
  * 仅转发 @thinker-workbench/shared 约定的 IPC 通道；不直接访问 Node/fs。
  */
-import { contextBridge, ipcRenderer } from "electron";
+
 import {
-  IpcChannels,
   type AgentEvent,
   type AgentResumeCommand,
   type AgentRunCommand,
   type AttentionPreviewKind,
+  type AuxPageId,
+  type BrowserBounds,
+  type BrowserEvent,
   type ChatMessage,
+  type ChatMode,
   type ContextUsageRequest,
+  type CustomizeScope,
   type DataDirChangeRequest,
   type DataDirMigrateProgress,
   type GeneralSettings,
   type HitlResponse,
+  IpcChannels,
   type LogRecord,
+  type LogsQuery,
   type McpServerRuntimeStatus,
   type McpServerUpsertInput,
-  type ChatMode,
   type ModelCatalogPatch,
   type ModelProbeRequest,
   type ModelSelection,
   type MoveSessionInput,
   type ReorderInput,
-  type ShortcutsMap,
-  type AuxPageId,
-  type LogsQuery,
-  type BrowserBounds,
-  type BrowserEvent,
-  type CustomizeScope,
   type RuleUpsertInput,
+  type RunResult,
+  type ShortcutsMap,
   type SkillUpsertInput,
   type SubagentUpsertInput,
   type TerminalEvent,
@@ -42,8 +43,8 @@ import {
   type UiSessionSnapshot,
   type WindowRole,
   type WorkspaceCreateInput,
-  type RunResult,
 } from "@thinker-workbench/shared";
+import { contextBridge, ipcRenderer } from "electron";
 
 /** 渲染进程可用的 Thinker 桌面桥接实现。 */
 const api: ThinkerApi = {
@@ -81,8 +82,7 @@ const api: ThinkerApi = {
   },
   settings: {
     getModel: () => ipcRenderer.invoke(IpcChannels.settingsGetModel),
-    setModel: (patch: ModelCatalogPatch) =>
-      ipcRenderer.invoke(IpcChannels.settingsSetModel, patch),
+    setModel: (patch: ModelCatalogPatch) => ipcRenderer.invoke(IpcChannels.settingsSetModel, patch),
     probeModel: (request: ModelProbeRequest) =>
       ipcRenderer.invoke(IpcChannels.settingsProbeModel, request),
     unlockModelSecrets: (request?: { force?: boolean }) =>
@@ -120,8 +120,7 @@ const api: ThinkerApi = {
       defaultPath?: string;
       title?: string;
       filters?: Array<{ name: string; extensions: string[] }>;
-    }) =>
-      ipcRenderer.invoke(IpcChannels.settingsSaveTextFile, options) as Promise<string | null>,
+    }) => ipcRenderer.invoke(IpcChannels.settingsSaveTextFile, options) as Promise<string | null>,
     resolveDataDir: (configured?: string) =>
       ipcRenderer.invoke(IpcChannels.settingsResolveDataDir, configured),
     previewDataDirChange: (dataDir: string) =>
@@ -131,8 +130,7 @@ const api: ThinkerApi = {
     onDataDirMigrateProgress(cb: (progress: DataDirMigrateProgress) => void) {
       const handler = (_evt: unknown, progress: DataDirMigrateProgress) => cb(progress);
       ipcRenderer.on(IpcChannels.settingsDataDirMigrateProgress, handler);
-      return () =>
-        ipcRenderer.removeListener(IpcChannels.settingsDataDirMigrateProgress, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.settingsDataDirMigrateProgress, handler);
     },
   },
   session: {
@@ -166,10 +164,10 @@ const api: ThinkerApi = {
   },
   workspaces: {
     list: () => ipcRenderer.invoke(IpcChannels.workspacesList),
-    create: (input: WorkspaceCreateInput) => ipcRenderer.invoke(IpcChannels.workspacesCreate, input),
+    create: (input: WorkspaceCreateInput) =>
+      ipcRenderer.invoke(IpcChannels.workspacesCreate, input),
     rename: (id, name) => ipcRenderer.invoke(IpcChannels.workspacesRename, { id, name }),
-    setPinned: (id, pinned) =>
-      ipcRenderer.invoke(IpcChannels.workspacesSetPinned, { id, pinned }),
+    setPinned: (id, pinned) => ipcRenderer.invoke(IpcChannels.workspacesSetPinned, { id, pinned }),
     reorder: (input: ReorderInput) => ipcRenderer.invoke(IpcChannels.workspacesReorder, input),
     remove: (id) => ipcRenderer.invoke(IpcChannels.workspacesRemove, id),
     clear: (id) => ipcRenderer.invoke(IpcChannels.workspacesClear, id),
@@ -179,8 +177,7 @@ const api: ThinkerApi = {
       ipcRenderer.on(IpcChannels.workspacesChanged, handler);
       return () => ipcRenderer.removeListener(IpcChannels.workspacesChanged, handler);
     },
-    listSessions: (workspaceId?) =>
-      ipcRenderer.invoke(IpcChannels.chatSessionsList, workspaceId),
+    listSessions: (workspaceId?) => ipcRenderer.invoke(IpcChannels.chatSessionsList, workspaceId),
     createSession: (workspaceId, title?) =>
       ipcRenderer.invoke(IpcChannels.chatSessionsCreate, { workspaceId, title }),
     getSession: (sessionId) => ipcRenderer.invoke(IpcChannels.chatSessionsGet, sessionId),
@@ -220,15 +217,13 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.workspaceGitStatus, workspaceId),
     gitFileDiff: (workspaceId: string, path: string, full?: boolean) =>
       ipcRenderer.invoke(IpcChannels.workspaceGitDiff, { workspaceId, path, full }),
-    gitInit: (workspaceId: string) =>
-      ipcRenderer.invoke(IpcChannels.workspaceGitInit, workspaceId),
+    gitInit: (workspaceId: string) => ipcRenderer.invoke(IpcChannels.workspaceGitInit, workspaceId),
   },
   terminal: {
     listSessions: () => ipcRenderer.invoke(IpcChannels.terminalList),
     listShellProfiles: () => ipcRenderer.invoke(IpcChannels.terminalListShellProfiles),
     create: (options?) => ipcRenderer.invoke(IpcChannels.terminalCreate, options),
-    write: (sessionId, data) =>
-      ipcRenderer.invoke(IpcChannels.terminalWrite, { sessionId, data }),
+    write: (sessionId, data) => ipcRenderer.invoke(IpcChannels.terminalWrite, { sessionId, data }),
     resize: (sessionId, cols, rows) =>
       ipcRenderer.invoke(IpcChannels.terminalResize, { sessionId, cols, rows }),
     kill: (sessionId) => ipcRenderer.invoke(IpcChannels.terminalKill, sessionId),
@@ -245,10 +240,8 @@ const api: ThinkerApi = {
     goBack: () => ipcRenderer.invoke(IpcChannels.browserGoBack),
     goForward: () => ipcRenderer.invoke(IpcChannels.browserGoForward),
     reload: () => ipcRenderer.invoke(IpcChannels.browserReload),
-    setBounds: (bounds: BrowserBounds) =>
-      ipcRenderer.invoke(IpcChannels.browserSetBounds, bounds),
-    setVisible: (visible: boolean) =>
-      ipcRenderer.invoke(IpcChannels.browserSetVisible, visible),
+    setBounds: (bounds: BrowserBounds) => ipcRenderer.invoke(IpcChannels.browserSetBounds, bounds),
+    setVisible: (visible: boolean) => ipcRenderer.invoke(IpcChannels.browserSetVisible, visible),
     takeControl: () => ipcRenderer.invoke(IpcChannels.browserTakeControl),
     onEvent(cb: (event: BrowserEvent) => void) {
       const handler = (_evt: unknown, event: BrowserEvent) => cb(event);
@@ -279,8 +272,7 @@ const api: ThinkerApi = {
   agents: {
     list: (workspaceRoot?: string | null) =>
       ipcRenderer.invoke(IpcChannels.agentsList, workspaceRoot ?? null),
-    upsert: (input: SubagentUpsertInput) =>
-      ipcRenderer.invoke(IpcChannels.agentsUpsert, input),
+    upsert: (input: SubagentUpsertInput) => ipcRenderer.invoke(IpcChannels.agentsUpsert, input),
     remove: (scope: CustomizeScope, name: string) =>
       ipcRenderer.invoke(IpcChannels.agentsRemove, scope, name),
     copyToScope: (name: string, fromPath: string, scope: CustomizeScope) =>
@@ -293,10 +285,8 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.traceGetSessionSpans, sessionId),
     getPayload: (sessionId: string, payloadId: string) =>
       ipcRenderer.invoke(IpcChannels.traceGetPayload, sessionId, payloadId),
-    startSpan: (req: TraceStartSpanRequest) =>
-      ipcRenderer.invoke(IpcChannels.traceStartSpan, req),
-    endSpan: (req: TraceEndSpanRequest) =>
-      ipcRenderer.invoke(IpcChannels.traceEndSpan, req),
+    startSpan: (req: TraceStartSpanRequest) => ipcRenderer.invoke(IpcChannels.traceStartSpan, req),
+    endSpan: (req: TraceEndSpanRequest) => ipcRenderer.invoke(IpcChannels.traceEndSpan, req),
     deleteSession: (sessionId: string) =>
       ipcRenderer.invoke(IpcChannels.traceDeleteSession, sessionId),
     exportSession: (sessionId: string) =>
@@ -304,13 +294,11 @@ const api: ThinkerApi = {
   },
   mcp: {
     list: () => ipcRenderer.invoke(IpcChannels.mcpList),
-    upsert: (input: McpServerUpsertInput) =>
-      ipcRenderer.invoke(IpcChannels.mcpUpsert, input),
+    upsert: (input: McpServerUpsertInput) => ipcRenderer.invoke(IpcChannels.mcpUpsert, input),
     remove: (id: string) => ipcRenderer.invoke(IpcChannels.mcpRemove, id),
     setEnabled: (id: string, enabled: boolean) =>
       ipcRenderer.invoke(IpcChannels.mcpSetEnabled, id, enabled),
-    test: (input: McpServerUpsertInput) =>
-      ipcRenderer.invoke(IpcChannels.mcpTest, input),
+    test: (input: McpServerUpsertInput) => ipcRenderer.invoke(IpcChannels.mcpTest, input),
     importFile: () => ipcRenderer.invoke(IpcChannels.mcpImportFile),
     onStatus(cb: (status: McpServerRuntimeStatus) => void) {
       const handler = (_evt: unknown, status: McpServerRuntimeStatus) => cb(status);

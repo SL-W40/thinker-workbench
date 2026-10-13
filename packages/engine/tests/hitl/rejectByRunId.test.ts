@@ -2,15 +2,15 @@
  * HITL cancel 按 runId 作用域。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
-import { rejectHitlByRunId, requestHitl } from "../../src/hitl/requestHitl";
-import { runWithContext } from "../../src/runtime/runContext";
-import { buildRunContext } from "../../src/runtime/buildRunContext";
 import {
   DEFAULT_SHELL_ALLOWLIST,
   DEFAULT_SHELL_APPROVAL_MODE,
   DEFAULT_WORKSPACE_ACCESS,
 } from "@thinker-workbench/shared";
+import { describe, it } from "vitest";
+import { rejectHitlByRunId, requestHitl } from "../../src/hitl/requestHitl";
+import { buildRunContext } from "../../src/runtime/buildRunContext";
+import { runWithContext } from "../../src/runtime/runContext";
 
 describe("rejectHitlByRunId", () => {
   it("只拒绝目标 run 的 pending HITL", async () => {

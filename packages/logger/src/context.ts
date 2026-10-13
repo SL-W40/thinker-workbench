@@ -4,7 +4,7 @@ import type { LogContext } from "./types";
  * 同步栈上下文（浏览器与 Node 均可）。
  * Node 侧可用 `@thinker-workbench/logger/node` 的 ALS 在 await 后仍保持上下文。
  */
-let stack: LogContext[] = [];
+const stack: LogContext[] = [];
 let alsGet: (() => LogContext | undefined) | null = null;
 
 /** 由 node 入口注册 AsyncLocalStorage 读取器。 */

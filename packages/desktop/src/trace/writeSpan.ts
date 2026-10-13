@@ -4,11 +4,11 @@
 import {
   createSpanId,
   type TraceEndSpanRequest,
+  type TraceSource,
   type TraceSpanKind,
   type TraceSpanRecord,
-  type TraceSource,
-  type TraceStartSpanRequest,
   type TraceSpanStatus,
+  type TraceStartSpanRequest,
 } from "@thinker-workbench/shared";
 import { getGeneralSettings } from "../config/settingsStore";
 import { isSessionArtifactsPurged } from "../db/sessionArtifacts";
@@ -84,8 +84,7 @@ export function startTraceSpan(input: StartSpanInput): string {
 
   // 缺 summary 时用 name 生成短展示文案（时序图 / 列表标签）
   const summary =
-    input.summary?.trim() ||
-    (input.name.length > 48 ? `${input.name.slice(0, 46)}…` : input.name);
+    input.summary?.trim() || (input.name.length > 48 ? `${input.name.slice(0, 46)}…` : input.name);
 
   const record: TraceSpanRecord = {
     spanId,
@@ -167,8 +166,7 @@ export function handleStartSpan(req: TraceStartSpanRequest): { spanId: string } 
   const spanId = startTraceSpan({
     ...req,
     source: req.source ?? "app",
-    workspaceId:
-      typeof req.attrs?.workspaceId === "string" ? req.attrs.workspaceId : undefined,
+    workspaceId: typeof req.attrs?.workspaceId === "string" ? req.attrs.workspaceId : undefined,
     threadId: typeof req.attrs?.threadId === "string" ? req.attrs.threadId : undefined,
   });
   return { spanId };

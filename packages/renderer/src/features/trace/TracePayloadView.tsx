@@ -3,7 +3,7 @@
  */
 import { SegmentedControl } from "@thinker-workbench/design/react";
 import type { TracePayloadRecord } from "@thinker-workbench/shared";
-import { useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useT } from "../../i18n/useI18n";
 
 type ViewMode = "pretty" | "raw";
@@ -24,12 +24,7 @@ function isLongText(v: unknown): v is string {
 }
 
 function isPrimitive(v: unknown): boolean {
-  return (
-    v == null ||
-    typeof v === "string" ||
-    typeof v === "number" ||
-    typeof v === "boolean"
-  );
+  return v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
 }
 
 function formatPrimitive(v: unknown): string {
@@ -64,11 +59,7 @@ function PrettyValue({ value, depth = 0 }: { value: unknown; depth?: number }): 
       );
     }
     if (depth >= 2) {
-      return (
-        <pre className="trace-pane__prose is-compact">
-          {JSON.stringify(value, null, 2)}
-        </pre>
-      );
+      return <pre className="trace-pane__prose is-compact">{JSON.stringify(value, null, 2)}</pre>;
     }
     return (
       <div className="trace-pane__nested-list">
@@ -83,17 +74,11 @@ function PrettyValue({ value, depth = 0 }: { value: unknown; depth?: number }): 
   }
   if (isPlainObject(value)) {
     if (depth >= 2) {
-      return (
-        <pre className="trace-pane__prose is-compact">
-          {JSON.stringify(value, null, 2)}
-        </pre>
-      );
+      return <pre className="trace-pane__prose is-compact">{JSON.stringify(value, null, 2)}</pre>;
     }
     return <PrettyObject obj={value} depth={depth} />;
   }
-  return (
-    <pre className="trace-pane__prose is-compact">{JSON.stringify(value, null, 2)}</pre>
-  );
+  return <pre className="trace-pane__prose is-compact">{JSON.stringify(value, null, 2)}</pre>;
 }
 
 function PrettyObject({
@@ -161,20 +146,13 @@ function isPartialPayload(json: unknown): boolean {
   );
 }
 
-export function TracePayloadView({
-  title,
-  payload,
-  truncatedLabel,
-  partialLabel,
-}: Props) {
+export function TracePayloadView({ title, payload, truncatedLabel, partialLabel }: Props) {
   const t = useT();
   const [mode, setMode] = useState<ViewMode>("pretty");
   const partial = isPartialPayload(payload.json);
   const flags = useMemo(
     () =>
-      [partial ? partialLabel : null, payload.truncated ? truncatedLabel : null].filter(
-        Boolean,
-      ),
+      [partial ? partialLabel : null, payload.truncated ? truncatedLabel : null].filter(Boolean),
     [partial, partialLabel, payload.truncated, truncatedLabel],
   );
 

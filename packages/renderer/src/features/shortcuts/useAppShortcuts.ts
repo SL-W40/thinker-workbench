@@ -3,22 +3,19 @@
  * `reload` 由主进程 before-input-event 处理，此处跳过。
  */
 import {
-  MAIN_PROCESS_SHORTCUTS,
-  SHORTCUT_CATALOG,
   getDefaultShortcuts,
+  MAIN_PROCESS_SHORTCUTS,
   matchAccelerator,
+  SHORTCUT_CATALOG,
   type ShortcutId,
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
 import { useEffect, useRef, useState } from "react";
-import {
-  SHORTCUTS_SETTINGS_CHANGED,
-  getShortcutsSettings,
-} from "../../bridge/thinker";
+import { getShortcutsSettings, SHORTCUTS_SETTINGS_CHANGED } from "../../bridge/thinker";
 import { isShortcutRecording } from "./recordingGate";
 
 /** 返回 `false` 表示未处理（勿 preventDefault），便于 Escape 在空闲时放行。 */
-export type ShortcutHandlers = Partial<Record<ShortcutId, () => void | boolean>>;
+export type ShortcutHandlers = Partial<Record<ShortcutId, () => undefined | boolean>>;
 
 /** 是否存在应优先响应 Escape 的对话框（避免抢走 Modal 关闭）。 */
 function hasEscapeDialog(): boolean {

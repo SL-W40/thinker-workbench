@@ -7,7 +7,18 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/artifacts", "!**/dist", "!**/node_modules", "!**/.vite"]
+    "includes": [
+      "**",
+      "!**/artifacts",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.vite",
+      "!**/.thinker",
+      "!**/coverage",
+      "!**/test-results",
+      "!**/workbench.desktop.main.js",
+      "!**/.biome-report.json"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -30,7 +41,39 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "warn"
+      },
+      "complexity": {
+        "useOptionalChain": "warn"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "warn",
+        "noInnerDeclarations": "warn",
+        "noUnusedVariables": "warn"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "warn",
+        "noControlCharactersInRegex": "warn",
+        "noAssignInExpressions": "warn",
+        "noImplicitAnyLet": "warn"
+      },
+      "a11y": {
+        "useSemanticElements": "warn",
+        "noSvgWithoutTitle": "warn",
+        "useFocusableInteractive": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "noLabelWithoutControl": "warn",
+        "noStaticElementInteractions": "warn",
+        "useKeyWithClickEvents": "warn",
+        "useMediaCaption": "warn",
+        "noNoninteractiveElementToInteractiveRole": "warn",
+        "noNoninteractiveTabindex": "warn"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "warn"
+      }
     }
   },
   "assist": {

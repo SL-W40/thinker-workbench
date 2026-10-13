@@ -3,14 +3,14 @@
  * runtime 事件以 `kind: "event"`、日志以 `kind: "log"` 回推主进程。
  */
 import {
-  PREVIEW_BODY_CHARS,
   configureLog,
   configureLogPreview,
+  PREVIEW_BODY_CHARS,
   withTextPreview,
 } from "@thinker-workbench/logger";
 import {
-  emptyContextUsageSnapshot,
   type AiLocale,
+  emptyContextUsageSnapshot,
   type McpServerConfig,
   type ModelCatalog,
   type ModelSelection,
@@ -25,33 +25,25 @@ import {
 } from "@thinker-workbench/shared";
 import { setChatMode } from "../chatMode";
 import { setDataDir } from "../config/dataDir";
+import { configureRuntimeLimits } from "../config/runtimeLimits";
 import { assembleContext } from "../context/assembleContext";
 import { rejectHitlByRunId, resolveHitl } from "../hitl/requestHitl";
 import { agentLog, configureAgentLog } from "../log/setup";
 import { getMcpManager } from "../mcp/McpManager";
-import { configureAgentTrace } from "../trace/emit";
-import {
-  configureFromLegacyModel,
-  configureModelCatalog,
-} from "../model/catalog";
-import { configureRuntimeLimits } from "../config/runtimeLimits";
+import { configureFromLegacyModel, configureModelCatalog } from "../model/catalog";
 import { configureHttpCompatibilityMode } from "../model/httpFetch";
-import {
-  configureAiLocale,
-  getAiLocale,
-  getAllowEmoji,
-  getContextWindow,
-} from "../model/openai";
+import { configureAiLocale, getAiLocale, getAllowEmoji, getContextWindow } from "../model/openai";
 import type { ChatMessage } from "../model/types";
+import { type AgentRuntime, createAgentRuntime } from "../runtime/AgentRuntime";
 import { buildRunContext } from "../runtime/buildRunContext";
-import { createAgentRuntime, type AgentRuntime } from "../runtime/AgentRuntime";
 import { bindRuntimeEmitter } from "../runtime/runEmit";
 import { setSubagentDefinitions } from "../subagents/registry";
 import { cancelBackgroundTasksByRunId } from "../tools/task/execute";
+import { configureAgentTrace } from "../trace/emit";
 import { setAllowAiDeleteFiles, setWorkspaceAccess, setWorkspaceRoot } from "../workspace";
 import { handleBrowserEvent } from "./browserClient";
-import { handlePtyEvent } from "./ptyClient";
 import { getParentPort, postToParent } from "./port";
+import { handlePtyEvent } from "./ptyClient";
 import { applyShellConfig } from "./shellConfig";
 
 export class UtilityHost {
@@ -151,7 +143,7 @@ export class UtilityHost {
   }
 
   private async onMessage(message: UtilityToChild): Promise<void> {
-    if (!message || message.channel !== "utility") return;
+    if (message?.channel !== "utility") return;
 
     switch (message.kind) {
       case "hello":

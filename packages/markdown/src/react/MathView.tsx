@@ -1,8 +1,9 @@
 /**
  * KaTeX 数学公式渲染；解析失败时回退为等宽原文。
  */
-import { useMemo } from "react";
+
 import katex from "katex";
+import { useMemo } from "react";
 
 type Props = {
   /** TeX 源。 */

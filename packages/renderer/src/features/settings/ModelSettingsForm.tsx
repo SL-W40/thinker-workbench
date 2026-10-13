@@ -1,7 +1,7 @@
 /**
  * 设置 → 模型：连接凭据（API Key / Base URL / 模型名）与回复偏好（emoji）。
  */
-import { useEffect, useId, useRef, useState } from "react";
+
 import {
   Badge,
   Button,
@@ -10,31 +10,25 @@ import {
   Field,
   Input,
   Modal,
+  reorderTableRows,
   Select,
   Switch,
   Table,
-  reorderTableRows,
 } from "@thinker-workbench/design/react";
 import {
   createId,
-  MODEL_TAGS,
   DEFAULT_CONTEXT_WINDOW,
+  MODEL_TAGS,
   type ModelCatalogPublic,
   type ModelEntry,
   type ModelSelection,
   type ModelTag,
 } from "@thinker-workbench/shared";
-import {
-  getModelSettings,
-  probeModel,
-  setModelSettings,
-} from "../../bridge/thinker";
+import { useEffect, useId, useRef, useState } from "react";
+import { getModelSettings, probeModel, setModelSettings } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
-import {
-  useEnsureModelSecrets,
-  useShowModelSecretGate,
-} from "../modelSecrets/ModelSecretGate";
 import { isUnlockDeniedError } from "../chat/systemErrors";
+import { useEnsureModelSecrets, useShowModelSecretGate } from "../modelSecrets/ModelSecretGate";
 
 /** 输入停止后延迟再写入主进程的毫秒数。*/
 const SAVE_DEBOUNCE_MS = 450;
@@ -400,8 +394,7 @@ export function ModelSettingsForm() {
     })),
   ];
 
-  const providerName = (id: string) =>
-    providers.find((p) => p.id === id)?.label || id || "…";
+  const providerName = (id: string) => providers.find((p) => p.id === id)?.label || id || "…";
 
   return (
     <div className="settings-model">
@@ -739,9 +732,7 @@ export function ModelSettingsForm() {
                 value={modelForm.contextWindow}
                 placeholder={t("settings.model.contextWindowPlaceholder")}
                 onChange={(e) =>
-                  setModelForm((prev) =>
-                    prev ? { ...prev, contextWindow: e.target.value } : prev,
-                  )
+                  setModelForm((prev) => (prev ? { ...prev, contextWindow: e.target.value } : prev))
                 }
               />
             </Field>
@@ -773,11 +764,7 @@ export function ModelSettingsForm() {
               <Button variant="ghost" onClick={() => setModelForm(null)}>
                 {t("settings.model.cancel")}
               </Button>
-              <Button
-                variant="primary"
-                onClick={commitModelForm}
-                disabled={!modelForm.providerId}
-              >
+              <Button variant="primary" onClick={commitModelForm} disabled={!modelForm.providerId}>
                 {t("settings.model.save")}
               </Button>
             </div>

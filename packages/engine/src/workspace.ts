@@ -121,7 +121,9 @@ export function getAllowAiBrowser(): boolean {
 }
 
 /** 设置命令行审批模式。 */
-export function setShellApprovalMode(mode: ShellApprovalMode | undefined | null): ShellApprovalMode {
+export function setShellApprovalMode(
+  mode: ShellApprovalMode | undefined | null,
+): ShellApprovalMode {
   if (mode) shellApprovalMode = normalizeShellApprovalMode(mode);
   return shellApprovalMode;
 }

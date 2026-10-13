@@ -8,10 +8,7 @@ export type FrontmatterParseResult = {
 };
 
 function stripQuotes(s: string): string {
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     return s.slice(1, -1);
   }
   return s;
@@ -62,9 +59,9 @@ export function parseFrontmatter(raw: string): FrontmatterParseResult {
       flushBlock();
     }
     const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
-    if (!m) continue;
-    const key = m[1]!;
-    const value = m[2]!.trim();
+    if (!m?.length) continue;
+    const key = m[1];
+    const value = m[2]?.trim();
     if (isBlockScalarIndicator(value)) {
       blockKey = key;
       blockFolded = value.startsWith(">");

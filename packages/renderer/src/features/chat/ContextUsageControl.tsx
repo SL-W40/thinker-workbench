@@ -3,23 +3,16 @@
  */
 import { CloseIcon, IconButton } from "@thinker-workbench/design/react";
 import {
-  emptyContextUsageSnapshot,
   type ChatMessage,
   type ContextUsageSegmentId,
   type ContextUsageSnapshot,
+  emptyContextUsageSnapshot,
 } from "@thinker-workbench/shared";
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getContextUsage } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import { extractContextPaths } from "./composerMentions";
 import { visibleAssistantText } from "./messageModel";
 import { formatCompactTokens } from "./usageStats";
@@ -74,11 +67,7 @@ function toUsageMessages(messages: ChatMessage[], draft: string) {
 
 /**
  * 相对触发器放置弹层：下方够用则向下，否则向上；再夹入视口。 */
-function placeContextPopover(
-  trigger: DOMRect,
-  menuW: number,
-  menuH: number,
-): PopoverCoords {
+function placeContextPopover(trigger: DOMRect, menuW: number, menuH: number): PopoverCoords {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const width = Math.min(menuW, vw - POPOVER_PAD * 2);
@@ -111,16 +100,19 @@ export function ContextUsageControl({ messages, draft, workspaceRoot }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      const contextPaths = extractContextPaths(draft);
-      void getContextUsage({
-        messages: toUsageMessages(messages, draft),
-        workspaceRoot: workspaceRoot ?? undefined,
-        ...(contextPaths.length ? { contextPaths } : {}),
-      }).then((snap) => {
-        if (!cancelled) setUsage(snap);
-      });
-    }, open ? 80 : 400);
+    const timer = window.setTimeout(
+      () => {
+        const contextPaths = extractContextPaths(draft);
+        void getContextUsage({
+          messages: toUsageMessages(messages, draft),
+          workspaceRoot: workspaceRoot ?? undefined,
+          ...(contextPaths.length ? { contextPaths } : {}),
+        }).then((snap) => {
+          if (!cancelled) setUsage(snap);
+        });
+      },
+      open ? 80 : 400,
+    );
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -146,7 +138,7 @@ export function ContextUsageControl({ messages, draft, workspaceRoot }: Props) {
     return () => {
       window.removeEventListener("resize", update);
     };
-  }, [open, usage]);
+  }, [open]);
 
   // 页面 / 聊天区滚动时关掉，避免浮层与触发器脱
   useEffect(() => {
@@ -178,8 +170,7 @@ export function ContextUsageControl({ messages, draft, workspaceRoot }: Props) {
     };
   }, [open]);
 
-  const pct =
-    usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0;
+  const pct = usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0;
   const byId = new Map(usage.segments.map((s) => [s.id, s.tokens]));
   const ordered = SEGMENT_ORDER.map((id) => ({
     id,
@@ -194,7 +185,12 @@ export function ContextUsageControl({ messages, draft, workspaceRoot }: Props) {
 
   const popoverStyle: CSSProperties = coords
     ? { top: coords.top, left: coords.left, width: coords.width }
-    : { top: 0, left: 0, width: Math.min(POPOVER_WIDTH, window.innerWidth - POPOVER_PAD * 2), visibility: "hidden" };
+    : {
+        top: 0,
+        left: 0,
+        width: Math.min(POPOVER_WIDTH, window.innerWidth - POPOVER_PAD * 2),
+        visibility: "hidden",
+      };
 
   const popover =
     open && typeof document !== "undefined"

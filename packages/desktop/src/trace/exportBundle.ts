@@ -3,15 +3,15 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import yazl from "yazl";
 import {
-  DEFAULT_TRACE_REDACT_KEYS,
   type ChatMessage,
   type ChatSessionRecord,
+  DEFAULT_TRACE_REDACT_KEYS,
   type TraceSessionSummary,
   type TraceSpanRecord,
   type WorkspaceRecord,
 } from "@thinker-workbench/shared";
+import yazl from "yazl";
 
 /** 导出包内文本文件映射（路径 → 内容）。 */
 export type ExportFileMap = Record<string, string>;
@@ -73,9 +73,7 @@ export function buildTraceSummary(spans: TraceSpanRecord[]): Record<string, unkn
 
     const turnRaw = s.attrs?.turn;
     const turn =
-      typeof turnRaw === "number" && Number.isFinite(turnRaw)
-        ? Math.floor(turnRaw)
-        : undefined;
+      typeof turnRaw === "number" && Number.isFinite(turnRaw) ? Math.floor(turnRaw) : undefined;
     if (turn != null && turn > 0) {
       const entry = turns.get(turn) ?? { count: 0, names: [] };
       entry.count += 1;
@@ -198,10 +196,7 @@ export function buildSessionExportFiles(input: BuildExportBundleInput): ExportFi
 }
 
 /** 将文件映射写入 ZIP。 */
-export async function writeExportZip(
-  files: ExportFileMap,
-  outPath: string,
-): Promise<void> {
+export async function writeExportZip(files: ExportFileMap, outPath: string): Promise<void> {
   await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
   const zipfile = new yazl.ZipFile();
   for (const [name, content] of Object.entries(files)) {
@@ -220,10 +215,6 @@ export async function writeExportZip(
 /** 默认导出文件名。 */
 export function defaultExportFileName(sessionId: string, ts = Date.now()): string {
   const short = sessionId.replace(/[^a-zA-Z0-9]/g, "").slice(-8) || "session";
-  const stamp = new Date(ts)
-    .toISOString()
-    .replace(/[:.]/g, "-")
-    .replace("T", "_")
-    .slice(0, 19);
+  const stamp = new Date(ts).toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
   return `thinker-trace-${short}-${stamp}.zip`;
 }

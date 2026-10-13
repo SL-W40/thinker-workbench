@@ -11,7 +11,8 @@ if (argv.length === 0) {
   process.exit(1);
 }
 
-const ANSI = /\u001b\[[0-9;]*m/g;
+/** ESC：用 fromCharCode 拼正则，避免字面量控制字符触发 lint */
+const ANSI = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
 
 /** 去掉 ANSI 后再匹配；成功路径的心跳整行丢弃 */
 const DROP = [

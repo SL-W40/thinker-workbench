@@ -2,12 +2,8 @@
  * 按配置清理会话 Trace（天 / 会话数 / 总字节）。
  */
 import { getGeneralSettings } from "../config/settingsStore";
-import {
-  deleteSession,
-  listSessionsOldestFirst,
-  sessionCount,
-} from "./traceDb";
 import { removeSessionJsonl, totalSessionsBytes } from "./sessionJsonl";
+import { deleteSession, listSessionsOldestFirst, sessionCount } from "./traceDb";
 
 export type PruneTraceResult = {
   removedSessions: number;

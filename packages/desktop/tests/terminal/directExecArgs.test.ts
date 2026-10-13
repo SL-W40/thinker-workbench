@@ -3,10 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import {
-  buildDirectExecArgs,
-  resolveExecMode,
-} from "../../src/terminal/directExecArgs";
+import { buildDirectExecArgs, resolveExecMode } from "../../src/terminal/directExecArgs";
 
 describe("resolveExecMode", () => {
   it("显式 login / direct 原样", () => {
@@ -34,10 +31,7 @@ describe("buildDirectExecArgs", () => {
   });
 
   it("cmd 用 /c", () => {
-    const inv = buildDirectExecArgs(
-      { id: "cmd", name: "cmd", path: "cmd.exe", args: [] },
-      "dir",
-    );
+    const inv = buildDirectExecArgs({ id: "cmd", name: "cmd", path: "cmd.exe", args: [] }, "dir");
     assert.deepEqual(inv.args, ["/d", "/s", "/c", "dir"]);
   });
 
@@ -65,4 +59,3 @@ describe("buildDirectExecArgs", () => {
     assert.deepEqual(inv.args, ["-c", "echo hi"]);
   });
 });
-

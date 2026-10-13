@@ -16,15 +16,15 @@ describe("shell tool specs", () => {
   it("shell 参数含 await 与 exec_mode", () => {
     const shell = getTool("shell");
     assert.ok(shell);
-    assert.ok(shell!.parameters.properties.await);
-    assert.equal(shell!.parameters.properties.await.type, "boolean");
-    assert.ok(shell!.parameters.properties.exec_mode);
+    assert.ok(shell?.parameters.properties.await);
+    assert.equal(shell?.parameters.properties.await.type, "boolean");
+    assert.ok(shell?.parameters.properties.exec_mode);
   });
 
   it("shell_write 支持 secret", () => {
     const w = getTool("shell_write");
     assert.ok(w);
-    assert.ok(w!.parameters.properties.secret);
-    assert.equal(w!.parameters.properties.secret.type, "boolean");
+    assert.ok(w?.parameters.properties.secret);
+    assert.equal(w?.parameters.properties.secret.type, "boolean");
   });
 });

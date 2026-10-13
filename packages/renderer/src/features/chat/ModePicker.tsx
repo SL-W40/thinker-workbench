@@ -1,25 +1,26 @@
 /**
  * Composer 左下角 ChatMode：紧凑触发器 + 带图标与说明的上浮面板。
  */
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentType } from "react";
-import { createPortal } from "react-dom";
+
 import {
   AgentModeIcon,
   AskModeIcon,
   DebugModeIcon,
+  type IconProps,
   MultitaskModeIcon,
   PlanModeIcon,
-  type IconProps,
 } from "@thinker-workbench/design/react";
 import {
   CHAT_MODES,
-  DEFAULT_CHAT_MODE,
   type ChatMode,
+  DEFAULT_CHAT_MODE,
   normalizeChatMode,
 } from "@thinker-workbench/shared";
+import { type ComponentType, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getSessionChatMode, setSessionChatMode } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
 import type { MessageKey } from "../../i18n/translate";
+import { useT } from "../../i18n/useI18n";
 import "./ModePicker.less";
 
 type Props = {

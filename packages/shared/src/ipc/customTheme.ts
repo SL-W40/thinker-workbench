@@ -52,7 +52,11 @@ export type CustomThemeExport = {
 
 /** 是否为自定义主题 id。 */
 export function isCustomThemeId(value: unknown): value is string {
-  return typeof value === "string" && value.startsWith(CUSTOM_THEME_ID_PREFIX) && value.length > CUSTOM_THEME_ID_PREFIX.length;
+  return (
+    typeof value === "string" &&
+    value.startsWith(CUSTOM_THEME_ID_PREFIX) &&
+    value.length > CUSTOM_THEME_ID_PREFIX.length
+  );
 }
 
 /** 生成新的自定义主题 id。 */
@@ -100,7 +104,8 @@ export function normalizeCustomThemeSnapshot(
   const ui = normalizeStringMap(obj.ui);
   const markdown = normalizeStringMap(obj.markdown);
   if (!Object.keys(ui).length && !Object.keys(markdown).length) return null;
-  const colorScheme = obj.colorScheme === "dark" || obj.colorScheme === "light" ? obj.colorScheme : undefined;
+  const colorScheme =
+    obj.colorScheme === "dark" || obj.colorScheme === "light" ? obj.colorScheme : undefined;
   return {
     id: recordId,
     ...(colorScheme ? { colorScheme } : {}),
@@ -121,13 +126,10 @@ export function normalizeCustomThemes(raw: unknown): CustomThemeRecord[] {
     if (out.length >= MAX_CUSTOM_THEMES) break;
     if (!item || typeof item !== "object") continue;
     const obj = item as Record<string, unknown>;
-    const id =
-      typeof obj.id === "string" && isCustomThemeId(obj.id) ? obj.id : null;
+    const id = typeof obj.id === "string" && isCustomThemeId(obj.id) ? obj.id : null;
     if (!id || seen.has(id)) continue;
     const name =
-      typeof obj.name === "string" && obj.name.trim()
-        ? obj.name.trim().slice(0, 64)
-        : id;
+      typeof obj.name === "string" && obj.name.trim() ? obj.name.trim().slice(0, 64) : id;
     const theme = normalizeCustomThemeSnapshot(obj.theme, id);
     if (!theme) continue;
     seen.add(id);
@@ -159,9 +161,7 @@ export function parseCustomThemeExport(raw: unknown): {
   const theme = normalizeCustomThemeSnapshot(obj.theme, id);
   if (!theme) return null;
   const name =
-    typeof obj.name === "string" && obj.name.trim()
-      ? obj.name.trim().slice(0, 64)
-      : "Imported";
+    typeof obj.name === "string" && obj.name.trim() ? obj.name.trim().slice(0, 64) : "Imported";
   return {
     name,
     ...(typeof obj.basedOn === "string" && obj.basedOn.trim()
@@ -177,6 +177,15 @@ export function toCustomThemeExport(record: CustomThemeRecord): CustomThemeExpor
     format: CUSTOM_THEME_FORMAT,
     name: record.name,
     ...(record.basedOn ? { basedOn: record.basedOn } : {}),
-    theme: { ...record.theme, id: record.id, ui: { ...record.theme.ui }, markdown: { ...record.theme.markdown }, mermaid: { ...record.theme.mermaid, themeVariables: { ...record.theme.mermaid.themeVariables } } },
+    theme: {
+      ...record.theme,
+      id: record.id,
+      ui: { ...record.theme.ui },
+      markdown: { ...record.theme.markdown },
+      mermaid: {
+        ...record.theme.mermaid,
+        themeVariables: { ...record.theme.mermaid.themeVariables },
+      },
+    },
   };
 }

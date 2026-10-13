@@ -4,6 +4,8 @@
  *
  * `dataDir` 不走 `setGeneral` 即时生效，须经 `previewDataDirChange` / `applyDataDirChange`。
  */
+
+import { type CustomThemeRecord, isCustomThemeId, normalizeCustomThemes } from "./customTheme";
 import type {
   DataDirChangePreview,
   DataDirChangeRequest,
@@ -11,11 +13,6 @@ import type {
   DataDirMigrateProgress,
   DataDirPaths,
 } from "./dataDir";
-import {
-  isCustomThemeId,
-  normalizeCustomThemes,
-  type CustomThemeRecord,
-} from "./customTheme";
 import {
   type AiLocale,
   type AppLocale,
@@ -76,10 +73,7 @@ export const DEFAULT_APP_THEME: BuiltinAppThemeId = "light";
  * 将偏好主题解析为可应用的内置色板 id。
  * `system` 跟随 OS；自定义 id 原样返回（调用方再查 customThemes）。
  */
-export function resolveVisualThemeId(
-  themeId: AppThemeId,
-  prefersDark: boolean,
-): AppThemeId {
+export function resolveVisualThemeId(themeId: AppThemeId, prefersDark: boolean): AppThemeId {
   if (themeId === "system") return prefersDark ? "dark" : "light";
   return themeId;
 }
@@ -353,8 +347,7 @@ export function normalizeShellApprovalMode(
   value: unknown,
   fallback: ShellApprovalMode = DEFAULT_SHELL_APPROVAL_MODE,
 ): ShellApprovalMode {
-  return typeof value === "string" &&
-    (SHELL_APPROVAL_MODES as readonly string[]).includes(value)
+  return typeof value === "string" && (SHELL_APPROVAL_MODES as readonly string[]).includes(value)
     ? (value as ShellApprovalMode)
     : fallback;
 }
@@ -681,9 +674,7 @@ export function normalizeGeneral(
     base.allowAiDeleteFiles = obj.allowAiDeleteFiles;
   }
   if (typeof obj.deleteFileRestoreTtlDays === "number") {
-    base.deleteFileRestoreTtlDays = normalizeDeleteFileRestoreTtlDays(
-      obj.deleteFileRestoreTtlDays,
-    );
+    base.deleteFileRestoreTtlDays = normalizeDeleteFileRestoreTtlDays(obj.deleteFileRestoreTtlDays);
   }
   base.customThemes = normalizeCustomThemes(obj.customThemes);
   if (themeCatalogVersion < THEME_CATALOG_VERSION) {
@@ -793,7 +784,10 @@ export function normalizeGeneral(
   if (typeof obj.traceMaxMessageChars === "number" && Number.isFinite(obj.traceMaxMessageChars)) {
     base.traceMaxMessageChars = Math.max(1000, Math.floor(obj.traceMaxMessageChars));
   }
-  if (typeof obj.traceMaxHistoryMessages === "number" && Number.isFinite(obj.traceMaxHistoryMessages)) {
+  if (
+    typeof obj.traceMaxHistoryMessages === "number" &&
+    Number.isFinite(obj.traceMaxHistoryMessages)
+  ) {
     base.traceMaxHistoryMessages = Math.max(1, Math.floor(obj.traceMaxHistoryMessages));
   }
   if (obj.traceCaptureBinary === "meta" || obj.traceCaptureBinary === "omit") {

@@ -85,8 +85,7 @@ function writeSnap(): void {
     }
     const snap: SessionSnap = {
       openTaskIds: [...openTaskIds],
-      activeTaskId:
-        activeTaskId && openTaskIds.includes(activeTaskId) ? activeTaskId : null,
+      activeTaskId: activeTaskId && openTaskIds.includes(activeTaskId) ? activeTaskId : null,
       steps: stepsObj,
     };
     localStorage.setItem(storageKey(sessionId), JSON.stringify(snap));
@@ -118,8 +117,7 @@ export function consumePendingRestoreSubagent(): RestoreSubagentDetail | null {
 export function peekOpenSubagents(): RestoreSubagentDetail {
   return {
     taskIds: [...openTaskIds],
-    activeTaskId:
-      activeTaskId && openTaskIds.includes(activeTaskId) ? activeTaskId : null,
+    activeTaskId: activeTaskId && openTaskIds.includes(activeTaskId) ? activeTaskId : null,
   };
 }
 
@@ -214,8 +212,7 @@ export function forgetSubagentStep(taskId: string): void {
  * 否则清空，避免刷新后强行抢回 Task。
  */
 export function setActiveSubagentTask(taskId: string | null): void {
-  const next =
-    taskId && openTaskIds.includes(taskId) ? taskId : null;
+  const next = taskId && openTaskIds.includes(taskId) ? taskId : null;
   if (activeTaskId === next) return;
   activeTaskId = next;
   writeSnap();

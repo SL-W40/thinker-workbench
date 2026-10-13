@@ -99,9 +99,7 @@ function ensureActiveShard(meta: Database.Database): string {
 
   const key = newShardKey(meta);
   meta
-    .prepare(
-      "INSERT INTO shards(key, record_count, created_at, accepting_new) VALUES(?, 0, ?, 1)",
-    )
+    .prepare("INSERT INTO shards(key, record_count, created_at, accepting_new) VALUES(?, 0, ?, 1)")
     .run(key, Date.now());
   return key;
 }
@@ -110,9 +108,7 @@ function rotateActiveShard(meta: Database.Database, fullKey: string): string {
   meta.prepare("UPDATE shards SET accepting_new = 0 WHERE key = ?").run(fullKey);
   const key = newShardKey(meta);
   meta
-    .prepare(
-      "INSERT INTO shards(key, record_count, created_at, accepting_new) VALUES(?, 0, ?, 1)",
-    )
+    .prepare("INSERT INTO shards(key, record_count, created_at, accepting_new) VALUES(?, 0, ?, 1)")
     .run(key, Date.now());
   return key;
 }
@@ -155,9 +151,9 @@ function resolveWriteShard(meta: Database.Database, traceId: string | undefined)
   }
 
   let active = ensureActiveShard(meta);
-  const row = meta.prepare("SELECT record_count, accepting_new FROM shards WHERE key = ?").get(
-    active,
-  ) as { record_count: number; accepting_new: number } | undefined;
+  const row = meta
+    .prepare("SELECT record_count, accepting_new FROM shards WHERE key = ?")
+    .get(active) as { record_count: number; accepting_new: number } | undefined;
 
   // 活跃库已满：先滚动，新 trace 进新库
   if (row && row.accepting_new === 1 && row.record_count >= LOG_RECORDS_PER_SHARD) {
@@ -210,9 +206,9 @@ export function insertLogRecord(record: LogRecord): void {
     }
 
     // 本条写入后触顶 → 封库，后续新 trace 进新库（未完成 trace 仍绑此 key）
-    const after = meta.prepare("SELECT record_count, accepting_new FROM shards WHERE key = ?").get(
-      key,
-    ) as { record_count: number; accepting_new: number } | undefined;
+    const after = meta
+      .prepare("SELECT record_count, accepting_new FROM shards WHERE key = ?")
+      .get(key) as { record_count: number; accepting_new: number } | undefined;
     if (after && after.accepting_new === 1 && after.record_count >= LOG_RECORDS_PER_SHARD) {
       rotateActiveShard(meta, key);
     }
@@ -332,9 +328,9 @@ function fetchShardRows(key: string, where: WhereBuilt, cap: number): LogRow[] {
 function lookupTraceShard(traceId: string): string | null {
   try {
     const meta = openMeta();
-    const row = meta.prepare("SELECT shard_key FROM trace_routes WHERE trace_id = ?").get(traceId) as
-      | { shard_key: string }
-      | undefined;
+    const row = meta
+      .prepare("SELECT shard_key FROM trace_routes WHERE trace_id = ?")
+      .get(traceId) as { shard_key: string } | undefined;
     return row?.shard_key ?? null;
   } catch {
     return null;
@@ -367,9 +363,7 @@ export function queryLogRecords(query: LogsDbQuery): {
 } {
   const shards = listLogShards();
   let wanted =
-    query.file && query.file !== "all"
-      ? shards.filter((s) => s.name === query.file)
-      : shards;
+    query.file && query.file !== "all" ? shards.filter((s) => s.name === query.file) : shards;
 
   // 有路由时只扫绑定分片；路由缺失再全扫
   const tid = query.traceId?.trim();

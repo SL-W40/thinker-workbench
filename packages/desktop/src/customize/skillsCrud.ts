@@ -12,7 +12,6 @@ import type {
 } from "@thinker-workbench/shared";
 import { listWorkspaces } from "../db/workspacesStore";
 import { listSkillSummaries } from "../skills/listSkills";
-import { ensureDir, resolveWritableRoot } from "./paths";
 import {
   metaBool,
   metaString,
@@ -20,6 +19,7 @@ import {
   sanitizeKebabName,
   serializeFrontmatter,
 } from "./frontmatter";
+import { ensureDir, resolveWritableRoot } from "./paths";
 
 type ScanRoot = {
   root: string;
@@ -93,12 +93,9 @@ function collectRoots(workspaceRoot?: string | null): ScanRoot[] {
   const wsRoot = workspaceRoot?.trim() || null;
   if (wsRoot) {
     const ws = listWorkspaces().find(
-      (w) =>
-        path.resolve(w.rootPath).toLowerCase() === path.resolve(wsRoot).toLowerCase(),
+      (w) => path.resolve(w.rootPath).toLowerCase() === path.resolve(wsRoot).toLowerCase(),
     );
-    const scope: CustomizeScope = ws
-      ? { kind: "workspace", workspaceId: ws.id }
-      : { kind: "user" };
+    const scope: CustomizeScope = ws ? { kind: "workspace", workspaceId: ws.id } : { kind: "user" };
     roots.push({
       root: path.join(wsRoot, ".thinker", "skills"),
       scope,

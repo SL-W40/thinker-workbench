@@ -2,17 +2,17 @@
  * 从 UtilityRun / UtilityResume 字段组装 RunContext（状态由 Handle 拥有）。
  */
 import {
+  type ChatMode,
   DEFAULT_CHAT_MODE,
   DEFAULT_SHELL_ALLOWLIST,
   DEFAULT_SHELL_APPROVAL_MODE,
   DEFAULT_WORKSPACE_ACCESS,
+  type ModelCatalog,
+  type ModelSelection,
   normalizeChatMode,
   normalizeShellAllowlist,
   normalizeShellApprovalMode,
   normalizeWorkspaceAccess,
-  type ChatMode,
-  type ModelCatalog,
-  type ModelSelection,
   type ShellApprovalMode,
   type ShellProfile,
   type WorkspaceAccess,
@@ -50,8 +50,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
         allowEmoji: input.catalog.allowEmoji,
       }
     : null;
-  const selection =
-    input.selection ?? catalog?.selection ?? ({ mode: "auto" } as ModelSelection);
+  const selection = input.selection ?? catalog?.selection ?? ({ mode: "auto" } as ModelSelection);
 
   return {
     runId: input.runId,
@@ -60,10 +59,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     workspaceRoot: input.workspaceRoot,
     workspaceName: input.workspaceName?.trim() || undefined,
     chatMode: normalizeChatMode(input.chatMode ?? DEFAULT_CHAT_MODE),
-    workspaceAccess: normalizeWorkspaceAccess(
-      input.workspaceAccess,
-      DEFAULT_WORKSPACE_ACCESS,
-    ),
+    workspaceAccess: normalizeWorkspaceAccess(input.workspaceAccess, DEFAULT_WORKSPACE_ACCESS),
     allowAiDeleteFiles: input.allowAiDeleteFiles !== false,
     allowAiShell: input.allowAiShell !== false,
     allowAiBrowser: input.allowAiBrowser !== false,
