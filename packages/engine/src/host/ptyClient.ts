@@ -1,7 +1,14 @@
 /**
  * Engine → main PTY 请求客户端（requestId 往返）。
  */
-import { createId, type UtilityPtyEvent, type UtilityPtyRequest } from "@thinker-workbench/shared";
+import {
+  createId,
+  type PtyExecMode,
+  type PtyShellOutcome,
+  type PtyWakeReason,
+  type UtilityPtyEvent,
+  type UtilityPtyRequest,
+} from "@thinker-workbench/shared";
 import { postToParent } from "./port";
 import { getRunIds } from "../runtime/runEmit";
 
@@ -34,14 +41,41 @@ export type PtyExecResult = {
   output: string;
   exitCode: number | null;
   backgrounded: boolean;
+  outcome: PtyShellOutcome;
+  wakeReason?: PtyWakeReason;
+  outputPath?: string;
+  outputBytes?: number;
+  outputTruncated?: boolean;
+  execMode?: PtyExecMode;
 };
 
-/** 执行一条命令并等待 result。 */
+function eventToResult(event: UtilityPtyEvent, fallbackSessionId = ""): PtyExecResult {
+  const outcome: PtyShellOutcome =
+    event.outcome ??
+    (event.backgrounded ? "still_running" : "complete");
+  return {
+    sessionId: event.sessionId ?? fallbackSessionId,
+    output: event.output ?? "",
+    exitCode: event.exitCode ?? null,
+    backgrounded: outcome === "still_running",
+    outcome,
+    wakeReason: event.wakeReason,
+    outputPath: event.outputPath,
+    outputBytes: event.outputBytes,
+    outputTruncated: event.outputTruncated,
+    execMode: event.execMode,
+  };
+}
+
+/** 执行一条命令并等待 result（或 await:false 立刻 still_running）。 */
 export function ptyExec(
   options: {
     command: string;
     workingDirectory?: string;
     blockUntilMs?: number;
+    /** 默认 true；false = 立刻 still_running。 */
+    await?: boolean;
+    execMode?: PtyExecMode;
     onData?: (data: string, sessionId?: string) => void;
   },
   signal?: AbortSignal,
@@ -56,6 +90,8 @@ export function ptyExec(
     command: options.command,
     workingDirectory: options.workingDirectory,
     blockUntilMs: options.blockUntilMs,
+    await: options.await,
+    execMode: options.execMode,
     runId: ids?.runId,
     threadId: ids?.threadId,
   };
@@ -67,7 +103,6 @@ export function ptyExec(
     }
     const onAbort = () => {
       pending.delete(requestId);
-      // 尽力杀掉
       try {
         postToParent({
           channel: "utility",
@@ -87,12 +122,7 @@ export function ptyExec(
       onData: options.onData,
       resolve: (event) => {
         signal?.removeEventListener("abort", onAbort);
-        resolve({
-          sessionId: event.sessionId ?? "",
-          output: event.output ?? "",
-          exitCode: event.exitCode ?? null,
-          backgrounded: Boolean(event.backgrounded),
-        });
+        resolve(eventToResult(event));
       },
       reject: (err) => {
         signal?.removeEventListener("abort", onAbort);
@@ -140,12 +170,48 @@ export function ptyAwait(
       onData: options.onData,
       resolve: (event) => {
         signal?.removeEventListener("abort", onAbort);
-        resolve({
-          sessionId: event.sessionId ?? options.sessionId,
-          output: event.output ?? "",
-          exitCode: event.exitCode ?? null,
-          backgrounded: Boolean(event.backgrounded),
-        });
+        resolve(eventToResult(event, options.sessionId));
+      },
+      reject: (err) => {
+        signal?.removeEventListener("abort", onAbort);
+        reject(err);
+      },
+    });
+
+    postToParent(req);
+  });
+}
+
+/** 向 running login 会话写入 stdin。 */
+export function ptyWrite(
+  options: { sessionId: string; data: string },
+  signal?: AbortSignal,
+): Promise<PtyExecResult> {
+  const requestId = createId("pty");
+  const req: UtilityPtyRequest = {
+    channel: "utility",
+    kind: "ptyRequest",
+    requestId,
+    action: "write",
+    sessionId: options.sessionId,
+    data: options.data,
+  };
+
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error("Run cancelled."));
+      return;
+    }
+    const onAbort = () => {
+      pending.delete(requestId);
+      reject(new Error("Run cancelled."));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    pending.set(requestId, {
+      resolve: (event) => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve(eventToResult(event, options.sessionId));
       },
       reject: (err) => {
         signal?.removeEventListener("abort", onAbort);

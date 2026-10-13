@@ -480,6 +480,9 @@ export const en = {
     openTerminal: "Open terminal",
     /** shell card: waiting for HITL approval. */
     shellAwaitingApproval: "Awaiting approval",
+    /** shell_write 审批：说明向哪条命令输入 */
+    shellWriteIntoCommand: "Type into waiting command",
+    shellWriteWillSend: "Will send",
     /** shell timed out into background; terminal still open. */
     shellBackgrounded: "Background",
     shellExpand: "Show more output",
@@ -772,7 +775,7 @@ export const en = {
       defaultShellBlockUntilMs: {
         title: "Shell default wait",
         description:
-          "Default block_until_ms for shell / shell_await when the model omits it. 0 backgrounds immediately.",
+          "Default block_until_ms for shell / shell_await when the model omits it. 0 returns still_running immediately.",
       },
       shellOutputCap: {
         title: "Shell output cap",
@@ -819,7 +822,7 @@ export const en = {
       allowAiShell: {
         title: "Allow AI shell",
         description:
-          "When on, the agent can run shell / shell_await. When off, those tools are not offered to the model.",
+          "When on, the agent can run shell / shell_await / shell_write. When off, those tools are not offered to the model.",
       },
       allowAiBrowser: {
         title: "Allow AI browser",
@@ -1097,10 +1100,12 @@ export const en = {
     shellApproval: {
       title: "Allow shell command?",
     },
+    secretPlaceholder: "Enter password or secret",
     actions: {
       allow: "Allow",
       deny: "Deny",
       allowAndWhitelist: "Allow & whitelist",
+      submit: "Submit",
     },
   },
   terminal: {

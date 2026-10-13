@@ -1,0 +1,24 @@
+# 将来打 .app / .dmg 时交给 electron-builder 使用。
+# Hardened Runtime + 公证前务必 asarUnpack 原生模块，并对 .node / spawn-helper 签名。
+appId: com.thinker.workbench
+productName: Thinker Workbench
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - "**/spawn-helper"
+  - "**/node-pty/**"
+  - "**/better-sqlite3/**"
+files:
+  - artifacts/**
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
+  # 公证：设置 Apple ID / team / app 专用密码后启用
+  # notarize:
+  #   teamId: XXXXXXXXXX
+# 相对本 yml 所在 packaging/ → ../scripts/notarize-hint.mjs
+afterSign: ../scripts/notarize-hint.mjs

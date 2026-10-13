@@ -304,7 +304,10 @@ export function applyToolEvent(
 ): ChatTimelineStep[] {
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
 
-  const isShellTool = event.name === "shell" || event.name === "shell_await";
+  const isShellTool =
+    event.name === "shell" ||
+    event.name === "shell_await" ||
+    event.name === "shell_write";
   let matchIndex = -1;
   if (event.callId) {
     matchIndex = next.findIndex(
@@ -317,7 +320,9 @@ export function applyToolEvent(
       (s) =>
         s.kind === "tool" &&
         Boolean(s.hitl) &&
-        (s.name === "shell" || s.name === "shell_await") &&
+        (s.name === "shell" ||
+          s.name === "shell_await" ||
+          s.name === "shell_write") &&
         s.phase === "start" &&
         s.active,
     );
@@ -440,7 +445,9 @@ export function appendShellLiveOutput(
       const s = steps[i];
       if (
         s.kind === "tool" &&
-        (s.name === "shell" || s.name === "shell_await") &&
+        (s.name === "shell" ||
+          s.name === "shell_await" ||
+          s.name === "shell_write") &&
         s.phase === "start" &&
         s.active
       ) {
@@ -467,15 +474,34 @@ export function appendShellLiveOutput(
 }
 
 /**
- * HITL 请求：shell_approval 预插入活动 shell 卡片；其它 kind 忽略（走 Modal）。
+ * HITL 请求：shell_approval / shell_write_approval 挂时间线卡片；其它 kind 走 Modal。
  */
 export function applyHitlRequest(
   steps: ChatTimelineStep[],
   request: HitlRequest,
 ): ChatTimelineStep[] {
-  if (request.kind !== "shell_approval") return steps;
+  if (request.kind !== "shell_approval" && request.kind !== "shell_write_approval") {
+    return steps;
+  }
+  const parentCommand =
+    typeof request.payload?.parentCommand === "string"
+      ? request.payload.parentCommand.trim()
+      : "";
+  const dataPreview =
+    typeof request.payload?.dataPreview === "string"
+      ? request.payload.dataPreview
+      : "";
   const command =
-    typeof request.payload?.command === "string" ? request.payload.command.trim() : "";
+    typeof request.payload?.command === "string"
+      ? request.payload.command.trim()
+      : request.kind === "shell_write_approval"
+        ? parentCommand
+          ? `${parentCommand} ← ${dataPreview || "…"}`
+          : dataPreview
+            ? `← ${dataPreview}`
+            : ""
+        : "";
+  const toolName = request.kind === "shell_write_approval" ? "shell_write" : "shell";
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
   // 已有同 hitlId 则刷新
   const existing = next.findIndex(
@@ -490,29 +516,84 @@ export function applyHitlRequest(
       label: a.label,
       style: a.style,
     })),
+    parentCommand: parentCommand || undefined,
+    dataPreview: dataPreview || undefined,
   };
+  const sessionId =
+    typeof request.payload?.sessionId === "string" ? request.payload.sessionId : "";
+
+  // 时间线里同 session 的 shell 命令，补全 parentCommand（引擎缓存未命中时）
+  let resolvedHitl = hitl;
+  if (
+    request.kind === "shell_write_approval" &&
+    !resolvedHitl.parentCommand &&
+    sessionId
+  ) {
+    for (let i = next.length - 1; i >= 0; i--) {
+      const s = next[i];
+      if (
+        s.kind === "tool" &&
+        s.name === "shell" &&
+        s.sessionId === sessionId &&
+        s.command?.trim()
+      ) {
+        resolvedHitl = { ...resolvedHitl, parentCommand: s.command.trim() };
+        break;
+      }
+    }
+  }
+  const cardCommand =
+    request.kind === "shell_write_approval" && resolvedHitl.parentCommand
+      ? `${resolvedHitl.parentCommand} ← ${resolvedHitl.dataPreview || "…"}`
+      : command;
+
   if (existing >= 0) {
     const prev = next[existing];
     if (prev.kind !== "tool") return next;
     const copy = [...next];
     copy[existing] = {
       ...prev,
-      command: command || prev.command,
-      hitl,
+      command: cardCommand || prev.command,
+      hitl: resolvedHitl,
       phase: "start",
       active: true,
     };
     return copy;
   }
+
+  // 挂到已有 Running 的同名工具卡，避免「Running」+「待确认」两张
+  for (let i = next.length - 1; i >= 0; i--) {
+    const s = next[i];
+    if (
+      s.kind === "tool" &&
+      s.name === toolName &&
+      s.phase === "start" &&
+      s.active
+    ) {
+      const copy = [...next];
+      copy[i] = {
+        ...s,
+        command: cardCommand || s.command,
+        summary: cardCommand || s.summary,
+        sessionId: s.sessionId || sessionId || undefined,
+        hitl: resolvedHitl,
+        phase: "start",
+        active: true,
+      };
+      return copy;
+    }
+  }
+
   return [
     ...next,
     {
       id: createId("tl"),
       kind: "tool",
-      name: "shell",
-      command: command || undefined,
-      summary: command || undefined,
-      hitl,
+      name: toolName,
+      command: cardCommand || undefined,
+      summary: cardCommand || undefined,
+      sessionId: sessionId || undefined,
+      hitl: resolvedHitl,
       phase: "start",
       active: true,
     },
@@ -543,6 +624,48 @@ export function applyHitlResolved(
   return copy;
 }
 
+/** 软等待耗尽：按 sessionId 标为 still_running / backgrounded。 */
+export function applyShellCommandBackgrounded(
+  steps: ChatTimelineStep[],
+  sessionId: string,
+): ChatTimelineStep[] {
+  if (!sessionId) return steps;
+  const idx = steps.findIndex(
+    (s) => s.kind === "tool" && s.sessionId === sessionId,
+  );
+  if (idx < 0) return steps;
+  const prev = steps[idx];
+  if (prev.kind !== "tool") return steps;
+  const copy = [...steps];
+  copy[idx] = { ...prev, backgrounded: true };
+  return copy;
+}
+
+/** 命令 finalize：仍挂着的 shell 步收束为 complete（可开终端关掉）。 */
+export function applyShellCommandExited(
+  steps: ChatTimelineStep[],
+  sessionId: string,
+  exitCode: number | null,
+): ChatTimelineStep[] {
+  if (!sessionId) return steps;
+  const idx = steps.findIndex(
+    (s) => s.kind === "tool" && s.sessionId === sessionId,
+  );
+  if (idx < 0) return steps;
+  const prev = steps[idx];
+  if (prev.kind !== "tool") return steps;
+  const copy = [...steps];
+  copy[idx] = {
+    ...prev,
+    backgrounded: false,
+    exitCode,
+    phase: "end",
+    active: false,
+    ok: prev.ok !== false,
+  };
+  return copy;
+}
+
 /** 终端会话创建时，把 sessionId 绑到当前活动 shell 工具步。 */
 export function bindShellSessionId(
   steps: ChatTimelineStep[],
@@ -553,7 +676,9 @@ export function bindShellSessionId(
   for (let i = steps.length - 1; i >= 0; i--) {
     const s = steps[i];
     if (s.kind !== "tool") continue;
-    if (s.name !== "shell" && s.name !== "shell_await") continue;
+    if (s.name !== "shell" && s.name !== "shell_await" && s.name !== "shell_write") {
+      continue;
+    }
     if (s.sessionId && s.sessionId !== sessionId) continue;
     if (s.phase === "start" && s.active) {
       const copy = [...steps];

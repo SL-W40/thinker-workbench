@@ -24,8 +24,8 @@ importers:
         specifier: ^9.1.2
         version: 9.2.4
       electron:
-        specifier: ^34.0.0
-        version: 34.0.0(supports-color@5.5.0)
+        specifier: ^37.10.3
+        version: 37.10.3
       nodemon:
         specifier: ^3.1.14
         version: 3.1.14
@@ -1132,9 +1132,6 @@ packages:
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
 
-  '@types/node@20.19.43':
-    resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
-
   '@types/node@22.20.5':
     resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
 
@@ -1719,8 +1716,8 @@ packages:
   electron-to-chromium@1.5.444:
     resolution: {integrity: sha512-5ss/uJfoDYDHT0lfJzT6FbcskIzROIOPf0BbbFkGcvDzoJU7i//9GDrwwIHQVmIsrAGiF3ihpADBRIsrEFt1rQ==}
 
-  electron@34.0.0:
-    resolution: {integrity: sha512-fpaPb0lifoUJ6UJa4Lk8/0B2Ku/xDZWdc1Gkj67jbygTCrvSon0qquju6Ltx1Kz23GRqqlIHXiy9EvrjpY7/Wg==}
+  electron@37.10.3:
+    resolution: {integrity: sha512-3IjCGSjQmH50IbW2PFveaTzK+KwcFX9PEhE7KXb9v5IT8cLAiryAN7qezm/XzODhDRlLu0xKG1j8xWBtZ/bx/g==}
     engines: {node: '>= 12.20.55'}
     hasBin: true
 
@@ -3254,7 +3251,7 @@ snapshots:
 
   '@chevrotain/types@11.1.2': {}
 
-  '@electron/get@2.0.0(supports-color@5.5.0)':
+  '@electron/get@2.0.0':
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       env-paths: 2.2.0
@@ -3262,7 +3259,7 @@ snapshots:
       got: 11.8.5
       progress: 2.0.3
       semver: 6.2.0
-      sumchecker: 3.0.1(supports-color@5.5.0)
+      sumchecker: 3.0.1
     optionalDependencies:
       global-agent: 3.0.0
       global-tunnel-ng: 2.7.1
@@ -3796,10 +3793,6 @@ snapshots:
   '@types/keyv@3.1.4':
     dependencies:
       '@types/node': 22.20.5
-
-  '@types/node@20.19.43':
-    dependencies:
-      undici-types: 6.21.0
 
   '@types/node@22.20.5':
     dependencies:
@@ -4466,11 +4459,11 @@ snapshots:
 
   electron-to-chromium@1.5.444: {}
 
-  electron@34.0.0(supports-color@5.5.0):
+  electron@37.10.3:
     dependencies:
-      '@electron/get': 2.0.0(supports-color@5.5.0)
-      '@types/node': 20.19.43
-      extract-zip: 2.0.1(supports-color@5.5.0)
+      '@electron/get': 2.0.0
+      '@types/node': 22.20.5
+      extract-zip: 2.0.1
     transitivePeerDependencies:
       - supports-color
 
@@ -4639,7 +4632,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extract-zip@2.0.1(supports-color@5.5.0):
+  extract-zip@2.0.1:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       get-stream: 5.2.0
@@ -5627,7 +5620,7 @@ snapshots:
 
   stylis@4.4.0: {}
 
-  sumchecker@3.0.1(supports-color@5.5.0):
+  sumchecker@3.0.1:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:

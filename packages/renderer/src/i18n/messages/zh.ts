@@ -471,6 +471,9 @@ export const zh: MessageTree = {
     openTerminal: "打开终端",
     /** shell 卡片：等待用户审批。 */
     shellAwaitingApproval: "待确认",
+    /** shell_write 审批：说明向哪条命令输入 */
+    shellWriteIntoCommand: "向正在等待的命令输入",
+    shellWriteWillSend: "将发送",
     /** shell 超时挂起，仍可打开终端。 */
     shellBackgrounded: "后台",
     shellExpand: "展开输出",
@@ -761,7 +764,7 @@ export const zh: MessageTree = {
       defaultShellBlockUntilMs: {
         title: "Shell 默认等待",
         description:
-          "模型未指定时 shell / shell_await 的默认 block_until_ms。0 表示立即转后台。",
+          "模型未指定时 shell / shell_await 的默认 block_until_ms。0 表示立即返回 still_running。",
       },
       shellOutputCap: {
         title: "Shell 输出上限",
@@ -806,7 +809,8 @@ export const zh: MessageTree = {
       },
       allowAiShell: {
         title: "允许 AI 使用 Shell",
-        description: "开启后 Agent 可以使用 shell / shell_await。关闭后这些工具不会提供给模型。",
+        description:
+          "开启后 Agent 可以使用 shell / shell_await / shell_write。关闭后这些工具不会提供给模型。",
       },
       allowAiBrowser: {
         title: "允许 AI 使用内置浏览器",
@@ -1068,10 +1072,12 @@ export const zh: MessageTree = {
     shellApproval: {
       title: "允许执行命令？",
     },
+    secretPlaceholder: "输入密码或密钥",
     actions: {
       allow: "允许",
       deny: "拒绝",
       allowAndWhitelist: "允许并加入白名单",
+      submit: "提交",
     },
   },
   terminal: {

@@ -37,6 +37,9 @@ export type TerminalSession = {
   createdAt: number;
 };
 
+/** Agent shell 等待唤醒原因（对齐工具 wakeReason）。 */
+export type ShellWakeReason = "exit" | "timeout" | "pattern" | "background";
+
 /** 推送给 renderer 的终端事件。 */
 export type TerminalEvent =
   | { type: "created"; session: TerminalSession }
@@ -47,7 +50,21 @@ export type TerminalEvent =
       exitCode: number | null;
       session: TerminalSession;
     }
-  | { type: "updated"; session: TerminalSession };
+  | { type: "updated"; session: TerminalSession }
+  /** 软等待预算耗尽 / 故意后台：会话仍跟踪。 */
+  | {
+      type: "commandBackgrounded";
+      sessionId: string;
+      reason: ShellWakeReason;
+      session: TerminalSession;
+    }
+  /** Agent 命令 finalize：OSC / 子进程 exit。 */
+  | {
+      type: "commandExited";
+      sessionId: string;
+      exitCode: number | null;
+      session: TerminalSession;
+    };
 
 /** Preload 暴露的终端 API。 */
 export type ThinkerTerminalApi = {

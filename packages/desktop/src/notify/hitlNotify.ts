@@ -121,6 +121,12 @@ export function handleHitlAgentEvent(event: AgentEvent, bridge: AgentBridge): vo
   pending.set(event.hitlId, event.request);
   resolved.delete(event.hitlId);
 
+  // 密钥输入必须走应用内密码框，不能靠系统 Toast 提交
+  if (event.request.kind === "shell_secret_input") {
+    if (!anyWindowFocused()) showMainWindow();
+    return;
+  }
+
   const general = getGeneralSettings();
   if (!general.systemNotifications) return;
   if (anyWindowFocused()) return;

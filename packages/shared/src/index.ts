@@ -41,6 +41,7 @@ export type {
 export type { HitlAction, HitlKind, HitlRequest, HitlResponse } from "./ipc/hitl";
 export type {
   ShellProfile,
+  ShellWakeReason,
   TerminalEvent,
   TerminalSession,
   TerminalSessionStatus,
@@ -313,7 +314,10 @@ export type {
 } from "./ipc/skills";
 export type {
   BrowserRequestAction,
+  PtyExecMode,
   PtyRequestAction,
+  PtyShellOutcome,
+  PtyWakeReason,
   UtilityBrowserEvent,
   UtilityBrowserRequest,
   UtilityCancel,

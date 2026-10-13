@@ -29,6 +29,7 @@ import {
   syncWindowBackgroundFromSettings,
 } from "./window/createWindow";
 import { startDevToolsPrefsBridge } from "./window/devToolsEnv";
+import { terminalSessionManager } from "./terminal/TerminalSessionManager";
 import { isAppQuitting, setTrayEnsureWindow, syncTrayFromSettings } from "./window/tray";
 
 app.setName(APP_NAME);
@@ -199,6 +200,12 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  // 先撕掉全部 PTY，再关 DB；残留 node-pty 在新 macOS 上易 SIGABRT
+  try {
+    terminalSessionManager.disposeAll();
+  } catch {
+    /* ignore */
+  }
   try {
     if (healRunningSessions() > 0) broadcastThreadsChanged();
   } catch {

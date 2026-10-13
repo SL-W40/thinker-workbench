@@ -61,7 +61,11 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
       }
     });
     const unsub = onTerminalEvent((event) => {
-      if (event.type === "created" || event.type === "updated") {
+      if (
+        event.type === "created" ||
+        event.type === "updated" ||
+        event.type === "commandBackgrounded"
+      ) {
         const session = event.session;
         setShellTasks((prev) => {
           const without = prev.filter((s) => s.sessionId !== session.sessionId);
@@ -70,7 +74,7 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
         });
         return;
       }
-      if (event.type === "exit") {
+      if (event.type === "exit" || event.type === "commandExited") {
         setShellTasks((prev) => prev.filter((s) => s.sessionId !== event.sessionId));
       }
     });

@@ -56,7 +56,13 @@ export function listChatTools(options?: {
     .filter((spec) => {
       if (!isToolAllowedForChatMode(spec.name, modeOpts)) return false;
       if (spec.name === "delete_file") return allowDelete;
-      if (spec.name === "shell" || spec.name === "shell_await") return allowShell;
+      if (
+        spec.name === "shell" ||
+        spec.name === "shell_await" ||
+        spec.name === "shell_write"
+      ) {
+        return allowShell;
+      }
       if (BROWSER_TOOL_NAMES.has(spec.name)) return allowBrowser;
       return true;
     })

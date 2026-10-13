@@ -42,14 +42,18 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
   const backgrounded = Boolean(step.backgrounded);
   const command = step.command?.trim() || step.summary?.trim() || step.name;
   const displayOut = stripAnsi(step.liveOutput ?? "").trim();
-  // 仅挂起会话保留「打开终端」；一次跑完的会话已自动关
+  // still_running / 后台会话可打开终端；complete 后会话会回收
   const canOpenTerminal = Boolean(onOpenTerminal && backgrounded && step.sessionId);
 
   const hitlBody = hitl?.body?.trim() ?? "";
-  const reviewNote =
-    hitlBody &&
-    command &&
-    hitlBody.startsWith(command.slice(0, Math.min(command.length, 400)))
+  const writeParent = hitl?.parentCommand?.trim() ?? "";
+  const writePreview = hitl?.dataPreview ?? "";
+  const isWriteApproval = Boolean(awaiting && (writeParent || writePreview));
+  const reviewNote = isWriteApproval
+    ? ""
+    : hitlBody &&
+        command &&
+        hitlBody.startsWith(command.slice(0, Math.min(command.length, 400)))
       ? hitlBody.slice(command.slice(0, 400).length).replace(/^\s*\n+/, "").trim()
       : hitlBody && hitlBody !== command
         ? hitlBody
@@ -115,7 +119,26 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
 
       {awaiting && hitl ? (
         <div className="run-shell-card__hitl">
-          {reviewNote ? <p className="run-shell-card__note">{reviewNote}</p> : null}
+          {isWriteApproval ? (
+            <div className="run-shell-card__write-ctx">
+              {writeParent ? (
+                <>
+                  <p className="run-shell-card__note">
+                    {t("chat.shellWriteIntoCommand")}
+                  </p>
+                  <pre className="run-shell-card__write-cmd">{writeParent}</pre>
+                </>
+              ) : null}
+              <p className="run-shell-card__note">{t("chat.shellWriteWillSend")}</p>
+              <pre className="run-shell-card__write-data">
+                {writePreview || "(empty)"}
+              </pre>
+            </div>
+          ) : (
+            <>
+              {reviewNote ? <p className="run-shell-card__note">{reviewNote}</p> : null}
+            </>
+          )}
           <div className="run-shell-card__actions">
             {hitl.actions.map((action) => (
               <Button

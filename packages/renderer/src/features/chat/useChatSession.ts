@@ -50,6 +50,8 @@ import {
   appendThinkingText,
   applyHitlRequest,
   applyHitlResolved,
+  applyShellCommandBackgrounded,
+  applyShellCommandExited,
   applyStatus,
   applySubagentEvent,
   applyToolEvent,
@@ -808,8 +810,12 @@ export function useChatSession(visible = true) {
       setThreadId(event.threadId);
 
       if (event.type === "hitl") {
-        if (event.phase === "request" && event.request?.kind === "shell_approval") {
-          timelineRef.current = applyHitlRequest(timelineRef.current, event.request);
+        const hitlKind = event.request?.kind;
+        if (
+          event.phase === "request" &&
+          (hitlKind === "shell_approval" || hitlKind === "shell_write_approval")
+        ) {
+          timelineRef.current = applyHitlRequest(timelineRef.current, event.request!);
           patchTarget({ timeline: [...timelineRef.current], pending: true });
         } else if (event.phase === "resolved") {
           timelineRef.current = applyHitlResolved(
@@ -993,6 +999,39 @@ export function useChatSession(visible = true) {
           timelineRef.current,
           event.session.sessionId,
           { runId: event.session.runId, command: event.session.command },
+        );
+        setMessages((prev) => {
+          const next = prev.map((m) =>
+            m.id === id
+              ? { ...m, pending: true, timeline: [...timelineRef.current] }
+              : m,
+          );
+          messagesRef.current = next;
+          return next;
+        });
+        return;
+      }
+      if (event.type === "commandBackgrounded") {
+        timelineRef.current = applyShellCommandBackgrounded(
+          timelineRef.current,
+          event.sessionId,
+        );
+        setMessages((prev) => {
+          const next = prev.map((m) =>
+            m.id === id
+              ? { ...m, pending: true, timeline: [...timelineRef.current] }
+              : m,
+          );
+          messagesRef.current = next;
+          return next;
+        });
+        return;
+      }
+      if (event.type === "commandExited") {
+        timelineRef.current = applyShellCommandExited(
+          timelineRef.current,
+          event.sessionId,
+          event.exitCode,
         );
         setMessages((prev) => {
           const next = prev.map((m) =>

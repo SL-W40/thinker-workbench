@@ -26,7 +26,7 @@ export function getChatMode(): ChatMode {
 /** 写入类内置工具名。 */
 const WRITE_TOOLS = new Set(["write_file", "edit_file", "delete_file"]);
 /** Shell 类。 */
-const SHELL_TOOLS = new Set(["shell", "shell_await"]);
+const SHELL_TOOLS = new Set(["shell", "shell_await", "shell_write"]);
 /** 浏览器类前缀判断用完整集合在 schema 侧。 */
 const BROWSER_TOOLS = new Set([
   "browser_navigate",

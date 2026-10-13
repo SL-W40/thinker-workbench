@@ -111,14 +111,14 @@
   ol > li {
     counter-increment: tw-md-ol;
     padding-left: 28px;
+    position: relative;
   }
 
   ol > li::before {
     content: counter(tw-md-ol);
     position: absolute;
     left: 0;
-    /* 与正文字高中线对齐（同 ul 圆点：top + translateY(-50%)） */
-    top: 0.82em;
+    top: 1.35em;
     transform: translateY(-50%);
     box-sizing: border-box;
     min-width: 1.35em;

@@ -222,7 +222,13 @@ export class AgentBridge {
         data: string;
         exitCode: number | null;
         backgrounded: boolean;
+        outcome: "complete" | "still_running";
+        wakeReason: "exit" | "timeout" | "pattern" | "background";
         output: string;
+        outputPath: string;
+        outputBytes: number;
+        outputTruncated: boolean;
+        execMode: "login" | "direct";
         error: string;
       }> = {},
     ) => {
@@ -239,32 +245,75 @@ export class AgentBridge {
       }
     };
 
+    const replyWaitResult = (result: {
+      sessionId: string;
+      output: string;
+      exitCode: number | null;
+      backgrounded: boolean;
+      outcome: "complete" | "still_running";
+      wakeReason?: "exit" | "timeout" | "pattern" | "background";
+      outputPath?: string;
+      outputBytes?: number;
+      outputTruncated?: boolean;
+      execMode?: "login" | "direct";
+    }) => {
+      reply("result", {
+        sessionId: result.sessionId,
+        output: result.output,
+        exitCode: result.exitCode,
+        backgrounded: result.backgrounded,
+        outcome: result.outcome,
+        wakeReason: result.wakeReason,
+        outputPath: result.outputPath,
+        outputBytes: result.outputBytes,
+        outputTruncated: result.outputTruncated,
+        execMode: result.execMode,
+      });
+    };
+
     try {
       if (req.action === "exec") {
         if (!req.command?.trim()) {
           reply("error", { error: "Missing command." });
           return;
         }
+        const execMode = req.execMode === "direct" ? "direct" : "login";
         let sessionId = "";
-        const result = await terminalSessionManager.exec({
+        const started = await terminalSessionManager.startAgentCommand({
           command: req.command,
           cwd: req.workingDirectory,
-          blockUntilMs: req.blockUntilMs,
           cols: req.cols,
           rows: req.rows,
           runId: req.runId,
           threadId: req.threadId,
+          execMode,
           onSession: (id) => {
             sessionId = id;
           },
           onData: (data) => reply("data", { sessionId, data }),
         });
-        reply("result", {
-          sessionId: result.sessionId,
-          output: result.output,
-          exitCode: result.exitCode,
-          backgrounded: result.backgrounded,
+        sessionId = started.sessionId || sessionId;
+
+        const shouldAwait = req.await !== false;
+        const budgetMs = req.blockUntilMs ?? 30_000;
+        // await:false 或 budget<=0：立刻 still_running，不弃跟踪
+        if (!shouldAwait || budgetMs <= 0) {
+          const result = await terminalSessionManager.waitAgentCommand(sessionId, {
+            budgetMs: 0,
+            onData: (data) => reply("data", { sessionId, data }),
+          });
+          replyWaitResult(result);
+          return;
+        }
+
+        const waited = await terminalSessionManager.waitAgentCommand(sessionId, {
+          budgetMs,
+          onData: (data) => reply("data", { sessionId, data }),
         });
+        if (waited.outcome === "complete") {
+          terminalSessionManager.finishAwait(sessionId, waited);
+        }
+        replyWaitResult(waited);
         return;
       }
 
@@ -275,19 +324,14 @@ export class AgentBridge {
         }
         const result = terminalSessionManager.finishAwait(
           req.sessionId,
-          await terminalSessionManager.awaitSession(req.sessionId, {
-            blockUntilMs: req.blockUntilMs ?? 30_000,
+          await terminalSessionManager.waitAgentCommand(req.sessionId, {
+            budgetMs: req.blockUntilMs ?? 30_000,
             pattern: req.pattern,
             requestId: req.requestId,
             onData: (data) => reply("data", { sessionId: req.sessionId, data }),
           }),
         );
-        reply("result", {
-          sessionId: result.sessionId,
-          output: result.output,
-          exitCode: result.exitCode,
-          backgrounded: result.backgrounded,
-        });
+        replyWaitResult(result);
         return;
       }
 
@@ -296,8 +340,20 @@ export class AgentBridge {
           reply("error", { error: "Missing sessionId or data." });
           return;
         }
+        if (!terminalSessionManager.canWrite(req.sessionId)) {
+          reply("error", {
+            error: "Session not writable (need running login agent session).",
+          });
+          return;
+        }
         terminalSessionManager.write(req.sessionId, req.data);
-        reply("result", { sessionId: req.sessionId, output: "" });
+        reply("result", {
+          sessionId: req.sessionId,
+          output: "",
+          outcome: "complete",
+          wakeReason: "exit",
+          backgrounded: false,
+        });
         return;
       }
 

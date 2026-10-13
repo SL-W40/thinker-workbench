@@ -18,7 +18,12 @@ export type ToolUiPayload = {
   /** shell 命令。 */
   command?: string;
   exitCode?: number | null;
+  /** 兼容：outcome === still_running。 */
   backgrounded?: boolean;
+  outcome?: "complete" | "still_running";
+  wakeReason?: "exit" | "timeout" | "pattern" | "background";
+  outputPath?: string;
+  execMode?: "login" | "direct";
   resultPaths?: string[];
   resultPathKinds?: ChatTimelineResultPathKind[];
 };

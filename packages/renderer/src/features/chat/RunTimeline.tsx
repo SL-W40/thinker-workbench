@@ -917,7 +917,7 @@ function ToolStepRow({
   const hasDiff = Boolean(step.diff?.trim());
   const mutation = isMutationTool(step.name);
   const isDelete = step.name === "delete_file";
-  const isShell = step.name === "shell";
+  const isShell = step.name === "shell" || step.name === "shell_write";
   const isShellAwait = step.name === "shell_await";
   const isTaskAwait = step.name === "task_await";
   const ttlDays = readDeleteFileRestoreTtlDays();

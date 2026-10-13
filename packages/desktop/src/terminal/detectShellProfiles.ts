@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ShellProfile } from "@thinker-workbench/shared";
+import { augmentPathEnv } from "./shellEnv";
 
 /** 路径存在且为文件时返回 true。 */
 function isFile(p: string): boolean {
@@ -15,9 +16,9 @@ function isFile(p: string): boolean {
   }
 }
 
-/** 在 PATH / 常见位置查找可执行文件。 */
+/** 在 PATH（含 Homebrew 补丁）/ 常见位置查找可执行文件。 */
 function which(name: string): string | null {
-  const pathEnv = process.env.PATH ?? process.env.Path ?? "";
+  const pathEnv = augmentPathEnv(process.env.PATH ?? process.env.Path ?? "");
   const sep = process.platform === "win32" ? ";" : ":";
   const exts =
     process.platform === "win32"
@@ -87,9 +88,18 @@ function detectUnix(): ShellProfile[] {
   }
   add("zsh", "zsh", "/bin/zsh", ["-l"]);
   add("bash", "bash", "/bin/bash", ["-l"]);
+  // fish：系统路径 + Homebrew + PATH which（Dock 启动时常只有 /usr/bin）
   add("fish", "fish", "/usr/bin/fish", ["-l"]);
+  add("fish-homebrew", "fish (Homebrew)", "/opt/homebrew/bin/fish", ["-l"]);
+  add("fish-local", "fish (/usr/local)", "/usr/local/bin/fish", ["-l"]);
+  const fishWhich = which("fish");
+  if (fishWhich) add("fish-path", "fish", fishWhich, ["-l"]);
   add("zsh-usr", "zsh", "/usr/bin/zsh", ["-l"]);
   add("bash-usr", "bash", "/usr/bin/bash", ["-l"]);
+  const zshWhich = which("zsh");
+  if (zshWhich) add("zsh-path", "zsh", zshWhich, ["-l"]);
+  const bashWhich = which("bash");
+  if (bashWhich) add("bash-path", "bash", bashWhich, ["-l"]);
   return out;
 }
 

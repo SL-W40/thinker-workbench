@@ -81,6 +81,10 @@ export type ChatTimelineToolStep = {
       label: string;
       style?: "primary" | "danger" | "ghost";
     }>;
+    /** shell_write：原 shell 命令（说明向谁输入）。 */
+    parentCommand?: string;
+    /** shell_write：将写入的内容预览。 */
+    dataPreview?: string;
   };
 };
 

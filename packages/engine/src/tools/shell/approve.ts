@@ -11,6 +11,7 @@ import {
   getShellApprovalMode,
 } from "../../workspace";
 import { reviewCommand } from "./reviewCommand";
+import { getShellSessionCommand } from "./sessionMeta";
 
 /** 取命令首 token（剥 Windows 扩展名）。 */
 export function commandBaseToken(command: string): string {
@@ -97,4 +98,56 @@ async function applyHitlResponse(
   }
   if (response.actionId === "allow") return;
   throw new Error("Shell command denied by user.");
+}
+
+/**
+ * shell_write 审批：默认 HITL 确认（预览截断）；unrestricted 跳过。
+ * 文案带上原 shell 命令，说明「向哪条命令的等待输入写入什么」。
+ */
+export async function ensureShellWriteApproved(
+  sessionId: string,
+  data: string,
+  signal: AbortSignal,
+  options?: { parentCommand?: string },
+): Promise<void> {
+  const mode: ShellApprovalMode = getShellApprovalMode();
+  if (mode === "unrestricted") return;
+
+  const preview = data.length > 200 ? `${data.slice(0, 200)}…` : data;
+  const parent =
+    options?.parentCommand?.trim() || getShellSessionCommand(sessionId) || "";
+  const parentLine = parent
+    ? `Waiting command:\n${parent.slice(0, 300)}`
+    : `Shell session:\n${sessionId}`;
+  const body = [
+    parentLine,
+    "",
+    "Will type into the terminal:",
+    preview || "(empty)",
+    "",
+    `(sessionId: ${sessionId})`,
+  ].join("\n");
+
+  const response = await requestHitl(
+    {
+      kind: "shell_write_approval",
+      title: parent
+        ? "Allow typing into the waiting shell command?"
+        : "Allow writing to shell session?",
+      body,
+      payload: {
+        sessionId,
+        dataPreview: preview,
+        parentCommand: parent || undefined,
+      },
+      actions: [
+        { id: "allow", label: "Allow", style: "primary" },
+        { id: "deny", label: "Deny", style: "danger" },
+      ],
+    },
+    signal,
+  );
+  if (response.actionId !== "allow") {
+    throw new Error("Shell write denied by user.");
+  }
 }

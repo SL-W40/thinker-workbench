@@ -264,6 +264,15 @@ export type UtilityLogMessage = {
 /** PTY 请求动作。 */
 export type PtyRequestAction = "exec" | "await" | "write" | "kill";
 
+/** shell 执行模式（已解析；auto 在 engine 侧展开）。 */
+export type PtyExecMode = "login" | "direct";
+
+/** shell 工具 outcome。 */
+export type PtyShellOutcome = "complete" | "still_running";
+
+/** shell 等待唤醒原因。 */
+export type PtyWakeReason = "exit" | "timeout" | "pattern" | "background";
+
 /** 子进程 → 主进程：PTY 请求（exec/await/write/kill）。 */
 export type UtilityPtyRequest = {
   channel: "utility";
@@ -274,6 +283,10 @@ export type UtilityPtyRequest = {
   command?: string;
   workingDirectory?: string;
   blockUntilMs?: number;
+  /** exec：是否在本次调用内 wait（false = 立刻 still_running）。 */
+  await?: boolean;
+  /** exec：已解析的 login | direct。 */
+  execMode?: PtyExecMode;
   sessionId?: string;
   /** await 时可选：stdout 匹配则提前返回。 */
   pattern?: string;
@@ -293,8 +306,15 @@ export type UtilityPtyEvent = {
   sessionId?: string;
   data?: string;
   exitCode?: number | null;
+  /** 兼容旧字段：outcome === still_running。 */
   backgrounded?: boolean;
+  outcome?: PtyShellOutcome;
+  wakeReason?: PtyWakeReason;
   output?: string;
+  outputPath?: string;
+  outputBytes?: number;
+  outputTruncated?: boolean;
+  execMode?: PtyExecMode;
   error?: string;
 };
 

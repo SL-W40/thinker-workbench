@@ -3,8 +3,13 @@
  * 与 SessionRunStatus 的 cancelled / crashed 无关；等人期间 run 保持 running。
  */
 
-/** HITL 种类；首期实现 shell_approval，预留澄清与选择。 */
-export type HitlKind = "shell_approval" | "clarify" | "choice";
+/** HITL 种类；shell 审批 / 写入确认 / 密钥输入 + 澄清与选择。 */
+export type HitlKind =
+  | "shell_approval"
+  | "shell_write_approval"
+  | "shell_secret_input"
+  | "clarify"
+  | "choice";
 
 /** 介入卡上的操作按钮。 */
 export type HitlAction = {

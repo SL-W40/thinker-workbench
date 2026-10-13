@@ -2457,6 +2457,31 @@ html[data-tw-theme="dark"] .mention-chip--at {
   margin-left: auto;
 }
 
+.run-shell-card__write-ctx {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.run-shell-card__write-cmd,
+.run-shell-card__write-data {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--tw-surface-2, rgba(127, 127, 127, 0.12));
+  font-family: var(--tw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--tw-fg);
+}
+
+.run-shell-card__write-data {
+  font-weight: 600;
+}
+
 .run-shell-card__hitl {
   padding: 0 12px 10px;
 }
