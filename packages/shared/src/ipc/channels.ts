@@ -29,6 +29,8 @@ export const IpcChannels = {
   settingsSetModel: "settings:setModel",
   /** 对指定模型做连通性测试。 */
   settingsProbeModel: "settings:probeModel",
+  /** 发消息前解锁已存 API key（safeStorage / 钥匙串）。 */
+  settingsUnlockModelSecrets: "settings:unlockModelSecrets",
   /** 读取会话级模型选择覆盖。 */
   settingsGetSessionModelSelection: "settings:getSessionModelSelection",
   /** 写入会话级模型选择覆盖。 */

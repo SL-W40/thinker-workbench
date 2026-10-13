@@ -20,6 +20,7 @@ import {
 import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
 import { clearApplicationMenu } from "./menu";
 import { ensureTrayForHide, shouldHideToTray } from "./tray";
+import { windowChromeOptions } from "./chromeOptions";
 import { fitWindowToDisplay, windowMinSize } from "./defaultBounds";
 import { windowBackgroundForTheme } from "./themeBackground";
 import { waitForRenderer } from "./waitForRenderer";
@@ -134,7 +135,7 @@ export function createWindow(): BrowserWindow {
     minWidth,
     minHeight,
     backgroundColor: windowBackgroundForTheme(getGeneralSettings().uiTheme),
-    frame: false,
+    ...windowChromeOptions(),
     show: false,
     icon: appIcon.isEmpty() ? appIconPath : appIcon,
     webPreferences: {

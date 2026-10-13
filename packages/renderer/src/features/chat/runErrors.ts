@@ -2,12 +2,13 @@
  * 运行失败归类：供时间线固定格式展示（不再发 System 气泡）。
  */
 import { isCancelErrorMessage } from "@thinker-workbench/shared";
-import { isMissingApiKeyError } from "./systemErrors";
+import { isMissingApiKeyError, isUnlockDeniedError } from "./systemErrors";
 
 /** 将原始错误文案归为稳定 code（可无）。 */
 export function classifyRunError(message: string): string | undefined {
   const t = message.trim();
   if (!t) return undefined;
+  if (isUnlockDeniedError(t)) return "MODEL_API_KEY_UNLOCK_DENIED";
   if (isMissingApiKeyError(t)) return "MODEL_API_KEY_MISSING";
   if (isCancelErrorMessage(t)) {
     return "CANCELLED";

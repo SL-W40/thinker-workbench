@@ -36,6 +36,8 @@ import type {
   ThinkerApi,
   ThreadMeta,
   RunResult,
+  UnlockModelSecretsRequest,
+  UnlockModelSecretsResult,
 } from "@thinker-workbench/shared";
 import { emptyContextUsageSnapshot } from "@thinker-workbench/shared";
 
@@ -139,6 +141,18 @@ export function probeModel(request: ModelProbeRequest): Promise<ModelProbeResult
   const settings = api()?.settings;
   if (!settings?.probeModel) return Promise.reject(new Error("Settings API unavailable."));
   return settings.probeModel(request);
+}
+
+/** 发消息前解锁已存 API key（会触发 OS 钥匙串）。 */
+export async function unlockModelSecrets(
+  request?: UnlockModelSecretsRequest,
+): Promise<UnlockModelSecretsResult> {
+  const settings = api()?.settings;
+  if (!settings?.unlockModelSecrets) {
+    // 浏览器预览：无钥匙串，视为已就绪
+    return { ok: true };
+  }
+  return settings.unlockModelSecrets(request);
 }
 
 /** 读取会话级模型选用覆盖。 */

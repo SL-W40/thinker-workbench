@@ -2,8 +2,26 @@
  * 识别可映射到本地化文案 + 跳转动作的系统错误。
  */
 
-/** 与 engine `MODEL_API_KEY_MISSING` 对齐；兼容旧英文整句。 */
+/** 钥匙串未授权（有密文但 decrypt 失败）。 */
+export function isUnlockDeniedError(text: string): boolean {
+  const t = text.trim();
+  return (
+    t === "MODEL_API_KEY_UNLOCK_DENIED" ||
+    t.startsWith("MODEL_API_KEY_UNLOCK_DENIED") ||
+    /failed to unlock the saved API key/i.test(t)
+  );
+}
+
+/**
+ * 尚未配置模型 API key（与 engine `MODEL_API_KEY_MISSING` 对齐）。
+ * 不含钥匙串拒绝——那种走自定义门禁，不走气泡内「去设置」链接。
+ */
 export function isMissingApiKeyError(text: string): boolean {
   const t = text.trim();
-  return t === "MODEL_API_KEY_MISSING" || /api key is not set/i.test(t);
+  if (isUnlockDeniedError(t)) return false;
+  return (
+    t === "MODEL_API_KEY_MISSING" ||
+    t.startsWith("MODEL_API_KEY_MISSING") ||
+    /api key is not set/i.test(t)
+  );
 }

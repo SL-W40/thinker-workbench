@@ -26,6 +26,7 @@ import {
   saveGeneralSettings,
   saveModelSettings,
   saveShortcutsSettings,
+  unlockModelSecretsForRun,
 } from "../config/settingsStore";
 import { probeModel } from "../config/probeModel";
 import {
@@ -60,6 +61,9 @@ export function registerSettingsHandlers(
     return saveModelSettings(patch ?? {});
   });
   ipcMain.handle(IpcChannels.settingsProbeModel, (_evt, request) => probeModel(request ?? {}));
+  ipcMain.handle(IpcChannels.settingsUnlockModelSecrets, (_evt, request?: { force?: boolean }) =>
+    unlockModelSecretsForRun({ force: Boolean(request?.force) }),
+  );
   ipcMain.handle(
     IpcChannels.settingsGetSessionModelSelection,
     (_evt, sessionId: string) =>

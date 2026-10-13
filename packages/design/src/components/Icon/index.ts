@@ -9,6 +9,7 @@ export {
   BellIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronsRightIcon,
   ClockIcon,
   CloseIcon,
   CodeIcon,

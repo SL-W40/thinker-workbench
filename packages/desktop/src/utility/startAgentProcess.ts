@@ -9,8 +9,7 @@ import { utilityProcess } from "electron";
 import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths";
 import {
   getGeneralSettings,
-  getModelCatalog,
-  resolvePrimaryModelSettings,
+  getModelCatalogSnapshot,
 } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
@@ -29,14 +28,20 @@ export type AgentProcessHandle = {
 /** 组装下发给 agent 的 hello 载荷（设置变更时可重发）。 */
 export function buildAgentHello(): UtilityHello {
   const general = getGeneralSettings();
-  const catalog = getModelCatalog();
+  // 启动 hello 不解锁钥匙串；首次 run / probe 再经 getModelCatalog 解密
+  const catalog = getModelCatalogSnapshot();
   return {
     channel: "utility",
     kind: "hello",
     checkpointDir: getCheckpointDir(),
     catalog,
     selection: catalog.selection,
-    model: resolvePrimaryModelSettings(),
+    model: {
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+      allowEmoji: catalog.allowEmoji,
+    },
     aiLocale: general.aiLocale,
     workspaceAccess: general.workspaceAccess,
     allowAiDeleteFiles: general.allowAiDeleteFiles,

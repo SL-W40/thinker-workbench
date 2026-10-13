@@ -40,6 +40,27 @@ if (process.platform === "win32") {
 // 压制 Chromium EGL/GPU 驱动在 stderr 刷屏（log-level≥3 只留 FATAL）
 app.commandLine.appendSwitch("log-level", "3");
 
+/**
+ * 单实例：上次 `pnpm dev` 未干净退出时常见孤儿 Electron，再启动会多一个空窗。
+ * 未抢到锁则立刻退出；二次启动则聚焦已有主窗。
+ */
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.exit(0);
+}
+
+app.on("second-instance", () => {
+  if (!gotSingleInstanceLock) return;
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) {
+    if (app.isReady()) createWindow();
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+});
+
 /** 从打包资源加载应用图标；macOS 额外设置 Dock 图标。 */
 function applyAppIcon() {
   const iconPath = getAppIconPath();
@@ -50,7 +71,9 @@ function applyAppIcon() {
   }
 }
 
+// 未抢到锁时上面已 exit；仍注册 whenReady 无害（进程即将退出）
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return;
   loadSettings();
   loadSession();
   openCatalogDb();

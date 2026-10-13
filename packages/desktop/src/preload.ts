@@ -85,6 +85,8 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.settingsSetModel, patch),
     probeModel: (request: ModelProbeRequest) =>
       ipcRenderer.invoke(IpcChannels.settingsProbeModel, request),
+    unlockModelSecrets: (request?: { force?: boolean }) =>
+      ipcRenderer.invoke(IpcChannels.settingsUnlockModelSecrets, request ?? {}),
     getSessionModelSelection: (sessionId: string) =>
       ipcRenderer.invoke(IpcChannels.settingsGetSessionModelSelection, sessionId),
     setSessionModelSelection: (sessionId: string, selection: ModelSelection) =>

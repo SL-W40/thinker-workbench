@@ -30,6 +30,11 @@ import {
   setModelSettings,
 } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
+import {
+  useEnsureModelSecrets,
+  useShowModelSecretGate,
+} from "../modelSecrets/ModelSecretGate";
+import { isUnlockDeniedError } from "../chat/systemErrors";
 
 /** 输入停止后延迟再写入主进程的毫秒数。*/
 const SAVE_DEBOUNCE_MS = 450;
@@ -83,6 +88,8 @@ function selectionValue(sel: ModelSelection): string {
 
 export function ModelSettingsForm() {
   const t = useT();
+  const ensureModelSecrets = useEnsureModelSecrets();
+  const showModelSecretGate = useShowModelSecretGate();
   const providerTitleId = useId();
   const modelTitleId = useId();
   const [providers, setProviders] = useState<ProviderDraft[]>([]);
@@ -341,6 +348,8 @@ export function ModelSettingsForm() {
       setError(err instanceof Error ? err.message : String(err));
       return;
     }
+    // 与发消息同一套：仅钥匙串拒绝弹窗并中止；未配置密钥继续探测
+    if (!(await ensureModelSecrets())) return;
     setProbingId(modelId);
     try {
       const result = await probeModel({ modelId });
@@ -361,8 +370,15 @@ export function ModelSettingsForm() {
       queueMicrotask(() => {
         skipSaveRef.current = false;
       });
-      if (!result.ok) setError(result.error ?? t("settings.model.probeFailed"));
-      else setError(null);
+      if (!result.ok) {
+        if (isUnlockDeniedError(result.error ?? "")) {
+          showModelSecretGate();
+          setError(null);
+        } else {
+          // 未配置密钥等：用表单错误区展示，不弹钥匙串门禁
+          setError(result.error ?? t("settings.model.probeFailed"));
+        }
+      } else setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

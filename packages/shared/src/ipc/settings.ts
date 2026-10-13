@@ -109,6 +109,19 @@ export type ModelProbeResult = {
 };
 
 /**
+ * 发消息前解锁 OS 加密存储的结果。
+ * `denied` = 钥匙串未授权；`missing` = 从未保存过密钥。
+ */
+export type UnlockModelSecretsResult =
+  | { ok: true }
+  | { ok: false; reason: "missing" | "denied" };
+
+/** 解锁请求；`force` 表示 Retry，强制再调一次 decrypt。 */
+export type UnlockModelSecretsRequest = {
+  force?: boolean;
+};
+
+/**
  * 已解析的单模型凭据（engine 实际请求用）。
  * 由目录条目 + 凭证展开得到。
  */
@@ -156,6 +169,8 @@ export type ThinkerSettingsApi = ThinkerShortcutsApi &
     setModel(patch: ModelCatalogPatch): Promise<ModelCatalogPublic>;
     /** 对指定模型做连通性测试。 */
     probeModel(request: ModelProbeRequest): Promise<ModelProbeResult>;
+    /** 发消息前解锁已存 API key（会触发 OS 钥匙串）。 */
+    unlockModelSecrets(request?: UnlockModelSecretsRequest): Promise<UnlockModelSecretsResult>;
     /** 读取会话级模型选用覆盖（无则 null，继承全局）。 */
     getSessionModelSelection(sessionId: string): Promise<ModelSelection | null>;
     /** 写入会话级模型选用覆盖。 */

@@ -14,6 +14,7 @@ import {
 } from "@thinker-workbench/shared";
 import { BrowserWindow, type IpcMain } from "electron";
 import { admitRun, resolveSession, resolveSessionForCancel } from "../agent/runCoordinator";
+import { unlockModelSecretsForRun } from "../config/settingsStore";
 import {
   assertWorkspaceRoot,
   getSessionByThreadId,
@@ -29,6 +30,20 @@ import { handleHitlAgentEvent, respondHitl } from "../notify/hitlNotify";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { flushPendingMcpReload } from "./mcpHandlers";
 import { broadcastThreadsChanged } from "./workspacesHandlers";
+
+/**
+ * 发消息 / 恢复前先解锁 API key；失败则不派发。
+ * `UNLOCK_DENIED` → renderer 自定义门禁；`MISSING` → 气泡内既有「去设置」引导。
+ * @returns 可继续时为 null；否则为应返回给渲染进程的错误码
+ */
+function ensureModelSecretsUnlocked():
+  | "MODEL_API_KEY_UNLOCK_DENIED"
+  | "MODEL_API_KEY_MISSING"
+  | null {
+  const unlock = unlockModelSecretsForRun();
+  if (unlock.ok) return null;
+  return unlock.reason === "denied" ? "MODEL_API_KEY_UNLOCK_DENIED" : "MODEL_API_KEY_MISSING";
+}
 
 function broadcastLog(record: LogRecord): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -135,6 +150,12 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
       return { ok: false as const, error: admitted.error };
     }
 
+    // 先解锁钥匙串，成功后再标 running / 派发；失败不发消息（弹窗在 renderer）
+    const secretError = ensureModelSecretsUnlocked();
+    if (secretError) {
+      return { ok: false as const, error: secretError };
+    }
+
     try {
       upsertSessionForRun({
         threadId: admitted.threadId,
@@ -201,6 +222,12 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
         error: "No workspace open. Open a workspace and start a chat before sending.",
       };
     }
+
+    const secretError = ensureModelSecretsUnlocked();
+    if (secretError) {
+      return { ok: false as const, error: secretError };
+    }
+
     const workspaceName = command.workspaceName?.trim() || workspace?.name;
     setSessionRunStatus(session.id, "running", {
       interruptReason: null,

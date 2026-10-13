@@ -80,6 +80,8 @@ export const zh: MessageTree = {
     tabs: {
       customize: "自定义",
     },
+    expandTabs: "展开控制台标签",
+    collapseTabs: "收起控制台标签",
     loading: "加载中",
     trace: {
       searchPlaceholder: "搜索会话…",
@@ -528,6 +530,15 @@ export const zh: MessageTree = {
       missingApiKeyLead: "尚未配置模型 API key。请打开",
       jumpSettingsModel: "控制台 → 模型",
       missingApiKeyTail: "并填入密钥。",
+      secretDeniedTitle: "未能解锁已保存的密钥",
+      secretDenied:
+        "系统未授权读取已加密的 API key。请点击「重新获取」，并在弹出的系统授权框中选择「允许」或「始终允许」。",
+      secretUnlockCancel: "取消",
+      secretRetryUnlock: "重新获取",
+      secretRetrying: "正在获取…",
+      secretRetryOk: "已成功解锁，可以继续使用。",
+      secretRetryStillDenied:
+        "仍然未能解锁。若没有出现系统授权框，多半是本进程已拒绝过一次：请完全退出 Thinker Workbench 后再打开，发消息时会再次弹出授权。",
     },
   },
   settings: {

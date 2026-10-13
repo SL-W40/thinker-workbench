@@ -6,10 +6,14 @@
  *
  * 内存中 provider.apiKey 为明文；落盘时仅存 `apiKeyEnc`（safeStorage 密文）。
  * 加载时若发现旧版单字段 model 或明文 apiKey 会迁移。
+ *
+ * 密文**不会**在 `loadSettings` / `getModelCatalogSnapshot` / contextUsage 时解密；
+ * 仅在发消息、resume、探测模型等真正需要密钥时经 `ensureSecretsUnlocked` 解锁。
  */
 import fs from "node:fs";
 import path from "node:path";
 import {
+  apiKeyHint,
   createId,
   emptyModelCatalog,
   migrateLegacyModelSettings,
@@ -18,7 +22,6 @@ import {
   normalizeModelTags,
   normalizeShortcuts,
   THEME_CATALOG_VERSION,
-  toPublicModelCatalog,
   type GeneralSettings,
   type ModelCatalog,
   type ModelCatalogPatch,
@@ -31,9 +34,12 @@ import {
   type ShortcutsMap,
   resolveModelSettings,
   buildModelCandidates,
+  type UnlockModelSecretsResult,
 } from "@thinker-workbench/shared";
 import { decryptSecret, encryptSecret } from "./secretCrypto";
 import { bootstrapThinkerDir, resolveDataDir } from "./thinkerHome";
+
+export type { UnlockModelSecretsResult };
 
 /** 内存中的设置（provider.apiKey 为明文）。 */
 type StoredSettings = {
@@ -96,8 +102,148 @@ type DiskSettings = {
 
 /** 内存缓存。 */
 let cached: StoredSettings | null = null;
-/** 各 provider 最近成功密文，加密失败时保留。 */
+/** 各 provider 最近成功密文，加密失败 / 未解锁时保留。 */
 const lastApiKeyEncByProvider = new Map<string, string>();
+
+/** 测试用：清空设置缓存与密文表。 */
+export function resetSettingsCacheForTests(): void {
+  cached = null;
+  lastApiKeyEncByProvider.clear();
+}
+
+/** 某 provider 是否仍有未解锁（或已存）的密文。 */
+function hasPendingSecret(providerId: string): boolean {
+  return Boolean(lastApiKeyEncByProvider.get(providerId)?.trim());
+}
+
+/**
+ * 从权威 / 引导 settings.json 把 `apiKeyEnc` 补回内存表。
+ * 防止缓存与 Map 不同步时按需解锁找不到密文（表现为发消息也不弹钥匙串）。
+ */
+function hydrateEncFromDisk(): void {
+  const files = new Set<string>();
+  try {
+    files.add(settingsPath());
+  } catch {
+    /* settingsPath 依赖缓存；忽略 */
+  }
+  try {
+    files.add(bootstrapSettingsPath());
+  } catch {
+    /* ignore */
+  }
+  for (const file of files) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as DiskSettings;
+      const rawModel = parsed.model;
+      if (!rawModel || typeof rawModel !== "object") continue;
+      const providers = (rawModel as DiskModelCatalog).providers;
+      if (!Array.isArray(providers)) {
+        const legacy = rawModel as DiskLegacyModel;
+        if (typeof legacy.apiKeyEnc === "string" && legacy.apiKeyEnc.trim()) {
+          // 旧单字段：挂到当前缓存里第一个 provider（若有）
+          const id = cached?.model.providers[0]?.id;
+          if (id) lastApiKeyEncByProvider.set(id, legacy.apiKeyEnc.trim());
+        }
+        continue;
+      }
+      for (const p of providers) {
+        if (!p || typeof p !== "object") continue;
+        const id = typeof p.id === "string" && p.id.trim() ? p.id.trim() : "";
+        const enc = typeof p.apiKeyEnc === "string" ? p.apiKeyEnc.trim() : "";
+        if (id && enc) lastApiKeyEncByProvider.set(id, enc);
+      }
+    } catch (err) {
+      console.error("[settings] hydrateEncFromDisk failed", file, err);
+    }
+  }
+}
+
+/**
+ * 按需解密各 provider 的 `apiKeyEnc` 写入内存明文。
+ * 会触发 OS 钥匙串 / Credential 授权（macOS 开发态常见弹窗）。
+ * @param force 为 true 时即使已有明文也重新 decrypt（Retry 用，尽量再次触发系统授权框）
+ * @returns 是否仍有密文解不开（用户拒绝 / 解密失败）
+ */
+function ensureSecretsUnlocked(force = false): { denied: boolean } {
+  const current = loadSettings();
+  hydrateEncFromDisk();
+  let denied = false;
+  for (const provider of current.model.providers) {
+    if (!force && provider.apiKey.trim()) continue;
+    const enc = lastApiKeyEncByProvider.get(provider.id)?.trim();
+    if (!enc) continue;
+    // force：先清空，避免误以为已解锁而跳过系统交互
+    if (force) provider.apiKey = "";
+    const plain = decryptSecret(enc);
+    if (plain != null && plain.trim()) {
+      provider.apiKey = plain;
+    } else {
+      denied = true;
+      console.error(
+        "[settings] unlock failed for provider",
+        provider.id,
+        "(keychain denied or decrypt error)",
+      );
+    }
+  }
+  return { denied };
+}
+
+/** 是否仍有密文尚未解出明文（供 run 前校验）。 */
+export function hasLockedModelSecrets(): boolean {
+  loadSettings();
+  hydrateEncFromDisk();
+  return loadSettings().model.providers.some(
+    (p) => !p.apiKey.trim() && hasPendingSecret(p.id),
+  );
+}
+
+/**
+ * 发 run / Retry 前解锁已存 API Key（会弹 OS 钥匙串）。
+ * 成功才应继续派发；`denied` = 用户未授权；`missing` = 从未保存过密钥。
+ *
+ * 注意：macOS 若已在本进程点过「拒绝」，系统常**不再弹**密码框，decrypt 会立刻失败；
+ * 需完全退出应用后再试。`force: true`（Retry）会强制再调一次 decrypt。
+ */
+export function unlockModelSecretsForRun(options?: {
+  force?: boolean;
+}): UnlockModelSecretsResult {
+  try {
+    // 延迟导入避免 settingsStore ↔ electron 循环；仅主进程调用
+    const { app } = require("electron") as typeof import("electron");
+    if (process.platform === "darwin") {
+      try {
+        app.focus({ steal: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* 非 Electron 测试环境 */
+  }
+
+  const { denied } = ensureSecretsUnlocked(Boolean(options?.force));
+  const catalog = loadSettings().model;
+  if (catalog.providers.some((p) => p.apiKey.trim())) {
+    return { ok: true };
+  }
+  if (denied || hasLockedModelSecrets()) {
+    return { ok: false, reason: "denied" };
+  }
+  return { ok: false, reason: "missing" };
+}
+
+/** 克隆当前目录快照（不强制解锁）。 */
+function cloneModelCatalog(model: ModelCatalog): ModelCatalog {
+  return {
+    providers: model.providers.map((p) => ({ ...p })),
+    models: model.models.map((m) => ({ ...m, tags: [...m.tags] })),
+    selection: model.selection,
+    allowEmoji: model.allowEmoji,
+  };
+}
 
 /** 引导路径上的 settings（始终可写；自定义 dataDir 时作启动镜像）。 */
 export function bootstrapSettingsPath(): string {
@@ -192,9 +338,9 @@ function readProviderFromDisk(raw: DiskProvider): {
   if (typeof raw.apiKeyEnc === "string" && raw.apiKeyEnc.trim()) {
     const enc = raw.apiKeyEnc.trim();
     lastApiKeyEncByProvider.set(id, enc);
-    const plain = decryptSecret(enc);
+    // 延迟解密：启动只登记密文，真正用钥时再 unlock
     return {
-      provider: { id, label, apiKey: plain ?? "", baseUrl },
+      provider: { id, label, apiKey: "", baseUrl },
       needsMigrate: false,
     };
   }
@@ -260,15 +406,16 @@ function readModelFromDisk(raw: unknown): { model: ModelCatalog; needsMigrate: b
   if (isLegacyDiskModel(raw)) {
     const obj = raw as DiskLegacyModel;
     let apiKey = "";
-    let needsMigrate = false;
-    if (typeof obj.apiKeyEnc === "string" && obj.apiKeyEnc.trim()) {
-      const plain = decryptSecret(obj.apiKeyEnc.trim());
-      apiKey = plain ?? "";
+    let needsMigrate = true;
+    const enc =
+      typeof obj.apiKeyEnc === "string" && obj.apiKeyEnc.trim()
+        ? obj.apiKeyEnc.trim()
+        : "";
+    if (enc) {
+      // 旧密文不在此解密；占位非空以便 migrate 建出 provider，再清明文
+      apiKey = ".";
     } else if (typeof obj.apiKey === "string" && obj.apiKey.trim()) {
       apiKey = obj.apiKey.trim();
-      needsMigrate = true;
-    } else {
-      needsMigrate = true; // 结构迁移
     }
     const catalog = migrateLegacyModelSettings({
       apiKey,
@@ -280,9 +427,9 @@ function readModelFromDisk(raw: unknown): { model: ModelCatalog; needsMigrate: b
           ? obj.contextWindow
           : undefined,
     });
-    // 保留旧密文到新 provider
-    if (typeof obj.apiKeyEnc === "string" && obj.apiKeyEnc.trim() && catalog.providers[0]) {
-      lastApiKeyEncByProvider.set(catalog.providers[0].id, obj.apiKeyEnc.trim());
+    if (enc && catalog.providers[0]) {
+      lastApiKeyEncByProvider.set(catalog.providers[0].id, enc);
+      catalog.providers[0].apiKey = "";
     }
     return { model: catalog, needsMigrate: true };
   }
@@ -310,6 +457,16 @@ function readModelFromDisk(raw: unknown): { model: ModelCatalog; needsMigrate: b
 function providerToDisk(provider: ModelProvider): DiskProvider {
   const key = provider.apiKey.trim();
   if (!key) {
+    // 明文尚未解锁：保留已有密文，避免主题迁移 / 改通用设置时把钥写丢
+    const pending = lastApiKeyEncByProvider.get(provider.id)?.trim();
+    if (pending) {
+      return {
+        id: provider.id,
+        label: provider.label,
+        apiKeyEnc: pending,
+        baseUrl: provider.baseUrl,
+      };
+    }
     lastApiKeyEncByProvider.delete(provider.id);
     return {
       id: provider.id,
@@ -473,15 +630,21 @@ export function loadSettings(): StoredSettings {
   return cached;
 }
 
-/** 读取完整模型目录（含明文 API Key，仅主进程内使用）。 */
+/**
+ * 读取模型目录快照；默认不解锁密文（`apiKey` 可能为空）。
+ * 启动 hello / 公开视图用此路径，避免一启动就碰钥匙串。
+ */
+export function getModelCatalogSnapshot(): ModelCatalog {
+  return cloneModelCatalog(loadSettings().model);
+}
+
+/**
+ * 读取完整模型目录（含明文 API Key，仅主进程内使用）。
+ * 会按需解锁 OS 加密存储。
+ */
 export function getModelCatalog(): ModelCatalog {
-  const model = loadSettings().model;
-  return {
-    providers: model.providers.map((p) => ({ ...p })),
-    models: model.models.map((m) => ({ ...m, tags: [...m.tags] })),
-    selection: model.selection,
-    allowEmoji: model.allowEmoji,
-  };
+  ensureSecretsUnlocked();
+  return cloneModelCatalog(loadSettings().model);
 }
 
 /** @deprecated 兼容旧名：返回目录（非单字段）。 */
@@ -490,8 +653,41 @@ export function getModelSettings(): ModelCatalog {
 }
 
 /**
+ * 从目录解析首个候选的「展示/估算用」模型元数据（不要求已有明文 apiKey）。
+ * 用于 contextUsage 等只需要 contextWindow / allowEmoji 的路径。
+ */
+export function resolvePrimaryModelMeta(
+  catalog: ModelCatalog,
+  selection?: ModelSelection,
+  options?: { userText?: string; contextPaths?: string[] },
+): ModelSettings {
+  const sel = selection ?? catalog.selection;
+  const candidates = buildModelCandidates(catalog, sel, options);
+  const first = candidates[0];
+  if (!first) {
+    return { apiKey: "", baseUrl: "", model: "", allowEmoji: catalog.allowEmoji };
+  }
+  const provider = catalog.providers.find((p) => p.id === first.providerId);
+  return {
+    // 故意不填密钥：调用方若需要明文应走 getModelCatalog / unlock
+    apiKey: "",
+    baseUrl: provider?.baseUrl.trim() ?? "",
+    model: first.model.trim(),
+    allowEmoji: catalog.allowEmoji,
+    ...(typeof first.contextWindow === "number" &&
+    Number.isFinite(first.contextWindow) &&
+    first.contextWindow > 0
+      ? { contextWindow: Math.floor(first.contextWindow) }
+      : {}),
+    entryId: first.id,
+    providerId: first.providerId,
+    label: first.label || first.model,
+  };
+}
+
+/**
  * 按选用解析首个可用 ModelSettings（供简单调用方）。
- * Auto 时取候选首项；无可用则空凭据。
+ * Auto 时取候选首项；无可用则空凭据。**会解锁钥匙串。**
  */
 export function resolvePrimaryModelSettings(
   selection?: ModelSelection,
@@ -505,18 +701,29 @@ export function resolvePrimaryModelSettings(
     return { apiKey: "", baseUrl: "", model: "", allowEmoji: catalog.allowEmoji };
   }
   return (
-    resolveModelSettings(catalog, first) ?? {
-      apiKey: "",
-      baseUrl: "",
-      model: "",
-      allowEmoji: catalog.allowEmoji,
-    }
+    resolveModelSettings(catalog, first) ?? resolvePrimaryModelMeta(catalog, sel, options)
   );
 }
 
-/** 读取可下发给渲染进程的公开模型目录。 */
+/** 读取可下发给渲染进程的公开模型目录（不解锁密文；有密文时仍标 hasApiKey）。 */
 export function getPublicModelSettings(): ModelCatalogPublic {
-  return toPublicModelCatalog(getModelCatalog());
+  const catalog = getModelCatalogSnapshot();
+  return {
+    providers: catalog.providers.map((p) => {
+      const key = p.apiKey.trim();
+      const pending = hasPendingSecret(p.id);
+      return {
+        id: p.id,
+        label: p.label,
+        hasApiKey: Boolean(key) || pending,
+        apiKeyHint: key ? apiKeyHint(key) : pending ? "••••" : "",
+        baseUrl: p.baseUrl,
+      };
+    }),
+    models: catalog.models.map((m) => ({ ...m })),
+    selection: catalog.selection,
+    allowEmoji: catalog.allowEmoji,
+  };
 }
 
 /**
@@ -544,7 +751,7 @@ export function markModelHealth(
     };
   });
   persist({ ...current, model: { ...current.model, models } });
-  return toPublicModelCatalog(getModelCatalog());
+  return getPublicModelSettings();
 }
 
 /**
@@ -634,8 +841,13 @@ export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic 
     allowEmoji:
       typeof patch.allowEmoji === "boolean" ? patch.allowEmoji : current.model.allowEmoji,
   };
+  // 已删除的 provider 清掉密文缓存
+  const keepIds = new Set(nextProviders.map((p) => p.id));
+  for (const id of [...lastApiKeyEncByProvider.keys()]) {
+    if (!keepIds.has(id)) lastApiKeyEncByProvider.delete(id);
+  }
   persist({ ...current, model });
-  return toPublicModelCatalog(model);
+  return getPublicModelSettings();
 }
 
 /** 读取快捷键映射副本。 */

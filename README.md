@@ -1,72 +1,61 @@
 # Thinker Workbench
 
-**Local-First AI Workbench** — an Electron monorepo that runs a hand-rolled agent loop in a **`utilityProcess`**, not inside the renderer.
+**English** | [简体中文](./README.zh-CN.md)
 
-License: [Apache-2.0](./LICENSE).
+License: [Apache-2.0](./LICENSE) · Deferred work: [TODOS](./TODOS.md)
 
-## Prerequisites
+## What you get
 
-| Requirement | Notes |
+- Chat-driven agent with file tools, skills, rules, and MCP (stdio)
+- Multi-session runs with a configurable parallel cap
+- Data and keys stay on your machine (`~/.thinker` by default; API keys via OS `safeStorage`)
+- OpenAI-compatible model endpoint (API key + base URL + model)
+
+## Requirements
+
+| | |
 |---|---|
-| **Node.js 22+** | Matches `@types/node`; no root `engines` field |
-| **pnpm 11.12.0** | Pinned via `packageManager` — use pnpm, not npm/yarn |
-| **OS** | Windows / macOS / Linux; Electron **34** |
+| **Node.js** | 22+ |
+| **pnpm** | **11.12.0** (pinned by `packageManager` — do not use npm/yarn) |
+| **OS** | Windows / macOS / Linux |
+| **Electron** | 37 (via workspace dependency) |
 
-`pnpm install` runs `postinstall` (macOS renames the Electron.app bundle for local identity; desktop rebuilds native modules such as `better-sqlite3`).
+`pnpm install` runs `postinstall` (macOS renames the Electron.app for local identity; desktop rebuilds natives such as `better-sqlite3`).
 
 ## Quick start
 
 ```bash
 pnpm install
-pnpm run dev                 # Full stack: watchers + Electron
-pnpm run dev -- --no-hot     # No Vite HMR / Electron auto-restart
-pnpm run dev -- --devtools   # Open DevTools on launch (can combine with --no-hot)
+pnpm run dev
 ```
 
-Then open **Settings → Model** and set an OpenAI-compatible **API key**, **base URL**, and **model**. Keys are encrypted at rest with OS `safeStorage` in `<dataDir>/settings.json` (default `~/.thinker/settings.json`).
+1. Wait for the desktop window (renderer at http://127.0.0.1:5179).
+2. Open **Settings → Model** and set API key, base URL, and model.
+3. Open or create a workspace, then chat.
+
+Useful flags:
+
+```bash
+pnpm run dev -- --no-hot      # no Vite HMR / Electron auto-restart  (TW_DEV_NO_HOT=1)
+pnpm run dev -- --devtools    # open DevTools on launch             (THINKER_OPEN_DEVTOOLS=1)
+```
+
+> Renderer-only (`pnpm --filter @thinker-workbench/renderer dev`) has no `window.thinker` bridge — use full `pnpm run dev` for chat.
+
+## Common scripts
 
 | Script | Purpose |
 |---|---|
-| `pnpm run dev` | Product desktop stack (shared → logger → engine → desktop → renderer → Electron) |
-| `pnpm run dev -- --no-hot` | Dev without hot reload (UI HMR off; Electron starts once). Env: `TW_DEV_NO_HOT=1` |
-| `pnpm run dev -- --devtools` | Open main-window DevTools on launch. Env: `THINKER_OPEN_DEVTOOLS=1` |
-| `pnpm run build` | Build all packages (including renderer) |
-| `pnpm run build:node` | Build without renderer |
+| `pnpm run dev` | Full stack: watchers + Electron |
+| `pnpm run build` / `build:node` | Build all packages / skip renderer |
 | `pnpm start` | Electron against the last build |
+| `pnpm test` / `test:report` | Vitest (report → `test-results/report/`) |
 | `pnpm run check` | Biome lint + format check |
-| `pnpm run format` / `pnpm run lint` | Format write / lint only |
-| `pnpm test` | Unit tests (Vitest) |
-| `pnpm test:report` | Same + Vitest HTML / JUnit / v8 coverage → `test-results/report/` |
-| `pnpm run dev:logger:web` | Standalone log viewer → http://127.0.0.1:5181 |
+| `pnpm run format` / `lint` | Format write / lint only |
+| `pnpm run dev:logger:web` | Log viewer → http://127.0.0.1:5181 |
 | `pnpm run pack:zip` | Zip the repo (respects `.gitignore`) |
 
-Tests live under each package’s `tests/` tree (mirrors `src/`), named `*.test.ts`. Config: [`vitest.config.ts`](vitest.config.ts). Per-package: `pnpm --filter @thinker-workbench/<pkg> test`.
-
-**Dev ports**
-
-| URL | Service |
-|---|---|
-| http://127.0.0.1:5179 | Renderer (Vite) |
-| http://127.0.0.1:5181 | Logger web UI |
-
-Optional: `pnpm run dev -- --devtools` or `THINKER_OPEN_DEVTOOLS=1` opens DevTools on launch.
-
-Renderer-only (`pnpm --filter @thinker-workbench/renderer dev`) has no `window.thinker` bridge — chat will echo a hint to run full `pnpm run dev`.
-
-## Packages
-
-| Package | Path | Role |
-|---|---|---|
-| `@thinker-workbench/shared` | `packages/shared` | Cross-process IPC contracts, commands, events, types |
-| `@thinker-workbench/logger` | `packages/logger` | Structured logging (`./node` for main / utility) |
-| `@thinker-workbench/logger-web` | `packages/logger/web` | Log / trace viewer (Vite + SQLite log shards) |
-| `@thinker-workbench/design` | `packages/design` | Shared React design system (`/react`, Less tokens) |
-| `@thinker-workbench/markdown` | `packages/markdown` | Homemade Markdown AST + React view |
-| `@thinker-workbench/engine` | `packages/engine` | Agent graph, tools, model client (`artifacts/entry.js`) |
-| `@thinker-workbench/desktop` | `packages/desktop` | Electron main, preload, IPC, SQLite |
-| `@thinker-workbench/renderer` | `packages/renderer` | Product React UI (chat, settings, tools pane) |
-
-Build outputs land in each package’s `artifacts/` (gitignored). Cold start uses `scripts/dev-prepare.mjs` when artifacts are missing.
+Tests live under each package’s `tests/` (mirrors `src/`), named `*.test.ts`. Config: [`vitest.config.ts`](vitest.config.ts). Per-package: `pnpm --filter @thinker-workbench/<pkg> test`.
 
 ## Architecture
 
@@ -81,59 +70,67 @@ Desktop (ipcMain) ── SQLite / settings / FS IPC
                                 UtilityHost → AgentRuntime → graph
 ```
 
-- **Contracts**: `@thinker-workbench/shared` (`IpcChannels`, utility envelopes).
-- **Default graph**: `packages/engine/src/graph/` — `start → agent ⇄ tools → end`. Customize nodes/edges there.
-- **Tools**: `packages/engine/src/tools/*` (read/write/edit file, grep, list_dir, search_files, …). File tools use the **workspace root**, not the monorepo cwd.
-- **UI kit**: prefer `@thinker-workbench/design/react`; live catalog in-app at `#/components`.
+| Layer | Package | Role |
+|---|---|---|
+| UI | `renderer` | Chat, settings, tools pane |
+| Shell | `desktop` | Electron main, preload, IPC, SQLite |
+| Agent | `engine` | Graph, tools, model client |
+| Kit | `design` / `markdown` | Shared UI + Markdown |
+| Contracts | `shared` | IPC channels, commands, events |
+| Observability | `logger` (+ `logger-web`) | Structured logs / viewer |
+
+Default graph: `start → agent ⇄ tools → end` in `packages/engine/src/graph/`. File tools operate on the **workspace root**, not the monorepo cwd. Prefer `@thinker-workbench/design/react` for UI; live catalog at `#/components`.
+
+Build outputs go to each package’s `artifacts/` (gitignored). Cold start uses `scripts/dev-prepare.mjs` when they are missing.
+
+## macOS Keychain prompt
+
+API keys are encrypted with Electron `safeStorage` (item name **Thinker Workbench Safe Storage**). The OS may ask for your **login keychain password** when the app must decrypt a saved key (send / resume, or model probe). Startup, opening settings, and context-usage estimates do **not** touch the keychain.
+
+Dev / unsigned builds often show “authenticity cannot be verified” because the app identity changes between rebuilds. **Always Allow** after you trust the local build; Deny only blocks decrypting stored keys.
 
 ## Data layout
 
-Default data root is **`~/.thinker`** (`general.dataDir`). Authoritative **`settings.json`** lives at the data root; when `dataDir` is customized, a mirror is also kept at **`~/.thinker/settings.json`** so the app can find `dataDir` on next launch.
+Default root: **`~/.thinker`** (`general.dataDir`). Authoritative `settings.json` lives at that root; a customized `dataDir` still keeps a mirror at `~/.thinker/settings.json` so the next launch can find it.
 
 | Path | Contents |
 |---|---|
-| `settings.json` | App settings (model keys, preferences, `dataDir`) |
+| `settings.json` | Settings (model keys, preferences, `dataDir`) |
 | `state/catalog.db` | Workspace metadata |
 | `state/session.json` | UI / window session |
-| `checkpoints/` | Agent resume checkpoints (migrated with the data root) |
+| `checkpoints/` | Agent resume checkpoints |
 | `workspaces/<id>/chat.db` | Per-workspace chats |
 | `logs/` | SQLite log shards |
 | `skills/`, `mcps/`, `rules/` | Global skills / MCP / rules |
-| `workspace/` | Default on-disk workspace folder (under bootstrap `~/.thinker`) |
+| `workspace/` | Default on-disk workspace (under bootstrap `~/.thinker`) |
 
-Changing the root copies history into the new folder and always writes `settings.json` there; the previous root is left in place (copy, not delete). Older installs may still have checkpoints under Electron `userData/checkpoints` — those are moved into `<dataDir>/checkpoints` on startup.
+Changing the root **copies** history into the new folder (old root is left in place) and always writes `settings.json` there. Legacy Electron `userData/checkpoints` are migrated into `<dataDir>/checkpoints` on startup.
 
-## Rules & skills
+## Rules, skills, composer
 
-Loaded at runtime into agent context (later roots override same skill name):
-
-| Kind | Search order |
+| Kind | Search order (later overrides same name) |
 |---|---|
 | **Rules** | `<dataDir>/rules/` → `<workspace>/.thinker/rules/` |
 | **Skills** | `<dataDir>/skills/` → `<workspace>/.thinker/skills/` |
 
-Rules: `.md` / `.mdc` / `.txt`. Skills: folder + `SKILL.md` with YAML frontmatter.
+Rules: `.md` / `.mdc` / `.txt`. Skills: folder + `SKILL.md` (YAML frontmatter).
 
-### Composer `/` and `@`
+In the composer:
 
-In the chat composer:
-
-- Type `/` (after start of line or whitespace) to pick a **Skill**. Selecting inserts `/skill-name `; the engine already activates skills from that slash form.
-- Type `@` to mention a **workspace file or folder** (recent + searchable paths, tree depth up to 12). Selecting inserts `@path` (folders keep a trailing `/`). On send, files are injected into context; folders contribute a listing plus a few small text files (size-capped). Esc or Space dismisses the picker and keeps a plain `@`.
+- **`/`** — pick a skill; inserts `/skill-name ` (engine activates from that form).
+- **`@`** — mention a workspace file or folder; on send, files go into context (folders: listing + a few small text files). Esc / Space dismisses and keeps a plain `@`.
 
 ## MCP (stdio)
 
-Settings → **MCP** manages stdio servers. Config merge order (later wins same `id`):
+**Settings → MCP**. Merge order (same `id`: later wins):
 
 1. `<dataDir>/mcps/*.json`
 2. `<workspace>/.thinker/mcps/*.json`
-3. Optional import from `mcp.json` (`mcpServers` map; Customize → Import)
+3. Optional import from `mcp.json` (`mcpServers` map)
 
-Per-server fields: `id`, `name`, `enabled`, `transport: "stdio"`, `command`, `args`, `env`, optional `cwd`. Desktop pushes an enabled snapshot to the utility process; the engine connects with `@modelcontextprotocol/sdk` and exposes tools as `mcp__{serverId}__{toolName}`.
+Fields: `id`, `name`, `enabled`, `transport: "stdio"`, `command`, `args`, `env`, optional `cwd`. Tools appear as `mcp__{serverId}__{toolName}`.
 
-**Windows:** if the command is `npx` / `npm` / `node`, the app resolves `npx.cmd` (etc.) automatically; you can also enter `npx.cmd` explicitly.
-
-Example filesystem server (via npx):
+On Windows, `npx` / `npm` / `node` resolve to `*.cmd` automatically.
 
 ```json
 {
@@ -147,10 +144,11 @@ Example filesystem server (via npx):
 }
 ```
 
-Disable a server in Settings to drop its tools; quitting the app should leave no orphan MCP child processes.
+Disable a server in Settings to drop its tools; quitting should leave no orphan MCP children.
 
 ## Contributing
 
-- Use **pnpm** only.
+- **pnpm** only.
 - Run `pnpm run check` before sending changes.
-- Source comments / JSDoc in this repo should be **中文** (identifiers and i18n strings stay as they are).
+- Source comments / JSDoc: **中文** (identifiers and i18n strings stay as they are).
+- Product backlog / deferred items: [TODOS.md](./TODOS.md).

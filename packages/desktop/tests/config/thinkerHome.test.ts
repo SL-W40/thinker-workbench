@@ -4,17 +4,31 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { describe, it } from "vitest";
+import { beforeEach, describe, it } from "vitest";
 import {
   bootstrapSettingsPath,
   describeDataDirPaths,
 } from "../../src/config/settingsStore";
 import {
+  bootstrapThinkerDir,
   defaultDataDir,
   resolveDataDir,
 } from "../../src/config/thinkerHome";
 
+beforeEach(() => {
+  // 避免并行用例留下的 THINKER_HOME 干扰默认根断言
+  delete process.env.THINKER_HOME;
+});
+
 describe("resolveDataDir", () => {
+  it("THINKER_HOME 覆盖引导根", () => {
+    const custom = path.resolve(os.tmpdir(), "tw-thinker-home-override");
+    process.env.THINKER_HOME = custom;
+    assert.equal(bootstrapThinkerDir(), custom);
+    assert.equal(defaultDataDir(), custom);
+    delete process.env.THINKER_HOME;
+  });
+
   it("空串回落默认 ~/.thinker", () => {
     assert.equal(resolveDataDir(""), defaultDataDir());
     assert.equal(resolveDataDir("   "), defaultDataDir());

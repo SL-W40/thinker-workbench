@@ -7,6 +7,7 @@ import { StrictMode, useCallback, useState, type ReactNode } from "react";
 import { ThemeProvider } from "@thinker-workbench/design/react";
 import { App } from "./App";
 import { readBootAppearance } from "./boot/readBootAppearance";
+import { ModelSecretGateProvider } from "./features/modelSecrets/ModelSecretGate";
 import { HmrErrorBoundary } from "./hmr/HmrErrorBoundary";
 import { I18nProvider } from "./i18n/I18nProvider";
 import { AppearanceProvider } from "./theme/AppearanceProvider";
@@ -36,13 +37,15 @@ export function RootApp() {
           initialCustomThemes={boot.customThemes}
         >
           <I18nProvider>
-            {import.meta.env.DEV ? (
-              <DevHmrShell>
+            <ModelSecretGateProvider>
+              {import.meta.env.DEV ? (
+                <DevHmrShell>
+                  <App />
+                </DevHmrShell>
+              ) : (
                 <App />
-              </DevHmrShell>
-            ) : (
-              <App />
-            )}
+              )}
+            </ModelSecretGateProvider>
           </I18nProvider>
         </AppearanceProvider>
       </ThemeProvider>

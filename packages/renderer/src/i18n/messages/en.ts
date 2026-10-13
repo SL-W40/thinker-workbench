@@ -77,6 +77,8 @@ export const en = {
     tabs: {
       customize: "Customize",
     },
+    expandTabs: "Expand console tabs",
+    collapseTabs: "Collapse console tabs",
     loading: "Loading",
     trace: {
       searchPlaceholder: "Search sessions…",
@@ -537,6 +539,15 @@ export const en = {
       missingApiKeyLead: "Model API key is not set. Open",
       jumpSettingsModel: "Console → Model",
       missingApiKeyTail: "and enter your key.",
+      secretDeniedTitle: "Could not unlock the saved key",
+      secretDenied:
+        "The system did not allow reading your encrypted API key. Click Retry, then choose Allow or Always Allow in the system prompt.",
+      secretUnlockCancel: "Cancel",
+      secretRetryUnlock: "Retry",
+      secretRetrying: "Unlocking…",
+      secretRetryOk: "Unlocked successfully. You can continue.",
+      secretRetryStillDenied:
+        "Still locked. If no system prompt appeared, this process likely already denied access once — fully quit Thinker Workbench and reopen; sending a message will prompt again.",
     },
   },
   settings: {

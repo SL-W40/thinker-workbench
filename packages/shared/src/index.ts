@@ -189,6 +189,8 @@ export type {
   ModelHealth,
   ModelProbeRequest,
   ModelProbeResult,
+  UnlockModelSecretsRequest,
+  UnlockModelSecretsResult,
   ModelProvider,
   ModelProviderPublic,
   ModelSelection,
@@ -286,6 +288,7 @@ export {
   matchAccelerator,
   normalizeAccelerator,
   normalizeShortcuts,
+  processPlatform,
   SHORTCUT_CATALOG,
   SHORTCUT_GROUPS,
 } from "./ipc/shortcuts";

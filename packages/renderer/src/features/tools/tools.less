@@ -67,9 +67,82 @@
   gap: 2px;
   margin-left: 4px;
   min-width: 0;
-  overflow-x: auto;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+/* 额外 tab：默认收起，展开时宽度 + 透明度过渡 */
+.titlebar .titlebar-tool-tabs-extra {
+  display: grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns 240ms ease;
+}
+
+.titlebar .titlebar-tool-tabs-extra.is-open {
+  grid-template-columns: 1fr;
+}
+
+.titlebar .titlebar-tool-tabs-extra__inner {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition:
+    opacity 180ms ease,
+    transform 240ms ease;
+}
+
+.titlebar .titlebar-tool-tabs-extra.is-open .titlebar-tool-tabs-extra__inner {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.titlebar .titlebar-tool-tabs-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  cursor: pointer !important;
+  opacity: 0.62;
+  flex: 0 0 auto;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    transform 240ms ease;
+
+  &:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--tw-fg, #2a2218) 6%, transparent);
+    cursor: pointer !important;
+  }
+
+  &.is-open {
+    transform: rotate(180deg);
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.35;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    pointer-events: none;
+  }
 }
 
 .titlebar .titlebar-tool-tab {
@@ -84,12 +157,17 @@
   color: inherit;
   font: inherit;
   font-size: 12px;
-  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  cursor: pointer !important;
   opacity: 0.72;
+  white-space: nowrap;
+  flex: 0 0 auto;
 
   &:hover {
     opacity: 1;
     background: color-mix(in srgb, var(--tw-fg, #2a2218) 6%, transparent);
+    cursor: pointer !important;
   }
 
   &.is-active {
@@ -105,5 +183,6 @@
     stroke-width: 1.35;
     stroke-linejoin: round;
     stroke-linecap: round;
+    pointer-events: none;
   }
 }

@@ -37,7 +37,10 @@ import { getDataDir } from "../config/paths";
 import {
   getGeneralSettings,
   getModelCatalog,
+  getModelCatalogSnapshot,
+  resolvePrimaryModelMeta,
   resolvePrimaryModelSettings,
+  unlockModelSecretsForRun,
 } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
 import {
@@ -467,13 +470,15 @@ export class AgentBridge {
       try {
         const activeId = getActiveSessionId();
         const activeSession = activeId ? getSession(activeId) : null;
+        // 用量估算只需 contextWindow 等元数据，禁止走 modelPayload（会弹钥匙串）
+        const modelSnap = this.modelPayloadSnapshot(activeSession?.threadId);
         this.send({
           channel: "utility",
           kind: "contextUsage",
           requestId,
           request,
-          ...this.modelPayload(activeSession?.threadId),
-          model: resolvePrimaryModelSettings(),
+          ...modelSnap,
+          model: resolvePrimaryModelMeta(modelSnap.catalog, modelSnap.selection),
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
@@ -609,12 +614,22 @@ export class AgentBridge {
     };
   }
 
-  /** 解析本轮模型目录与生效选用（会话覆盖优先于全局）。 */
-  private modelPayload(threadId?: string): {
-    catalog: ReturnType<typeof getModelCatalog>;
-    selection: ModelSelection;
-  } {
-    const catalog = getModelCatalog();
+  /**
+   * 发 run 前再次确认密钥已解锁（IPC 层应已解锁并弹窗；此处作兜底）。
+   */
+  private assertModelSecretsUnlocked(): void {
+    const result = unlockModelSecretsForRun();
+    if (result.ok) return;
+    const code =
+      result.reason === "denied" ? "MODEL_API_KEY_UNLOCK_DENIED" : "MODEL_API_KEY_MISSING";
+    throw new Error(code);
+  }
+
+  /** 会话覆盖优先的选用解析（不碰钥匙串）。 */
+  private resolveSelection(
+    catalog: ReturnType<typeof getModelCatalogSnapshot>,
+    threadId?: string,
+  ): ModelSelection {
     let selection = catalog.selection;
     if (threadId) {
       const session = getSessionByThreadId(threadId);
@@ -623,7 +638,28 @@ export class AgentBridge {
         if (override) selection = override;
       }
     }
-    return { catalog, selection };
+    return selection;
+  }
+
+  /**
+   * 模型目录快照（不解锁密文）。供 contextUsage / 估算等路径。
+   */
+  private modelPayloadSnapshot(threadId?: string): {
+    catalog: ReturnType<typeof getModelCatalogSnapshot>;
+    selection: ModelSelection;
+  } {
+    const catalog = getModelCatalogSnapshot();
+    return { catalog, selection: this.resolveSelection(catalog, threadId) };
+  }
+
+  /** 解析本轮模型目录与生效选用（会话覆盖优先于全局）。**会解锁钥匙串。** */
+  private modelPayload(threadId?: string): {
+    catalog: ReturnType<typeof getModelCatalog>;
+    selection: ModelSelection;
+  } {
+    this.assertModelSecretsUnlocked();
+    const catalog = getModelCatalog();
+    return { catalog, selection: this.resolveSelection(catalog, threadId) };
   }
 
   /** 解析本轮会话 ChatMode（缺省 agent）。 */

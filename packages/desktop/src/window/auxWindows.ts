@@ -14,6 +14,7 @@ import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStor
 import { isShortcutRecording } from "../config/shortcutRecording";
 import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
 import { APP_NAME } from "../config/appIdentity";
+import { windowChromeOptions } from "./chromeOptions";
 import { windowMinSize } from "./defaultBounds";
 import { windowBackgroundForTheme } from "./themeBackground";
 import { waitForRenderer } from "./waitForRenderer";
@@ -117,7 +118,7 @@ function createAuxWindow(page: AuxPageId): BrowserWindow {
     minHeight,
     title: `${APP_NAME} - ${AUX_TITLE_EN}`,
     backgroundColor: windowBackgroundForTheme(getGeneralSettings().uiTheme),
-    frame: false,
+    ...windowChromeOptions(),
     show: false,
     icon: getAppIconPath(),
     webPreferences: {

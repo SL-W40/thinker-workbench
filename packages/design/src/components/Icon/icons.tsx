@@ -36,6 +36,16 @@ export function ChevronRightIcon({
   );
 }
 
+/** 双右箭头（标题栏 tab 展开等）。 */
+export const ChevronsRightIcon = createIcon(
+  "ChevronsRightIcon",
+  <>
+    <path d="M4.25 3.25 8.5 8 4.25 12.75" />
+    <path d="M8.5 3.25 12.75 8 8.5 12.75" />
+  </>,
+  VB,
+);
+
 export const PlusIcon = createIcon("PlusIcon", <path d="M8 3.25v9.5M3.25 8h9.5" />, VB);
 
 /** 下载 / 导出箭头入托盘。 */

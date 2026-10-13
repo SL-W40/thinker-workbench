@@ -19,6 +19,11 @@ import {
   resumeAgent,
   runAgent,
 } from "../../bridge/thinker";
+import {
+  useEnsureModelSecrets,
+  useShowModelSecretGate,
+} from "../modelSecrets/ModelSecretGate";
+import { isUnlockDeniedError } from "./systemErrors";
 import { workspaceWriteFile } from "../../bridge/workspaceFs";
 import {
   createSession,
@@ -64,6 +69,7 @@ import {
 } from "./timelineModel";
 import { extractContextPaths } from "./composerMentions";
 import type { ComposerEditorHandle } from "./ComposerEditor";
+import { shouldApplySessionReload } from "./sessionReload";
 import {
   ensureLiveRunRegistry,
   listBusyLiveRuns,
@@ -244,6 +250,8 @@ export function useChatSession(visible = true) {
     kind: "no-workspace" | "need-session";
     message: string;
   } | null>(null);
+  const ensureModelSecrets = useEnsureModelSecrets();
+  const showModelSecretGate = useShowModelSecretGate();
   const scroller = useRef<HTMLDivElement>(null);
   /**
    * 递增以请求舞台强制贴底（发送 / 续跑 / 切会话）。
@@ -496,11 +504,22 @@ export function useChatSession(visible = true) {
   async function reloadCurrentSessionFromDb() {
     const sid = sessionIdRef.current;
     if (!sid) return;
- // 已挂上直播目标时由事件流更新，勿被 DB 抢写
+    // 已挂上直播目标时由事件流更新，勿被 DB 抢写
     if (targetMsgId.current) return;
+    const localCountBefore = messagesRef.current.length;
     const loaded = await getSession(sid);
     if (!loaded || sessionIdRef.current !== sid) return;
- // 取消时主进程可能先落了偏旧快照：合并本地更完整的时间线 / 正文
+    // await 期间可能已发出 / 重挂直播：再判一次，避免空 DB 冲掉气泡
+    if (
+      !shouldApplySessionReload({
+        targetMsgId: targetMsgId.current,
+        localCount: Math.max(localCountBefore, messagesRef.current.length),
+        dbCount: loaded.messages.length,
+      })
+    ) {
+      return;
+    }
+    // 取消时主进程可能先落了偏旧快照：合并本地更完整的时间线 / 正文
     const merged = loaded.messages.map((m) => {
       const loc = messagesRef.current.find((x) => x.id === m.id);
       if (!loc || m.role !== "assistant") return m;
@@ -1262,6 +1281,9 @@ export function useChatSession(visible = true) {
     if (!text) return;
     if (busy && !replaceUserId) return;
 
+    // 先解锁钥匙串；仅「拒绝授权」弹窗并中止。未配置密钥不拦截，走气泡内既有引导。
+    if (!(await ensureModelSecrets())) return;
+
  // 必须有活动会话所属的工作空间；有工作空间无会话时自动建会话
     // getSession 返回 { session, messages }，工作空间在 session.workspaceId
     let sid = sessionId ?? (await getActiveSessionId());
@@ -1281,14 +1303,13 @@ export function useChatSession(visible = true) {
       sid = created.id;
       runThreadId = created.threadId;
       // 勿 bump sessionEpoch：会丢掉本轮即将到来的 agent 事件，导致气泡不更新、busy 卡住
+      // 立刻挂上 ref，避免随后 threadsChanged 重载时仍指向旧会话
+      sessionIdRef.current = created.id;
       setSessionId(created.id);
       setThreadId(created.threadId);
       await setActiveSession(created.id);
       await setLastWorkspaceId(wid);
       await syncWorkspaceLabel(wid);
-      setMessages([]);
-      messagesRef.current = [];
-      sessionIdRef.current = created.id;
     }
     setWorkspaceGate(null);
 
@@ -1393,6 +1414,23 @@ export function useChatSession(visible = true) {
           : { error: result.error },
       });
 
+      // 钥匙串拒绝兜底：撤回本轮气泡、恢复草稿、弹自定义窗（正常路径已在 send 开头拦截）
+      // 未配置密钥不走这里——交给下方失败气泡 + RunTimeline 的设置跳转
+      if (!result.ok && isUnlockDeniedError(result.error || "")) {
+        setMessages((prev) => {
+          const next = prev.filter((m) => m.id !== userMsg.id && m.id !== pending.id);
+          messagesRef.current = next;
+          scheduleSave(next);
+          return next;
+        });
+        setDraft(text);
+        showModelSecretGate();
+        activeRunId.current = null;
+        setBusy(false);
+        inputRef.current?.focus();
+        return;
+      }
+
       setMessages((prev) => {
         const next = prev.map((m) => {
           if (m.id !== pending.id) return m;
@@ -1482,8 +1520,12 @@ export function useChatSession(visible = true) {
         raf.current = null;
       }
       endMessageClock(pending.id);
+      // 先落库再清直播目标，避免 run 很快结束时 threadsChanged 用空 DB 冲掉气泡
       if (targetMsgId.current === pending.id) {
-        targetMsgId.current = null;
+        await flushSave();
+        if (targetMsgId.current === pending.id) {
+          targetMsgId.current = null;
+        }
       }
       // epoch 被 abort 抢占时对方已清 busy；否则必须收束，避免发送钮永久转圈
       if (epoch === runEpoch.current) {
@@ -1496,6 +1538,8 @@ export function useChatSession(visible = true) {
 
   async function resume() {
     if (!threadId || busy) return;
+
+    if (!(await ensureModelSecrets())) return;
 
  // 续写原先那条助手消息：丢掉末尾空壳错误气泡，再取最后一条 assistant
     let base = [...messagesRef.current];

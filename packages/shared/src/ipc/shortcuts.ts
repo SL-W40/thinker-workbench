@@ -196,7 +196,7 @@ export function formatAcceleratorLabel(
  * 探测当前平台字符串（`darwin` / `win32` 等）。
  * Node 优先用 `process.platform`；浏览器用 navigator 启发式。
  */
-function processPlatform(): string {
+export function processPlatform(): string {
   const g = globalThis as {
     process?: { platform?: string };
     navigator?: { platform?: string; userAgentData?: { platform?: string } };

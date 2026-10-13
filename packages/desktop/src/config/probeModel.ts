@@ -3,8 +3,13 @@
  * 成功则 health=ok，失败则标 error。
  */
 import type { ModelProbeRequest, ModelProbeResult } from "@thinker-workbench/shared";
-import { resolveModelSettings, toPublicModelCatalog } from "@thinker-workbench/shared";
-import { getModelCatalog, markModelHealth } from "./settingsStore";
+import { resolveModelSettings } from "@thinker-workbench/shared";
+import {
+  getModelCatalog,
+  getPublicModelSettings,
+  markModelHealth,
+  unlockModelSecretsForRun,
+} from "./settingsStore";
 
 const PROBE_TIMEOUT_MS = 15_000;
 
@@ -14,6 +19,7 @@ function normalizeBaseUrl(baseUrl?: string): string {
 
 /**
  * 探测单个模型条目的连通性并更新 health。
+ * 先解锁钥匙串；未授权 / 未配置时返回稳定错误码，由 renderer 弹统一门禁。
  */
 export async function probeModel(request: ModelProbeRequest): Promise<ModelProbeResult> {
   const modelId = typeof request?.modelId === "string" ? request.modelId.trim() : "";
@@ -21,7 +27,17 @@ export async function probeModel(request: ModelProbeRequest): Promise<ModelProbe
     return {
       ok: false,
       error: "modelId required",
-      catalog: toPublicModelCatalog(getModelCatalog()),
+      catalog: getPublicModelSettings(),
+    };
+  }
+
+  const unlock = unlockModelSecretsForRun();
+  if (!unlock.ok) {
+    return {
+      ok: false,
+      error:
+        unlock.reason === "denied" ? "MODEL_API_KEY_UNLOCK_DENIED" : "MODEL_API_KEY_MISSING",
+      catalog: getPublicModelSettings(),
     };
   }
 
@@ -37,7 +53,7 @@ export async function probeModel(request: ModelProbeRequest): Promise<ModelProbe
 
   const settings = resolveModelSettings(catalog, entry);
   if (!settings?.apiKey) {
-    const err = "API key is not set";
+    const err = "MODEL_API_KEY_MISSING";
     return { ok: false, error: err, catalog: markModelHealth(modelId, "error", err) };
   }
 

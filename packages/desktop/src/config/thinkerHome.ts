@@ -10,8 +10,15 @@
 import os from "node:os";
 import path from "node:path";
 
-/** 固定引导根：`~/.thinker`（始终可读 settings.json）。 */
+/**
+ * 固定引导根：`~/.thinker`（始终可读 settings.json）。
+ * 仅在 Vitest 下尊重 `THINKER_HOME`，避免开发启动误读临时目录。
+ */
 export function bootstrapThinkerDir(): string {
+  if (process.env.VITEST) {
+    const override = process.env.THINKER_HOME?.trim();
+    if (override) return path.resolve(override);
+  }
   return path.join(os.homedir(), ".thinker");
 }
 

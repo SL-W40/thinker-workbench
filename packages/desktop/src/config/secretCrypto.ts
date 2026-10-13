@@ -36,14 +36,13 @@ export function encryptSecret(plain: string): string | null {
 /**
  * 解密磁盘上的 base64 密文。
  * @returns 明文；空输入返回空串；解密失败返回 null
+ *
+ * 注意：不因 `isEncryptionAvailable()===false` 提前返回——个别环境下该探测会误报，
+ * 导致跳过 `decryptString`、钥匙串弹窗也不出现，最终被误判为「未设置 API key」。
  */
 export function decryptSecret(encoded: string): string | null {
   const raw = encoded.trim();
   if (!raw) return "";
-  if (!isSecretEncryptionAvailable()) {
-    console.error("[settings] safeStorage decryption unavailable");
-    return null;
-  }
   try {
     return safeStorage.decryptString(Buffer.from(raw, "base64"));
   } catch (err) {
