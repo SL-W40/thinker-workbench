@@ -28,14 +28,37 @@ describe("filesystem tools", () => {
   it("read_file 缺路径、读目录、行区间与超长截断", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-read-"));
     fs.mkdirSync(path.join(root, "sub"));
+    // "one\ntwo\nthree\n" → 4 行（末尾空行）
     fs.writeFileSync(path.join(root, "a.txt"), "one\ntwo\nthree\n", "utf8");
 
     await assert.rejects(readFileTool({}, ctx(root)), /requires parameters.path/);
     await assert.rejects(readFileTool({ path: "sub" }, ctx(root)), /Not a file/);
     await assert.rejects(
-      readFileTool({ path: "a.txt", start_line: 1, end_line: 9 }, ctx(root)),
-      /out of bounds/,
+      readFileTool({ path: "a.txt", start_line: 20, end_line: 30 }, ctx(root)),
+      /start_line \(20\) out of bounds/,
     );
+
+    // 猜错路径：ENOENT + 按 basename 给出候选
+    fs.mkdirSync(path.join(root, "pkg", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "pkg", "src", "a.txt"), "nested\n", "utf8");
+    await assert.rejects(
+      readFileTool({ path: "src/a.txt" }, ctx(root)),
+      /File not found: src\/a\.txt[\s\S]*Did you mean:[\s\S]*pkg\/src\/a\.txt/,
+    );
+
+    // end 超出总行数时夹到末尾
+    const clamped = await readFileTool(
+      { path: "a.txt", start_line: 2, end_line: 99 },
+      ctx(root),
+    );
+    assert.match(clamped, /lines\t2-4/);
+    assert.match(clamped, /2\|two/);
+
+    // 只给 start → 读到 EOF；只给 end → 从第 1 行起
+    const fromStart = await readFileTool({ path: "a.txt", start_line: 3 }, ctx(root));
+    assert.match(fromStart, /lines\t3-4/);
+    const toEnd = await readFileTool({ path: "a.txt", end_line: 2 }, ctx(root));
+    assert.match(toEnd, /lines\t1-2/);
 
     const ranged = await readFileTool({ path: "a.txt", start_line: 2, end_line: 2 }, ctx(root));
     assert.match(ranged, /lines\t2-2/);
@@ -77,6 +100,15 @@ describe("filesystem tools", () => {
     if (typeof edited === "string") assert.fail("expected ui result");
     assert.match(edited.output, /lines\t2-2/);
     assert.equal(fs.readFileSync(path.join(root, "nested/a.txt"), "utf8"), "alpha\nBETA\n");
+
+    // end 超出时夹到末尾（当前 3 行：alpha / BETA / 空），从第 2 行替换到 EOF
+    const tail = await writeFileTool(
+      { path: "nested/a.txt", contents: "TAIL", start_line: 2, end_line: 99 },
+      ctx(root),
+    );
+    if (typeof tail === "string") assert.fail("expected ui result");
+    assert.match(tail.output, /lines\t2-3/);
+    assert.equal(fs.readFileSync(path.join(root, "nested/a.txt"), "utf8"), "alpha\nTAIL");
   });
 
   it("edit_file 要求唯一匹配，replace_all 才替换全部", async () => {

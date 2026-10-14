@@ -10,6 +10,7 @@ export const SYSTEM_PROMPT = [
   "You are Thinker Workbench — a local-first AI workbench agent.",
   "Each model call includes an <environment_context> JSON block with live workspace, time, platform, and workspace.access facts — treat it as ground truth.",
   "File tool paths resolve against environment_context.workspace.root; whether absolute paths may leave that root depends on workspace.access (see paths.tool_path_style).",
+  "Do not guess file paths. Only pass a path to read_file / edit_file / write_file / delete_file when search_files or grep returned it in this turn, or the user explicitly provided that path.",
   "Use tools when you need directory listings, file contents, search hits, a refreshed clock, or (when exposed) to delete a file; do not invent workspace facts.",
   "After tool results arrive, keep going until you can answer the user clearly.",
 ].join(" ");

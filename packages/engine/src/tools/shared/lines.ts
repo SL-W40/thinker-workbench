@@ -35,43 +35,60 @@ export function parseLineNumber(value: unknown): number | null {
 export type LineRange = { start: number; end: number };
 
 /**
+ * 工具参数解析出的行区间。
+ * `end === null` 表示到文件末尾（在 resolve 时填入总行数）。
+ */
+export type ParsedLineRange = { start: number; end: number | null };
+
+/**
  * 从工具参数解析行区间。
  * - 都未提供 → null（整文件）
- * - 只提供其一 → 抛错
- * - start > end → 抛错
+ * - 只给 start_line → 从该行到文件末尾
+ * - 只给 end_line → 从第 1 行到该行
+ * - 都给且 start > end → 抛错
  */
 export function parseLineRange(args: {
   start_line?: unknown;
   end_line?: unknown;
-}): LineRange | null {
+}): ParsedLineRange | null {
   const hasStart =
     args.start_line !== undefined && args.start_line !== null && args.start_line !== "";
   const hasEnd = args.end_line !== undefined && args.end_line !== null && args.end_line !== "";
   if (!hasStart && !hasEnd) return null;
-  if (!hasStart || !hasEnd) {
-    throw new Error("start_line and end_line must be provided together (1-based inclusive).");
+
+  const start = hasStart ? parseLineNumber(args.start_line) : 1;
+  const end = hasEnd ? parseLineNumber(args.end_line) : null;
+  if (start == null) {
+    throw new Error("start_line must be an integer >= 1.");
   }
-  const start = parseLineNumber(args.start_line);
-  const end = parseLineNumber(args.end_line);
-  if (start == null || end == null) {
-    throw new Error("start_line and end_line must be integers >= 1.");
+  if (hasEnd && end == null) {
+    throw new Error("end_line must be an integer >= 1.");
   }
-  if (start > end) {
+  if (end != null && start > end) {
     throw new Error(`Invalid line range: start_line (${start}) > end_line (${end}).`);
   }
   return { start, end };
 }
 
-/** 校验区间落在 [1, totalLines]（允许空文件 total=0 时仅整文件模式）。 */
-export function assertRangeInFile(range: LineRange, totalLines: number, pathLabel: string): void {
+/**
+ * 把解析区间落到具体文件：缺省 end→末尾；end 超出则夹到末尾。
+ * start 超过总行数仍报错（整段都在文件外）。
+ */
+export function resolveRangeInFile(
+  range: ParsedLineRange,
+  totalLines: number,
+  pathLabel: string,
+): LineRange {
   if (totalLines === 0) {
     throw new Error(`Cannot use line range on empty file: ${pathLabel}`);
   }
-  if (range.start > totalLines || range.end > totalLines) {
+  if (range.start > totalLines) {
     throw new Error(
-      `Line range ${range.start}-${range.end} out of bounds for ${pathLabel} (${totalLines} lines).`,
+      `Line range start_line (${range.start}) out of bounds for ${pathLabel} (${totalLines} lines).`,
     );
   }
+  const end = range.end == null ? totalLines : Math.min(range.end, totalLines);
+  return { start: range.start, end };
 }
 
 /**

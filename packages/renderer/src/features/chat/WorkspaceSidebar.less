@@ -461,8 +461,27 @@
   opacity: 0.4;
 }
 
-.ws-more {
-  margin: 4px 0 0 2px;
+/* 右对齐，贴会话时间列；轻量字重 + chevron 表示展开/收起 */
+.ws-more.tw-btn.tw-btn--ghost.tw-btn--sm {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0;
+  min-height: 24px;
+  padding: 2px 6px;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tw-fg-muted, #8a8478);
+
+  .tw-btn__icon {
+    opacity: 0.75;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--tw-fg, var(--ink));
+  }
 }
 
 .ws-hint {

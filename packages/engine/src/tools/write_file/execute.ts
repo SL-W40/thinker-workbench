@@ -6,11 +6,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildUnifiedDiff } from "../shared/diff";
 import {
-  assertRangeInFile,
   detectEol,
   joinLines,
+  type LineRange,
   parseLineRange,
   replaceLineRange,
+  resolveRangeInFile,
   splitLines,
 } from "../shared/lines";
 import { resolveWorkspacePath, toWorkspaceRelative } from "../shared/paths";
@@ -34,7 +35,7 @@ export async function writeFileTool(args: ToolArgs, ctx: ToolContext): Promise<T
 
   const target = resolveWorkspacePath(ctx.workspaceRoot, rel, { access: "write" });
   const pathLabel = toWorkspaceRelative(ctx.workspaceRoot, target);
-  const range = parseLineRange(args);
+  const parsed = parseLineRange(args);
   const existed = fs.existsSync(target);
 
   let before = "";
@@ -43,7 +44,8 @@ export async function writeFileTool(args: ToolArgs, ctx: ToolContext): Promise<T
   }
 
   let after: string;
-  if (range) {
+  let range: LineRange | null = null;
+  if (parsed) {
     if (!existed) {
       throw new Error(
         `write_file line range requires an existing file: ${pathLabel}. Omit start_line/end_line to create it.`,
@@ -51,7 +53,7 @@ export async function writeFileTool(args: ToolArgs, ctx: ToolContext): Promise<T
     }
     const eol = detectEol(before);
     const lines = splitLines(before);
-    assertRangeInFile(range, lines.length, pathLabel);
+    range = resolveRangeInFile(parsed, lines.length, pathLabel);
     after = joinLines(replaceLineRange(lines, range, contents), eol);
   } else {
     after = contents;

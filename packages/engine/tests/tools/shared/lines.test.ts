@@ -1,16 +1,16 @@
 /**
- * 行号区间：解析、越界、带行号切片、按区间替换。
+ * 行号区间：解析、夹紧越界、带行号切片、按区间替换。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import {
-  assertRangeInFile,
   detectEol,
   formatNumberedSlice,
   joinLines,
   parseLineNumber,
   parseLineRange,
   replaceLineRange,
+  resolveRangeInFile,
   splitLines,
 } from "../../../src/tools/shared/lines";
 
@@ -43,11 +43,13 @@ describe("parseLineNumber", () => {
 });
 
 describe("parseLineRange", () => {
-  it("都没给表示整文件；只给一边或非法或 start>end 则抛错", () => {
+  it("都没给表示整文件；单侧补全；非法或 start>end 则抛错", () => {
     assert.equal(parseLineRange({}), null);
     assert.equal(parseLineRange({ start_line: null, end_line: "" }), null);
-    assert.throws(() => parseLineRange({ start_line: 1 }), /must be provided together/);
-    assert.throws(() => parseLineRange({ start_line: 0, end_line: 2 }), /integers >= 1/);
+    assert.deepEqual(parseLineRange({ start_line: 2 }), { start: 2, end: null });
+    assert.deepEqual(parseLineRange({ end_line: 3 }), { start: 1, end: 3 });
+    assert.throws(() => parseLineRange({ start_line: 0 }), /start_line must be an integer/);
+    assert.throws(() => parseLineRange({ end_line: "x" }), /end_line must be an integer/);
     assert.throws(
       () => parseLineRange({ start_line: 4, end_line: 2 }),
       /start_line \(4\) > end_line \(2\)/,
@@ -56,13 +58,24 @@ describe("parseLineRange", () => {
   });
 });
 
-describe("assertRangeInFile / formatNumberedSlice / replaceLineRange", () => {
-  it("空文件不能用区间；越界带路径与总行数", () => {
-    assert.throws(() => assertRangeInFile({ start: 1, end: 1 }, 0, "a.txt"), /empty file: a.txt/);
+describe("resolveRangeInFile / formatNumberedSlice / replaceLineRange", () => {
+  it("空文件不能用区间；start 越界报错；end 越界夹到末尾；缺省 end 到末尾", () => {
     assert.throws(
-      () => assertRangeInFile({ start: 1, end: 3 }, 2, "a.txt"),
-      /1-3 out of bounds for a.txt \(2 lines\)/,
+      () => resolveRangeInFile({ start: 1, end: 1 }, 0, "a.txt"),
+      /empty file: a.txt/,
     );
+    assert.throws(
+      () => resolveRangeInFile({ start: 5, end: 6 }, 2, "a.txt"),
+      /start_line \(5\) out of bounds for a.txt \(2 lines\)/,
+    );
+    assert.deepEqual(resolveRangeInFile({ start: 1, end: 9 }, 2, "a.txt"), {
+      start: 1,
+      end: 2,
+    });
+    assert.deepEqual(resolveRangeInFile({ start: 2, end: null }, 4, "a.txt"), {
+      start: 2,
+      end: 4,
+    });
   });
 
   it("行号按 end 对齐宽度；空 contents 删掉区间", () => {

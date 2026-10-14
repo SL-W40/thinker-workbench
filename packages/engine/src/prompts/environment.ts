@@ -112,9 +112,9 @@ export function buildEnvironmentFacts(locale: AiLocale): Record<string, unknown>
     file_tools: {
       line_numbers: "1-based inclusive",
       read_file:
-        "Optional start_line / end_line to read a slice; response lines are numbered when a range is used.",
+        "Do not guess path — use search_files / grep hits or a user-provided path. Optional start_line and/or end_line to read a slice (either side alone is ok; end past EOF is clamped); response lines are numbered when a range is used.",
       write_file:
-        "Omit start_line/end_line to create or overwrite the whole file. Set both to replace that inclusive line span with contents (empty contents deletes the span).",
+        "Omit start_line/end_line to create or overwrite the whole file. Set start_line and/or end_line to replace that inclusive span with contents (empty contents deletes the span; end past EOF is clamped).",
       delete_file: getAllowAiDeleteFiles()
         ? "Delete a file at path. For a directory, set recursive=true. Cannot delete workspace.root."
         : "Not available: Settings currently disallow AI file deletion.",

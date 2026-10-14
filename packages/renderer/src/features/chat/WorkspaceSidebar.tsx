@@ -497,8 +497,9 @@ export function WorkspaceSidebar({
                     {hasMore ? (
                       <Button
                         className="ws-more"
-                        variant="text"
+                        variant="ghost"
                         size="sm"
+                        endIcon={<ChevronRightIcon open={showAll} size="sm" />}
                         onClick={() => {
                           const next = new Set(expandedMore);
                           if (next.has(w.id)) next.delete(w.id);

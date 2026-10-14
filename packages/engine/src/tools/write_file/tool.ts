@@ -9,7 +9,7 @@ import { writeFileTool } from "./execute";
 export const writeFileToolSpec = defineTool({
   name: "write_file",
   description:
-    "Create a new file or overwrite an existing file (paths resolve against environment_context.workspace.root; writes respect workspace.access). Prefer edit_file for small localized edits. To replace a line span, pass start_line and end_line (1-based inclusive) with contents for that span (empty contents deletes the span).",
+    "Create a new file or overwrite an existing file (paths resolve against environment_context.workspace.root; writes respect workspace.access). Prefer edit_file for small localized edits. To replace a line span, pass start_line and/or end_line (1-based inclusive) with contents for that span (empty contents deletes the span). Omitting end_line replaces through EOF; omitting start_line starts at line 1; end_line past EOF is clamped.",
   parameters: {
     type: "object",
     properties: {
@@ -25,12 +25,12 @@ export const writeFileToolSpec = defineTool({
       start_line: {
         type: "number",
         description:
-          "Optional 1-based start line (inclusive) for span replace. Must be paired with end_line. File must already exist.",
+          "Optional 1-based start line (inclusive) for span replace. Alone: replace from here to EOF. File must already exist.",
       },
       end_line: {
         type: "number",
         description:
-          "Optional 1-based end line (inclusive) for span replace. Must be paired with start_line.",
+          "Optional 1-based end line (inclusive) for span replace. Alone: replace lines 1..end. Past EOF is clamped to the last line.",
       },
     },
     required: ["path", "contents"],
