@@ -37,10 +37,10 @@
     "test:report": "vitest run --coverage",
     "pack:zip": "node scripts/pack-zip.mjs",
     "stage:desktop": "node scripts/stage-desktop-app.mjs",
-    "pack:desktop": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml",
-    "pack:desktop:win": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --win",
-    "pack:desktop:mac": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --mac",
-    "pack:desktop:dir": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --dir"
+    "pack:desktop": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --publish never",
+    "pack:desktop:win": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --win --publish never",
+    "pack:desktop:mac": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --mac --publish never",
+    "pack:desktop:dir": "pnpm run build && pnpm run stage:desktop && electron-builder --config packages/desktop/packaging/electron-builder.yml --dir --publish never"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

@@ -14,6 +14,9 @@ asarUnpack:
   - "**/node-pty/**"
   - "**/better-sqlite3/**"
 
+# 安装包只上传 Actions artifact，不发 GitHub Release（避免 CI 缺 GH_TOKEN）
+publish: null
+
 directories:
   app: packages/desktop/.stage/app
   # 安装包产物放仓库根目录，方便取用；.stage 仍留在 desktop 包内

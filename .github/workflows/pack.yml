@@ -22,6 +22,9 @@ jobs:
             platform: mac
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    # renderer 的 vite build（含 monaco）在默认 ~2GB 堆上易 OOM；macOS runner 内存约 7GB
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
 
