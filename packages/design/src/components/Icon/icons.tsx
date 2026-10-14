@@ -48,6 +48,13 @@ export const ChevronsRightIcon = createIcon(
 
 export const PlusIcon = createIcon("PlusIcon", <path d="M8 3.25v9.5M3.25 8h9.5" />, VB);
 
+/** 回形针（附件）。斜向单线铺满视口，端点由 `.tw-icon` 圆角收口。 */
+export const PaperclipIcon = createIcon(
+  "PaperclipIcon",
+  <path d="M10.6 3.15 5.15 8.6a1.7 1.7 0 0 0 2.4 2.4l5.7-5.7a2.55 2.55 0 0 0-3.6-3.6L3.9 7.45a3.4 3.4 0 0 0 4.8 4.8l5.45-5.45" />,
+  VB,
+);
+
 /** 下载 / 导出箭头入托盘。 */
 export const DownloadIcon = createIcon(
   "DownloadIcon",
@@ -64,6 +71,8 @@ export const CloseIcon = createIcon(
   <path d="M4.25 4.25l7.5 7.5M11.75 4.25l-7.5 7.5" />,
   VB,
 );
+
+export const CheckIcon = createIcon("CheckIcon", <path d="M3.5 8.25 6.5 11.25 12.5 4.75" />, VB);
 
 export const MinimizeIcon = createIcon("MinimizeIcon", <path d="M3.25 8h9.5" />, VB);
 

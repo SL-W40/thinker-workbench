@@ -11,12 +11,14 @@ export {
 } from "../components/Button/Button";
 export { Callout, type CalloutProps, type CalloutTone } from "../components/Callout/Callout";
 export { Checkbox, type CheckboxProps } from "../components/Checkbox/Checkbox";
+export { Chip, type ChipProps, type ChipTone } from "../components/Chip/Chip";
 export { ChoiceCard, type ChoiceCardProps } from "../components/ChoiceCard/ChoiceCard";
 export {
   ContextMenu,
   type ContextMenuItemProps,
   type ContextMenuProps,
 } from "../components/ContextMenu/ContextMenu";
+export { Disclosure, type DisclosureProps } from "../components/Disclosure/Disclosure";
 export { EmptyState, type EmptyStateProps } from "../components/EmptyState/EmptyState";
 export { Field, type FieldProps } from "../components/Field/Field";
 export {
@@ -26,6 +28,7 @@ export {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsRightIcon,
+  CheckIcon,
   ClockIcon,
   CloseIcon,
   CodeIcon,
@@ -54,6 +57,7 @@ export {
   MinimizeIcon,
   MultitaskModeIcon,
   PaletteIcon,
+  PaperclipIcon,
   PlanModeIcon,
   PlayIcon,
   PlusIcon,
@@ -79,7 +83,10 @@ export {
   type MasonryBreakpoint,
   type MasonryProps,
 } from "../components/Masonry/Masonry";
-export { Modal, type ModalProps } from "../components/Modal/Modal";
+export { Modal, ModalBody, ModalFooter, ModalHeader, type ModalHeaderProps, type ModalProps, type ModalSectionProps } from "../components/Modal/Modal";
+export { Menu, type MenuGroup, type MenuItem, type MenuProps } from "../components/Menu/Menu";
+export { Popover, type AnchorHandle, type PopoverProps } from "../components/Popover/Popover";
+export type { PopoverAlign, PopoverPlacement } from "../overlay/place";
 export { Progress, type ProgressProps } from "../components/Progress/Progress";
 export {
   RadioGroup,
@@ -93,9 +100,11 @@ export {
 } from "../components/SegmentedControl/SegmentedControl";
 export { Select, type SelectOption, type SelectProps } from "../components/Select/Select";
 export { Separator, type SeparatorProps } from "../components/Separator/Separator";
+export { SettingsRow, type SettingsRowProps } from "../components/SettingsRow/SettingsRow";
 export { SideNavItem, type SideNavItemProps } from "../components/SideNavItem/SideNavItem";
 export { Spinner, type SpinnerProps, type SpinnerSize } from "../components/Spinner/Spinner";
 export { Switch, type SwitchProps } from "../components/Switch/Switch";
+export { Tabs, type TabItem, type TabsProps, type TabsVariant } from "../components/Tabs/Tabs";
 export {
   reorderTableRows,
   Table,

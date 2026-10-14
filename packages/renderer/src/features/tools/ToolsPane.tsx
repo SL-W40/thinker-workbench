@@ -32,7 +32,7 @@ const CustomizePane = lazy(async () => {
   return { default: m.CustomizePane };
 });
 
-/** `logs` 为历史路由键，UI 文案?Trace。*/
+/** `logs` 为历史路由键，UI 文案是 Trace。*/
 export type ToolTabId = "settings" | "customize" | "logs" | "components";
 
 export const TOOL_TAB_IDS: ToolTabId[] = ["settings", "customize", "logs", "components"];
@@ -52,7 +52,7 @@ type ToolsPaneProps = {
   focusSessionId?: string | null;
 };
 
-/** 产品控制台主体（tab 切换?TitleBar 控制）。*/
+/** 产品控制台主体（tab 切换由 TitleBar 控制）。*/
 export function ToolsPane({
   active,
   tab,

@@ -13,10 +13,12 @@ import {
   type ModelSettings,
   normalizeAiLocale,
 } from "@thinker-workbench/shared";
+import { getDataDir } from "../config/dataDir";
 import { getModelRetryMaxAttempts } from "../config/runtimeLimits";
 import { agentLog } from "../log/setup";
 import { buildSystemPrompt } from "../prompts/system";
 import { modelFetch } from "./httpFetch";
+import { contentToPlainText, messageToApiContent } from "./imageParts";
 import { formatErrorMessage, isRetryableError, isRetryableHttpStatus, sleepBackoff } from "./retry";
 import type {
   ChatCompletionResult,
@@ -99,9 +101,13 @@ type StreamToolCallAcc = {
   arguments: string;
 };
 
-/** 在 messages 前插入 system 消息（图 state 里不存 system）。 */
-function toApiMessages(system: string, messages: ChatMessage[]): unknown[] {
-  return [{ role: "system", content: system }, ...messages];
+/** 在 messages 前插入 system 消息；用户 image_ref 在此编码为 data URL。 */
+export function toApiMessages(system: string, messages: ChatMessage[]): unknown[] {
+  const dataDir = getDataDir();
+  return [
+    { role: "system", content: system },
+    ...messages.map((m) => messageToApiContent(m, dataDir)),
+  ];
 }
 
 /** 从 delta / message 上抽出各家网关的推理字段。 */
@@ -341,7 +347,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
       }
 
       const lastUser = [...request.messages].reverse().find((m) => m.role === "user");
-      const lastUserText = typeof lastUser?.content === "string" ? lastUser.content : "";
+      const lastUserText = lastUser ? contentToPlainText(lastUser.content) : "";
       log.info("request", {
         meta: {
           model,

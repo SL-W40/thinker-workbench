@@ -1,22 +1,43 @@
 /**
- * MCP 服务端配置与运行时状态（stdio 首期）。
+ * MCP 服务端配置与运行时状态（stdio / Streamable HTTP）。
  */
+import type { CustomizeScope } from "./customize";
 
-/** 传输类型；首期仅 stdio。 */
-export type McpTransport = "stdio";
+/** 传输类型。 */
+export type McpTransport = "stdio" | "http";
 
-/** 落盘 / IPC 用的 MCP server 配置。 */
-export type McpServerConfig = {
+/** 导入冲突策略。 */
+export type McpImportConflict = "skip" | "overwrite";
+
+type McpServerBase = {
   id: string;
   name: string;
   enabled: boolean;
-  transport: McpTransport;
+  /** 列表项所在作用域；落盘文件不写这个字段。 */
+  scope?: CustomizeScope;
+  /** 列表项是否可写。 */
+  writable?: boolean;
+};
+
+/** 本地进程 MCP。 */
+export type McpStdioServerConfig = McpServerBase & {
+  transport: "stdio";
   command: string;
   args: string[];
   env: Record<string, string>;
   /** 可选工作目录。 */
   cwd?: string | null;
 };
+
+/** 远程 Streamable HTTP MCP。 */
+export type McpHttpServerConfig = McpServerBase & {
+  transport: "http";
+  url: string;
+  headers?: Record<string, string>;
+};
+
+/** 落盘 / IPC 用的 MCP server 配置。 */
+export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
 /** 单个 MCP server 运行态。 */
 export type McpServerRuntimeState = "stopped" | "starting" | "ready" | "error";
@@ -42,28 +63,43 @@ export type McpListResult = {
   statuses: McpServerRuntimeStatus[];
 };
 
-/** 新建 / 更新时的可写字段（id 创建后不可改）。 */
-export type McpServerUpsertInput = {
+type McpUpsertBase = {
   id: string;
   name?: string;
   enabled?: boolean;
-  transport?: McpTransport;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  cwd?: string | null;
+  scope?: CustomizeScope;
 };
+
+/** 新建 / 更新时的可写字段（id 创建后不可改）。 */
+export type McpServerUpsertInput =
+  | (McpUpsertBase & {
+      transport?: "stdio";
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+      cwd?: string | null;
+    })
+  | (McpUpsertBase & {
+      transport: "http";
+      url: string;
+      headers?: Record<string, string>;
+    });
 
 /** 桌面 MCP API。 */
 export type ThinkerMcpApi = {
-  list(): Promise<McpListResult>;
+  list(workspaceRoot?: string | null): Promise<McpListResult>;
   upsert(input: McpServerUpsertInput): Promise<McpServerConfig>;
-  remove(id: string): Promise<void>;
-  setEnabled(id: string, enabled: boolean): Promise<McpServerConfig>;
+  remove(id: string, scope?: CustomizeScope): Promise<void>;
+  setEnabled(id: string, enabled: boolean, scope?: CustomizeScope): Promise<McpServerConfig>;
   /** 临时连接一次，返回状态（不永久占用）。 */
   test(input: McpServerUpsertInput): Promise<McpServerRuntimeStatus>;
   /** 弹出选文件对话框，从 mcp.json（`mcpServers` 映射）导入。 */
-  importFile(): Promise<{ imported: string[]; skipped: string[] }>;
+  importFile(
+    conflict?: McpImportConflict,
+    scope?: CustomizeScope,
+  ): Promise<{ imported: string[]; skipped: string[] }>;
+  /** 把指定作用域导出为 mcp.json。 */
+  exportFile(scope?: CustomizeScope): Promise<{ ok: boolean; path?: string }>;
   /** 订阅运行时状态推送。 */
   onStatus(cb: (status: McpServerRuntimeStatus) => void): () => void;
 };

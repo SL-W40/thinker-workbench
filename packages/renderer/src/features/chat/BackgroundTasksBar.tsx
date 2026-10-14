@@ -1,18 +1,26 @@
 /**
- * Composer 上方：agent 挂起的 background shell 任务条。
+ * Composer 上方：agent 挂起的 background shell / subagent 任务条。
+ * Subagent 芯片旁可取消单路 Task（与 task_cancel 同一 IPC 执法点）。
  */
-import { ChevronRightIcon, ConsoleIcon } from "@thinker-workbench/design/react";
+import {
+  ChevronRightIcon,
+  CloseIcon,
+  ConsoleIcon,
+  IconButton,
+} from "@thinker-workbench/design/react";
 import type { TerminalSession } from "@thinker-workbench/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { requestOpenSubagent } from "../../bridge/subagent";
 import { listTerminalSessions, onTerminalEvent } from "../../bridge/terminal";
-import { onAgentEvent } from "../../bridge/thinker";
+import { cancelAgentTask, onAgentEvent } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
 import "./BackgroundTasksBar.less";
 
 type Props = {
   /** 当前聊天 thread；有则只展示本会话的 subagent（shell 仍按全局 backgrounded） */
   threadId?: string;
+  /** 当前 runId；取消 Task 时用于归属校验（可选）。 */
+  runId?: string;
   onOpenTerminal?: (detail?: {
     sessionId?: string;
     previewOutput?: string;
@@ -38,7 +46,7 @@ function taskLabel(s: TerminalSession): string {
   return cmd.length > 48 ? `${cmd.slice(0, 47)}…` : cmd;
 }
 
-export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
+export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
   const t = useT();
   const [shellTasks, setShellTasks] = useState<TerminalSession[]>([]);
   const [subagents, setSubagents] = useState<SubagentTask[]>([]);
@@ -188,7 +196,7 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
                 : s.subagent;
             const label = s.title?.trim() || typeName;
             return (
-              <li key={s.taskId}>
+              <li key={s.taskId} className="bg-tasks__row">
                 <button
                   type="button"
                   className="bg-tasks__chip"
@@ -210,6 +218,19 @@ export function BackgroundTasksBar({ threadId, onOpenTerminal }: Props) {
                   <span className="bg-tasks__dot" aria-hidden="true" />
                   <span className="bg-tasks__cmd">{label}</span>
                 </button>
+                <IconButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="bg-tasks__cancel"
+                  aria-label={t("chat.backgroundTasks.cancelTaskNamed", { name: label })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void cancelAgentTask(s.taskId, runId);
+                  }}
+                >
+                  <CloseIcon size="sm" />
+                </IconButton>
               </li>
             );
           })}

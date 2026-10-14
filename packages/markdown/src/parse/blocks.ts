@@ -1,8 +1,8 @@
 /**
  * 块级 Markdown 解析：标题、列表、表格、围栏、定义列表、脚注、数学块等。
  */
-import { parseFrontmatter } from "../frontmatter";
 import type {
+  AlertKind,
   BlockNode,
   DefinitionItem,
   FootnoteDef,
@@ -14,15 +14,20 @@ import type {
 import { parseInline } from "./inline";
 import type { ParseOptions } from "./options";
 
-/** ATX 标题：`#` + 空白 + 非空内容（与解析分支一致，避免 ##foo 死循环）。 */
-const ATX_HEADING_RE = /^(#{1,6})\s+(.+)$/;
-
-function isAtxHeading(line: string): boolean {
-  return ATX_HEADING_RE.test(line);
+/** ATX 标题：最多 3 个前导空格，`#` 后必须有空白，并去掉收尾井号。 */
+function matchAtx(line: string): { level: 1 | 2 | 3 | 4 | 5 | 6; text: string } | null {
+  const matched = /^( {0,3})(#{1,6})([ \t]+)(.*)$/.exec(line);
+  if (!matched) return null;
+  const text = (matched[4] ?? "").replace(/[ \t]+#+\s*$/, "").trim();
+  if (!text) return null;
+  return { level: matched[2].length as 1 | 2 | 3 | 4 | 5 | 6, text };
 }
 
 function isTableSep(line: string): boolean {
-  return /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(line);
+  const t = line.trim();
+  // 必须含管道，避免把 Setext 下划线 `---` 当成单列表格分隔行
+  if (!t.includes("|")) return false;
+  return /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(t);
 }
 
 /** 行是否以未转义的 `|` 结尾。 */
@@ -100,21 +105,114 @@ function indentOf(line: string): number {
   return m ? m[1].replace(/\t/g, "    ").length : 0;
 }
 
-/** 匹配围栏开行：返回 fence 字符、数量、meta。 */
-function matchFenceOpen(line: string): { ch: "`" | "~"; count: number; meta: string } | null {
-  const m = /^(`{3,}|~{3,})(.*)$/.exec(line);
-  if (!m) return null;
-  const fence = m[1];
+function stripLeadingSpaces(line: string, count: number): string {
+  let i = 0;
+  while (i < count && i < line.length && line[i] === " ") i += 1;
+  return line.slice(i);
+}
+
+type ListMarker = {
+  indent: string;
+  ordered: boolean;
+  number: string;
+  delim: "." | ")";
+  spacing: string;
+  body: string;
+};
+
+/** 无序列表，或 `.` / `)` 有序列表。 */
+function matchListMarker(line: string): ListMarker | null {
+  const ul = /^(\s*)([-*+])(\s+)(.*)$/.exec(line);
+  if (ul) {
+    return {
+      indent: ul[1] ?? "",
+      ordered: false,
+      number: "",
+      delim: ".",
+      spacing: ul[3] ?? " ",
+      body: ul[4] ?? "",
+    };
+  }
+  const ol = /^(\s*)(\d+)([.)])(\s+)(.*)$/.exec(line);
+  if (!ol) return null;
   return {
-    ch: fence[0] as "`" | "~",
-    count: fence.length,
-    meta: m[2].trim(),
+    indent: ol[1] ?? "",
+    ordered: true,
+    number: ol[2] ?? "1",
+    delim: ol[3] === ")" ? ")" : ".",
+    spacing: ol[4] ?? " ",
+    body: ol[5] ?? "",
   };
 }
 
+/** 三个以上 `-` / `*` / `_`，中间可以有空格。 */
+function isThematicBreak(line: string): boolean {
+  return /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line);
+}
+
+/** Setext 下划线：`=` 为一级，`-` 为二级。 */
+function setextLevel(line: string): 1 | 2 | null {
+  const matched = /^ {0,3}(=+|-+)[ \t]*$/.exec(line);
+  if (!matched) return null;
+  return matched[1]?.startsWith("=") ? 1 : 2;
+}
+
+/** 引用标记：最多 3 个前导空格，只剥掉 `>` 后的一个空白。 */
+function stripBlockquoteMarker(line: string): string | null {
+  const matched = /^( {0,3}>)([ \t])?(.*)$/.exec(line);
+  if (!matched) return null;
+  return matched[3] ?? "";
+}
+
+function plainInline(nodes: InlineNode[]): string {
+  return nodes
+    .map((node) => {
+      if (node.type === "text" || node.type === "code" || node.type === "kbd") return node.value;
+      if (node.type === "autolink") return node.text;
+      if (node.type === "math") return node.value;
+      if (node.type === "image") return node.alt;
+      if (node.type === "break") return " ";
+      if ("children" in node && node.children) return plainInline(node.children);
+      return "";
+    })
+    .join("");
+}
+
+function dedupeHeadingIds(blocks: BlockNode[], seen: Map<string, number>): void {
+  for (const block of blocks) {
+    if (block.type === "heading") {
+      const base = block.id || "section";
+      const count = seen.get(base) ?? 0;
+      seen.set(base, count + 1);
+      block.id = count === 0 ? base : `${base}-${count}`;
+    } else if (block.type === "blockquote") {
+      dedupeHeadingIds(block.children, seen);
+    } else if (block.type === "list") {
+      for (const item of block.items) dedupeHeadingIds(item.children, seen);
+    } else if (block.type === "definitionList") {
+      for (const item of block.items) {
+        for (const def of item.definitions) dedupeHeadingIds(def, seen);
+      }
+    }
+  }
+}
+
+/** 匹配围栏开行：允许最多 3 个前导空格。 */
+function matchFenceOpen(
+  line: string,
+): { ch: "`" | "~"; count: number; meta: string; indent: number } | null {
+  const matched = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!matched) return null;
+  const fence = matched[2] ?? "";
+  const ch = fence[0] as "`" | "~";
+  const meta = (matched[3] ?? "").trim();
+  // 反引号围栏的信息串里不能再出现反引号
+  if (ch === "`" && meta.includes("`")) return null;
+  return { ch, count: fence.length, meta, indent: (matched[1] ?? "").length };
+}
+
 function isFenceClose(line: string, ch: "`" | "~", count: number): boolean {
-  const m = new RegExp(`^${ch === "`" ? "`" : "~"}{${count},}\\s*$`).exec(line);
-  return Boolean(m);
+  return new RegExp(`^ {0,3}${ch === "`" ? "`" : "~"}{${count},}[ \\t]*$`).test(line);
 }
 
 function parseTable(
@@ -157,19 +255,19 @@ function parseList(
   start: number,
   options: ParseOptions,
 ): { node: BlockNode; next: number } | null {
-  const first = lines[start];
-  const ul = /^(\s*)([-*+])(\s+)(.*)$/.exec(first);
-  const ol = /^(\s*)(\d+)(\.)(\s+)(.*)$/.exec(first);
-  if (!ul && !ol) return null;
+  const first = lines[start] ?? "";
+  const firstMarker = matchListMarker(first);
+  if (!firstMarker) return null;
 
-  const ordered = Boolean(ol);
+  const ordered = firstMarker.ordered;
+  const delim = firstMarker.delim;
   const baseIndent = indentOf(first);
-  const startNum = ol ? Number(ol[2]) : undefined;
+  const startNum = ordered ? Number(firstMarker.number) : undefined;
   const items: ListItem[] = [];
   let i = start;
 
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i] ?? "";
     if (!line.trim()) {
       i += 1;
       continue;
@@ -177,31 +275,30 @@ function parseList(
     const ind = indentOf(line);
     if (ind < baseIndent) break;
 
-    const itemUl = /^(\s*)([-*+])(\s+)(.*)$/.exec(line);
-    const itemOl = /^(\s*)(\d+)(\.)(\s+)(.*)$/.exec(line);
-    const itemMatch = ordered ? itemOl : itemUl;
-    if (!itemMatch || indentOf(line) !== baseIndent) break;
+    const marker = matchListMarker(line);
+    if (!marker || marker.ordered !== ordered || indentOf(line) !== baseIndent) break;
+    if (ordered && marker.delim !== delim) break;
 
-    // 内容列 = 缩进 + marker（含有序的 `.`）+ 随后空白
-    const indentWidth = itemMatch[1]?.replace(/\t/g, "    ").length;
-    const contentCol = ordered
-      ? indentWidth + itemOl?.[2]?.length + 1 + itemOl?.[4]?.length
-      : indentWidth + 1 + itemUl?.[3]?.length;
+    // 内容列 = 缩进 + marker（含有序的 `.` / `)`）+ 随后空白
+    const indentWidth = marker.indent.replace(/\t/g, "    ").length;
+    const markerWidth = ordered ? marker.number.length + 1 : 1;
+    const contentCol = indentWidth + markerWidth + marker.spacing.replace(/\t/g, "    ").length;
 
-    let body = (ordered ? itemOl?.[5] : itemUl?.[4]) ?? "";
+    let body = marker.body;
     let task = false;
     let checked = false;
-    const taskMatch = /^\[([ xX])\]\s+(.*)$/.exec(body);
+    // `]` 后可以没有正文（空任务项），但不能紧贴文字（`[x]done` 仍是普通列表）
+    const taskMatch = /^\[([ xX])\](?:[ \t]+([\s\S]*))?$/.exec(body);
     if (taskMatch) {
       task = true;
-      checked = taskMatch[1].toLowerCase() === "x";
-      body = taskMatch[2];
+      checked = (taskMatch[1] ?? "").toLowerCase() === "x";
+      body = taskMatch[2] ?? "";
     }
 
     i += 1;
     const chunk: string[] = [body];
     while (i < lines.length) {
-      const next = lines[i];
+      const next = lines[i] ?? "";
       if (!next.trim()) {
         chunk.push("");
         i += 1;
@@ -209,14 +306,13 @@ function parseList(
       }
       const nextInd = indentOf(next);
       if (nextInd <= baseIndent) break;
-      const nestedUl = /^(\s*)([-*+])\s+/.test(next);
-      const nestedOl = /^(\s*)(\d+)\.\s+/.test(next);
-      if ((nestedUl || nestedOl) && nextInd === baseIndent) break;
+      const nested = matchListMarker(next);
+      if (nested && nextInd === baseIndent) break;
       chunk.push(sliceContentColumn(next, contentCol));
       i += 1;
     }
 
-    const children = parseMarkdown(chunk.join("\n").replace(/\n+$/, ""), options);
+    const children = parseFragment(chunk.join("\n").replace(/\n+$/, ""), options);
     items.push({
       task,
       checked,
@@ -233,6 +329,25 @@ function parseList(
   };
 }
 
+const ALERT_SOLO = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*$/i;
+const ALERT_INLINE = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]+(.*)$/i;
+
+function takeAlert(chunk: string[]): AlertKind | undefined {
+  if (!chunk.length) return undefined;
+  const line = (chunk[0] ?? "").trim();
+  const solo = ALERT_SOLO.exec(line);
+  if (solo) {
+    chunk.shift();
+    return solo[1].toLowerCase() as AlertKind;
+  }
+  const inline = ALERT_INLINE.exec(line);
+  if (!inline) return undefined;
+  const rest = inline[2] ?? "";
+  if (rest.trim()) chunk[0] = rest;
+  else chunk.shift();
+  return inline[1].toLowerCase() as AlertKind;
+}
+
 function parseBlockquote(
   lines: string[],
   start: number,
@@ -240,14 +355,123 @@ function parseBlockquote(
 ): { node: BlockNode; next: number } {
   const chunk: string[] = [];
   let i = start;
-  while (i < lines.length && /^>\s?/.test(lines[i])) {
-    chunk.push(lines[i].replace(/^>\s?/, ""));
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    const quoted = stripBlockquoteMarker(line);
+    if (quoted !== null) {
+      chunk.push(quoted);
+      i += 1;
+      continue;
+    }
+    // 空行结束引用；非空且不是新块时，按懒延续并进同一段
+    if (!line.trim() || isBlockStart(line, Boolean(options.streaming), lines, i)) break;
+    chunk.push(line);
     i += 1;
   }
+  const alert = takeAlert(chunk);
+  const children = parseFragment(chunk.join("\n"), options);
   return {
-    node: { type: "blockquote", children: parseMarkdown(chunk.join("\n"), options) },
+    node: alert ? { type: "blockquote", alert, children } : { type: "blockquote", children },
     next: i,
   };
+}
+
+/**
+ * 围栏、数学块、缩进代码里的行不能抽成链接定义或脚注。
+ * 否则代码示例里的 `[id]: url` 会从样例中消失。
+ */
+function markOpaqueLines(lines: string[]): boolean[] {
+  const opaque = new Array<boolean>(lines.length).fill(false);
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    if (indentOf(line) >= 4 && line.trim()) {
+      while (i < lines.length) {
+        const current = lines[i] ?? "";
+        if (!current.trim()) {
+          let j = i + 1;
+          while (j < lines.length && !(lines[j] ?? "").trim()) j += 1;
+          if (j < lines.length && indentOf(lines[j] ?? "") >= 4) {
+            opaque[i] = true;
+            i += 1;
+            continue;
+          }
+          break;
+        }
+        if (indentOf(current) < 4) break;
+        opaque[i] = true;
+        i += 1;
+      }
+      continue;
+    }
+
+    const fence = matchFenceOpen(line);
+    if (fence) {
+      opaque[i] = true;
+      i += 1;
+      while (i < lines.length && !isFenceClose(lines[i] ?? "", fence.ch, fence.count)) {
+        opaque[i] = true;
+        i += 1;
+      }
+      if (i < lines.length) {
+        opaque[i] = true;
+        i += 1;
+      }
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (indentOf(line) <= 3 && trimmed.startsWith("$$")) {
+      opaque[i] = true;
+      const sameLine = trimmed.length > 2 && trimmed.endsWith("$$");
+      i += 1;
+      if (!sameLine) {
+        while (i < lines.length) {
+          opaque[i] = true;
+          const mathLine = (lines[i] ?? "").trim();
+          i += 1;
+          if (mathLine === "$$" || mathLine.endsWith("$$")) break;
+        }
+      }
+      continue;
+    }
+
+    i += 1;
+  }
+  return opaque;
+}
+
+function readLinkDestination(rest: string): { href: string; rest: string } | null {
+  if (rest.startsWith("<")) {
+    let href = "";
+    let i = 1;
+    while (i < rest.length) {
+      if (rest[i] === "\\" && i + 1 < rest.length) {
+        href += rest[i + 1];
+        i += 2;
+        continue;
+      }
+      if (rest[i] === ">") return { href, rest: rest.slice(i + 1) };
+      href += rest[i];
+      i += 1;
+    }
+    return null;
+  }
+  const matched = /^(\S+)/.exec(rest);
+  if (!matched?.[1]) return null;
+  return { href: matched[1], rest: rest.slice(matched[1].length) };
+}
+
+function readSameLineTitle(rest: string): string | undefined {
+  const matched = /^[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\))[ \t]*$/.exec(rest);
+  if (!matched) return undefined;
+  return matched[1] ?? matched[2] ?? matched[3];
+}
+
+function readNextLineTitle(line: string): string | null {
+  const matched = /^ {0,3}(?:"([^"]*)"|'([^']*)'|\(([^)]*)\))[ \t]*$/.exec(line);
+  if (!matched) return null;
+  return matched[1] ?? matched[2] ?? matched[3] ?? "";
 }
 
 /** 抽取链接定义与脚注定义，返回剩余行。 */
@@ -259,23 +483,27 @@ function extractDefs(lines: string[]): {
   const linkDefs: Record<string, LinkDef> = {};
   const footnotes: FootnoteDef[] = [];
   const kept: string[] = [];
+  const opaque = markOpaqueLines(lines);
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i];
-
-    // 脚注 [^id]: ...
-    const fn = /^\[\^([^\]]+)\]:\s*(.*)$/.exec(line);
-    if (fn) {
-      const id = fn[1];
-      const first = fn[2];
-      const chunk: string[] = [first];
+    const line = lines[i] ?? "";
+    if (opaque[i]) {
+      kept.push(line);
       i += 1;
-      while (i < lines.length) {
-        const next = lines[i];
+      continue;
+    }
+
+    // 脚注 [^id]: ...（最多 3 个前导空格，避免吃掉缩进代码）
+    const fn = /^ {0,3}\[\^([^\]]+)\]:[ \t]*(.*)$/.exec(line);
+    if (fn) {
+      const id = fn[1] ?? "";
+      const chunk: string[] = [fn[2] ?? ""];
+      i += 1;
+      while (i < lines.length && !opaque[i]) {
+        const next = lines[i] ?? "";
         if (!next.trim()) {
-          // 空行：若后面仍是缩进续写则保留，否则结束
-          if (i + 1 < lines.length && /^\s{2,}\S/.test(lines[i + 1])) {
+          if (i + 1 < lines.length && !opaque[i + 1] && /^\s{2,}\S/.test(lines[i + 1] ?? "")) {
             chunk.push("");
             i += 1;
             continue;
@@ -294,18 +522,36 @@ function extractDefs(lines: string[]): {
       }
       footnotes.push({
         id,
-        children: parseMarkdown(chunk.join("\n").trim(), {}),
+        children: parseFragment(chunk.join("\n").trim(), {}),
       });
       continue;
     }
 
-    // 链接定义 [id]: url "title"
-    const ld = /^\[([^\]]+)\]:\s*(\S+)(?:\s+"([^"]*)")?\s*$/.exec(line.trim());
-    if (ld && !line.trim().startsWith("[^")) {
-      const id = ld[1].trim().toLowerCase();
-      linkDefs[id] = { href: ld[2].replace(/^<|>$/g, ""), title: ld[3] };
-      i += 1;
-      continue;
+    // 链接定义 [id]: <url> "title"，标题可以写在下一行
+    const head = /^ {0,3}\[([^\]]+)\]:[ \t]*/.exec(line);
+    if (head && !(head[1] ?? "").startsWith("^")) {
+      const dest = readLinkDestination(line.slice(head[0].length));
+      if (dest?.href) {
+        let title: string | undefined;
+        let next = i + 1;
+        if (dest.rest.trim()) {
+          title = readSameLineTitle(dest.rest);
+          if (title === undefined) {
+            kept.push(line);
+            i += 1;
+            continue;
+          }
+        } else if (next < lines.length && !opaque[next]) {
+          const nextTitle = readNextLineTitle(lines[next] ?? "");
+          if (nextTitle !== null) {
+            title = nextTitle;
+            next += 1;
+          }
+        }
+        linkDefs[(head[1] ?? "").trim().toLowerCase()] = { href: dest.href, title };
+        i = next;
+        continue;
+      }
     }
 
     kept.push(line);
@@ -326,14 +572,15 @@ function parseDefinitionList(
     // 允许 `: definition`
     if (!/^:\s+/.test(lines[start + 1])) return null;
   }
-  // term 不能是列表/标题/围栏等
-  const termLine = lines[start];
+  // term 不能是列表/标题/围栏等，也不能以冒号结尾（避免把 "Note:" 下一行吃成定义）
+  const termLine = lines[start] ?? "";
   if (
     !termLine.trim() ||
-    termLine.startsWith("#") ||
+    /[:：]\s*$/.test(termLine.trim()) ||
+    matchAtx(termLine) ||
     matchFenceOpen(termLine) ||
-    /^>\s?/.test(termLine) ||
-    /^\s*([-*+]|\d+\.)\s+/.test(termLine) ||
+    /^ {0,3}>/.test(termLine) ||
+    matchListMarker(termLine) ||
     termLine.trim().startsWith("|")
   ) {
     return null;
@@ -351,9 +598,9 @@ function parseDefinitionList(
     if (i + 1 >= lines.length || !/^:\s+/.test(lines[i + 1])) break;
     if (
       lines[i].startsWith("#") ||
-      matchFenceOpen(lines[i]) ||
-      /^>\s?/.test(lines[i]) ||
-      /^\s*([-*+]|\d+\.)\s+/.test(lines[i])
+      matchFenceOpen(lines[i] ?? "") ||
+      /^ {0,3}>/.test(lines[i] ?? "") ||
+      matchListMarker(lines[i] ?? "")
     ) {
       break;
     }
@@ -383,8 +630,8 @@ function parseDefinitionList(
         if (
           next.startsWith("#") ||
           matchFenceOpen(next) ||
-          /^>\s?/.test(next) ||
-          /^\s*([-*+]|\d+\.)\s+/.test(next) ||
+          /^ {0,3}>/.test(next) ||
+          Boolean(matchListMarker(next)) ||
           (i + 1 < lines.length && /^:\s+/.test(lines[i + 1]) && !/^\s/.test(next))
         ) {
           // 下一 term：未缩进且后面是 :
@@ -394,8 +641,8 @@ function parseDefinitionList(
           if (
             next.startsWith("#") ||
             matchFenceOpen(next) ||
-            /^>\s?/.test(next) ||
-            /^\s*([-*+]|\d+\.)\s+/.test(next)
+            /^ {0,3}>/.test(next) ||
+            matchListMarker(next)
           ) {
             break;
           }
@@ -410,7 +657,7 @@ function parseDefinitionList(
         chunk.push(next);
         i += 1;
       }
-      definitions.push(parseMarkdown(chunk.join("\n").trim(), options));
+      definitions.push(parseFragment(chunk.join("\n").trim(), options));
     }
 
     if (definitions.length === 0) break;
@@ -421,18 +668,54 @@ function parseDefinitionList(
   return { node: { type: "definitionList", items }, next: i };
 }
 
+function isDefinitionStart(lines: string[], i: number): boolean {
+  if (i + 1 >= lines.length || indentOf(lines[i] ?? "") !== 0) return false;
+  if (!/^:[ \t]+\S/.test(lines[i + 1] ?? "")) return false;
+  const term = (lines[i] ?? "").trim();
+  if (!term || /[:：]\s*$/.test(term)) return false;
+  if (matchAtx(lines[i] ?? "") || matchFenceOpen(lines[i] ?? "") || isThematicBreak(lines[i] ?? "")) {
+    return false;
+  }
+  if (matchListMarker(lines[i] ?? "") || /^ {0,3}>/.test(lines[i] ?? "")) return false;
+  return true;
+}
+
 function isBlockStart(line: string, streaming: boolean, lines: string[], i: number): boolean {
   if (!line.trim()) return true;
-  if (isAtxHeading(line)) return true;
-  if (matchFenceOpen(line)) return true;
-  if (/^>\s?/.test(line)) return true;
-  if (/^\s*([-*+]|\d+\.)\s+/.test(line)) return true;
-  if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) return true;
+  if (matchAtx(line) || matchFenceOpen(line) || /^ {0,3}>/.test(line)) return true;
+  if (matchListMarker(line) && indentOf(line) <= 3) return true;
+  if (isThematicBreak(line) || setextLevel(line) !== null) return true;
   if (isTableHeaderAt(lines, i)) return true;
   if (streaming && isPipeTableLine(line) && !isTableHeaderAt(lines, i)) return true;
-  if (line.trim().startsWith("$$")) return true;
-  if (i + 1 < lines.length && /^:\s+/.test(lines[i + 1]) && indentOf(line) === 0) return true;
+  if (indentOf(line) <= 3 && line.trim().startsWith("$$")) return true;
+  if (indentOf(line) >= 4) return true;
+  if (isDefinitionStart(lines, i)) return true;
   return false;
+}
+
+/** 四空格（或 tab）缩进代码块；末尾空行留给后面的块。 */
+function parseIndentedCode(
+  lines: string[],
+  start: number,
+): { node: BlockNode; next: number } | null {
+  if (indentOf(lines[start] ?? "") < 4 || !(lines[start] ?? "").trim()) return null;
+  const buf: string[] = [];
+  const pendingBlanks: string[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    if (!line.trim()) {
+      pendingBlanks.push("");
+      i += 1;
+      continue;
+    }
+    if (indentOf(line) < 4) break;
+    buf.push(...pendingBlanks, sliceContentColumn(line, 4));
+    pendingBlanks.length = 0;
+    i += 1;
+  }
+  if (!buf.length) return null;
+  return { node: { type: "code", lang: "", value: buf.join("\n") }, next: i - pendingBlanks.length };
 }
 
 /** 流式表格：仅当表是文末块且缓冲区未以换行闭合时标 incomplete。 */
@@ -451,21 +734,21 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
 
   while (i < lines.length) {
     const startI = i;
-    const line = lines[i];
+    const line = lines[i] ?? "";
 
     if (!line.trim()) {
       i += 1;
       continue;
     }
 
-    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
+    if (isThematicBreak(line)) {
       out.push({ type: "hr" });
       i += 1;
       continue;
     }
 
-    // 数学块 $$
-    if (line.trim().startsWith("$$")) {
+    // 数学块 $$（四空格缩进留给代码块）
+    if (indentOf(line) <= 3 && line.trim().startsWith("$$")) {
       const trimmed = line.trim();
       if (trimmed === "$$" || trimmed.startsWith("$$")) {
         const sameLine = trimmed.length > 2 && trimmed.endsWith("$$") && trimmed !== "$$";
@@ -507,12 +790,13 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
       const buf: string[] = [];
       let closed = false;
       while (i < lines.length) {
-        if (isFenceClose(lines[i], ch, count)) {
+        const fenceLine = lines[i] ?? "";
+        if (isFenceClose(fenceLine, ch, count)) {
           closed = true;
           i += 1;
           break;
         }
-        buf.push(lines[i]);
+        buf.push(stripLeadingSpaces(fenceLine, fence.indent));
         i += 1;
       }
       const value = buf.join("\n");
@@ -560,28 +844,36 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
       }
     }
 
-    if (/^>\s?/.test(line)) {
+    if (/^ {0,3}>/.test(line)) {
       const quote = parseBlockquote(lines, i, options);
       out.push(quote.node);
       i = quote.next;
       continue;
     }
 
-    const heading = ATX_HEADING_RE.exec(line);
+    const heading = matchAtx(line);
     if (heading) {
-      const level = heading[1].length as 1 | 2 | 3 | 4 | 5 | 6;
-      const text = heading[2].trim();
+      const children = parseInline(heading.text, options);
       out.push({
         type: "heading",
-        level,
-        id: headingId(text),
-        children: parseInline(text, options),
+        level: heading.level,
+        id: headingId(plainInline(children)) || "section",
+        children,
       });
       i += 1;
       continue;
     }
 
-    if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
+    if (indentOf(line) >= 4) {
+      const indented = parseIndentedCode(lines, i);
+      if (indented) {
+        out.push(indented.node);
+        i = indented.next;
+        continue;
+      }
+    }
+
+    if (matchListMarker(line) && indentOf(line) <= 3) {
       const list = parseList(lines, i, options);
       if (list) {
         out.push(list.node);
@@ -599,32 +891,38 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
     }
 
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i], streaming, lines, i)) {
-      // 若当前行是 term 且下一行是 : 定义，停在段落外交给 dl
-      if (i + 1 < lines.length && /^:\s+/.test(lines[i + 1]) && indentOf(lines[i]) === 0) {
-        break;
-      }
-      para.push(lines[i]);
+    while (i < lines.length && (lines[i] ?? "").trim() && !isBlockStart(lines[i] ?? "", streaming, lines, i)) {
+      if (isDefinitionStart(lines, i)) break;
+      para.push(lines[i] ?? "");
       i += 1;
     }
-    // 若因为 dl 停下且 para 为空，循环继续会进 dl；若 para 有内容先输出
-    if (para.length) {
+    const underline = i < lines.length ? setextLevel(lines[i] ?? "") : null;
+    if (para.length && underline) {
+      const children = parseInline(para.join("\n"), options);
+      out.push({
+        type: "heading",
+        level: underline,
+        id: headingId(plainInline(children)) || "section",
+        children,
+      });
+      i += 1;
+    } else if (para.length) {
       out.push({ type: "paragraph", children: parseInline(para.join("\n"), options) });
-    } else if (i < lines.length && i + 1 < lines.length && /^:\s+/.test(lines[i + 1])) {
+    } else if (isDefinitionStart(lines, i)) {
       const dl2 = parseDefinitionList(lines, i, options);
       if (dl2) {
         out.push(dl2.node);
         i = dl2.next;
       } else {
         // 无法解析则当段落吃掉一行，避免死循环
-        out.push({ type: "paragraph", children: parseInline(lines[i], options) });
+        out.push({ type: "paragraph", children: parseInline(lines[i] ?? "", options) });
         i += 1;
       }
     }
 
     // 兜底：本轮未推进则强制吃一行，防止同类死循环
     if (i === startI) {
-      out.push({ type: "paragraph", children: parseInline(lines[i]!, options) });
+      out.push({ type: "paragraph", children: parseInline(lines[i] ?? "", options) });
       i += 1;
     }
   }
@@ -632,18 +930,34 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
   return out;
 }
 
-/** 解析完整文档（含脚注与链接定义）。 */
+/**
+ * 解析列表项、引用、脚注正文。
+ * 不再次抽取链接定义，避免把代码块里的 `[id]: url` 从内层抽掉后丢掉。
+ */
+function parseFragment(md: string, options: ParseOptions): BlockNode[] {
+  const source = md ?? "";
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  return parseBlocks(lines, options, source);
+}
+
+/**
+ * 解析完整文档（含脚注与链接定义）。
+ * 聊天正文里的 `---` 是分隔线，不能当成 frontmatter 剥掉，否则两道分隔线之间的正文会整段消失。
+ */
 export function parseMarkdownDocument(md: string, options: ParseOptions = {}): MarkdownDocument {
-  const source = parseFrontmatter(md ?? "").body;
+  const source = md ?? "";
   const rawLines = source.replace(/\r\n/g, "\n").split("\n");
   const { lines, linkDefs, footnotes } = extractDefs(rawLines);
   const mergedDefs = { ...linkDefs, ...(options.linkDefs ?? {}) };
   const opts: ParseOptions = { ...options, linkDefs: mergedDefs };
   const blocks = parseBlocks(lines, opts, md ?? "");
+  const seen = new Map<string, number>();
+  dedupeHeadingIds(blocks, seen);
+  for (const note of footnotes) dedupeHeadingIds(note.children, seen);
   return { blocks, footnotes, linkDefs: mergedDefs };
 }
 
-/** 解析完整 markdown 文档为块级 AST（会剥离 frontmatter 与链接/脚注定义）。 */
+/** 解析完整 markdown 文档为块级 AST（会剥离链接/脚注定义）。 */
 export function parseMarkdown(md: string, options: ParseOptions = {}): BlockNode[] {
   return parseMarkdownDocument(md, options).blocks;
 }

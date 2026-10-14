@@ -1,6 +1,8 @@
 /**
  * 文档前置元数据（frontmatter）解析：YAML / JSON / TOML 子集。
+ * YAML 对象解析交给 shared，这里只负责围栏识别与 JSON / TOML。
  */
+import { parseYamlObject } from "@thinker-workbench/shared";
 
 export type FrontmatterFormat = "yaml" | "json" | "toml";
 
@@ -74,78 +76,6 @@ function parseScalar(raw: string): unknown {
   return stripQuotes(value);
 }
 
-/** 最小 YAML 子集：映射、嵌套缩进、列表、标量。 */
-function parseYaml(raw: string): Record<string, unknown> {
-  const lines = raw.replace(/\t/g, "  ").split("\n");
-  const root: Record<string, unknown> = {};
-  const stack: Array<{ indent: number; container: Record<string, unknown> | unknown[] }> = [
-    { indent: -1, container: root },
-  ];
-
-  const top = () => stack[stack.length - 1];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (!line.trim() || line.trimStart().startsWith("#")) continue;
-
-    const indent = line.match(/^ */)?.[0].length ?? 0;
-    const trimmed = line.trim();
-
-    while (stack.length > 1 && indent <= top().indent) stack.pop();
-    const parent = top().container;
-
-    if (trimmed.startsWith("- ")) {
-      if (!Array.isArray(parent)) continue;
-      const itemRaw = trimmed.slice(2).trim();
-      if (!itemRaw) {
-        const obj: Record<string, unknown> = {};
-        parent.push(obj);
-        stack.push({ indent, container: obj });
-        continue;
-      }
-      if (itemRaw.includes(":") && !/^['"].*['"]$/.test(itemRaw)) {
-        const obj: Record<string, unknown> = {};
-        const colon = itemRaw.indexOf(":");
-        const key = itemRaw.slice(0, colon).trim();
-        const rest = itemRaw.slice(colon + 1).trim();
-        if (rest) obj[key] = parseScalar(rest);
-        parent.push(obj);
-        stack.push({ indent, container: obj });
-      } else {
-        parent.push(parseScalar(itemRaw));
-      }
-      continue;
-    }
-
-    if (typeof parent !== "object" || parent === null || Array.isArray(parent)) continue;
-
-    const colon = trimmed.indexOf(":");
-    if (colon < 0) continue;
-    const key = trimmed.slice(0, colon).trim();
-    const rest = trimmed.slice(colon + 1).trim();
-
-    if (!rest) {
-      const next = lines[i + 1];
-      const nextIndent = next ? (next.match(/^ */)?.[0].length ?? 0) : 0;
-      const nextTrim = next?.trim() ?? "";
-      if (next && nextIndent > indent && nextTrim.startsWith("- ")) {
-        const arr: unknown[] = [];
-        parent[key] = arr;
-        stack.push({ indent, container: arr });
-      } else {
-        const obj: Record<string, unknown> = {};
-        parent[key] = obj;
-        stack.push({ indent, container: obj });
-      }
-      continue;
-    }
-
-    parent[key] = parseScalar(rest);
-  }
-
-  return root;
-}
-
 /** 最小 TOML 子集：key = value、[tables]、点分键。 */
 function parseToml(raw: string): Record<string, unknown> {
   const root: Record<string, unknown> = {};
@@ -214,7 +144,7 @@ function parsePayload(format: FrontmatterFormat, raw: string): Record<string, un
       return {};
     }
     if (format === "toml") return parseToml(text);
-    return parseYaml(text);
+    return parseYamlObject(text);
   } catch {
     return {};
   }
@@ -241,9 +171,3 @@ export function parseFrontmatter(source: string): FrontmatterResult {
     raw: fence.raw,
   };
 }
-
-/** {@link parseFrontmatter} 的别名——文档元数据抽取。 */
-export const parseMetadata = parseFrontmatter;
-
-export type MetadataFormat = FrontmatterFormat;
-export type MetadataResult = FrontmatterResult;

@@ -4,14 +4,7 @@
  */
 
 export { extractToc, type TocItem } from "./extractToc";
-export {
-  type FrontmatterFormat,
-  type FrontmatterResult,
-  type MetadataFormat,
-  type MetadataResult,
-  parseFrontmatter,
-  parseMetadata,
-} from "./frontmatter";
+export { type FrontmatterFormat, type FrontmatterResult, parseFrontmatter } from "./frontmatter";
 export { highlightCode, registerLanguage } from "./highlight";
 export { headingId, parseMarkdown, parseMarkdownDocument } from "./parse/blocks";
 export { parseInline } from "./parse/inline";
@@ -42,6 +35,7 @@ export {
   resolveTheme,
 } from "./themes";
 export type {
+  AlertKind,
   BlockNode,
   DefinitionItem,
   FootnoteDef,

@@ -1,7 +1,7 @@
 /**
  * Customize 内按作用域展开的分组：标题栏 + 添加 + 空状态 / 内容。
  */
-import { Button, ChevronRightIcon, EmptyState } from "@thinker-workbench/design/react";
+import { Button, Disclosure, EmptyState } from "@thinker-workbench/design/react";
 import { type ReactNode, useState } from "react";
 
 type Props = {
@@ -36,43 +36,34 @@ export function ScopeGroupSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className={`customize-scope-group${open ? " is-open" : ""}`}>
-      <header className="customize-scope-group__head">
-        <button
-          type="button"
-          className="customize-scope-group__toggle"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <ChevronRightIcon open={open} size="sm" />
-          <span className="customize-scope-group__title">{title}</span>
-          <span className="customize-scope-group__count">{count}</span>
-        </button>
-        <div className="customize-scope-group__actions">
+    <Disclosure
+      title={title}
+      count={count}
+      open={open}
+      onOpenChange={setOpen}
+      actions={
+        <>
           {headerExtra}
           <Button size="sm" variant="primary" onClick={onAdd}>
             {addLabel}
           </Button>
-        </div>
-      </header>
-      {open ? (
-        <div className="customize-scope-group__body">
-          {isEmpty ? (
-            <EmptyState
-              className="customize-scope-group__empty"
-              title={emptyTitle}
-              description={emptyBody}
-              action={
-                <Button size="sm" variant="primary" onClick={onAdd}>
-                  {addLabel}
-                </Button>
-              }
-            />
-          ) : (
-            children
-          )}
-        </div>
-      ) : null}
-    </section>
+        </>
+      }
+    >
+      {isEmpty ? (
+        <EmptyState
+          className="customize-scope-group__empty"
+          title={emptyTitle}
+          description={emptyBody}
+          action={
+            <Button size="sm" variant="primary" onClick={onAdd}>
+              {addLabel}
+            </Button>
+          }
+        />
+      ) : (
+        children
+      )}
+    </Disclosure>
   );
 }

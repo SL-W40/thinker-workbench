@@ -65,15 +65,31 @@ export async function runAgent(command: AgentRunCommand | string): Promise<RunRe
   await new Promise((r) => setTimeout(r, 420));
   return {
     ok: true,
-    text: `(browser preview echo) ${message}\n\nRun npm run dev to use Electron + utilityProcess.`,
+    accepted: true,
     runId: "preview",
     threadId: "preview",
   };
 }
 
-/** 取消指定（或当前）Agent 运行；无 API 时为 no-op。 */
-export function cancelAgent(runId?: string): Promise<void> {
-  return api()?.cancel(runId ?? "") ?? Promise.resolve();
+/** 取消指定 run 或会话上的活动 run；无 API 时为 no-op。 */
+export function cancelAgent(
+  command?: string | { runId?: string; sessionId?: string },
+): Promise<{ ok: boolean; error?: string } | void> {
+  return api()?.cancel(command ?? "") ?? Promise.resolve({ ok: true });
+}
+
+/** 取消单个后台 Task（不停止父 run）。 */
+export function cancelAgentTask(
+  taskId: string,
+  runId?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const id = taskId.trim();
+  if (!id) return Promise.resolve({ ok: false, error: "taskId is required." });
+  const thinker = api();
+  if (!thinker?.cancelTask) {
+    return Promise.resolve({ ok: false, error: "cancelTask API unavailable." });
+  }
+  return thinker.cancelTask({ taskId: id, ...(runId?.trim() ? { runId: runId.trim() } : {}) });
 }
 
 /** 从中断点恢复（审批 / checkpoint Resume）。 */
@@ -82,7 +98,8 @@ export async function resumeAgent(command: AgentResumeCommand): Promise<RunResul
   if (!thinker?.resume) {
     return { ok: false, error: "Resume API unavailable.", runId: "", threadId: command.threadId };
   }
-  return thinker.resume(command);
+  const result = await thinker.resume(command);
+  return result;
 }
 
 /** 估算当前会话上下文占用（与 assembleContext 同源）。 */

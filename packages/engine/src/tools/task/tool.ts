@@ -1,13 +1,13 @@
 /**
- * Task / task_await 工具规格。
+ * Task / task_await / task_cancel 工具规格。
  */
 import { defineTool } from "../defineTool";
-import { runTaskAwaitTool, runTaskTool } from "./execute";
+import { runTaskAwaitTool, runTaskCancelTool, runTaskTool } from "./execute";
 
 export const taskToolSpec = defineTool({
   name: "Task",
   description:
-    "Delegate work to a named subagent. Argument order matters for streaming UX: emit subagent, then a short unique title, then prompt (never put a long prompt first). Decide await yourself: await=true blocks until the subagent finishes and returns its summary; await=false (or background=true) returns a taskId immediately — then call task_await when you need the result (same pattern as shell / shell_await). Prefer await=false for independent parallel workstreams, then task_await each taskId before summarizing. Do not invent a status subagent.",
+    "Delegate work to a named subagent. Argument order matters for streaming UX: emit subagent, then a short unique title, then prompt (never put a long prompt first). Decide await yourself: await=true blocks until the subagent finishes and returns its summary; await=false (or background=true) returns a taskId immediately — then call task_await when you need the result (same pattern as shell / shell_await). Prefer await=false for independent parallel workstreams, then task_await each taskId before summarizing. Use task_cancel to drop one background task without stopping the parent run. Do not invent a status subagent.",
   parameters: {
     type: "object",
     properties: {
@@ -66,4 +66,21 @@ export const taskAwaitToolSpec = defineTool({
     required: ["taskId"],
   },
   execute: runTaskAwaitTool,
+});
+
+export const taskCancelToolSpec = defineTool({
+  name: "task_cancel",
+  description:
+    "Cancel one background Task by taskId without stopping the parent run or other Tasks. Use when a parallel workstream is no longer needed. Idempotent if already finished/failed/cancelled. Prefer this over inventing a status subagent.",
+  parameters: {
+    type: "object",
+    properties: {
+      taskId: {
+        type: "string",
+        description: "taskId from a prior Task (await=false / background=true) result.",
+      },
+    },
+    required: ["taskId"],
+  },
+  execute: runTaskCancelTool,
 });

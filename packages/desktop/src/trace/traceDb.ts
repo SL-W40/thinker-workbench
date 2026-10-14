@@ -304,8 +304,37 @@ export function listSessionsOldestFirst(): TraceSessionSummary[] {
   }));
 }
 
+export function notePayloadIndex(
+  sessionId: string,
+  payloadId: string,
+  offset: number,
+  length: number,
+): void {
+  openTraceDb()
+    .prepare(
+      `INSERT OR REPLACE INTO payloads(session_id, payload_id, offset, length)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(sessionId, payloadId, offset, length);
+}
+
+export function findPayloadIndex(
+  sessionId: string,
+  payloadId: string,
+): { offset: number; length: number } | null {
+  const row = openTraceDb()
+    .prepare("SELECT offset, length FROM payloads WHERE session_id = ? AND payload_id = ?")
+    .get(sessionId, payloadId) as { offset: number; length: number } | undefined;
+  return row ?? null;
+}
+
+export function deletePayloadIndex(sessionId: string): void {
+  openTraceDb().prepare("DELETE FROM payloads WHERE session_id = ?").run(sessionId);
+}
+
 export function deleteSession(sessionId: string): void {
   const d = openTraceDb();
+  d.prepare("DELETE FROM payloads WHERE session_id = ?").run(sessionId);
   d.prepare("DELETE FROM spans WHERE session_id = ?").run(sessionId);
   d.prepare("DELETE FROM sessions WHERE session_id = ?").run(sessionId);
 }

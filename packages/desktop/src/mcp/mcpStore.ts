@@ -1,14 +1,17 @@
 /**
- * MCP 配置落盘：`{dataDir}/mcps/{id}.json`。
+ * MCP 配置落盘：user 在 `{dataDir}/mcps`，workspace 在 `<root>/.thinker/mcps`。
  */
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  CustomizeScope,
+  McpImportConflict,
   McpServerConfig,
   McpServerUpsertInput,
-  McpTransport,
 } from "@thinker-workbench/shared";
-import { getDataDir } from "../config/paths";
+import { customizeScopeKey, normalizeCustomizeScope } from "@thinker-workbench/shared";
+import { ensureDir, resolveWritableRoot } from "../customize/paths";
+import { listWorkspaces } from "../db/workspacesStore";
 
 function sanitizeId(raw: string): string {
   const cleaned = raw
@@ -19,52 +22,59 @@ function sanitizeId(raw: string): string {
   return cleaned || "server";
 }
 
-/** MCP 配置目录。 */
-export function getMcpsDir(): string {
-  return path.join(getDataDir(), "mcps");
+function scopeOf(raw?: CustomizeScope | null): CustomizeScope {
+  return normalizeCustomizeScope(raw ?? { kind: "user" });
 }
 
-/** 确保目录存在。 */
-export function ensureMcpsDir(): string {
-  const dir = getMcpsDir();
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+function dirFor(scope: CustomizeScope): string {
+  return ensureDir(resolveWritableRoot(scope, "mcps"));
 }
 
-function filePathForId(id: string): string {
-  return path.join(getMcpsDir(), `${sanitizeId(id)}.json`);
+function filePath(scope: CustomizeScope, id: string): string {
+  return path.join(dirFor(scope), `${sanitizeId(id)}.json`);
 }
 
-function normalizeConfig(raw: unknown, fallbackId: string): McpServerConfig | null {
+function readStringMap(raw: unknown): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return env;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string") env[k] = v;
+    else if (v != null) env[k] = String(v);
+  }
+  return env;
+}
+
+function normalizeConfig(
+  raw: unknown,
+  fallbackId: string,
+  scope: CustomizeScope,
+): McpServerConfig | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const id = sanitizeId(typeof o.id === "string" ? o.id : fallbackId);
+  const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : id;
+  const enabled = o.enabled !== false;
+  const base = { id, name, enabled, scope, writable: true as const };
+  if (o.transport === "http" || (typeof o.url === "string" && o.url.trim() && !o.command)) {
+    const url = typeof o.url === "string" ? o.url.trim() : "";
+    if (!url) return null;
+    return { ...base, transport: "http", url, headers: readStringMap(o.headers) };
+  }
   const command = typeof o.command === "string" ? o.command.trim() : "";
   if (!command) return null;
-  const transport: McpTransport = o.transport === "stdio" || !o.transport ? "stdio" : "stdio";
   const args = Array.isArray(o.args) ? o.args.map((a) => String(a)) : [];
-  const env: Record<string, string> = {};
-  if (o.env && typeof o.env === "object" && !Array.isArray(o.env)) {
-    for (const [k, v] of Object.entries(o.env as Record<string, unknown>)) {
-      if (typeof v === "string") env[k] = v;
-      else if (v != null) env[k] = String(v);
-    }
-  }
   return {
-    id,
-    name: typeof o.name === "string" && o.name.trim() ? o.name.trim() : id,
-    enabled: o.enabled !== false,
-    transport,
+    ...base,
+    transport: "stdio",
     command,
     args,
-    env,
+    env: readStringMap(o.env),
     cwd: typeof o.cwd === "string" && o.cwd.trim() ? o.cwd.trim() : null,
   };
 }
 
-/** 列出全部已保存配置。 */
-export function listMcpConfigs(): McpServerConfig[] {
-  const dir = ensureMcpsDir();
+function readScope(scope: CustomizeScope): McpServerConfig[] {
+  const dir = dirFor(scope);
   let names: string[];
   try {
     names = fs.readdirSync(dir);
@@ -74,46 +84,95 @@ export function listMcpConfigs(): McpServerConfig[] {
   const out: McpServerConfig[] = [];
   for (const name of names) {
     if (!name.endsWith(".json")) continue;
-    const abs = path.join(dir, name);
     try {
-      const raw = JSON.parse(fs.readFileSync(abs, "utf8")) as unknown;
-      const cfg = normalizeConfig(raw, path.basename(name, ".json"));
+      const raw = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")) as unknown;
+      const cfg = normalizeConfig(raw, path.basename(name, ".json"), scope);
       if (cfg) out.push(cfg);
     } catch {
-      /* skip bad file */
+      /* 跳过坏文件 */
     }
+  }
+  return out;
+}
+
+function workspaceScopeForRoot(workspaceRoot?: string | null): CustomizeScope | null {
+  if (!workspaceRoot?.trim()) return null;
+  const resolved = path.resolve(workspaceRoot);
+  const ws = listWorkspaces().find((item) => path.resolve(item.rootPath) === resolved);
+  return ws ? { kind: "workspace", workspaceId: ws.id } : null;
+}
+
+/** 列出 user，以及指定工作区（省略则全部工作区）下的配置。 */
+export function listMcpConfigs(workspaceRoot?: string | null): McpServerConfig[] {
+  const out = readScope({ kind: "user" });
+  if (workspaceRoot === undefined) {
+    for (const ws of listWorkspaces()) {
+      out.push(...readScope({ kind: "workspace", workspaceId: ws.id }));
+    }
+  } else {
+    const scope = workspaceScopeForRoot(workspaceRoot);
+    if (scope) out.push(...readScope(scope));
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** 仅启用且 transport=stdio 的快照（下发给 engine）。 */
+/** 启用中的配置（stdio 与 http），供 engine 重载。 */
 export function listEnabledMcpConfigs(): McpServerConfig[] {
-  return listMcpConfigs().filter((c) => c.enabled && c.transport === "stdio");
+  return listMcpConfigs().filter((c) => c.enabled);
 }
 
-/** 写入 / 更新。 */
+function persist(scope: CustomizeScope, cfg: McpServerConfig): void {
+  const stored = { ...cfg };
+  delete stored.scope;
+  delete stored.writable;
+  fs.writeFileSync(filePath(scope, cfg.id), `${JSON.stringify(stored, null, 2)}\n`, "utf8");
+}
+
+/** 写入 / 更新。stdio 要 command，http 要 url。 */
 export function upsertMcpConfig(input: McpServerUpsertInput): McpServerConfig {
-  ensureMcpsDir();
+  const scope = scopeOf(input.scope);
   const id = sanitizeId(input.id);
-  const existing = listMcpConfigs().find((c) => c.id === id);
-  const next: McpServerConfig = {
-    id,
-    name: (input.name?.trim() || existing?.name || id).trim(),
-    enabled: input.enabled ?? existing?.enabled ?? true,
-    transport: "stdio",
-    command: input.command.trim(),
-    args: input.args ?? existing?.args ?? [],
-    env: input.env ?? existing?.env ?? {},
-    cwd: input.cwd !== undefined ? input.cwd?.trim() || null : (existing?.cwd ?? null),
-  };
-  if (!next.command) throw new Error("MCP command is required.");
-  fs.writeFileSync(filePathForId(id), `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  const existing = readScope(scope).find((c) => c.id === id);
+  const name = (input.name?.trim() || existing?.name || id).trim();
+  const enabled = input.enabled ?? existing?.enabled ?? true;
+  let next: McpServerConfig;
+  if (input.transport === "http") {
+    const url = input.url.trim();
+    if (!url) throw new Error("MCP url is required.");
+    next = {
+      id,
+      name,
+      enabled,
+      scope,
+      writable: true,
+      transport: "http",
+      url,
+      headers: input.headers ?? (existing?.transport === "http" ? existing.headers : {}) ?? {},
+    };
+  } else {
+    const command = input.command.trim();
+    if (!command) throw new Error("MCP command is required.");
+    const prev = existing?.transport === "stdio" ? existing : null;
+    next = {
+      id,
+      name,
+      enabled,
+      scope,
+      writable: true,
+      transport: "stdio",
+      command,
+      args: input.args ?? prev?.args ?? [],
+      env: input.env ?? prev?.env ?? {},
+      cwd: input.cwd !== undefined ? input.cwd?.trim() || null : (prev?.cwd ?? null),
+    };
+  }
+  persist(scope, next);
   return next;
 }
 
 /** 删除配置文件。 */
-export function removeMcpConfig(id: string): void {
-  const abs = filePathForId(id);
+export function removeMcpConfig(id: string, scope?: CustomizeScope): void {
+  const abs = filePath(scopeOf(scope), id);
   try {
     fs.unlinkSync(abs);
   } catch {
@@ -122,34 +181,72 @@ export function removeMcpConfig(id: string): void {
 }
 
 /** 切换启用。 */
-export function setMcpEnabled(id: string, enabled: boolean): McpServerConfig {
-  const cur = listMcpConfigs().find((c) => c.id === sanitizeId(id));
+export function setMcpEnabled(
+  id: string,
+  enabled: boolean,
+  scope?: CustomizeScope,
+): McpServerConfig {
+  const resolved = scopeOf(scope);
+  const cur = readScope(resolved).find((c) => c.id === sanitizeId(id));
   if (!cur) throw new Error(`MCP server not found: ${id}`);
-  return upsertMcpConfig({ ...cur, enabled });
+  if (cur.transport === "http") {
+    return upsertMcpConfig({ ...cur, enabled, scope: resolved, transport: "http" });
+  }
+  return upsertMcpConfig({ ...cur, enabled, scope: resolved, transport: "stdio" });
+}
+
+function importOne(
+  id: string,
+  value: Record<string, unknown>,
+  scope: CustomizeScope,
+): McpServerUpsertInput | null {
+  if (value.transport === "http" || (typeof value.url === "string" && value.url.trim())) {
+    const url = typeof value.url === "string" ? value.url.trim() : "";
+    if (!url) return null;
+    return {
+      id,
+      name: id,
+      enabled: true,
+      transport: "http",
+      url,
+      headers: readStringMap(value.headers),
+      scope,
+    };
+  }
+  const command = typeof value.command === "string" ? value.command.trim() : "";
+  if (!command) return null;
+  return {
+    id,
+    name: id,
+    enabled: true,
+    transport: "stdio",
+    command,
+    args: Array.isArray(value.args) ? value.args.map((a) => String(a)) : [],
+    env: readStringMap(value.env),
+    cwd: typeof value.cwd === "string" ? value.cwd : null,
+    scope,
+  };
 }
 
 /**
- * 从 `mcp.json`（`{ mcpServers: { id: { command, args, env } } }`）导入。
- * 冲突跳过（不覆盖）。
+ * 从 `mcp.json`（`{ mcpServers: { id: config } }`）导入到指定作用域。
  */
-export function importMcpJsonFile(filePath: string): {
-  imported: string[];
-  skipped: string[];
-} {
+export function importMcpJsonFile(
+  filePath: string,
+  conflict: McpImportConflict = "skip",
+  scope?: CustomizeScope,
+): { imported: string[]; skipped: string[] } {
   const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Invalid mcp.json");
-  }
+  if (!raw || typeof raw !== "object") throw new Error("Invalid mcp.json");
   const map = (raw as { mcpServers?: unknown }).mcpServers;
-  if (!map || typeof map !== "object") {
-    throw new Error("mcp.json missing mcpServers");
-  }
-  const existing = new Set(listMcpConfigs().map((c) => c.id));
+  if (!map || typeof map !== "object") throw new Error("mcp.json missing mcpServers");
+  const resolved = scopeOf(scope);
+  const existing = new Set(readScope(resolved).map((c) => c.id));
   const imported: string[] = [];
   const skipped: string[] = [];
   for (const [key, value] of Object.entries(map as Record<string, unknown>)) {
     const id = sanitizeId(key);
-    if (existing.has(id)) {
+    if (existing.has(id) && conflict !== "overwrite") {
       skipped.push(id);
       continue;
     }
@@ -157,31 +254,39 @@ export function importMcpJsonFile(filePath: string): {
       skipped.push(id);
       continue;
     }
-    const v = value as Record<string, unknown>;
-    const command = typeof v.command === "string" ? v.command.trim() : "";
-    if (!command) {
+    const input = importOne(id, value as Record<string, unknown>, resolved);
+    if (!input) {
       skipped.push(id);
       continue;
     }
-    upsertMcpConfig({
-      id,
-      name: id,
-      enabled: true,
-      command,
-      args: Array.isArray(v.args) ? v.args.map((a) => String(a)) : [],
-      env:
-        v.env && typeof v.env === "object" && !Array.isArray(v.env)
-          ? Object.fromEntries(
-              Object.entries(v.env as Record<string, unknown>).map(([k, val]) => [
-                k,
-                String(val ?? ""),
-              ]),
-            )
-          : {},
-      cwd: typeof v.cwd === "string" ? v.cwd : null,
-    });
+    upsertMcpConfig(input);
     imported.push(id);
     existing.add(id);
   }
   return { imported, skipped };
+}
+
+/** 把一个作用域导出成 mcp.json 对象。 */
+export function exportMcpServers(scope?: CustomizeScope): Record<string, unknown> {
+  const resolved = scopeOf(scope);
+  const servers: Record<string, unknown> = {};
+  for (const cfg of readScope(resolved)) {
+    if (cfg.transport === "http") {
+      servers[cfg.id] = { transport: "http", url: cfg.url, headers: cfg.headers ?? {} };
+    } else {
+      servers[cfg.id] = {
+        transport: "stdio",
+        command: cfg.command,
+        args: cfg.args,
+        env: cfg.env,
+        cwd: cfg.cwd ?? null,
+      };
+    }
+  }
+  return { mcpServers: servers };
+}
+
+/** 作用域稳定键，供测试断言。 */
+export function mcpScopeKey(scope?: CustomizeScope): string {
+  return customizeScopeKey(scopeOf(scope));
 }

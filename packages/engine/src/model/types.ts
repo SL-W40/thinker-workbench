@@ -17,10 +17,27 @@ export type ChatToolCall = {
   };
 };
 
+/** 文本 content part。 */
+export type ChatTextPart = {
+  type: "text";
+  text: string;
+};
+
+/** 附图引用 part（发 HTTP 前再读盘编码）。 */
+export type ChatImageRefPart = {
+  type: "image_ref";
+  id: string;
+  path: string;
+  mime: string;
+};
+
+/** 用户多模态 content（assistant / tool 仍用字符串）。 */
+export type ChatContentPart = ChatTextPart | ChatImageRefPart;
+
 /** 单条对话消息；assistant 可带 tool_calls，tool 须带 tool_call_id。 */
 export type ChatMessage = {
   role: ChatRole;
-  content: string | null;
+  content: string | ChatContentPart[] | null;
   name?: string;
   tool_call_id?: string;
   tool_calls?: ChatToolCall[];

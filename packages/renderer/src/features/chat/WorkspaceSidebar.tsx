@@ -261,7 +261,10 @@ export function WorkspaceSidebar({
     const th = threads.find((x) => x.sessionId === menu.id);
     if (!th) return [];
     // 任意正在跑的会话都禁删（不仅当前会话 UI busy）
-    const sessionBusy = th.runStatus === "running" || (busy && th.sessionId === activeSessionId);
+    const sessionBusy =
+      th.runStatus === "running" ||
+      th.runStatus === "queued" ||
+      (busy && th.sessionId === activeSessionId);
     return [
       {
         label: t("workspaces.rename"),
@@ -464,11 +467,20 @@ export function WorkspaceSidebar({
                             className={`ws-session__dot${
                               th.runStatus === "cancelled" || th.runStatus === "crashed"
                                 ? " is-interrupted"
-                                : th.runStatus === "running" ||
-                                    (busy && th.sessionId === activeSessionId)
-                                  ? " is-running"
-                                  : ""
+                                : th.runStatus === "queued"
+                                  ? " is-queued"
+                                  : th.runStatus === "running" ||
+                                      (busy && th.sessionId === activeSessionId)
+                                    ? " is-running"
+                                    : ""
                             }`}
+                            title={
+                              th.runStatus === "queued"
+                                ? th.queuePosition
+                                  ? t("chat.queued", { position: String(th.queuePosition) })
+                                  : t("chat.queuedUnknown")
+                                : undefined
+                            }
                           />
                           <span className="ws-session__title">{th.title}</span>
                           {th.pinned ? (

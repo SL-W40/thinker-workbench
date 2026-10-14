@@ -1,0 +1,136 @@
+/* Tabs 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  /* 只横向滚。overflow-x 不是 visible 时，另一轴的 visible 会被当成 auto。 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 13px;
+
+  &--line {
+    gap: 0;
+    /* 底边用背景线，避免下划线用负边距探出盒子后再触发滚动。 */
+    background-image: linear-gradient(var(--tw-border, var(--line)), var(--tw-border, var(--line)));
+    background-size: 100% 1.5px;
+    background-repeat: no-repeat;
+    background-position: bottom;
+  }
+
+  &--document {
+    gap: 4px;
+  }
+}
+
+.tw-tabs__item {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 200px;
+}
+
+.tw-tabs--document .tw-tabs__item {
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+
+  &.is-selected {
+    border-color: var(--tw-border, var(--line));
+    background: var(--tw-bg-elev, var(--bg-elev));
+  }
+}
+
+.tw-tabs__tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tw-fg-muted, var(--muted));
+  font: inherit;
+  cursor: pointer;
+
+  .tw-tabs--line & {
+    padding: 8px 12px;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+  }
+
+  .tw-tabs--line .tw-tabs__item.is-selected & {
+    color: var(--tw-fg, var(--ink));
+    font-weight: 650;
+    border-bottom-color: var(--tw-accent-strong, var(--tw-accent, var(--accent)));
+  }
+
+  .tw-tabs--document & {
+    padding: 6px 4px 6px 10px;
+  }
+
+  .tw-tabs--document .tw-tabs__item.is-selected & {
+    color: var(--tw-fg, var(--ink));
+    font-weight: 650;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+.tw-tabs__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tw-tabs__icon,
+.tw-tabs__dirty {
+  flex: 0 0 auto;
+}
+
+.tw-tabs__dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tw-accent-strong, var(--tw-accent, var(--accent)));
+}
+
+.tw-tabs__close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--tw-hover, var(--hover-wash));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 1px;
+  }
+}

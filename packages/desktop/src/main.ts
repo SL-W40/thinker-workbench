@@ -12,6 +12,7 @@ import { loadSession } from "./config/sessionStore";
 import { getGeneralSettings, loadSettings } from "./config/settingsStore";
 import { ensureBundledCustomize } from "./customize/ensureBundledCustomize";
 import { closeThinkerDb, openCatalogDb } from "./db/thinkerDb";
+import { runLedger } from "./agent/runLedger";
 import { ensureDefaultWorkspace, healRunningSessions } from "./db/workspacesStore";
 import { registerIpc } from "./ipc/register";
 import { broadcastThreadsChanged } from "./ipc/workspacesHandlers";
@@ -31,6 +32,9 @@ import {
 } from "./window/createWindow";
 import { startDevToolsPrefsBridge } from "./window/devToolsEnv";
 import { isAppQuitting, setTrayEnsureWindow, syncTrayFromSettings } from "./window/tray";
+
+/** whenReady 后赋值；before-quit 停掉 utility 自动重启。 */
+let stopAgentProcess: (() => void) | null = null;
 
 app.setName(APP_NAME);
 if (process.platform === "win32") {
@@ -118,7 +122,9 @@ app.whenReady().then(() => {
       syncWindowBackgroundFromSettings();
     }
   });
-  const { bridge } = startAgentProcess();
+  const agent = startAgentProcess();
+  stopAgentProcess = agent.stop;
+  const { bridge } = agent;
   // 须在 createWindow 之前注册 IPC，以便首帧同步恢复 session
   registerIpc(ipcMain, bridge, {
     onGeneralSaved: () => {
@@ -143,6 +149,12 @@ app.whenReady().then(() => {
         pushAgentHello(bridge);
       } catch {
         /* agent 未在跑时忽略 */
+      }
+      // 调高并行上限后立刻把队头放进空槽；调低不抢占已在跑的会话
+      try {
+        runLedger.pump();
+      } catch {
+        /* ignore */
       }
     },
     onDataDirApplied: () => {
@@ -224,7 +236,12 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  // 先撕掉全部 PTY，再关 DB；残留 node-pty 在新 macOS 上易 SIGABRT
+  // 停掉 utility 自动重启，再撕 PTY；残留 node-pty 在新 macOS 上易 SIGABRT
+  try {
+    stopAgentProcess?.();
+  } catch {
+    /* ignore */
+  }
   try {
     terminalSessionManager.disposeAll();
   } catch {

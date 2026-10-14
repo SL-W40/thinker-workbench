@@ -8,6 +8,7 @@ import {
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";
 import { getRunIds } from "../runtime/runEmit";
+import { getAllowAiBrowser } from "../workspace";
 import { postToParent } from "./port";
 
 type Pending = {
@@ -43,6 +44,13 @@ export function browserCall(
   > = {},
   signal?: AbortSignal,
 ): Promise<BrowserCallResult> {
+  if (!getAllowAiBrowser()) {
+    return Promise.reject(
+      new Error(
+        "Browser tools are disabled in Settings (Browser protection). Ask the user to turn protection off if browser automation is required.",
+      ),
+    );
+  }
   const requestId = createId("browser");
   const ids = getRunIds();
   const req: UtilityBrowserRequest = {

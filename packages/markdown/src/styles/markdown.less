@@ -188,6 +188,34 @@
     color: var(--md-fg-muted);
   }
 
+  blockquote.tw-md-alert--note {
+    border-left-color: var(--md-accent);
+  }
+
+  blockquote.tw-md-alert--tip {
+    border-left-color: color-mix(in srgb, var(--md-accent) 45%, #2f9e6b);
+  }
+
+  blockquote.tw-md-alert--important {
+    border-left-color: color-mix(in srgb, var(--md-accent) 35%, #7c5cbf);
+  }
+
+  blockquote.tw-md-alert--warning {
+    border-left-color: color-mix(in srgb, var(--md-danger) 40%, #d4a017);
+  }
+
+  blockquote.tw-md-alert--caution {
+    border-left-color: var(--md-danger);
+  }
+
+  .tw-md-alert-title {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--md-fg);
+  }
+
   hr {
     border: 0;
     border-top: 1px solid var(--md-border);

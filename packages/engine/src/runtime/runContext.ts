@@ -27,12 +27,14 @@ export type RunContext = {
   allowAiBrowser: boolean;
   shellApprovalMode: ShellApprovalMode;
   shellAllowlist: string[];
+  /** 本轮硬拒绝首 token；先于审批模式生效。 */
+  shellBlocklist: string[];
   shellProfile: ShellProfile | null;
   emit: RunEmitter;
   /** 本 run 的模型目录快照（与进程 baseline 隔离）。 */
   catalog: ModelCatalog | null;
   selection: ModelSelection;
-  routeContext: { userText: string; contextPaths?: string[] };
+  routeContext: { userText: string; contextPaths?: string[]; hasImages?: boolean };
   /** 本 run 挂起的 HITL id。 */
   hitlIds: Set<string>;
   /** 本 run 派生的后台 Task id。 */
@@ -42,7 +44,20 @@ export type RunContext = {
    * 供 Trace span attrs.turn；可变，在每轮调用前 setRunTurn。
    */
   turn?: number;
+  /**
+   * 工具开工前落盘 callId（供 resume 防重放）。
+   * 由 AgentRuntime.runLoop 绑定；无 ALS / 测试可不设。
+   */
+  markToolCallStarted?: (callId: string) => Promise<void>;
 };
+
+/** 调用当前 run 的开工落盘钩子（无钩子则 no-op）。 */
+export async function markToolCallStarted(callId: string): Promise<void> {
+  const id = callId?.trim();
+  if (!id) return;
+  const fn = als.getStore()?.markToolCallStarted;
+  if (fn) await fn(id);
+}
 
 const als = new AsyncLocalStorage<RunContext>();
 

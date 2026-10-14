@@ -1,8 +1,8 @@
 /**
- * Shell 命令首 token 列表编辑器（白名单 / 黑名单共用）。
- * 输入行 + 芯片列表；移除用 IconButton，避免整颗芯片当按钮的歧义。
+ * Shell 命令首 token 列表编辑器（白名单等）。
+ * 输入行 + 芯片列表。
  */
-import { Button, CloseIcon, IconButton, Input } from "@thinker-workbench/design/react";
+import { Button, Chip, Input } from "@thinker-workbench/design/react";
 
 type Props = {
   tokens: string[];
@@ -14,7 +14,7 @@ type Props = {
   addLabel: string;
   removeLabel: string;
   emptyHint: string;
-  /** 芯片色：白名单中性，黑名单危险色。 */
+  /** 芯片色；默认中性。 */
   tone?: "neutral" | "danger";
 };
 
@@ -54,22 +54,13 @@ export function ShellTokenList({
         <ul className="settings-token-list__chips">
           {tokens.map((token) => (
             <li key={token}>
-              <span
-                className={`settings-token-list__chip${
-                  tone === "danger" ? " settings-token-list__chip--danger" : ""
-                }`}
+              <Chip
+                tone={tone === "danger" ? "danger" : "neutral"}
+                removeLabel={`${removeLabel}: ${token}`}
+                onRemove={() => onRemove(token)}
               >
                 <code>{token}</code>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  className="settings-token-list__remove"
-                  aria-label={`${removeLabel}: ${token}`}
-                  onClick={() => onRemove(token)}
-                >
-                  <CloseIcon />
-                </IconButton>
-              </span>
+              </Chip>
             </li>
           ))}
         </ul>

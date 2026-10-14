@@ -15,6 +15,7 @@ import {
 } from "@thinker-workbench/design/react";
 import type {
   CustomizeScope,
+  McpImportConflict,
   McpServerConfig,
   McpServerRuntimeStatus,
   McpServerUpsertInput,
@@ -37,18 +38,6 @@ import { useT } from "../../i18n/useI18n";
 import { ScopeGroupSection } from "../customize/ScopeGroupSection";
 import { buildScopeGroups, customizeScopeKey } from "../customize/scopeHelpers";
 import "./McpSettingsForm.less";
-
-/** 导入冲突策略（桥接侧约定；共享包尚未导出）。 */
-type McpImportConflict = "skip" | "overwrite";
-
-/** UI 侧扩展字段（scope / http / writable），与落盘类型渐进对齐。 */
-type McpConfigRow = Omit<McpServerConfig, "transport"> & {
-  scope?: CustomizeScope;
-  writable?: boolean;
-  url?: string;
-  headers?: Record<string, string>;
-  transport: McpTransport | "http";
-};
 
 /** 去掉 mcp_ / mcp__ 服务前缀，卡片上只留工具短名。*/
 function shortToolLabel(toolName: string, serverId: string): string {
@@ -124,8 +113,7 @@ function McpToolsRail({ serverId, tools }: { serverId: string; tools: ToolInfo[]
 type Draft = {
   id: string;
   name: string;
-  /** UI 支持 http；共享类型首期仅 stdio。 */
-  transport: McpTransport | "http";
+  transport: McpTransport;
   command: string;
   argsText: string;
   envText: string;
@@ -155,21 +143,35 @@ function emptyDraft(): Draft {
   };
 }
 
-function draftFromConfig(c: McpConfigRow): Draft {
+function draftFromConfig(c: McpServerConfig): Draft {
+  if (c.transport === "http") {
+    return {
+      id: c.id,
+      name: c.name,
+      transport: "http",
+      command: "",
+      argsText: "",
+      envText: "",
+      cwd: "",
+      url: c.url,
+      headersText: Object.entries(c.headers ?? {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join("\n"),
+      enabled: c.enabled,
+    };
+  }
   return {
     id: c.id,
     name: c.name,
-    transport: c.transport === "http" ? "http" : "stdio",
-    command: c.command ?? "",
-    argsText: (c.args ?? []).join("\n"),
-    envText: Object.entries(c.env ?? {})
+    transport: "stdio",
+    command: c.command,
+    argsText: c.args.join("\n"),
+    envText: Object.entries(c.env)
       .map(([k, v]) => `${k}=${v}`)
       .join("\n"),
     cwd: c.cwd ?? "",
-    url: c.url ?? "",
-    headersText: Object.entries(c.headers ?? {})
-      .map(([k, v]) => `${k}=${v}`)
-      .join("\n"),
+    url: "",
+    headersText: "",
     enabled: c.enabled,
   };
 }
@@ -187,23 +189,23 @@ function parseKv(text: string): Record<string, string> {
 }
 
 function toUpsert(d: Draft, scope: CustomizeScope): McpServerUpsertInput {
-  // 与桌面侧渐进对齐：共享类型尚未声明 scope / http 字段。
   const base = {
     id: d.id.trim() || "server",
     name: d.name.trim() || d.id.trim() || "server",
     enabled: d.enabled,
-    transport: d.transport,
     scope,
   };
   if (d.transport === "http") {
     return {
       ...base,
+      transport: "http",
       url: d.url.trim(),
       headers: parseKv(d.headersText),
-    } as unknown as McpServerUpsertInput;
+    };
   }
   return {
     ...base,
+    transport: "stdio",
     command: d.command.trim(),
     args: d.argsText
       .split(/\r?\n/)
@@ -211,7 +213,7 @@ function toUpsert(d: Draft, scope: CustomizeScope): McpServerUpsertInput {
       .filter(Boolean),
     env: parseKv(d.envText),
     cwd: d.cwd.trim() || null,
-  } as unknown as McpServerUpsertInput;
+  };
 }
 
 function statusVariant(
@@ -236,7 +238,7 @@ export function McpSettingsForm({ workspaces }: Props) {
   const canBrowse = Boolean(window.thinker?.settings?.pickDirectory);
   const groupsDef = useMemo(() => buildScopeGroups(workspaces), [workspaces]);
 
-  const [servers, setServers] = useState<McpConfigRow[]>([]);
+  const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [statuses, setStatuses] = useState<Record<string, McpServerRuntimeStatus>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -246,13 +248,13 @@ export function McpSettingsForm({ workspaces }: Props) {
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
   const [testResult, setTestResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<McpConfigRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<McpServerConfig | null>(null);
   const [importConflictOpen, setImportConflictOpen] = useState(false);
 
   async function refresh() {
     try {
       const res = await mcpList();
-      setServers(res.servers as McpConfigRow[]);
+      setServers(res.servers);
       const map: Record<string, McpServerRuntimeStatus> = {};
       for (const s of res.statuses) map[s.id] = s;
       setStatuses((prev) => ({ ...prev, ...map }));
@@ -297,7 +299,7 @@ export function McpSettingsForm({ workspaces }: Props) {
     setModalOpen(true);
   }
 
-  function openEdit(c: McpConfigRow) {
+  function openEdit(c: McpServerConfig) {
     setActiveScope(c.scope ?? { kind: "user" });
     setEditingId(c.id);
     setDraft(draftFromConfig(c));

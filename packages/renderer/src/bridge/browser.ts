@@ -1,7 +1,12 @@
 /**
  * 内置浏览器桥接 + 打开面板事件。
  */
-import type { BrowserBounds, BrowserEvent, BrowserState } from "@thinker-workbench/shared";
+import type {
+  BrowserBounds,
+  BrowserEvent,
+  BrowserScreenshotPreview,
+  BrowserState,
+} from "@thinker-workbench/shared";
 
 export const OPEN_BROWSER_EVENT = "tw:open-browser";
 
@@ -76,6 +81,15 @@ export async function browserTakeControl(): Promise<BrowserState | null> {
   const browser = api();
   if (!browser) return null;
   return browser.takeControl();
+}
+
+/** 读取 browser-screenshots 下 PNG 为 data URL（时间线展开）。 */
+export async function browserReadScreenshot(
+  absolutePath: string,
+): Promise<BrowserScreenshotPreview | null> {
+  const browser = api();
+  if (!browser?.readScreenshot) return null;
+  return browser.readScreenshot(absolutePath);
 }
 
 export function onBrowserEvent(cb: (event: BrowserEvent) => void): () => void {

@@ -13,10 +13,12 @@ import {
   useState,
 } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../bridge/browser";
+import { ChatImageStrip } from "../features/chat/ChatImageStrip";
 import { ChatUsageBar } from "../features/chat/ChatUsageBar";
 import { SendGlyph } from "../features/chat/Composer";
 import { ComposerEditor, type ComposerEditorHandle } from "../features/chat/ComposerEditor";
 import { MentionsRichText } from "../features/chat/MentionsRichText";
+import { ModePicker } from "../features/chat/ModePicker";
 import { ModelPicker } from "../features/chat/ModelPicker";
 import { normalizeChatMessage } from "../features/chat/messageModel";
 import { RunTimeline } from "../features/chat/RunTimeline";
@@ -174,9 +176,11 @@ export function Bubble({
           onCancelEdit?.();
         }, 0);
       };
+      const editHasImages = Array.isArray(view.images) && view.images.length > 0;
       return (
         <li className="bubble role-user">
           <div className="user-prompt user-prompt--editing composer-shell" onBlur={leaveIfOutside}>
+            {editHasImages ? <ChatImageStrip images={view.images!} /> : null}
             <ComposerEditor
               ref={editInputRef}
               value={editDraft}
@@ -186,6 +190,7 @@ export function Bubble({
             />
             <div className="composer-bar">
               <div className="composer-bar-left">
+                <ModePicker sessionId={sessionId} />
                 <ModelPicker sessionId={sessionId} />
               </div>
               <div className="composer-bar-right">
@@ -193,7 +198,7 @@ export function Bubble({
                   className="composer-send"
                   size="lg"
                   variant="secondary"
-                  disabled={!editDraft.trim()}
+                  disabled={!editDraft.trim() && !editHasImages}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onSendEdit?.()}
                   aria-label={t("chat.send")}
@@ -210,6 +215,7 @@ export function Bubble({
       );
     }
 
+    const userImages = Array.isArray(view.images) ? view.images : [];
     return (
       <li className="bubble role-user">
         <div
@@ -225,7 +231,12 @@ export function Bubble({
           }}
           aria-label={t("chat.editUserMessage")}
         >
-          <UserPromptBody text={view.text} onOpenFile={onOpenFile} />
+          {userImages.length > 0 ? <ChatImageStrip images={userImages} /> : null}
+          {view.text?.trim() ? (
+            <UserPromptBody text={view.text} onOpenFile={onOpenFile} />
+          ) : userImages.length > 0 ? null : (
+            <UserPromptBody text={view.text} onOpenFile={onOpenFile} />
+          )}
           <span className="user-prompt__retry" aria-hidden="true">
             <RestartIcon size="sm" />
           </span>

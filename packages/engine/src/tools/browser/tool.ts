@@ -60,13 +60,14 @@ export const browserLockToolSpec = defineTool({
 export const browserSnapshotToolSpec = defineTool({
   name: "browser_snapshot",
   description:
-    "Capture an accessibility-style snapshot of interactive elements with opaque refs (e1, e2, …). Call before click/type/fill. Refs are invalidated after navigation.",
+    "Capture an accessibility-style snapshot of interactive elements with opaque refs (e1, e2, …). Also captures a viewport screenshot for the timeline (set take_screenshot_afterwards=false to skip). Call before click/type/fill. Refs are invalidated after navigation.",
   parameters: {
     type: "object",
     properties: {
       take_screenshot_afterwards: {
         type: "boolean",
-        description: "Also capture a screenshot.",
+        description:
+          "Capture a viewport screenshot for the chat timeline (default true). Set false to skip.",
       },
     },
     required: [],

@@ -119,6 +119,21 @@ export async function saveSessionMessages(
   await api()?.workspaces?.saveMessages(sessionId, messages);
 }
 
+/** 将用户附图写入工作空间 images 目录。 */
+export async function saveChatImage(
+  workspaceId: string,
+  input: { bytes: Uint8Array; mime: string; name?: string },
+): Promise<import("@thinker-workbench/shared").ChatImageRef> {
+  const ws = api()?.workspaces;
+  if (!ws?.saveChatImage) throw new Error("Chat images API unavailable.");
+  return ws.saveChatImage(workspaceId, input);
+}
+
+/** 读取已落盘附图预览 data URL。 */
+export async function readChatImagePreview(imagePath: string): Promise<{ dataUrl: string } | null> {
+  return api()?.workspaces?.readChatImagePreview(imagePath) ?? null;
+}
+
 export async function setActiveSession(sessionId: string | null): Promise<void> {
   await api()?.workspaces?.setActiveSession(sessionId);
 }

@@ -61,7 +61,7 @@ type RowChunk =
       tasks: ParTaskGroup[];
     };
 
-/** 并行块内?taskId 切成?agent 子块（连续同行同 task）。*/
+/** 并行块内按 taskId 切成各 agent 子块（连续同行同 task）。*/
 function groupParTasks(rows: CallTreeRow[]): ParTaskGroup[] {
   const out: ParTaskGroup[] = [];
   for (const row of rows) {

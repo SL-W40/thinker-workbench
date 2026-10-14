@@ -26,6 +26,7 @@ import type Database from "better-sqlite3";
 import { getDefaultWorkspaceRoot } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { peekThreadCheckpoint } from "./checkpointClear";
+import { planQueuedHeal } from "./queuedHeal";
 import { activityAtFromMessages } from "./sessionActivity";
 import { purgeSessionArtifacts } from "./sessionArtifacts";
 import { destroyWorkspaceChatDb, openCatalogDb, openWorkspaceChatDb } from "./thinkerDb";
@@ -127,11 +128,14 @@ function mapSession(row: SessionRow): ChatSessionRecord {
   };
 }
 
+export { QUEUE_CLEARED_ON_RESTART } from "./queuedHeal";
+
 /** 读盘时迁移旧 `interrupted` → cancelled / crashed。 */
 function normalizeRunStatus(value: string, interruptReason?: string | null): SessionRunStatus {
   if (
     value === "idle" ||
     value === "running" ||
+    value === "queued" ||
     value === "cancelled" ||
     value === "crashed" ||
     value === "failed"
@@ -518,12 +522,14 @@ export function getSessionByActiveRunId(runId: string): ChatSessionRecord | null
 
 /**
  * 进程退出 / 启动时愈合会话状态：
+ * - `queued` 且未要求保留 → `failed`（内存队列已丢，不能 Resume），收束 pending
  * - `running` 且有 checkpoint → `crashed`（可 Resume）
  * - `running` 且无 checkpoint → `failed`，收束 pending 消息
  * - 旧 `interrupted` / `failed` 仍有 checkpoint → `crashed`（修复旧版误标）
  * - 非 running 且无 checkpoint、却仍有 pending 助手消息 → 收束，避免永远 Planning
+ * @param options.preserveQueued utility 闪退时队列仍在内存里，不要把 queued 收掉
  */
-export function healRunningSessions(): number {
+export function healRunningSessions(options?: { preserveQueued?: boolean }): number {
   let changes = 0;
 
   for (const ws of listWorkspaces()) {
@@ -531,7 +537,7 @@ export function healRunningSessions(): number {
     const rows = db
       .prepare(
         `SELECT id, thread_id, run_status, interrupt_reason FROM chat_sessions
-         WHERE run_status IN ('running', 'interrupted', 'cancelled', 'crashed', 'failed')`,
+         WHERE run_status IN ('running', 'queued', 'interrupted', 'cancelled', 'crashed', 'failed')`,
       )
       .all() as Array<{
       id: string;
@@ -541,6 +547,21 @@ export function healRunningSessions(): number {
     }>;
 
     for (const row of rows) {
+      if (row.run_status === "queued") {
+        const plan = planQueuedHeal(options?.preserveQueued === true);
+        if (plan.action === "keep") continue;
+        db.prepare(
+          `UPDATE chat_sessions
+           SET run_status = ?,
+               active_run_id = NULL,
+               interrupt_reason = ?
+           WHERE id = ?`,
+        ).run(plan.runStatus, plan.interruptReason, row.id);
+        finalizeOrphanPendingMessages(ws.id, row.id, plan.message, "failed");
+        changes += 1;
+        continue;
+      }
+
       const ckpt = peekThreadCheckpoint(row.thread_id);
       if (ckpt) {
         const dirtyReason = /no pending interrupt|tool_approval/i.test(row.interrupt_reason ?? "");
@@ -551,12 +572,16 @@ export function healRunningSessions(): number {
           !dirtyReason;
         // 启动愈合：残留 running / 旧 interrupted → crashed；保留用户 cancelled
         if (row.run_status === "cancelled" && !dirtyReason) {
+          db.prepare(
+            `UPDATE chat_sessions SET active_run_id = NULL WHERE id = ? AND active_run_id IS NOT NULL`,
+          ).run(row.id);
           continue;
         }
         if (!alreadyCrashed && !alreadyCancelled) {
           db.prepare(
             `UPDATE chat_sessions
              SET run_status = 'crashed',
+                 active_run_id = NULL,
                  interrupt_reason = ?
              WHERE id = ?`,
           ).run("crash", row.id);
@@ -565,10 +590,16 @@ export function healRunningSessions(): number {
           db.prepare(
             `UPDATE chat_sessions
              SET run_status = 'crashed',
+                 active_run_id = NULL,
                  interrupt_reason = ?
              WHERE id = ?`,
           ).run("crash", row.id);
           changes += 1;
+        } else {
+          // 已是 crashed/cancelled 但仍残留 active_run_id：一并清掉
+          db.prepare(
+            `UPDATE chat_sessions SET active_run_id = NULL WHERE id = ? AND active_run_id IS NOT NULL`,
+          ).run(row.id);
         }
         continue;
       }
@@ -644,10 +675,15 @@ export function resyncSessionActivityTimes(): number {
 }
 
 /** 将会话中仍 pending 的助手消息标为失败，避免 UI 永久 Planning。 */
-function finalizeOrphanPendingMessages(
+/**
+ * 把仍 pending 的助手气泡收成终态，并补一条错误。
+ * `code` 默认 PROCESS_EXIT（进程重启）。排队失败传 `failed`，这样界面展示原文而不是「异常退出」。
+ */
+export function finalizeOrphanPendingMessages(
   workspaceId: string,
   sessionId: string,
   errorText: string,
+  code = "PROCESS_EXIT",
 ): void {
   const db = chatDb(workspaceId);
   const rows = db
@@ -670,7 +706,11 @@ function finalizeOrphanPendingMessages(
           /* ignore */
         }
       }
-      // 关掉活动 thinking，并追加错误步
+      // 排队等待文案不再保留；关掉活动 thinking，并追加错误步
+      timeline = timeline.filter((step) => {
+        if (!step || typeof step !== "object") return true;
+        return (step as { id?: string }).id !== "queued-wait";
+      });
       timeline = timeline.map((step) => {
         if (step && typeof step === "object" && (step as { kind?: string }).kind === "status") {
           return { ...step, active: false };
@@ -682,7 +722,7 @@ function finalizeOrphanPendingMessages(
         kind: "error",
         message: errorText,
         // 无 checkpoint 的进程中断：按异常退出展示，便于时间线「继续」识别
-        code: "PROCESS_EXIT",
+        code,
       });
       upd.run(JSON.stringify({ timeline, pending: false }), row.id);
     }
@@ -804,13 +844,24 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
         }
         return { ...step, active: false, startedAt: undefined, durationMs: step.durationMs };
       });
+      const images =
+        Array.isArray(m.images) && m.images.length > 0
+          ? m.images.filter(
+              (img) =>
+                img &&
+                typeof img.id === "string" &&
+                typeof img.path === "string" &&
+                typeof img.mime === "string",
+            )
+          : undefined;
       const hasPayload =
         timeline ||
         m.pending ||
         m.usage ||
         m.durationMs != null ||
         m.runStartedAt != null ||
-        Boolean(m.traceId);
+        Boolean(m.traceId) ||
+        Boolean(images?.length);
       const payload = hasPayload
         ? JSON.stringify({
             timeline,
@@ -820,6 +871,7 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
             // 已结束消息不持久化 live 计时锚点
             runStartedAt: m.pending ? m.runStartedAt : undefined,
             traceId: m.traceId,
+            ...(images?.length ? { images } : {}),
           })
         : null;
       ins.run(m.id, sessionId, m.role, m.text, m.createdAt ?? now, m.pending ? 1 : 0, payload, seq);
@@ -849,6 +901,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
     let durationMs: number | undefined;
     let runStartedAt: number | undefined;
     let traceId: string | undefined;
+    let images: ChatMessage["images"];
     if (row.payload_json) {
       try {
         const parsed = JSON.parse(row.payload_json) as {
@@ -858,6 +911,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
           durationMs?: number;
           runStartedAt?: number;
           traceId?: string;
+          images?: ChatMessage["images"];
         };
         timeline = parsed.timeline;
         if (typeof parsed.pending === "boolean") pending = parsed.pending;
@@ -866,6 +920,9 @@ export function loadMessages(sessionId: string): ChatMessage[] {
         if (typeof parsed.runStartedAt === "number") runStartedAt = parsed.runStartedAt;
         if (typeof parsed.traceId === "string" && parsed.traceId.trim()) {
           traceId = parsed.traceId.trim();
+        }
+        if (Array.isArray(parsed.images) && parsed.images.length > 0) {
+          images = parsed.images;
         }
       } catch {
         /* ignore */
@@ -882,6 +939,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
       durationMs,
       runStartedAt,
       traceId,
+      ...(images?.length ? { images } : {}),
     };
   });
 }

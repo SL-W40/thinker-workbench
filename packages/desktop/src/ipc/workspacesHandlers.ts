@@ -9,6 +9,7 @@ import {
   type WorkspaceCreateInput,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, type IpcMain, shell } from "electron";
+import { readChatImagePreview, saveChatImage } from "../chat/chatImages";
 import { openCatalogDb } from "../db/thinkerDb";
 import {
   clearWorkspace,
@@ -181,6 +182,36 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
       saveMessages(payload.sessionId, payload.messages);
       broadcastThreadsChanged();
     },
+  );
+
+  ipcMain.handle(
+    IpcChannels.chatImagesSave,
+    async (
+      _e,
+      payload: {
+        workspaceId: string;
+        bytes: Uint8Array | ArrayBuffer;
+        mime: string;
+        name?: string;
+      },
+    ) => {
+      const raw = payload.bytes;
+      const bytes =
+        raw instanceof Uint8Array
+          ? raw
+          : raw instanceof ArrayBuffer
+            ? new Uint8Array(raw)
+            : new Uint8Array(0);
+      return saveChatImage(payload.workspaceId, {
+        bytes,
+        mime: payload.mime,
+        name: payload.name,
+      });
+    },
+  );
+
+  ipcMain.handle(IpcChannels.chatImagesReadPreview, async (_e, imagePath: string) =>
+    readChatImagePreview(typeof imagePath === "string" ? imagePath : ""),
   );
 
   ipcMain.handle(IpcChannels.chatSessionsSetActive, async (_e, sessionId: string | null) => {

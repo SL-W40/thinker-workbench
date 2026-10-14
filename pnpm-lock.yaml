@@ -100,9 +100,15 @@ importers:
       '@types/yazl':
         specifier: ^3.3.1
         version: 3.3.1
+      electron:
+        specifier: ^37.10.3
+        version: 37.10.3(supports-color@5.5.0)
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.5)(@vitest/ui@3.2.7)(jiti@2.7.0)(less@4.9.1)(supports-color@5.5.0)(tsx@4.23.15)
       yauzl:
         specifier: ^3.4.0
         version: 3.4.0
@@ -193,6 +199,9 @@ importers:
 
   packages/markdown:
     dependencies:
+      '@thinker-workbench/shared':
+        specifier: workspace:*
+        version: link:../shared
       highlight.js:
         specifier: ^11.11.1
         version: 11.12.0
@@ -3994,7 +4003,7 @@ snapshots:
       glob: 7.2.0
       minimatch: 3.1.5
 
-  '@electron/get@2.0.0':
+  '@electron/get@2.0.0(supports-color@5.5.0)':
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       env-paths: 2.2.0
@@ -4002,7 +4011,7 @@ snapshots:
       got: 11.8.5
       progress: 2.0.3
       semver: 6.3.1
-      sumchecker: 3.0.1
+      sumchecker: 3.0.1(supports-color@5.5.0)
     optionalDependencies:
       global-agent: 3.0.0
       global-tunnel-ng: 2.7.1
@@ -5650,7 +5659,7 @@ snapshots:
 
   electron@37.10.3(supports-color@5.5.0):
     dependencies:
-      '@electron/get': 2.0.0
+      '@electron/get': 2.0.0(supports-color@5.5.0)
       '@types/node': 22.20.5
       extract-zip: 2.0.1(supports-color@5.5.0)
     transitivePeerDependencies:
@@ -6521,7 +6530,7 @@ snapshots:
 
   minipass-collect@1.0.2:
     dependencies:
-      minipass: 3.1.6
+      minipass: 3.0.0
 
   minipass-fetch@1.4.1:
     dependencies:
@@ -6533,15 +6542,15 @@ snapshots:
 
   minipass-flush@1.0.7:
     dependencies:
-      minipass: 3.1.6
+      minipass: 3.0.0
 
   minipass-pipeline@1.2.4:
     dependencies:
-      minipass: 3.1.6
+      minipass: 3.0.0
 
   minipass-sized@1.0.3:
     dependencies:
-      minipass: 3.1.6
+      minipass: 3.0.0
 
   minipass@3.0.0:
     dependencies:
@@ -7234,7 +7243,7 @@ snapshots:
 
   stylis@4.4.0: {}
 
-  sumchecker@3.0.1:
+  sumchecker@3.0.1(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:

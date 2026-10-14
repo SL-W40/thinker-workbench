@@ -3,6 +3,7 @@
 import { ChevronLeftIcon, ChevronRightIcon, IconButton } from "@thinker-workbench/design/react";
 import type { TraceSpanKind, TraceSpanRecord } from "@thinker-workbench/shared";
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
@@ -12,7 +13,7 @@ import {
 import { useT } from "../../i18n/useI18n";
 import { callTreeLabel } from "./callTreeModel";
 
-/** 并行区展示：滑动切换?Task / 展开?Task 分块连排。*/
+/** 并行区展示：滑动切换各 Task / 展开全部 Task 分块连排。*/
 type ParViewMode = "swipe" | "expand";
 
 type Props = {
@@ -85,7 +86,7 @@ type DrawnRow =
       inPar?: boolean;
     };
 
-/** 并行簇稳?key（用于记住当前滑动页）。*/
+/** 并行簇稳定 key（用于记住当前滑动页）。*/
 function parKeyOf(tasks: TaskMeta[]): string {
   return tasks
     .map((t) => t.id)
@@ -263,8 +264,8 @@ function clusterParallelTasks(tasks: TaskMeta[]): TaskMeta[][] {
     changed = false;
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
-        const a = clusters[i]!;
-        const b = clusters[j]!;
+        const a = clusters[i];
+        const b = clusters[j];
         if (a.some((ta) => b.some((tb) => canPair(ta, tb)))) {
           a.push(...b);
           clusters.splice(j, 1);
@@ -328,7 +329,7 @@ function buildSegments(
   }
   const seenCluster = new Set<string>();
   for (const t of tasks) {
-    const c = clusterOf.get(t.id)!;
+    const c = clusterOf.get(t.id) ?? [];
     const key = c
       .map((x) => x.id)
       .sort()
@@ -365,7 +366,7 @@ function buildSegments(
       .join("|");
     if (emittedClusters.has(key)) continue;
     emittedClusters.add(key);
-    // 重新分配 par 内色?A/B/…
+    // 重新分配 par 内色标 A/B/…
     const tagged = ev.cluster.map((tk, i) => ({ ...tk, tag: tagForIndex(i) }));
     if (tagged.length >= 2) {
       segments.push({
@@ -374,7 +375,7 @@ function buildSegments(
         collapsed: new Set([...collapsed].filter((id) => tagged.some((t) => t.id === id))),
       });
     } else {
-      const task = tagged[0]!;
+      const task = tagged[0];
       segments.push({
         type: "task",
         task,
@@ -433,11 +434,11 @@ function expandSegments(
         taskIds: seg.tasks.map((tk) => tk.id),
       });
       if (collapsed) continue;
-      // ?Task 启动顺序分块连排：墙钟交织会在「一侧卡?model.chat」时
-      // 打出 AAA…BBB…AAA，叙事断裂；分块可读性更好，时间线仍看上?Gantt。
+      // 按 Task 启动顺序分块连排：墙钟交织会在「一侧卡住 model.chat」时
+      // 打出 AAA…BBB…AAA，叙事断裂；分块可读性更好，时间线仍看上方 Gantt。
       const ordered = [...seg.tasks].sort((a, b) => a.startTs - b.startTs);
       for (let i = 0; i < ordered.length; i++) {
-        const tk = ordered[i]!;
+        const tk = ordered[i];
         const taskCollapsed = seg.collapsed.has(tk.id);
         rows.push({
           kind: "banner",
@@ -466,7 +467,7 @@ function expandSegments(
 
     const rawIdx = parSlide[key] ?? 0;
     const idx = Math.max(0, Math.min(seg.tasks.length - 1, rawIdx));
-    const active = seg.tasks[idx]!;
+    const active = seg.tasks[idx];
     rows.push({
       kind: "banner",
       scope: "par",
@@ -486,7 +487,7 @@ function expandSegments(
       });
     }
   }
-  // 按当前可见顺序重编号，避免分块后序号?A/B 间乱
+  // 按当前可见顺序重编号，避免分块后序号在 A/B 间乱跳
   let seq = 1;
   return rows.map((r) => (r.kind === "msg" ? { ...r, msg: { ...r.msg, seq: seq++ } } : r));
 }
@@ -515,7 +516,7 @@ function arrowEndpoints(
       labelY: number;
       arrowY: number;
     } {
-  // 行内分层：标签上 / 箭头?/ 不把徽章放标签上
+  // 行内分层：标签在上 / 箭头在中 / 不把徽章放标签上
   const arrowY = y + 6;
   const labelY = y - 10;
   if (Math.abs(x2 - x1) < MIN_ARROW_DX) {
@@ -547,7 +548,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [hostW, setHostW] = useState(0);
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(() => new Set());
-  /** par ?→当前滑动页下?*/
+  /** par 键 → 当前滑动页下标。 */
   const [parSlide, setParSlide] = useState<Record<string, number>>({});
   const [parView, setParView] = useState<ParViewMode>("expand");
   const swipeRef = useRef<{
@@ -631,7 +632,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
     return { t0, t1, mainStart, mainEnd, tasks: taskMetas };
   }, [msgs, taskMetas]);
 
-  // 行高需容纳：标?+ 徽章间隙 + 箭头，避免上下行叠字
+  // 行高需容纳：标签 + 徽章间隙 + 箭头，避免上下行叠字
   const rowH = 52;
   const scopeH = 32;
   const parTaskH = 24;
@@ -666,12 +667,12 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
   };
   const totalH = headH + ganttH + rows.reduce((acc, r) => acc + rowHOf(r), 0) + 16;
 
-  /** 并行区整块底色：?par 横幅到其内部消息?*/
+  /** 并行区整块底色：从 par 横幅到其内部消息底。 */
   const parBands: { y: number; h: number }[] = [];
   {
     let startYi: number | null = null;
     for (let yi = 0; yi < rows.length; yi++) {
-      const r = rows[yi]!;
+      const r = rows[yi];
       const inPar =
         (r.kind === "banner" && (r.scope === "par" || Boolean(r.parTask))) ||
         (r.kind === "msg" && Boolean(r.inPar));
@@ -718,10 +719,20 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
     const labelW = estimateLabelW(m.label);
     const badgeCy = ends.arrowY;
     return (
+      // biome-ignore lint/a11y/useSemanticElements: SVG <g> 不能换成 HTML <button>
       <g
         key={m.span.spanId}
         className={`trace-seq__msg${selected ? " is-selected" : ""}${onPath && !selected ? " is-related" : ""}${inTask ? " is-in-task" : ""}${inPar ? ` is-in-par is-par-task--${taskColorIdx % 3}` : ""}${statusClass}`}
+        role="button"
+        tabIndex={0}
+        aria-pressed={selected}
         onClick={() => onSelect(m.span.spanId)}
+        onKeyDown={(e: ReactKeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(m.span.spanId);
+          }
+        }}
       >
         {inPar ? (
           <rect
@@ -995,7 +1006,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
 
         {gantt && ganttH > 0 ? (
           <g className="trace-seq__gantt" transform={`translate(0, ${headH})`}>
-            {/* 时间线只画在泳道宽度…?*/}
+            {/* 时间线只画在泳道宽度内 */}
             <rect
               x={chartLeft}
               y={0}
@@ -1090,13 +1101,15 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
             const idx = cluster
               ? Math.max(0, Math.min(cluster.tasks.length - 1, parSlide[parKey] ?? 0))
               : 0;
-            return (
-              <g
-                key={`banner-${yi}-${r.scope}`}
-                className={`trace-seq__scope-row${isMain ? " is-main" : isPar ? " is-par" : " is-task"}${isParTask ? " is-par-task" : ""}`}
-                onClick={clickable ? () => toggleTasks(r.taskIds) : undefined}
-                style={clickable ? { cursor: "pointer" } : undefined}
-              >
+            const onToggleTasks = () => toggleTasks(r.taskIds);
+            const onToggleTasksKeyDown = (e: ReactKeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                toggleTasks(r.taskIds);
+              }
+            };
+            const bannerBody = (
+              <>
                 <rect
                   x={chartLeft}
                   y={y + 2}
@@ -1136,7 +1149,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                       <button
                         type="button"
                         className="trace-seq__par-bar-toggle"
-                        onClick={() => toggleTasks(r.taskIds)}
+                        onClick={onToggleTasks}
                       >
                         {r.collapsed ? "…" : "…"}
                       </button>
@@ -1191,19 +1204,57 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                       </span>
                     </div>
                   </foreignObject>
+                ) : isPar ? (
+                  // biome-ignore lint/a11y/useSemanticElements: SVG <text> 不能换成 HTML <button>
+                  <text
+                    x={chartLeft + 10}
+                    y={y + bannerH / 2 + 3}
+                    className="trace-seq__scope-title is-par"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={!r.collapsed}
+                    style={{ cursor: "pointer" }}
+                    onClick={onToggleTasks}
+                    onKeyDown={onToggleTasksKeyDown}
+                  >
+                    {r.collapsed ? "…" : "…"}
+                    {r.title}
+                    {r.subtitle ? ` …${r.subtitle}` : ""}
+                  </text>
                 ) : (
                   <text
                     x={chartLeft + 10}
                     y={y + bannerH / 2 + 3}
-                    className={`trace-seq__scope-title${isMain ? " is-main" : isPar ? " is-par" : " is-task"}`}
-                    onClick={isPar ? () => toggleTasks(r.taskIds) : undefined}
-                    style={isPar ? { cursor: "pointer" } : undefined}
+                    className={`trace-seq__scope-title${isMain ? " is-main" : " is-task"}`}
                   >
                     {r.collapsed ? "…" : !isMain ? "…" : ""}
                     {r.title}
                     {r.subtitle ? ` …${r.subtitle}` : ""}
                   </text>
                 )}
+              </>
+            );
+            const rowClass = `trace-seq__scope-row${isMain ? " is-main" : isPar ? " is-par" : " is-task"}${isParTask ? " is-par-task" : ""}`;
+            if (clickable) {
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: SVG <g> 不能换成 HTML <button>
+                <g
+                  key={`banner-${yi}-${r.scope}`}
+                  className={rowClass}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={!r.collapsed}
+                  style={{ cursor: "pointer" }}
+                  onClick={onToggleTasks}
+                  onKeyDown={onToggleTasksKeyDown}
+                >
+                  {bannerBody}
+                </g>
+              );
+            }
+            return (
+              <g key={`banner-${yi}-${r.scope}`} className={rowClass}>
+                {bannerBody}
               </g>
             );
           }

@@ -279,6 +279,19 @@
     }
   }
 
+  /* 排队：空心圆，不用 running 的彗星动画 */
+  &.is-queued {
+    color: var(--tw-accent-strong, #3d6b4f);
+
+    &::after {
+      width: 6px;
+      height: 6px;
+      background: transparent;
+      border: 1.5px solid currentColor;
+      opacity: 1;
+    }
+  }
+
   /*
    * 进行中：整圈淡底常在；亮头 + 次亮尾阶跃绕圈；
    * 中心一点更弱，作内层呼吸感（不另开追逐）。

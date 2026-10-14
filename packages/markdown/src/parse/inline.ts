@@ -2,7 +2,9 @@
  * 行内 Markdown 解析（转义、强调、链接、数学、自动链接等）。
  */
 import type { InlineNode, LinkDef } from "../types";
+import { decodeEntities } from "./entities";
 import type { ParseOptions } from "./options";
+import { sanitizeImageSrc, sanitizeUrl } from "./url";
 
 /** CommonMark 可转义 ASCII 标点。 */
 const ESCAPABLE = new Set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
@@ -184,8 +186,9 @@ function parseMathInline(
   return { node: { type: "math", value }, next: j + 1 };
 }
 
-const URL_RE = /https?:\/\/[^\s<]+[^<>\s.,;:!"')\]]/y;
-const WWW_RE = /www\.[^\s<]+[^<>\s.,;:!"')\]]/y;
+/** 结尾不能是 ASCII 或中文标点，避免「https://example.com。」把句号吃进链接。 */
+const URL_RE = /https?:\/\/[^\s<]+[^<>\s.,;:!"')\]。，、；：！？（）【】《》「」『』]/yu;
+const WWW_RE = /www\.[^\s<]+[^<>\s.,;:!"')\]。，、；：！？（）【】《》「」『』]/yu;
 
 function parseAutolinkBare(s: string, i: number): { node: InlineNode; next: number } | null {
   URL_RE.lastIndex = i;
@@ -205,9 +208,78 @@ function parseAutolinkBare(s: string, i: number): { node: InlineNode; next: numb
 }
 
 function splitDestTitle(dest: string): [string, string | undefined] {
-  const m = /^<?([^\s>]+)>?(?:\s+"([^"]*)")?$/.exec(dest);
-  if (!m) return [dest, undefined];
-  return [m[1], m[2]];
+  const trimmed = dest.trim();
+  if (trimmed.startsWith("<")) {
+    const end = trimmed.indexOf(">");
+    if (end > 0) {
+      const href = trimmed.slice(1, end).trim();
+      const after = trimmed.slice(end + 1).trim();
+      const title = /^(?:"([^"]*)"|'([^']*)'|\(([^)]*)\))$/.exec(after);
+      return [href, title ? (title[1] ?? title[2] ?? title[3]) : undefined];
+    }
+  }
+  const matched = /^(\S+?)(?:\s+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?$/.exec(trimmed);
+  if (!matched) return [trimmed, undefined];
+  return [matched[1] ?? trimmed, matched[2] ?? matched[3] ?? matched[4]];
+}
+
+function pushText(nodes: InlineNode[], value: string): void {
+  if (!value) return;
+  const decoded = decodeEntities(value);
+  const prev = nodes[nodes.length - 1];
+  if (prev?.type === "text") prev.value += decoded;
+  else nodes.push({ type: "text", value: decoded });
+}
+
+/** 流式缓冲区里，未闭合的 `[...](` 不能再往下扫出自动链接。 */
+function bracketIsComplete(s: string, i: number): boolean {
+  const close = s.indexOf("]", i + 1);
+  if (close < 0) return false;
+  if (s[close + 1] === "(") return findClosingParen(s, close + 1) >= 0;
+  if (s[close + 1] === "[") return s.indexOf("]", close + 2) >= 0;
+  return true;
+}
+
+function safeHref(raw: string): string | null {
+  return sanitizeUrl(decodeEntities(raw));
+}
+
+function pushLink(
+  nodes: InlineNode[],
+  href: string,
+  title: string | undefined,
+  children: InlineNode[],
+): void {
+  const safe = safeHref(href);
+  if (!safe) {
+    nodes.push(...children);
+    return;
+  }
+  nodes.push({
+    type: "link",
+    href: safe,
+    title: title ? decodeEntities(title) : undefined,
+    children,
+  });
+}
+
+function pushImage(
+  nodes: InlineNode[],
+  src: string,
+  alt: string,
+  title: string | undefined,
+): void {
+  const safe = sanitizeImageSrc(decodeEntities(src));
+  if (!safe) {
+    pushText(nodes, alt || src);
+    return;
+  }
+  nodes.push({
+    type: "image",
+    src: safe,
+    alt,
+    title: title ? decodeEntities(title) : undefined,
+  });
 }
 
 function resolveLinkDef(
@@ -235,12 +307,12 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         if (next === "\n") {
           nodes.push({ type: "break" });
         } else {
-          nodes.push({ type: "text", value: next });
+          pushText(nodes, next);
         }
         i += 2;
         continue;
       }
-      nodes.push({ type: "text", value: "\\" });
+      pushText(nodes, "\\");
       i += 1;
       continue;
     }
@@ -257,7 +329,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         continue;
       }
       if (streaming) {
-        nodes.push({ type: "text", value: s.slice(i) });
+        pushText(nodes, s.slice(i));
         break;
       }
     }
@@ -271,14 +343,14 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         continue;
       }
       if (streaming && s.startsWith("$$", i)) {
-        nodes.push({ type: "text", value: s.slice(i) });
+        pushText(nodes, s.slice(i));
         break;
       }
       if (streaming && s[i] === "$") {
         // 可能未闭合的行内数学：若像数学开头则整段文本
         const rest = s.slice(i + 1);
         if (rest && !/\s/.test(rest[0]!) && !rest.includes("$") && !rest.includes("\n")) {
-          nodes.push({ type: "text", value: s.slice(i) });
+          pushText(nodes, s.slice(i));
           break;
         }
       }
@@ -301,11 +373,14 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
           /^mailto:/i.test(target) ||
           /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(target)
         ) {
-          const href =
+          const rawHref =
             target.includes("@") && !target.startsWith("mailto:") ? `mailto:${target}` : target;
-          nodes.push({ type: "autolink", href, text: target.replace(/^mailto:/i, "") });
-          i += angle[0].length;
-          continue;
+          const href = safeHref(rawHref);
+          if (href) {
+            nodes.push({ type: "autolink", href, text: target.replace(/^mailto:/i, "") });
+            i += angle[0].length;
+            continue;
+          }
         }
       }
     }
@@ -320,12 +395,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
           if (endParen > altClose) {
             const dest = s.slice(altClose + 2, endParen).trim();
             const [src, titlePart] = splitDestTitle(dest);
-            nodes.push({
-              type: "image",
-              src,
-              alt: s.slice(i + 2, altClose),
-              title: titlePart,
-            });
+            pushImage(nodes, src, s.slice(i + 2, altClose), titlePart);
             i = endParen + 1;
             continue;
           }
@@ -336,12 +406,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
             const id = s.slice(altClose + 2, idClose) || s.slice(i + 2, altClose);
             const def = resolveLinkDef(id, linkDefs);
             if (def) {
-              nodes.push({
-                type: "image",
-                src: def.href,
-                alt: s.slice(i + 2, altClose),
-                title: def.title,
-              });
+              pushImage(nodes, def.href, s.slice(i + 2, altClose), def.title);
               i = idClose + 1;
               continue;
             }
@@ -349,7 +414,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         }
       }
       if (streaming) {
-        nodes.push({ type: "text", value: s.slice(i, i + 2) });
+        pushText(nodes, s.slice(i, i + 2));
         i += 2;
         continue;
       }
@@ -357,6 +422,10 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
 
     // 6. 链接 / 脚注 / 引用链接
     if (s[i] === "[") {
+      if (streaming && !bracketIsComplete(s, i)) {
+        pushText(nodes, s.slice(i));
+        break;
+      }
       // 脚注 [^id]
       const fn = /^\[\^([^\]]+)\]/.exec(s.slice(i));
       if (fn && s[i + fn[0].length] !== ":") {
@@ -367,17 +436,13 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
 
       const close = s.indexOf("]", i + 1);
       if (close > i) {
+        const label = s.slice(i + 1, close);
         if (s[close + 1] === "(") {
           const endParen = findClosingParen(s, close + 1);
           if (endParen > close) {
             const dest = s.slice(close + 2, endParen).trim();
             const [href, title] = splitDestTitle(dest);
-            nodes.push({
-              type: "link",
-              href,
-              title,
-              children: parseInline(s.slice(i + 1, close), options),
-            });
+            pushLink(nodes, href, title, parseInline(label, options));
             i = endParen + 1;
             continue;
           }
@@ -385,39 +450,34 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         if (s[close + 1] === "[") {
           const idClose = s.indexOf("]", close + 2);
           if (idClose > close) {
-            const label = s.slice(i + 1, close);
             const id = s.slice(close + 2, idClose) || label;
             const def = resolveLinkDef(id, linkDefs);
             if (def) {
-              nodes.push({
-                type: "link",
-                href: def.href,
-                title: def.title,
-                children: parseInline(label, options),
-              });
+              pushLink(nodes, def.href, def.title, parseInline(label, options));
               i = idClose + 1;
               continue;
             }
           }
         }
-        // [text][]  shortcut
+        // [text][] 折叠引用，以及 [text] 快捷引用
         if (s[close + 1] === "[" && s[close + 2] === "]") {
-          const label = s.slice(i + 1, close);
           const def = resolveLinkDef(label, linkDefs);
           if (def) {
-            nodes.push({
-              type: "link",
-              href: def.href,
-              title: def.title,
-              children: parseInline(label, options),
-            });
+            pushLink(nodes, def.href, def.title, parseInline(label, options));
             i = close + 3;
+            continue;
+          }
+        } else if (s[close + 1] !== "[" && s[close + 1] !== "(" && label.trim()) {
+          const def = resolveLinkDef(label, linkDefs);
+          if (def) {
+            pushLink(nodes, def.href, def.title, parseInline(label, options));
+            i = close + 1;
             continue;
           }
         }
       }
       if (streaming) {
-        nodes.push({ type: "text", value: "[" });
+        pushText(nodes, "[");
         i += 1;
         continue;
       }
@@ -432,7 +492,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         continue;
       }
       if (streaming) {
-        nodes.push({ type: "text", value: "~~" });
+        pushText(nodes, "~~");
         i += 2;
         continue;
       }
@@ -446,7 +506,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
         continue;
       }
       if (streaming) {
-        nodes.push({ type: "text", value: "==" });
+        pushText(nodes, "==");
         i += 2;
         continue;
       }
@@ -475,7 +535,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
           continue;
         }
         if (streaming) {
-          nodes.push({ type: "text", value: s.slice(i, i + 2) });
+          pushText(nodes, s.slice(i, i + 2));
           i += 2;
           continue;
         }
@@ -489,19 +549,10 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
           continue;
         }
         if (streaming) {
-          nodes.push({ type: "text", value: marker });
+          pushText(nodes, marker);
           i += 1;
           continue;
         }
-      }
-    }
-
-    if (s[i] === "~" && s[i + 1] !== "~") {
-      const hit = parseWrapped(s, i, "~", "~", "sub", options);
-      if (hit) {
-        nodes.push(hit.node);
-        i = hit.next;
-        continue;
       }
     }
 
@@ -524,10 +575,13 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
     // 裸 URL
     if (s[i] === "h" || s[i] === "w") {
       const auto = parseAutolinkBare(s, i);
-      if (auto) {
-        nodes.push(auto.node);
-        i = auto.next;
-        continue;
+      if (auto?.node.type === "autolink") {
+        const href = safeHref(auto.node.href);
+        if (href) {
+          nodes.push({ ...auto.node, href });
+          i = auto.next;
+          continue;
+        }
       }
     }
 
@@ -545,7 +599,6 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
       "__",
       "*",
       "_",
-      "~",
       "^",
       "  \n",
       "http://",
@@ -560,7 +613,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
     const httpIn = slice.search(/https?:\/\/|www\./);
     if (httpIn > 0) next = i + httpIn;
 
-    nodes.push({ type: "text", value: s.slice(i, next) });
+    pushText(nodes, s.slice(i, next));
     i = next;
   }
 

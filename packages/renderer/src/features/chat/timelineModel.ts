@@ -15,6 +15,48 @@ const THINKING_SUMMARY_MAX = 140;
 /** 无正文且短于此时长的思考步视为噪声，合并/丢弃。 */
 const EPHEMERAL_THINKING_MS = 500;
 
+/** 排队等待文案的时间线 id。出队、失败或取消后整段去掉。 */
+export const QUEUED_WAIT_STEP_ID = "queued-wait";
+
+/** 这些事件说明 run 已经开始产出，排队槽应切到 busy。 */
+const QUEUE_PROMOTE_EVENTS = new Set([
+  "token",
+  "status",
+  "tool",
+  "hitl",
+  "subagent",
+  "model_switch",
+  "usage",
+]);
+
+/** 去掉排队等待文案。没有该步时返回原数组。 */
+export function stripQueuedWait(steps: ChatTimelineStep[]): ChatTimelineStep[] {
+  if (!steps.some((step) => step.id === QUEUED_WAIT_STEP_ID)) return steps;
+  return steps.filter((step) => step.id !== QUEUED_WAIT_STEP_ID);
+}
+
+/** 用最新名次覆盖排队等待文案。 */
+export function withQueuedWait(steps: ChatTimelineStep[], text: string): ChatTimelineStep[] {
+  return [...stripQueuedWait(steps), { id: QUEUED_WAIT_STEP_ID, kind: "text", text }];
+}
+
+/**
+ * 后台槽上的排队过渡：终态去掉等待文案；模型开始输出时标成 busy。
+ * 出队前保持不忙，避免侧栏外的会话提前变成「正在跑」。
+ */
+export function applyQueuedSlotEvent(
+  slot: { busy: boolean; timeline: ChatTimelineStep[] },
+  eventType: string,
+): void {
+  if (eventType === "done" || eventType === "error") {
+    slot.timeline = stripQueuedWait(slot.timeline);
+    return;
+  }
+  if (!QUEUE_PROMOTE_EVENTS.has(eventType) || slot.busy) return;
+  slot.timeline = stripQueuedWait(slot.timeline);
+  slot.busy = true;
+}
+
 /** 截断到 max 字符，末尾加省略号。 */
 function truncatePhrase(text: string, max: number): string {
   const t = text.trim();
@@ -129,12 +171,15 @@ function finalizeActiveSubagent(
   };
 }
 
-/** 将所有活动行标为非活动（实时收束，可用墙钟结算思考耗时）。 */
+/** 将所有活动行标为非活动（实时收束，可用墙钟结算思考耗时）；顺带摘掉 HITL 等待态。 */
 export function deactivateAll(steps: ChatTimelineStep[]): ChatTimelineStep[] {
   return dropTrailingEphemeralThoughts(
     steps.map((s) => {
       if (s.kind === "status") return finalizeStatusStep(s, { wallClock: true });
-      if (s.kind === "tool") return { ...s, active: false };
+      if (s.kind === "tool") {
+        const { hitl: _hitl, ...rest } = s;
+        return { ...rest, active: false, hitl: undefined };
+      }
       if (s.kind === "subagent") return finalizeActiveSubagent(s);
       return s;
     }),

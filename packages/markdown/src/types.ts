@@ -46,11 +46,14 @@ export type LinkDef = {
   title?: string;
 };
 
+/** GFM 提示块种类（`> [!NOTE]` 等）。 */
+export type AlertKind = "note" | "tip" | "important" | "warning" | "caution";
+
 /** 块级节点（标题、段落、代码、图表、表格等）。 */
 export type BlockNode =
   | { type: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; id: string; children: InlineNode[] }
   | { type: "paragraph"; children: InlineNode[] }
-  | { type: "blockquote"; children: BlockNode[] }
+  | { type: "blockquote"; children: BlockNode[]; alert?: AlertKind }
   | { type: "code"; lang: string; value: string; meta?: string; incomplete?: boolean }
   | { type: "diagram"; lang: string; value: string; incomplete?: boolean }
   | { type: "list"; ordered: boolean; start?: number; items: ListItem[] }

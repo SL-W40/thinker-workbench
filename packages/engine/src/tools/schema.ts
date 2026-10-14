@@ -41,6 +41,7 @@ const BROWSER_TOOL_NAMES = new Set([
 export function listChatTools(options?: {
   childReadonly?: boolean;
   allowTask?: boolean;
+  chatMode?: import("@thinker-workbench/shared").ChatMode;
 }): ChatToolDefinition[] {
   const allowDelete = getAllowAiDeleteFiles();
   const allowShell = getAllowAiShell();
@@ -48,6 +49,7 @@ export function listChatTools(options?: {
   const modeOpts = {
     childReadonly: options?.childReadonly,
     allowTask: options?.allowTask,
+    chatMode: options?.chatMode,
   };
   const builtin = listTools()
     .filter((spec) => {

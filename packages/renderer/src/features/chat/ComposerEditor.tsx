@@ -31,6 +31,8 @@ type Props = {
   onChange: (value: string) => void;
   onKeyDown?: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
   onCaretChange?: () => void;
+  /** 剪贴板含图片时回调；返回 true 表示已处理（不再插入纯文本）。 */
+  onPasteImages?: (files: File[]) => boolean | void;
 };
 
 function atLabel(path: string): string {
@@ -220,7 +222,7 @@ function caretAnchor(root: HTMLElement): { left: number; top: number; bottom: nu
 }
 
 export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function ComposerEditor(
-  { value, placeholder, className, onChange, onKeyDown, onCaretChange },
+  { value, placeholder, className, onChange, onKeyDown, onCaretChange, onPasteImages },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -341,6 +343,17 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
   }
 
   function onPaste(e: React.ClipboardEvent<HTMLDivElement>) {
+    const files: File[] = [];
+    for (const item of Array.from(e.clipboardData.items ?? [])) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length > 0 && onPasteImages?.(files)) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
     document.execCommand("insertText", false, text);

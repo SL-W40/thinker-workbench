@@ -12,9 +12,11 @@ import {
   normalizeChatMode,
   normalizeShellAllowlist,
   normalizeShellApprovalMode,
+  normalizeShellBlocklist,
   normalizeWorkspaceAccess,
   type ShellApprovalMode,
   type ShellProfile,
+  shellAllowlistWithoutBlocked,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
 import type { RunContext } from "./runContext";
@@ -33,12 +35,28 @@ export type BuildRunContextInput = {
   allowAiBrowser?: boolean;
   shellApprovalMode?: ShellApprovalMode;
   shellAllowlist?: string[];
+  shellBlocklist?: string[];
   shell?: ShellProfile | null;
   catalog?: ModelCatalog | null;
   selection?: ModelSelection | null;
-  route?: { userText?: string; contextPaths?: string[] };
+  route?: { userText?: string; contextPaths?: string[]; hasImages?: boolean };
   emit: RunEmitter;
 };
+
+/** 白名单与硬拒绝名单：重叠时黑名单优先。缺省黑名单为空。 */
+function shellListsFromInput(input: BuildRunContextInput): {
+  shellAllowlist: string[];
+  shellBlocklist: string[];
+} {
+  const shellBlocklist = normalizeShellBlocklist(input.shellBlocklist);
+  const shellAllowlist = shellAllowlistWithoutBlocked(
+    input.shellAllowlist
+      ? normalizeShellAllowlist(input.shellAllowlist)
+      : [...DEFAULT_SHELL_ALLOWLIST],
+    shellBlocklist,
+  );
+  return { shellAllowlist, shellBlocklist };
+}
 
 /** 组装本轮 RunContext。 */
 export function buildRunContext(input: BuildRunContextInput): RunContext {
@@ -67,9 +85,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
       input.shellApprovalMode,
       DEFAULT_SHELL_APPROVAL_MODE,
     ),
-    shellAllowlist: input.shellAllowlist
-      ? normalizeShellAllowlist(input.shellAllowlist)
-      : [...DEFAULT_SHELL_ALLOWLIST],
+    ...shellListsFromInput(input),
     shellProfile: input.shell ?? null,
     emit: input.emit,
     catalog,
@@ -77,6 +93,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     routeContext: {
       userText: input.route?.userText ?? "",
       contextPaths: input.route?.contextPaths,
+      ...(input.route?.hasImages ? { hasImages: true as const } : {}),
     },
     hitlIds: new Set(),
     taskIds: new Set(),

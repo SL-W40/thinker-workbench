@@ -26,7 +26,7 @@ export type ModalProps = {
   panelClassName?: string;
 };
 
-export function Modal({
+function ModalRoot({
   open,
   children,
   onClose,
@@ -129,3 +129,55 @@ export function Modal({
     document.body,
   );
 }
+
+export type ModalHeaderProps = {
+  /** 标题。 */
+  title?: ReactNode;
+  /** 标题元素 id，供对话框 aria-labelledby。 */
+  titleId?: string;
+  /** 标题行右侧，例如关闭按钮。 */
+  children?: ReactNode;
+  /** 追加 class。 */
+  className?: string;
+};
+
+/** 对话框标题行。 */
+export function ModalHeader({ title, titleId, children, className }: ModalHeaderProps) {
+  return (
+    <div className={`tw-modal__header${className ? ` ${className}` : ""}`}>
+      {title != null ? (
+        <h2 id={titleId} className="tw-modal__title">
+          {title}
+        </h2>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+export type ModalSectionProps = {
+  children?: ReactNode;
+  className?: string;
+};
+
+/** 对话框正文。 */
+export function ModalBody({ children, className }: ModalSectionProps) {
+  return <div className={`tw-modal__body${className ? ` ${className}` : ""}`}>{children}</div>;
+}
+
+/** 对话框底栏，操作靠右。 */
+export function ModalFooter({ children, className }: ModalSectionProps) {
+  return <div className={`tw-modal__footer${className ? ` ${className}` : ""}`}>{children}</div>;
+}
+
+type ModalComponent = typeof ModalRoot & {
+  Header: typeof ModalHeader;
+  Body: typeof ModalBody;
+  Footer: typeof ModalFooter;
+};
+
+export const Modal = Object.assign(ModalRoot, {
+  Header: ModalHeader,
+  Body: ModalBody,
+  Footer: ModalFooter,
+}) as ModalComponent;

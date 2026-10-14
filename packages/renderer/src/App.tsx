@@ -269,8 +269,9 @@ export function App() {
       },
       focusComposer,
       stopRun: () => {
-        if (!session.busy) return false;
+        if (!session.busy && !session.queued) return false;
         session.cancel();
+        return true;
       },
       toggleLeftPanel: panels.toggleLeft,
       toggleRightPanel: panels.toggleRight,
@@ -368,7 +369,11 @@ export function App() {
               />
               <Composer
                 draft={session.draft}
+                draftImages={session.draftImages}
+                onAttachImages={(files) => void session.attachImageFiles(files)}
+                onRemoveImage={session.removeDraftImage}
                 busy={session.busy}
+                queued={session.queued}
                 inputRef={session.inputRef}
                 onDraftChange={session.setDraft}
                 onKeyDown={session.onKeyDown}

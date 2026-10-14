@@ -2,6 +2,7 @@
  * AI 锁定蒙层 HTML（独立 WebContentsView）。
  * 使用与产品一致的 --tw-* token，随主题同步。
  */
+import { type CustomThemeRecord, isCustomThemeId } from "@thinker-workbench/shared";
 
 export type OverlayThemeTokens = {
   bg: string;
@@ -15,8 +16,7 @@ export type OverlayThemeTokens = {
   fontUi: string;
 };
 
-/** 按视觉主题给出蒙层 token（自定义主题走 light 近似）。 */
-export function overlayTokensForVisual(visual: string): OverlayThemeTokens {
+function builtinOverlayTokens(visual: string): OverlayThemeTokens {
   switch (visual) {
     case "dark":
       return {
@@ -79,6 +79,37 @@ export function overlayTokensForVisual(visual: string): OverlayThemeTokens {
         fontUi: 'ui-sans-serif, system-ui, "Segoe UI", sans-serif',
       };
   }
+}
+
+function tokenOr(ui: Record<string, string>, key: string, fallback: string): string {
+  const value = ui[key]?.trim();
+  return value || fallback;
+}
+
+/**
+ * 按视觉主题给出蒙层 token。
+ * 自定义主题读自身色板；缺键按 colorScheme 取内置深/浅色。
+ */
+export function overlayTokensForVisual(
+  visual: string,
+  customThemes: readonly CustomThemeRecord[] = [],
+): OverlayThemeTokens {
+  if (!isCustomThemeId(visual)) return builtinOverlayTokens(visual);
+  const record = customThemes.find((item) => item.id === visual);
+  if (!record) return builtinOverlayTokens("light");
+  const fallback = builtinOverlayTokens(record.theme.colorScheme === "dark" ? "dark" : "light");
+  const ui = record.theme.ui ?? {};
+  return {
+    bg: tokenOr(ui, "--tw-bg", fallback.bg),
+    bgElev: tokenOr(ui, "--tw-bg-elev", fallback.bgElev),
+    fg: tokenOr(ui, "--tw-fg", fallback.fg),
+    fgMuted: tokenOr(ui, "--tw-fg-muted", fallback.fgMuted),
+    accent: tokenOr(ui, "--tw-accent", fallback.accent),
+    accentStrong: tokenOr(ui, "--tw-accent-strong", fallback.accentStrong),
+    accentInk: tokenOr(ui, "--tw-accent-ink", fallback.accentInk),
+    border: tokenOr(ui, "--tw-border", fallback.border),
+    fontUi: tokenOr(ui, "--tw-font-ui", fallback.fontUi),
+  };
 }
 
 /** 生成蒙层 data URL；文案由调用方按 locale 传入。 */

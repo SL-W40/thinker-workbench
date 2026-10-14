@@ -8,7 +8,6 @@ import {
   type ModelCatalog,
   type ModelEntry,
   type ModelSelection,
-  type ModelSettings,
   type ModelSwitchReason,
   resolveModelSettings,
 } from "@thinker-workbench/shared";
@@ -28,7 +27,16 @@ function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
     .filter((n): n is string => typeof n === "string" && n.length > 0);
   const last = messages[messages.length - 1];
   const lastRole = last?.role;
-  const lastPreview = typeof last?.content === "string" ? last.content.slice(0, 120) : undefined;
+  const lastPlain =
+    last && typeof last.content === "string"
+      ? last.content
+      : last && Array.isArray(last.content)
+        ? last.content
+            .filter((p): p is { type: "text"; text: string } => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+        : "";
+  const lastPreview = lastPlain ? lastPlain.slice(0, 120) : undefined;
   return {
     messageCount: messages.length,
     toolNames,
@@ -67,8 +75,10 @@ function modelChatOutput(args: {
 /** 进程级目录与选用（hello / 无 ALS）；run 内以 RunContext 为准。 */
 let catalog: ModelCatalog | null = null;
 let selection: ModelSelection = { mode: "auto" };
-/** 本轮用户文本 / 路径（供 Auto 路由）。 */
-let routeContext: { userText: string; contextPaths?: string[] } = { userText: "" };
+/** 本轮用户文本 / 路径 / 是否含图（供 Auto 路由）。 */
+let routeContext: { userText: string; contextPaths?: string[]; hasImages?: boolean } = {
+  userText: "",
+};
 
 function activeCatalog(): ModelCatalog | null {
   return getRunContext()?.catalog ?? catalog;
@@ -79,7 +89,7 @@ function activeSelection(): ModelSelection {
   return ctx ? ctx.selection : selection;
 }
 
-function activeRoute(): { userText: string; contextPaths?: string[] } {
+function activeRoute(): { userText: string; contextPaths?: string[]; hasImages?: boolean } {
   const ctx = getRunContext();
   return ctx ? ctx.routeContext : routeContext;
 }
@@ -88,7 +98,7 @@ function activeRoute(): { userText: string; contextPaths?: string[] } {
 export function configureModelCatalog(
   nextCatalog?: ModelCatalog | null,
   nextSelection?: ModelSelection | null,
-  route?: { userText?: string; contextPaths?: string[] },
+  route?: { userText?: string; contextPaths?: string[]; hasImages?: boolean },
 ): void {
   const ctx = getRunContext();
   const targetCatalog = ctx ? { holder: ctx as { catalog: ModelCatalog | null } } : null;
@@ -114,6 +124,7 @@ export function configureModelCatalog(
     const nextRoute = {
       userText: route.userText ?? "",
       contextPaths: route.contextPaths,
+      ...(route.hasImages ? { hasImages: true as const } : {}),
     };
     if (ctx) ctx.routeContext = nextRoute;
     else routeContext = nextRoute;
@@ -137,12 +148,6 @@ export function configureModelCatalog(
   }
 }
 
-/** 兼容旧单字段 configure。 */
-export function configureFromLegacyModel(settings?: ModelSettings | null): void {
-  if (!settings) return;
-  configureChatModel(settings);
-}
-
 /** 当前候选列表。 */
 export function listCandidates(): ModelEntry[] {
   const cat = activeCatalog();
@@ -152,6 +157,7 @@ export function listCandidates(): ModelEntry[] {
   return buildModelCandidates(cat, sel, {
     userText: route.userText,
     contextPaths: route.contextPaths,
+    hasImages: route.hasImages,
   });
 }
 

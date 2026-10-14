@@ -1,8 +1,12 @@
 /**
  * MCP IPC：配置 CRUD、测试连接、状态广播。
  */
+import fs from "node:fs";
 import {
+  type CustomizeScope,
   IpcChannels,
+  type McpImportConflict,
+  type McpServerConfig,
   type McpServerRuntimeStatus,
   type McpServerUpsertInput,
 } from "@thinker-workbench/shared";
@@ -10,6 +14,7 @@ import { BrowserWindow, dialog, type IpcMain } from "electron";
 import { canReloadMcpNow } from "../agent/resourceGovernor";
 import { desktopLog } from "../log/setup";
 import {
+  exportMcpServers,
   importMcpJsonFile,
   listEnabledMcpConfigs,
   listMcpConfigs,
@@ -76,8 +81,8 @@ function flushMcpReload(bridge: AgentBridge): void {
 
 /** 注册 MCP 通道。 */
 export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void {
-  ipcMain.handle(IpcChannels.mcpList, () => {
-    const servers = listMcpConfigs();
+  ipcMain.handle(IpcChannels.mcpList, (_evt, workspaceRoot?: string | null) => {
+    const servers = listMcpConfigs(workspaceRoot);
     const statuses = servers.map(
       (s) =>
         statusById.get(s.id) ??
@@ -95,14 +100,16 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
     return cfg;
   });
 
-  ipcMain.handle(IpcChannels.mcpRemove, (_evt, id: string) => {
-    removeMcpConfig(String(id ?? ""));
+  ipcMain.handle(IpcChannels.mcpRemove, (_evt, id: string, scope?: CustomizeScope) => {
+    removeMcpConfig(String(id ?? ""), scope);
     statusById.delete(sanitize(id));
     reloadMcpOnAgent(bridge);
   });
 
-  ipcMain.handle(IpcChannels.mcpSetEnabled, (_evt, id: string, enabled: boolean) => {
-    const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled));
+  ipcMain.handle(
+    IpcChannels.mcpSetEnabled,
+    (_evt, id: string, enabled: boolean, scope?: CustomizeScope) => {
+    const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled), scope);
     reloadMcpOnAgent(bridge);
     return cfg;
   });
@@ -115,21 +122,12 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
       id: input.id || "test",
       enabled: true,
     };
-    const cfg = {
-      id: sanitize(trial.id),
-      name: trial.name?.trim() || sanitize(trial.id),
-      enabled: true,
-      transport: "stdio" as const,
-      command: trial.command.trim(),
-      args: trial.args ?? [],
-      env: trial.env ?? {},
-      cwd: trial.cwd ?? null,
-    };
-    if (!cfg.command) {
+    const cfg = trialConfig(trial);
+    if (!cfg) {
       return {
-        id: cfg.id,
+        id: sanitize(trial.id),
         state: "error" as const,
-        error: "Command is required.",
+        error: trial.transport === "http" ? "URL is required." : "Command is required.",
       };
     }
     try {
@@ -159,7 +157,9 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
     }
   });
 
-  ipcMain.handle(IpcChannels.mcpImportFile, async () => {
+  ipcMain.handle(
+    IpcChannels.mcpImportFile,
+    async (_evt, conflict?: McpImportConflict, scope?: CustomizeScope) => {
     const win = BrowserWindow.getFocusedWindow();
     const result = win
       ? await dialog.showOpenDialog(win, {
@@ -175,10 +175,51 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
     if (result.canceled || !result.filePaths[0]) {
       return { imported: [] as string[], skipped: [] as string[] };
     }
-    const out = importMcpJsonFile(result.filePaths[0]);
+    const out = importMcpJsonFile(
+      result.filePaths[0],
+      conflict === "overwrite" ? "overwrite" : "skip",
+      scope,
+    );
     reloadMcpOnAgent(bridge);
     return out;
   });
+
+  ipcMain.handle(IpcChannels.mcpExportFile, async (_evt, scope?: CustomizeScope) => {
+    const win = BrowserWindow.getFocusedWindow();
+    const options = {
+      title: "Export mcp.json",
+      defaultPath: "mcp.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    };
+    const result = win
+      ? await dialog.showSaveDialog(win, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return { ok: false };
+    fs.writeFileSync(result.filePath, `${JSON.stringify(exportMcpServers(scope), null, 2)}\n`, "utf8");
+    return { ok: true, path: result.filePath };
+  });
+}
+
+function trialConfig(input: McpServerUpsertInput): McpServerConfig | null {
+  const id = sanitize(input.id);
+  const name = input.name?.trim() || id;
+  if (input.transport === "http") {
+    const url = input.url.trim();
+    if (!url) return null;
+    return { id, name, enabled: true, transport: "http", url, headers: input.headers ?? {} };
+  }
+  const command = input.command.trim();
+  if (!command) return null;
+  return {
+    id,
+    name,
+    enabled: true,
+    transport: "stdio",
+    command,
+    args: input.args ?? [],
+    env: input.env ?? {},
+    cwd: input.cwd ?? null,
+  };
 }
 
 function sanitize(raw: string): string {

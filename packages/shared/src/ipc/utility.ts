@@ -5,7 +5,12 @@
 
 import type { SubagentDefinition } from "./agents";
 import type { ChatMode } from "./chatMode";
-import type { AgentCancelCommand, AgentResumeCommand, AgentRunCommand } from "./commands";
+import type {
+  AgentCancelCommand,
+  AgentCancelTaskCommand,
+  AgentResumeCommand,
+  AgentRunCommand,
+} from "./commands";
 import type { ContextUsageRequest, ContextUsageSnapshot } from "./contextUsage";
 import type { AgentEvent } from "./events";
 import type { HttpCompatibilityMode, ShellApprovalMode, WorkspaceAccess } from "./general";
@@ -13,7 +18,7 @@ import type { HitlRequest, HitlResponse } from "./hitl";
 import type { AiLocale } from "./locale";
 import type { LogRecord } from "./log";
 import type { McpServerConfig, McpServerRuntimeStatus } from "./mcp";
-import type { ModelCatalog, ModelSelection, ModelSettings } from "./settings";
+import type { ModelCatalog, ModelSelection } from "./settings";
 import type { ShellProfile } from "./terminal";
 import type { TraceSpanMessage } from "./trace";
 
@@ -31,8 +36,6 @@ export type UtilityHello = {
   catalog?: ModelCatalog;
   /** 本轮生效的选用（会话覆盖或全局）。 */
   selection?: ModelSelection;
-  /** @deprecated 旧单模型；无 catalog 时回退。 */
-  model?: ModelSettings;
   /** AI 回复偏好语言。 */
   aiLocale?: AiLocale;
   /** 文件工具工作区外访问档位。 */
@@ -47,7 +50,7 @@ export type UtilityHello = {
   shellApprovalMode?: ShellApprovalMode;
   /** 免审命令白名单。 */
   shellAllowlist?: string[];
-  /** 禁止执行的命令黑名单。 */
+  /** 命令首 token 硬拒绝名单。 */
   shellBlocklist?: string[];
   /** 模型 HTTP 兼容模式。 */
   httpCompatibilityMode?: HttpCompatibilityMode;
@@ -115,8 +118,6 @@ export type UtilityRun = {
   catalog?: ModelCatalog;
   /** 本轮生效的选用。 */
   selection?: ModelSelection;
-  /** @deprecated 旧单模型；无 catalog 时回退。 */
-  model?: ModelSettings;
   /** 本轮 ChatMode。 */
   chatMode?: ChatMode;
   /** 本轮回复偏好语言。 */
@@ -129,6 +130,7 @@ export type UtilityRun = {
   allowAiBrowser?: boolean;
   shellApprovalMode?: ShellApprovalMode;
   shellAllowlist?: string[];
+  /** 本轮命令首 token 硬拒绝名单。 */
   shellBlocklist?: string[];
   httpCompatibilityMode?: HttpCompatibilityMode;
   maxAgentSteps?: number;
@@ -165,6 +167,13 @@ export type UtilityCancel = {
   command: AgentCancelCommand;
 };
 
+/** 主进程 → 子进程：取消单个后台 Task。 */
+export type UtilityCancelTask = {
+  channel: "utility";
+  kind: "cancelTask";
+  command: AgentCancelTaskCommand;
+};
+
 /** 主进程 → 子进程：从中断恢复。 */
 export type UtilityResume = {
   channel: "utility";
@@ -182,8 +191,6 @@ export type UtilityResume = {
   workspaceRoot?: string;
   catalog?: ModelCatalog;
   selection?: ModelSelection;
-  /** @deprecated 旧单模型。 */
-  model?: ModelSettings;
   /** 本轮 ChatMode。 */
   chatMode?: ChatMode;
   aiLocale?: AiLocale;
@@ -195,6 +202,7 @@ export type UtilityResume = {
   allowAiBrowser?: boolean;
   shellApprovalMode?: ShellApprovalMode;
   shellAllowlist?: string[];
+  /** 本轮命令首 token 硬拒绝名单。 */
   shellBlocklist?: string[];
   httpCompatibilityMode?: HttpCompatibilityMode;
   maxAgentSteps?: number;
@@ -229,8 +237,6 @@ export type UtilityContextUsage = {
   request: ContextUsageRequest;
   catalog?: ModelCatalog;
   selection?: ModelSelection;
-  /** @deprecated 旧单模型。 */
-  model?: ModelSettings;
   aiLocale?: AiLocale;
   workspaceAccess?: WorkspaceAccess;
   allowAiDeleteFiles?: boolean;
@@ -417,6 +423,7 @@ export type UtilityToChild =
   | UtilityHello
   | UtilityRun
   | UtilityCancel
+  | UtilityCancelTask
   | UtilityResume
   | UtilityContextUsage
   | UtilityPtyEvent

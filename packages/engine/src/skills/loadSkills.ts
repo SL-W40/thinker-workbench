@@ -9,6 +9,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { parseYamlFrontmatter } from "@thinker-workbench/shared";
 
 /** 单个已解析 skill。 */
 export type SkillDefinition = {
@@ -58,100 +59,6 @@ function walkSkillMd(root: string): string[] {
   return out;
 }
 
-/** 是否为 YAML 块标量指示符（`>` / `>-` / `|` / `|-` 等）。 */
-function isBlockScalarIndicator(value: string): boolean {
-  return /^[|>][+-]?$/.test(value);
-}
-
-/** 解析 YAML frontmatter（极简，够用 name/description/paths/disable）。 */
-function parseFrontmatter(raw: string): {
-  meta: Record<string, unknown>;
-  body: string;
-} {
-  const trimmed = raw.replace(/^\uFEFF/, "");
-  if (!trimmed.startsWith("---")) {
-    return { meta: {}, body: trimmed };
-  }
-  const end = trimmed.indexOf("\n---", 3);
-  if (end < 0) return { meta: {}, body: trimmed };
-  const fm = trimmed.slice(3, end).replace(/^\r?\n/, "");
-  const body = trimmed.slice(end + 4).replace(/^\r?\n/, "");
-  const meta: Record<string, unknown> = {};
-  let listKey: string | null = null;
-  let blockKey: string | null = null;
-  let blockFolded = true;
-  const blockLines: string[] = [];
-
-  const flushBlock = () => {
-    if (!blockKey) return;
-    const parts = blockLines.map((l) => l.replace(/^\s+/, ""));
-    const text = (blockFolded ? parts.join(" ") : parts.join("\n"))
-      .replace(/\s+/g, blockFolded ? " " : "\n")
-      .trim();
-    meta[blockKey] = text;
-    blockKey = null;
-    blockLines.length = 0;
-  };
-
-  for (const line of fm.split(/\r?\n/)) {
-    if (blockKey) {
-      if (/^\s+\S/.test(line) || line.trim() === "") {
-        if (line.trim()) blockLines.push(line);
-        continue;
-      }
-      flushBlock();
-    }
-    const listItem = line.match(/^\s*-\s+(.+)$/);
-    if (listItem && listKey) {
-      const prev = meta[listKey];
-      const arr = Array.isArray(prev) ? [...prev] : typeof prev === "string" ? [prev] : [];
-      arr.push(stripQuotes(listItem[1]?.trim()));
-      meta[listKey] = arr;
-      continue;
-    }
-    listKey = null;
-    const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
-    if (!m) continue;
-    const key = m[1]!;
-    const value = m[2]?.trim();
-    if (isBlockScalarIndicator(value)) {
-      blockKey = key;
-      blockFolded = value.startsWith(">");
-      blockLines.length = 0;
-      continue;
-    }
-    if (value === "") {
-      listKey = key;
-      meta[key] = [];
-      continue;
-    }
-    if (value.startsWith("[") && value.endsWith("]")) {
-      meta[key] = value
-        .slice(1, -1)
-        .split(",")
-        .map((s) => stripQuotes(s.trim()))
-        .filter(Boolean);
-      continue;
-    }
-    meta[key] = coerceScalar(value);
-  }
-  flushBlock();
-  return { meta, body };
-}
-
-function stripQuotes(s: string): string {
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    return s.slice(1, -1);
-  }
-  return s;
-}
-
-function coerceScalar(value: string): string | boolean {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return stripQuotes(value);
-}
-
 function asStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((v) => String(v).trim()).filter(Boolean);
@@ -180,7 +87,7 @@ function parseSkillFile(absPath: string, source: string): SkillDefinition | null
     return null;
   }
   const folderName = path.basename(path.dirname(absPath));
-  const { meta, body } = parseFrontmatter(raw);
+  const { data: meta, body } = parseYamlFrontmatter(raw);
   const name = normalizeSkillName(
     typeof meta.name === "string" ? meta.name : folderName,
     folderName,
@@ -199,14 +106,14 @@ function parseSkillFile(absPath: string, source: string): SkillDefinition | null
   };
 }
 
-/** 极简 glob：支持单星、双星与字面量。 */
-function globMatch(pattern: string, text: string): boolean {
+const GLOB_SPECIAL = ".+^${}()|\\";
+
+/** 路径 glob：`*`、`**`、`?`、`[]`。 */
+export function globMatch(pattern: string, text: string): boolean {
   const norm = pattern.replace(/\\/g, "/");
-  const target = text.replace(/\\/g, "/");
-  // 转成正则：双星 → .* ；单星 → [^/]*
-  const REGEX_SPECIAL = ".+?^${}()|[]\\";
+  const target = text.replace(/\\/g, "/").replace(/^\.\//, "");
   let re = "^";
-  for (let i = 0; i < norm.length; i++) {
+  for (let i = 0; i < norm.length; i += 1) {
     const c = norm[i]!;
     if (c === "*" && norm[i + 1] === "*") {
       re += ".*";
@@ -218,8 +125,19 @@ function globMatch(pattern: string, text: string): boolean {
       re += "[^/]*";
       continue;
     }
-    if (REGEX_SPECIAL.includes(c)) re += `\\${c}`;
-    else re += c;
+    if (c === "?") {
+      re += "[^/]";
+      continue;
+    }
+    if (c === "[") {
+      const end = norm.indexOf("]", i + 1);
+      if (end > i + 1) {
+        re += `[${norm.slice(i + 1, end)}]`;
+        i = end;
+        continue;
+      }
+    }
+    re += GLOB_SPECIAL.includes(c) ? `\\${c}` : c;
   }
   re += "$";
   try {
@@ -227,6 +145,19 @@ function globMatch(pattern: string, text: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** 从用户文里抽出像路径的片段（含斜杠或扩展名）。 */
+function pathsFromText(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.split(/\s+/)) {
+    const token = raw.replace(/^[`'"(]+|[`'"),.:;]+$/g, "").replace(/\\/g, "/");
+    if (!token || /^https?:/i.test(token)) continue;
+    if (token.includes("/") || /\.[a-z0-9]{1,8}$/i.test(token)) {
+      out.push(token.replace(/^\.\//, ""));
+    }
+  }
+  return out;
 }
 
 /** 从用户文抽取 `/skill-name` 显式调用。 */
@@ -240,20 +171,21 @@ export function extractSlashSkillNames(userText: string): string[] {
   return [...new Set(names)];
 }
 
-function pathsHit(skill: SkillDefinition, haystack: string): boolean {
+function pathsHit(skill: SkillDefinition, candidates: string[]): boolean {
   if (skill.paths.length === 0) return true;
-  const text = haystack.replace(/\\/g, "/");
-  return skill.paths.some((p) => globMatch(p, text) || text.includes(p.replace(/\*\*/g, "")));
+  return skill.paths.some((pattern) => candidates.some((text) => globMatch(pattern, text)));
 }
 
 /**
  * 发现并按策略激活 skills。
- * @param latestUserText 最新用户文（slash / paths 匹配）
+ * @param latestUserText 最新用户文（slash / 文中路径片段）
+ * @param contextPaths 本轮附带的工作区相对路径
  */
 export function loadSkills(
   dataDir: string | null | undefined,
   workspaceRoot: string | null | undefined,
   latestUserText = "",
+  contextPaths: readonly string[] = [],
 ): LoadedSkills {
   const byName = new Map<string, SkillDefinition>();
 
@@ -276,7 +208,10 @@ export function loadSkills(
 
   const skills = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   const slash = new Set(extractSlashSkillNames(latestUserText));
-  const haystack = latestUserText;
+  const candidates = [
+    ...contextPaths.map((p) => p.replace(/\\/g, "/").replace(/^\.\//, "")),
+    ...pathsFromText(latestUserText),
+  ];
 
   const activated: SkillDefinition[] = [];
   for (const skill of skills) {
@@ -285,7 +220,7 @@ export function loadSkills(
       continue;
     }
     if (skill.disableModelInvocation) continue;
-    if (!pathsHit(skill, haystack)) continue;
+    if (!pathsHit(skill, candidates)) continue;
     activated.push(skill);
   }
 

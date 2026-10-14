@@ -14,7 +14,7 @@ import { APP_NAME } from "../config/appIdentity";
 import { DEV_RENDERER_URL, getAppIconPath, getAppIndexHtml } from "../config/paths";
 import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStore";
 import { isShortcutRecording } from "../config/shortcutRecording";
-import { windowChromeOptions } from "./chromeOptions";
+import { syncBrowserWindowChrome, windowChromeOptions } from "./chromeOptions";
 import { windowMinSize } from "./defaultBounds";
 import { windowBackgroundForTheme } from "./themeBackground";
 import { waitForRenderer } from "./waitForRenderer";
@@ -220,10 +220,9 @@ export function closeAllAuxWindows(): void {
   auxByPage.clear();
 }
 
-/** 外观主题变更时同步所有辅助窗背景色。 */
+/** 外观主题变更时同步所有辅助窗底色与 Windows 系统按钮区。 */
 export function syncAuxWindowBackgrounds(): void {
-  const color = windowBackgroundForTheme(getGeneralSettings().uiTheme);
   for (const win of auxByPage.values()) {
-    if (!win.isDestroyed()) win.setBackgroundColor(color);
+    if (!win.isDestroyed()) syncBrowserWindowChrome(win);
   }
 }

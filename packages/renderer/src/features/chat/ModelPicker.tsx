@@ -32,6 +32,7 @@ const TAG_KEY: Record<ModelTag, MessageKey> = {
   coding: "settings.model.tag.coding",
   reasoning: "settings.model.tag.reasoning",
   fast: "settings.model.tag.fast",
+  vision: "settings.model.tag.vision",
 };
 
 function truncate(text: string, max: number): string {
@@ -262,7 +263,7 @@ export function ModelPicker({ sessionId, disabled }: Props) {
                     <span className="composer-model-menu__name">{t("chat.modelPicker.auto")}</span>
                     {selection.mode === "auto" ? (
                       <span className="composer-model-menu__check" aria-hidden>
-                        …?{" "}
+                        ✓
                       </span>
                     ) : null}
                   </div>
@@ -295,7 +296,7 @@ export function ModelPicker({ sessionId, disabled }: Props) {
                             <span className="composer-model-menu__name">{displayName(m)}</span>
                             {selected ? (
                               <span className="composer-model-menu__check" aria-hidden>
-                                …?{" "}
+                                ✓
                               </span>
                             ) : null}
                           </div>
@@ -309,12 +310,15 @@ export function ModelPicker({ sessionId, disabled }: Props) {
                                 <Badge variant="neutral">{t("chat.modelPicker.disabled")}</Badge>
                               ) : null}
                               {m.tags
-                                .filter((tag) => tag !== "general")
+                                .filter((tag) => tag !== "general" && tag !== "vision")
                                 .map((tag) => (
                                   <Badge key={tag} variant="accent">
                                     {t(TAG_KEY[tag])}
                                   </Badge>
                                 ))}
+                              {m.tags.includes("vision") ? (
+                                <Badge variant="success">{t(TAG_KEY.vision)}</Badge>
+                              ) : null}
                             </div>
                           </div>
                           {m.health === "error" && m.lastError ? (

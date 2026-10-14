@@ -1,0 +1,68 @@
+/* Chip 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: 999px;
+  background: var(--tw-bg-elev, var(--bg-elev));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 13px;
+  line-height: 1.2;
+
+  &:has(.tw-chip__remove) {
+    padding-right: 2px;
+  }
+
+  &--accent {
+    border-color: var(--tw-accent, var(--accent));
+    color: var(--tw-accent-strong, var(--accent-strong));
+    background: color-mix(in srgb, var(--tw-accent, var(--accent)) 14%, transparent);
+  }
+
+  &--danger {
+    border-color: var(--tw-danger, var(--danger));
+    color: var(--tw-danger, var(--danger));
+    background: var(--tw-danger-bg, rgba(155, 59, 46, 0.1));
+  }
+
+  &--success {
+    border-color: color-mix(in srgb, var(--tw-accent-strong, #2f6f4e) 70%, var(--tw-border, var(--line)));
+    color: var(--tw-accent-strong, #2f6f4e);
+    background: color-mix(in srgb, var(--tw-accent-strong, #2f6f4e) 12%, transparent);
+  }
+}
+
+.tw-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  code {
+    font-family: var(--tw-font-mono, ui-monospace, monospace);
+    font-size: inherit;
+    color: inherit;
+  }
+}
+
+.tw-chip__remove.tw-icon-btn {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  border-radius: 999px;
+  color: inherit;
+  opacity: 0.55;
+
+  &:hover:not(:disabled) {
+    opacity: 1;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+}

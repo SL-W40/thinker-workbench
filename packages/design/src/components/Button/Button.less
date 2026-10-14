@@ -1,6 +1,7 @@
 /* Button 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
 
 .tw-btn {
+  position: relative;
   appearance: none;
   box-sizing: border-box;
   display: inline-flex;
@@ -30,6 +31,11 @@
   &:disabled {
     opacity: 0.55;
     cursor: default;
+  }
+
+  &.is-busy:disabled {
+    cursor: progress;
+    opacity: 0.72;
   }
 
   &--sm {
@@ -126,4 +132,16 @@
 
 .tw-btn__label {
   min-width: 0;
+}
+
+.tw-btn__busy-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

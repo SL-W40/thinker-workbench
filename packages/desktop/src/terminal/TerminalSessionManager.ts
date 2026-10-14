@@ -14,6 +14,7 @@ import type { IPty } from "node-pty";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
+import { createDataBroadcastBatcher } from "./dataBroadcastBatcher";
 import { resolveShellProfile } from "./detectShellProfiles";
 import { buildDirectExecArgs } from "./directExecArgs";
 import { loadNodePty } from "./loadNodePty";
@@ -133,6 +134,10 @@ class TerminalSessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
   /** finalize 后短时缓存，供迟到的 shell_await 命中 complete。 */
   private readonly finalResults = new Map<string, PtyWaitResult>();
+  /** UI 侧 data 广播合并；waiter / AgentBridge 仍收原始 chunk。 */
+  private readonly dataBatcher = createDataBroadcastBatcher((sessionId, data) => {
+    broadcast({ type: "data", sessionId, data });
+  });
 
   list(): TerminalSession[] {
     return [...this.sessions.values()].map((s) => ({ ...s.meta }));
@@ -366,6 +371,8 @@ class TerminalSessionManager {
   kill(sessionId: string): void {
     const rec = this.sessions.get(sessionId);
     if (!rec) return;
+    // 先刷出未发 UI 数据，再发 exit，避免尾包丢在时间窗里
+    this.dataBatcher.flush(sessionId);
     if (rec.proc) {
       try {
         rec.proc.kill();
@@ -436,6 +443,7 @@ class TerminalSessionManager {
         /* 退出路径忽略单会话失败 */
       }
     }
+    this.dataBatcher.dispose();
   }
 
   // ─── 内部：启动 ───────────────────────────────────────────
@@ -591,6 +599,9 @@ class TerminalSessionManager {
     const rec = this.sessions.get(sessionId);
     if (!rec?.run || rec.run.finalized) return;
 
+    // 终态事件前刷出合并中的 data，保证 UI 先看到完整输出再收到 exit
+    this.dataBatcher.flush(sessionId);
+
     rec.run.finalized = true;
     rec.run.status = "exited";
     rec.run.exitCode = exitCode;
@@ -684,7 +695,7 @@ class TerminalSessionManager {
       rec.output = trimMemoryTail(rec.output).output;
     }
 
-    broadcast({ type: "data", sessionId, data });
+    this.dataBatcher.enqueue(sessionId, data);
   }
 
   private takeIncrementalOutput(rec: SessionRecord): string {
@@ -833,6 +844,7 @@ class TerminalSessionManager {
         // direct：子进程 exit 即完成；login：PTY 退出兜底
         this.finalize(sessionId, exitCode);
       } else if (!cur.run) {
+        this.dataBatcher.flush(sessionId);
         cur.meta.status = "exited";
         cur.meta.exitCode = exitCode;
         this.flushWaiters(sessionId, () => ({

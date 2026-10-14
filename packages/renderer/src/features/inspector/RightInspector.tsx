@@ -100,7 +100,7 @@ type Props = {
   workspaceId: string | null;
   /** Changes CTA：把固定英文 prompt 发给当前会话。*/
   onSendPrompt?: (prompt: string) => void;
-  /** 外部请求打开的工作空间相对路径（如聊?diff 点文件名）；消费后回调清空。*/
+  /** 外部请求打开的工作空间相对路径（如聊天 diff 点文件名）；消费后回调清空。*/
   pendingOpenPath?: string | null;
   onPendingOpenPathConsumed?: () => void;
   /** 外部请求打开 Terminal 并可选聚焦会话。*/
@@ -217,7 +217,7 @@ export function RightInspector({
   const t = useT();
   const tabsRef = useRef<HTMLDivElement>(null);
   const draftSeq = useRef(0);
-  /** 跳过恢复后的首次写回，避免用空态覆?localStorage。*/
+  /** 跳过恢复后的首次写回，避免用空态覆盖 localStorage。*/
   const skipPersist = useRef(true);
 
   const restoredUi = useMemo(() => loadInspectorUi(workspaceId), [workspaceId]);
@@ -320,7 +320,7 @@ export function RightInspector({
       terminal: t("inspector.section.terminal"),
       browser: t("inspector.section.browser"),
     });
-    // 合并当前会话已打开?Task（按会话落盘，不?inspectorUi 里）
+    // 合并当前会话已打开的 Task（按会话落盘，不进 inspectorUi 里）
     const openSub = peekOpenSubagents();
     const subTabs: Extract<StageTab, { kind: "subagent" }>[] = [];
     for (const taskId of openSub.taskIds) {
@@ -412,7 +412,7 @@ export function RightInspector({
     });
   }, [workspaceId, tabs, activeTab, filesListForced, filesListWidth, openDirs]);
 
-  // Git：聚?+ 12s 轮询（有 Changes 标签或空起始屏时：
+  // Git：聚焦 + 12s 轮询（有 Changes 标签或空起始屏时）
   useEffect(() => {
     if (!workspaceId) return;
     void refreshGit();
@@ -432,7 +432,8 @@ export function RightInspector({
     onPendingOpenPathConsumed?.();
     setFilesListOpen(true);
     void openFile(path);
-    // openFile 读最?state；仅?pending 变化时触? // eslint-disable-next-line react-hooks/exhaustive-deps
+    // openFile 读最新 state；仅在 pending 变化时触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenPath, openFile, setFilesListOpen, onPendingOpenPathConsumed]);
 
   // 外部 / 时间线：打开 Terminal 标签（细节由 TerminalPane 消费：
@@ -454,7 +455,8 @@ export function RightInspector({
     }
     window.addEventListener(OPEN_BROWSER_EVENT, onOpen);
     const off = onBrowserEvent((event) => {
-      if (event.type === "reveal") openBrowser(event.url);
+      // 主进程已导航：只开 Browser tab，勿再塞 pendingUrl（否则 navigate→reveal 死循环）
+      if (event.type === "reveal") openBrowser();
     });
     const pending = consumePendingOpenBrowser();
     if (pending) openBrowser(pending.url);
@@ -465,7 +467,7 @@ export function RightInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openBrowser]);
 
-  // Task 卡片 / 后台?/ 会话恢复：子代理时间?tab
+  // Task 卡片 / 后台条 / 会话恢复：子代理时间线 tab
   useEffect(() => {
     function tabFromTaskId(taskId: string): Extract<StageTab, { kind: "subagent" }> | null {
       const step = getSubagentStep(taskId);
@@ -499,7 +501,7 @@ export function RightInspector({
         return next;
       });
     }
-    /** 刷新或切回会话：重建已打开?Task tab，并按需激活。*/
+    /** 刷新或切回会话：重建已打开的 Task tab，并按需激活。*/
     function onRestore(e: Event) {
       const detail = (
         e as CustomEvent<{
@@ -556,9 +558,9 @@ export function RightInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ensureTab, t]);
 
-  // 激活非 Task 时清?activeTaskId，避免刷新后强行抢回 Task
+  // 激活非 Task 时清掉 activeTaskId，避免刷新后强行抢回 Task
   useEffect(() => {
-    if (!activeTab) return; // 初始…?key，勿冲掉会话恢复…?activeTaskId
+    if (!activeTab) return; // 初始无 key，勿冲掉会话恢复的 activeTaskId
     if (activeTab.startsWith("subagent:")) {
       setActiveSubagentTask(activeTab.slice("subagent:".length));
     } else {
@@ -784,7 +786,7 @@ export function RightInspector({
       const next = prev.filter((t) => t.key !== key);
       const idx = prev.findIndex((t) => t.key === key);
       const fallback = next[Math.max(0, idx - 1)] ?? next[0];
-      // 用函数式读最?activeTab，避?save+close 草稿?key 后闭包过?
+      // 用函数式读最新 activeTab，避免 save+close 改掉 key 后闭包过期
       setActiveTab((current) => (current === key ? (fallback?.key ?? "") : current));
       return next;
     });

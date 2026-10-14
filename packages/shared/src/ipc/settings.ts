@@ -8,10 +8,16 @@ import type { ThinkerGeneralApi } from "./general";
 import type { ShortcutsMap, ThinkerShortcutsApi } from "./shortcuts";
 
 /** 模型能力标签（Auto 路由用）。 */
-export type ModelTag = "general" | "coding" | "reasoning" | "fast";
+export type ModelTag = "general" | "coding" | "reasoning" | "fast" | "vision";
 
 /** 全部标签字面量。 */
-export const MODEL_TAGS: readonly ModelTag[] = ["general", "coding", "reasoning", "fast"] as const;
+export const MODEL_TAGS: readonly ModelTag[] = [
+  "general",
+  "coding",
+  "reasoning",
+  "fast",
+  "vision",
+] as const;
 
 /** 运行/探测得到的连通状态（与用户手动 enabled 正交）。 */
 export type ModelHealth = "ok" | "error";
@@ -130,25 +136,6 @@ export type ModelSettings = {
   label?: string;
 };
 
-/** @deprecated 旧单字段补丁；迁移期兼容，新代码用 ModelCatalogPatch。 */
-export type ModelSettingsPatch = {
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  allowEmoji?: boolean;
-  contextWindow?: number;
-};
-
-/** @deprecated 旧公开视图；新代码用 ModelCatalogPublic。 */
-export type ModelSettingsPublic = {
-  hasApiKey: boolean;
-  apiKeyHint: string;
-  baseUrl: string;
-  model: string;
-  allowEmoji: boolean;
-  contextWindow?: number;
-};
-
 /**
  * Preload 暴露的设置 API：快捷键 + 通用设置 + 模型目录读写。
  */
@@ -187,11 +174,6 @@ export function emptyModelCatalog(): ModelCatalog {
   };
 }
 
-/** @deprecated 兼容旧调用；等价于空目录展开的空凭据。 */
-export function emptyModelSettings(): ModelSettings {
-  return { apiKey: "", baseUrl: "", model: "", allowEmoji: false };
-}
-
 /** 将密钥转为脱敏 hint。 */
 export function apiKeyHint(apiKey: string): string {
   const key = apiKey.trim();
@@ -214,23 +196,6 @@ export function toPublicModelCatalog(catalog: ModelCatalog): ModelCatalogPublic 
     models: catalog.models.map((m) => ({ ...m })),
     selection: catalog.selection,
     allowEmoji: catalog.allowEmoji,
-  };
-}
-
-/** @deprecated 旧单字段公开转换；从目录首模型近似。 */
-export function toPublicModelSettings(settings: ModelSettings): ModelSettingsPublic {
-  const key = settings.apiKey.trim();
-  return {
-    hasApiKey: Boolean(key),
-    apiKeyHint: apiKeyHint(key),
-    baseUrl: settings.baseUrl,
-    model: settings.model,
-    allowEmoji: settings.allowEmoji,
-    ...(typeof settings.contextWindow === "number" &&
-    Number.isFinite(settings.contextWindow) &&
-    settings.contextWindow > 0
-      ? { contextWindow: Math.floor(settings.contextWindow) }
-      : {}),
   };
 }
 
@@ -335,8 +300,15 @@ export function resolveModelSettings(
  * 启发式任务标签（Auto 路由，无额外 LLM）。
  * @param text 用户本轮文本
  * @param contextPaths `@` 提及的路径
+ * @param options.hasImages 本轮或历史含用户附图时优先 vision
  */
-export function routeModelTag(text: string, contextPaths?: string[]): ModelTag {
+export function routeModelTag(
+  text: string,
+  contextPaths?: string[],
+  options?: { hasImages?: boolean },
+): ModelTag {
+  if (options?.hasImages) return "vision";
+
   const t = text ?? "";
   const paths = contextPaths ?? [];
   const hasCodeFence = /```/.test(t);
@@ -364,7 +336,7 @@ export function routeModelTag(text: string, contextPaths?: string[]): ModelTag {
 export function buildModelCandidates(
   catalog: ModelCatalog,
   selection: ModelSelection,
-  options?: { userText?: string; contextPaths?: string[] },
+  options?: { userText?: string; contextPaths?: string[]; hasImages?: boolean },
 ): ModelEntry[] {
   const byPriority = (a: ModelEntry, b: ModelEntry) =>
     a.priority - b.priority || a.id.localeCompare(b.id);
@@ -377,10 +349,11 @@ export function buildModelCandidates(
   const healthy = catalog.models.filter((m) => m.enabled && m.health === "ok");
   if (healthy.length === 0) return [];
 
-  const tag = routeModelTag(options?.userText ?? "", options?.contextPaths);
+  const tag = routeModelTag(options?.userText ?? "", options?.contextPaths, {
+    hasImages: options?.hasImages,
+  });
   const tagged = healthy.filter((m) => m.tags.includes(tag)).sort(byPriority);
   if (tagged.length > 0) {
-    if (tag === "fast" && tagged.length === 0) return [...healthy].sort(byPriority);
     return tagged;
   }
   return [...healthy].sort(byPriority);

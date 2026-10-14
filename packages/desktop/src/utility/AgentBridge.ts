@@ -1,8 +1,8 @@
 /**
  * 主进程与 Agent utilityProcess 之间的消息桥。
  *
- * 负责：attach 子进程、等待 ready、发送 run/cancel/hello、
- * 将 AgentEvent / LogRecord 分发给监听者，并在 done/error 时 resolve 对应 Promise。
+ * 负责：attach 子进程、等待 ready、派发 run/cancel/hello、
+ * 将 AgentEvent / LogRecord 分发给监听者。会话终态由 RunLedger 收口。
  */
 import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
 import {
@@ -13,16 +13,12 @@ import {
   type ContextUsageRequest,
   type ContextUsageSnapshot,
   createId,
-  createRunId,
-  createThreadId,
-  createTraceId,
   DEFAULT_CHAT_MODE,
   emptyContextUsageSnapshot,
   type HitlResponse,
   type LogRecord,
   type ModelSelection,
   normalizeChatMode,
-  type RunResult,
   type UtilityBrowserRequest,
   type UtilityPtyRequest,
   type UtilityToChild,
@@ -35,8 +31,6 @@ import {
   getGeneralSettings,
   getModelCatalog,
   getModelCatalogSnapshot,
-  resolvePrimaryModelMeta,
-  resolvePrimaryModelSettings,
   unlockModelSecretsForRun,
 } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
@@ -46,24 +40,20 @@ import {
   getSessionByThreadId,
   getSessionChatMode,
   getSessionModelSelection,
-  setSessionRunStatus,
-  upsertSessionForRun,
 } from "../db/workspacesStore";
-import { broadcastThreadsChanged } from "../ipc/workspacesHandlers";
 import { desktopLog } from "../log/setup";
 import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
+import { shellSettingsPayload } from "./shellSettingsPayload";
 import { isUtilityToParent } from "./transfer";
 
-/** 等待终态的进行中 run。 */
-type PendingRun = {
-  resolve: (result: RunResult) => void;
+/** 已派发、供 cancel 附带 sessionId 的轻量记录（终态由 RunLedger 收口）。 */
+type DispatchedRun = {
   sessionId?: string;
   threadId: string;
   runId: string;
   traceId: string;
-  workspaceRoot?: string;
 };
 
 /** 等待 contextUsage 结果。 */
@@ -80,14 +70,16 @@ export class AgentBridge {
   private ready = false;
   /** 等待 ready 的 resolve 队列。 */
   private readyWaiters: Array<() => void> = [];
-  /** runId → 待 resolve 的 Promise。 */
-  private readonly pending = new Map<string, PendingRun>();
+  /** runId → 已派发记录（cancel 用；结算后删除）。 */
+  private readonly dispatched = new Map<string, DispatchedRun>();
   /** AgentEvent 订阅者。 */
   private readonly eventListeners = new Set<(event: AgentEvent) => void>();
   /** LogRecord 订阅者（来自 agent utility）。 */
   private readonly logListeners = new Set<(record: LogRecord) => void>();
   /** requestId → contextUsage 等待者。 */
   private readonly pendingContextUsage = new Map<string, PendingContextUsage>();
+  /** ready 握手成功后的旁路订阅（如重置重启退避）。 */
+  private readonly readyListeners = new Set<() => void>();
 
   /**
    * 绑定新的子进程并监听 message。
@@ -103,6 +95,13 @@ export class AgentBridge {
         this.ready = true;
         for (const wake of this.readyWaiters) wake();
         this.readyWaiters = [];
+        for (const listener of this.readyListeners) {
+          try {
+            listener();
+          } catch {
+            /* 旁路监听失败不阻断握手 */
+          }
+        }
         return;
       }
       if (raw.kind === "event") {
@@ -401,6 +400,13 @@ export class AgentBridge {
     }
 
     try {
+      if (!getGeneralSettings().allowAiBrowser) {
+        reply("error", {
+          error:
+            "Browser tools are disabled in Settings (Browser protection). Ask the user to turn protection off if browser automation is required.",
+        });
+        return;
+      }
       const result = await browserSessionManager.handleRequest(req);
       reply("result", {
         output: result.output,
@@ -414,33 +420,41 @@ export class AgentBridge {
   }
 
   /**
-   * 子进程退出时调用：清空 child/ready，并将所有 pending run 以错误结果 resolve。
+   * 子进程退出时调用：清空 child/ready，未结算 run 交 RunLedger 统一 settle。
    * @param code 退出码，可能为 null
    */
   markExited(code: number | null): void {
     this.ready = false;
     this.child = null;
     const error = `Agent utilityProcess exited (${code ?? "null"}).`;
-    for (const [runId, pending] of this.pending) {
+    for (const [runId, d] of this.dispatched) {
       desktopLog("bridge").error("child exit during run", {
-        traceId: pending.traceId,
+        traceId: d.traceId,
         runId,
-        threadId: pending.threadId,
+        threadId: d.threadId,
         meta: { code },
       });
-      pending.resolve({
-        ok: false,
-        error,
-        runId,
-        threadId: pending.threadId,
-      });
     }
-    this.pending.clear();
+    this.dispatched.clear();
+    // 延迟 require：避免与 runLedger → AgentBridge 类型环在初始化期打架
+    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
+    runLedger.settleAllOnExit(error);
     for (const [id, pending] of this.pendingContextUsage) {
       clearTimeout(pending.timer);
       pending.resolve(emptyContextUsageSnapshot());
       this.pendingContextUsage.delete(id);
     }
+  }
+
+  /**
+   * 订阅 utility ready 握手（重启退避在此清零）。
+   * @returns 取消订阅函数
+   */
+  onReady(listener: () => void): () => void {
+    this.readyListeners.add(listener);
+    return () => {
+      this.readyListeners.delete(listener);
+    };
   }
 
   /**
@@ -475,7 +489,6 @@ export class AgentBridge {
           requestId,
           request,
           ...modelSnap,
-          model: resolvePrimaryModelMeta(modelSnap.catalog, modelSnap.selection),
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
@@ -542,55 +555,74 @@ export class AgentBridge {
   }
 
   /**
-   * 取消指定 run（必须带 runId；禁止 cancel-all，避免误伤并行会话）。
+   * 向 utility 发送 cancel（运输层）。
+   * 子进程未运行时抛错，由 RunLedger 决定是否本地 settle。
    */
-  cancel(runId?: string): void {
+  cancelTransport(runId?: string): void {
     const id = runId?.trim();
     if (!id) {
       desktopLog("bridge").warn("cancel ignored: runId required");
       return;
     }
-    const pending = this.pending.get(id);
+    const d = this.dispatched.get(id);
     desktopLog("bridge").info("cancel", {
-      traceId: pending?.traceId,
+      traceId: d?.traceId,
       runId: id,
-      threadId: pending?.threadId,
-      meta: pending?.sessionId ? { sessionId: pending.sessionId } : undefined,
+      threadId: d?.threadId,
+      meta: d?.sessionId ? { sessionId: d.sessionId } : undefined,
     });
     terminalSessionManager.killByRunId(id);
     this.send({
       channel: "utility",
       kind: "cancel",
-      command: { runId: id, sessionId: pending?.sessionId },
+      command: { runId: id, sessionId: d?.sessionId },
     });
+  }
+
+  /** @deprecated 使用 cancelTransport；保留别名以免外部调用方断裂。 */
+  cancel(runId?: string): void {
+    this.cancelTransport(runId);
   }
 
   /** 取消某聊天会话下全部 in-flight run（删会话 / 清空工作区前调用）。 */
   cancelRunsForSession(sessionId: string): void {
     const id = sessionId.trim();
     if (!id) return;
-    const runIds: string[] = [];
-    for (const [runId, p] of this.pending) {
-      if (p.sessionId === id) runIds.push(runId);
+    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
+    runLedger.requestCancel({ sessionId: id });
+  }
+
+  /**
+   * 取消单个后台 Task（不停止父 run）。
+   * 经 utility 走同一 cancelOneBackgroundTask。
+   */
+  cancelTask(taskId: string, runId?: string): void {
+    const id = taskId?.trim();
+    if (!id) {
+      desktopLog("bridge").warn("cancelTask ignored: taskId required");
+      return;
     }
-    for (const runId of runIds) this.cancel(runId);
+    const rid = runId?.trim() || undefined;
+    desktopLog("bridge").info("cancelTask", {
+      runId: rid,
+      meta: { taskId: id },
+    });
+    this.send({
+      channel: "utility",
+      kind: "cancelTask",
+      command: { taskId: id, ...(rid ? { runId: rid } : {}) },
+    });
   }
 
-  /** 按 runId 查 pending 元数据（供落库 / governor）。 */
-  getPendingRun(runId: string): PendingRun | undefined {
-    return this.pending.get(runId.trim());
+  /** 按 runId 查已派发元数据（供 governor 等）。 */
+  getPendingRun(runId: string): DispatchedRun | undefined {
+    return this.dispatched.get(runId.trim());
   }
 
-  /** hello / run / resume 共用的 shell 相关字段。 */
+  /** run / resume 的 shell 字段（含硬拒绝名单）；hello 使用同一组装函数。 */
   private shellPayload() {
     const general = getGeneralSettings();
-    return {
-      allowAiShell: general.allowAiShell,
-      allowAiBrowser: general.allowAiBrowser,
-      shellApprovalMode: general.shellApprovalMode,
-      shellAllowlist: general.shellAllowlist,
-      shell: shellFactsForAgent(general.shellProfileId),
-    };
+    return shellSettingsPayload(general, shellFactsForAgent(general.shellProfileId));
   }
 
   /** hello / run / resume 共用的运行时限额字段。 */
@@ -678,226 +710,177 @@ export class AgentBridge {
   }
 
   /**
-   * 发起一次 run：等待 ready、分配 threadId/runId/traceId、发送 run 消息，
-   * 直到收到对应 done/error 事件才 resolve。
+   * 派发已由 RunLedger 提交的 run（不写 DB、不分配 runId）。
+   * ready / send 失败时抛错，由调用方 ledger.dispatchFailed。
    */
-  async run(command: AgentRunCommand): Promise<RunResult> {
+  async dispatchRun(options: {
+    runId: string;
+    threadId: string;
+    traceId: string;
+    sessionId: string;
+    command: AgentRunCommand;
+  }): Promise<void> {
     await this.waitUntilReady();
-    const threadId = command.threadId?.trim() || createThreadId();
-    const runId = createRunId();
-    const traceId = command.traceId?.trim() || createTraceId();
-    const message = typeof command.message === "string" ? command.message : "";
+    const { runId, threadId, traceId, sessionId } = options;
+    const message = typeof options.command.message === "string" ? options.command.message : "";
     const log = desktopLog("bridge.run");
+    const session = getSession(sessionId);
+    const workspaceId = session?.workspaceId;
+    const sessionTitle = session?.title;
+    const general = getGeneralSettings();
 
-    let sessionId = command.sessionId?.trim() || undefined;
-    let workspaceId: string | undefined;
-    let sessionTitle: string | undefined;
-    try {
-      const existing = (sessionId ? getSession(sessionId) : null) ?? getSessionByThreadId(threadId);
-      const session = upsertSessionForRun({
-        threadId,
-        workspaceId: existing?.workspaceId,
-        titleHint: message,
-        runStatus: "running",
-        activeRunId: runId,
-        interruptReason: null,
-      });
-      sessionId = session.id;
-      workspaceId = session.workspaceId;
-      sessionTitle = session.title;
-      broadcastThreadsChanged();
-    } catch {
-      /* 无 workspace 时可能创建失败；仍继续 run */
-    }
+    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
+    // waitUntilReady 期间可能已取消：勿再派发
+    if (!runLedger.getOpen(runId)) return;
 
-    return new Promise<RunResult>((resolve) => {
-      this.pending.set(runId, {
-        resolve,
+    this.dispatched.set(runId, { sessionId, threadId, runId, traceId });
+    log.info("dispatch", {
+      traceId,
+      runId,
+      threadId,
+      meta: {
+        ...withTextPreview(message, "message", PREVIEW_BODY_CHARS),
         sessionId,
-        threadId,
-        runId,
-        traceId,
-        workspaceRoot: command.workspaceRoot,
-      });
-      const general = getGeneralSettings();
-      log.info("dispatch", {
-        traceId,
-        runId,
-        threadId,
-        meta: {
-          ...withTextPreview(message, "message", PREVIEW_BODY_CHARS),
-          ...(sessionId ? { sessionId } : {}),
-        },
-      });
-      try {
-        this.send({
-          channel: "utility",
-          kind: "run",
-          runId,
-          threadId,
-          traceId,
-          sessionId,
-          workspaceId,
-          sessionTitle,
-          command: {
-            sessionId,
-            threadId,
-            message,
-            history: command.history,
-            traceId,
-            workspaceRoot: command.workspaceRoot,
-            workspaceName: command.workspaceName,
-            contextPaths: command.contextPaths,
-          },
-          ...this.modelPayload(threadId),
-          ...this.chatModePayload(threadId),
-          ...this.subagentsPayload(command.workspaceRoot),
-          model: resolvePrimaryModelSettings(),
-          aiLocale: general.aiLocale,
-          workspaceAccess: general.workspaceAccess,
-          allowAiDeleteFiles: general.allowAiDeleteFiles,
-          ...this.shellPayload(),
-          httpCompatibilityMode: general.httpCompatibilityMode,
-          ...this.runtimeLimitsPayload(),
-          logTruncateLongContent: general.logTruncateLongContent,
-          loggingEnabled: general.loggingEnabled,
-          traceEnabled: general.traceEnabled,
-          workspaceRoot: command.workspaceRoot,
-          dataDir: getDataDir(),
-        });
-      } catch (err) {
-        this.pending.delete(runId);
-        const error = err instanceof Error ? err.message : String(err);
-        log.error("dispatch failed", { traceId, runId, threadId, meta: { error } });
-        resolve({
-          ok: false,
-          error,
-          runId,
-          threadId,
-        });
-      }
+      },
     });
+    try {
+      this.send({
+        channel: "utility",
+        kind: "run",
+        runId,
+        threadId,
+        traceId,
+        sessionId,
+        workspaceId,
+        sessionTitle,
+        command: {
+          sessionId,
+          threadId,
+          message,
+          images: options.command.images,
+          history: options.command.history,
+          traceId,
+          workspaceRoot: options.command.workspaceRoot,
+          workspaceName: options.command.workspaceName,
+          contextPaths: options.command.contextPaths,
+        },
+        ...this.modelPayload(threadId),
+        ...this.chatModePayload(threadId),
+        ...this.subagentsPayload(options.command.workspaceRoot),
+        aiLocale: general.aiLocale,
+        workspaceAccess: general.workspaceAccess,
+        allowAiDeleteFiles: general.allowAiDeleteFiles,
+        ...this.shellPayload(),
+        httpCompatibilityMode: general.httpCompatibilityMode,
+        ...this.runtimeLimitsPayload(),
+        logTruncateLongContent: general.logTruncateLongContent,
+        loggingEnabled: general.loggingEnabled,
+        traceEnabled: general.traceEnabled,
+        workspaceRoot: options.command.workspaceRoot,
+        dataDir: getDataDir(),
+      });
+      runLedger.markDispatched(runId);
+      // send 与 mark 之间若已 cancelRequested，补一刀 cancel
+      const open = runLedger.getOpen(runId);
+      if (open?.cancelRequested) {
+        try {
+          this.cancelTransport(runId);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      this.dispatched.delete(runId);
+      throw err;
+    }
   }
 
   /**
-   * 从 checkpoint 恢复：发送 resume，等待 done/error。
+   * 派发已由 RunLedger 提交的 resume（不写 DB、不分配 runId）。
    */
-  async resume(
-    command: AgentResumeCommand & {
-      workspaceRoot?: string;
-      workspaceName?: string;
-    },
-  ): Promise<RunResult> {
+  async dispatchResume(options: {
+    runId: string;
+    threadId: string;
+    traceId: string;
+    sessionId: string;
+    command: AgentResumeCommand & { workspaceRoot?: string; workspaceName?: string };
+  }): Promise<void> {
     await this.waitUntilReady();
-    const threadId = command.threadId.trim();
-    const runId = createRunId();
-    const traceId = command.traceId?.trim() || createTraceId();
+    const { runId, threadId, traceId, sessionId } = options;
     const general = getGeneralSettings();
     const log = desktopLog("bridge.resume");
+    const session = getSession(sessionId) ?? getSessionByThreadId(threadId);
+    const workspaceId = session?.workspaceId;
+    const sessionTitle = session?.title;
 
-    let sessionId: string | undefined;
-    let workspaceId: string | undefined;
-    let sessionTitle: string | undefined;
+    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
+    if (!runLedger.getOpen(runId)) return;
+
+    this.dispatched.set(runId, { sessionId, threadId, runId, traceId });
+    log.info("dispatch", { traceId, runId, threadId });
     try {
-      setSessionRunStatus(threadId, "running", {
-        byThread: true,
-        activeRunId: runId,
-        interruptReason: null,
-      });
-      const session = getSessionByThreadId(threadId);
-      sessionId = session?.id;
-      workspaceId = session?.workspaceId;
-      sessionTitle = session?.title;
-      broadcastThreadsChanged();
-    } catch {
-      /* ignore */
-    }
-
-    return new Promise<RunResult>((resolve) => {
-      this.pending.set(runId, {
-        resolve,
-        sessionId: command.sessionId?.trim() || sessionId,
-        threadId,
+      this.send({
+        channel: "utility",
+        kind: "resume",
         runId,
-        traceId,
-        workspaceRoot: command.workspaceRoot,
+        sessionId,
+        workspaceId,
+        sessionTitle,
+        command: {
+          sessionId,
+          threadId,
+          workspaceName: options.command.workspaceName,
+          traceId,
+        },
+        workspaceRoot: options.command.workspaceRoot,
+        ...this.modelPayload(threadId),
+        ...this.chatModePayload(threadId),
+        ...this.subagentsPayload(options.command.workspaceRoot),
+        aiLocale: general.aiLocale,
+        workspaceAccess: general.workspaceAccess,
+        allowAiDeleteFiles: general.allowAiDeleteFiles,
+        ...this.shellPayload(),
+        httpCompatibilityMode: general.httpCompatibilityMode,
+        ...this.runtimeLimitsPayload(),
+        logTruncateLongContent: general.logTruncateLongContent,
+        loggingEnabled: general.loggingEnabled,
+        traceEnabled: general.traceEnabled,
+        dataDir: getDataDir(),
       });
-      log.info("dispatch", { traceId, runId, threadId });
-      try {
-        this.send({
-          channel: "utility",
-          kind: "resume",
-          runId,
-          sessionId: command.sessionId?.trim() || sessionId,
-          workspaceId,
-          sessionTitle,
-          command: {
-            sessionId: command.sessionId?.trim() || sessionId,
-            threadId,
-            workspaceName: command.workspaceName,
-            traceId,
-          },
-          workspaceRoot: command.workspaceRoot,
-          ...this.modelPayload(threadId),
-          ...this.chatModePayload(threadId),
-          ...this.subagentsPayload(command.workspaceRoot),
-          model: resolvePrimaryModelSettings(),
-          aiLocale: general.aiLocale,
-          workspaceAccess: general.workspaceAccess,
-          allowAiDeleteFiles: general.allowAiDeleteFiles,
-          ...this.shellPayload(),
-          httpCompatibilityMode: general.httpCompatibilityMode,
-          ...this.runtimeLimitsPayload(),
-          logTruncateLongContent: general.logTruncateLongContent,
-          loggingEnabled: general.loggingEnabled,
-          traceEnabled: general.traceEnabled,
-          dataDir: getDataDir(),
-        });
-      } catch (err) {
-        this.pending.delete(runId);
-        const error = err instanceof Error ? err.message : String(err);
-        log.error("dispatch failed", { traceId, runId, threadId, meta: { error } });
-        resolve({ ok: false, error, runId, threadId });
+      runLedger.markDispatched(runId);
+      const open = runLedger.getOpen(runId);
+      if (open?.cancelRequested) {
+        try {
+          this.cancelTransport(runId);
+        } catch {
+          /* ignore */
+        }
       }
-    });
+    } catch (err) {
+      this.dispatched.delete(runId);
+      throw err;
+    }
   }
 
   /**
-   * 分发事件给监听者；done/error 时 resolve 对应 pending Promise。
+   * 分发事件给监听者；终态时从 dispatched 表移除（DB 由 RunLedger 收口）。
    */
   private onAgentEvent(event: AgentEvent): void {
     for (const listener of this.eventListeners) {
       listener(event);
     }
 
-    const pending = this.pending.get(event.runId);
-    if (!pending) return;
-
     if (event.type !== "done" && event.type !== "error") return;
-    this.pending.delete(event.runId);
+    const d = this.dispatched.get(event.runId);
+    this.dispatched.delete(event.runId);
     desktopLog("bridge.run").info(event.type === "done" ? "done" : "error", {
-      traceId: pending.traceId,
+      traceId: d?.traceId,
       runId: event.runId,
       threadId: event.threadId,
       meta:
         event.type === "error"
-          ? { error: event.error }
+          ? { error: event.error, code: event.code }
           : withTextPreview(event.text, "text", PREVIEW_BODY_CHARS),
     });
-    if (event.type === "done") {
-      pending.resolve({
-        ok: true,
-        text: event.text,
-        runId: event.runId,
-        threadId: event.threadId,
-      });
-    } else {
-      pending.resolve({
-        ok: false,
-        error: event.error,
-        runId: event.runId,
-        threadId: event.threadId,
-      });
-    }
   }
 }

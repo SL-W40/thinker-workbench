@@ -25,6 +25,8 @@ import { Button } from "@thinker-workbench/design/react";
 | `block` | `boolean` | `false` | 拉伸至容器宽度 |
 | `startIcon` | `ReactNode` | — | 标签前图标 |
 | `endIcon` | `ReactNode` | — | 标签后图标 |
+| `busy` | `boolean` | — | 忙碌：禁用点击，标签前显示转圈 |
+| `busyLabel` | `string` | — | 没有可见文案时的读屏说明 |
 | `disabled` | `boolean` | — | 禁用（原生） |
 | `type` | `button` \| `submit` \| `reset` | `button` | 按钮类型 |
 | `...rest` | `ButtonHTMLAttributes` | — | 透传原生 button 属性 |

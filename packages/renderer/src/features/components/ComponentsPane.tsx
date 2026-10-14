@@ -8,8 +8,10 @@ import {
   Checkbox,
   ChevronLeftIcon,
   ChevronRightIcon,
+  Chip,
   ChoiceCard,
   ContextMenu,
+  Disclosure,
   EmptyState,
   Field,
   FolderIcon,
@@ -18,21 +20,25 @@ import {
   Kbd,
   listDesignIcons,
   Masonry,
+  Menu,
   Modal,
+  Popover,
   Progress,
   RadioGroup,
   SegmentedControl,
   Select,
   Separator,
+  SettingsRow,
   SideNavItem,
   Spinner,
   Switch,
   Table,
+  Tabs,
   TextArea,
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import { MarkdownView } from "@thinker-workbench/markdown/react";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import type { MessageKey } from "../../i18n/translate";
 import { useT } from "../../i18n/useI18n";
 import { getComponentDoc } from "./componentDocs";
@@ -79,7 +85,9 @@ function ComponentCard({ docId, title, description, docsHint, onOpenDocs, childr
 }
 
 /**
- * 瀑布流卡片式预览：每个控件一张卡；页面本身用 Masonry 排布。 * 各控件绑定独?useState，便于点击试用；`useId` 保证 Field/htmlFor 在同页唯一。 */
+ * 瀑布流卡片式预览：每个控件一张卡；页面本身用 Masonry 排布。
+ * 各控件绑定独立 useState，便于点击试用；`useId` 保证 Field/htmlFor 在同页唯一。
+ */
 export function ComponentsPane({ active }: Props) {
   const t = useT();
   const { markdownTheme } = useDesignTheme();
@@ -106,8 +114,20 @@ export function ComponentsPane({ active }: Props) {
   /** Kbd 录制高亮开关（演示 recording 视觉）。*/
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(42);
-  /** 当前打开的组件说明文?id；null 表示关闭。*/
+  /** 当前打开的组件说明文档 id；null 表示关闭。*/
   const [docId, setDocId] = useState<string | null>(null);
+  const popoverAnchorRef = useRef<HTMLButtonElement>(null);
+  const menuAnchorRef = useRef<HTMLButtonElement>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [lineTab, setLineTab] = useState("files");
+  const [docTab, setDocTab] = useState("notes");
+  const [docTabs, setDocTabs] = useState([
+    { id: "notes", dirty: true },
+    { id: "terminal", dirty: false },
+  ]);
+  const [chips, setChips] = useState(["rg", "git"]);
+  const [disclosureOpen, setDisclosureOpen] = useState(true);
 
   const docsHint = t("components.openDocs");
   const card = (id: string, titleKey: MessageKey, descKey: MessageKey, children: ReactNode) => (
@@ -230,6 +250,7 @@ export function ComponentsPane({ active }: Props) {
               <Button size="md">{t("components.demo.medium")}</Button>
               <Button size="lg">{t("components.demo.large")}</Button>
               <Button disabled>{t("components.demo.disabled")}</Button>
+              <Button busy>{t("components.demo.loading")}</Button>
             </div>
           </>,
         )}
@@ -472,18 +493,16 @@ export function ComponentsPane({ active }: Props) {
               closeOnEscape
               aria-labelledby="components-modal-title"
             >
-              <h2 id="components-modal-title" className="components-modal-title">
-                {t("components.demo.modalTitle")}
-              </h2>
-              <p className="components-modal-body">{t("components.demo.modalBody")}</p>
-              <div className="components-row components-row--end">
+              <Modal.Header title={t("components.demo.modalTitle")} titleId="components-modal-title" />
+              <Modal.Body>{t("components.demo.modalBody")}</Modal.Body>
+              <Modal.Footer>
                 <Button variant="ghost" onClick={() => setModalOpen(false)}>
                   {t("components.demo.close")}
                 </Button>
                 <Button variant="primary" onClick={() => setModalOpen(false)}>
                   {t("components.demo.confirm")}
                 </Button>
-              </div>
+              </Modal.Footer>
             </Modal>
           </>,
         )}
@@ -516,11 +535,22 @@ export function ComponentsPane({ active }: Props) {
               items={[
                 {
                   label: t("components.demo.ctxRename"),
+                  shortcut: "F2",
                   onSelect: () => undefined,
                 },
                 {
                   label: t("components.demo.ctxPin"),
+                  checked: true,
                   onSelect: () => undefined,
+                },
+                {
+                  label: t("components.demo.submenu"),
+                  items: [
+                    {
+                      label: t("components.demo.ctxRename"),
+                      onSelect: () => undefined,
+                    },
+                  ],
                 },
                 {
                   label: t("components.demo.ctxDelete"),
@@ -531,6 +561,180 @@ export function ComponentsPane({ active }: Props) {
               ]}
             />
           </>,
+        )}
+
+        {card(
+          "Popover",
+          "components.section.popover",
+          "components.section.popoverDesc",
+          <>
+            <Button ref={popoverAnchorRef} variant="secondary" onClick={() => setPopoverOpen((v) => !v)}>
+              {t("components.demo.openPopover")}
+            </Button>
+            <Popover
+              open={popoverOpen}
+              onClose={() => setPopoverOpen(false)}
+              anchorRef={popoverAnchorRef}
+              role="dialog"
+              aria-label={t("components.section.popover")}
+            >
+              <p className="components-card-desc">{t("components.demo.popoverBody")}</p>
+              <div className="components-row">
+                <Button size="sm" variant="primary" onClick={() => setPopoverOpen(false)}>
+                  {t("components.demo.close")}
+                </Button>
+              </div>
+            </Popover>
+          </>,
+        )}
+
+        {card(
+          "Menu",
+          "components.section.menu",
+          "components.section.menuDesc",
+          <>
+            <Button ref={menuAnchorRef} variant="secondary" onClick={() => setMenuOpen((v) => !v)}>
+              {t("components.demo.openMenu")}
+            </Button>
+            <Menu
+              open={menuOpen}
+              onClose={() => setMenuOpen(false)}
+              anchorRef={menuAnchorRef}
+              aria-label={t("components.section.menu")}
+              groups={[
+                {
+                  label: t("components.demo.menuGroup"),
+                  items: [
+                    {
+                      label: t("components.demo.menuChecked"),
+                      description: t("components.demo.menuCheckedDesc"),
+                      checked: true,
+                      shortcut: "Ctrl+1",
+                      onSelect: () => undefined,
+                    },
+                    {
+                      label: t("components.demo.menuOther"),
+                      description: t("components.demo.menuOtherDesc"),
+                      shortcut: "Ctrl+2",
+                      onSelect: () => undefined,
+                    },
+                  ],
+                },
+                {
+                  items: [
+                    {
+                      label: t("components.demo.menuDanger"),
+                      danger: true,
+                      onSelect: () => undefined,
+                    },
+                  ],
+                },
+              ]}
+            />
+          </>,
+        )}
+
+        {card(
+          "Tabs",
+          "components.section.tabs",
+          "components.section.tabsDesc",
+          <>
+            <Tabs
+              aria-label={t("components.section.tabs")}
+              value={lineTab}
+              onChange={setLineTab}
+              tabs={[
+                { id: "files", label: t("components.demo.tabFiles") },
+                { id: "changes", label: t("components.demo.tabChanges") },
+                { id: "terminal", label: t("components.demo.tabTerminal") },
+              ]}
+            />
+            <Tabs
+              variant="document"
+              aria-label={t("components.section.tabs")}
+              value={docTab}
+              onChange={setDocTab}
+              onClose={(id) => {
+                setDocTabs((prev) => (prev.length <= 1 ? prev : prev.filter((tab) => tab.id !== id)));
+                setDocTab((current) => {
+                  if (current !== id) return current;
+                  const next = docTabs.filter((tab) => tab.id !== id);
+                  return next[0]?.id ?? current;
+                });
+              }}
+              tabs={docTabs.map((tab) => ({
+                id: tab.id,
+                label: t(tab.id === "notes" ? "components.demo.docTabNotes" : "components.demo.docTabTerminal"),
+                dirty: tab.dirty,
+                closable: true,
+                closeLabel: t("components.demo.tabClose"),
+              }))}
+            />
+          </>,
+        )}
+
+        {card(
+          "Chip",
+          "components.section.chip",
+          "components.section.chipDesc",
+          <div className="components-row">
+            {chips.map((token) => (
+              <Chip
+                key={token}
+                tone={token === "git" ? "accent" : "neutral"}
+                removeLabel={`${t("components.demo.chipRemove")} ${token}`}
+                onRemove={() => setChips((prev) => prev.filter((item) => item !== token))}
+              >
+                <code>{token}</code>
+              </Chip>
+            ))}
+            <Chip tone="danger">{t("components.demo.badgeDanger")}</Chip>
+          </div>,
+        )}
+
+        {card(
+          "SettingsRow",
+          "components.section.settingsRow",
+          "components.section.settingsRowDesc",
+          <div>
+            <SettingsRow
+              title={t("components.demo.settingsRowTitle")}
+              description={t("components.demo.settingsRowDesc")}
+            >
+              <Switch checked={on} aria-label={t("components.demo.settingsRowTitle")} onChange={setOn} />
+            </SettingsRow>
+            <SettingsRow
+              stack
+              title={t("components.demo.settingsRowStackTitle")}
+              description={t("components.demo.settingsRowStackDesc")}
+            >
+              <Input
+                value={fieldValue}
+                placeholder={t("components.demo.notesPlaceholder")}
+                aria-label={t("components.demo.settingsRowStackTitle")}
+                onChange={(e) => setFieldValue(e.target.value)}
+              />
+            </SettingsRow>
+          </div>,
+        )}
+
+        {card(
+          "Disclosure",
+          "components.section.disclosure",
+          "components.section.disclosureDesc",
+          <Disclosure
+            title={t("components.demo.disclosureTitle")}
+            count={3}
+            open={disclosureOpen}
+            onOpenChange={setDisclosureOpen}
+            actions={
+              <Button size="sm" variant="secondary">
+                {t("components.demo.disclosureAdd")}
+              </Button>
+            }
+          >
+            <p className="components-card-desc">{t("components.demo.disclosureBody")}</p>
+          </Disclosure>,
         )}
 
         {card(

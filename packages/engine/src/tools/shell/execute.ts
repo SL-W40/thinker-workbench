@@ -2,7 +2,7 @@
  * shell / shell_await / shell_write 工具执行体。
  */
 import path from "node:path";
-import type { PtyExecMode } from "@thinker-workbench/shared";
+import { type PtyExecMode, stripAnsi } from "@thinker-workbench/shared";
 import { getDefaultShellBlockUntilMs, getShellOutputCap } from "../../config/runtimeLimits";
 import { requestHitl } from "../../hitl/requestHitl";
 import { ptyAwait, ptyExec, ptyWrite } from "../../host/ptyClient";
@@ -10,7 +10,6 @@ import { getWorkspaceAccess, getWorkspaceRoot } from "../../workspace";
 import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
 import { ensureShellApproved, ensureShellWriteApproved } from "./approve";
 import { getShellSessionCommand, rememberShellSessionCommand } from "./sessionMeta";
-import { stripAnsi } from "./stripAnsi";
 
 /** 已落盘时回传模型的最大尾部字符（避免 ConPTY 垃圾灌爆回复）。 */
 const SPILL_TAIL_CHARS = 2_000;

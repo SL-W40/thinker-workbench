@@ -158,7 +158,7 @@ export function ChatStage({
     };
   }, [workspaceId]);
 
-  /** 用户滚动 → 更新贴底状态*/
+  /** 用户滚动 → 更新贴底状态。向上滚先松开，避免本帧增高把位置拽回底部。*/
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -167,9 +167,16 @@ export function ChatStage({
       stuckRef.current = near;
       setShowJump(!near);
     };
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) stuckRef.current = false;
+    };
     el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("wheel", onWheel, { passive: true });
     onScroll();
-    return () => el.removeEventListener("scroll", onScroll);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", onWheel);
+    };
   }, [scroller]);
 
   /**

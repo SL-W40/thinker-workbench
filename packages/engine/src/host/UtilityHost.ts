@@ -14,8 +14,8 @@ import {
   type McpServerConfig,
   type ModelCatalog,
   type ModelSelection,
-  type ModelSettings,
   type UtilityCancel,
+  type UtilityCancelTask,
   type UtilityContextUsage,
   type UtilityHello,
   type UtilityResume,
@@ -30,7 +30,7 @@ import { assembleContext } from "../context/assembleContext";
 import { rejectHitlByRunId, resolveHitl } from "../hitl/requestHitl";
 import { agentLog, configureAgentLog } from "../log/setup";
 import { getMcpManager } from "../mcp/McpManager";
-import { configureFromLegacyModel, configureModelCatalog } from "../model/catalog";
+import { configureModelCatalog } from "../model/catalog";
 import { configureHttpCompatibilityMode } from "../model/httpFetch";
 import { configureAiLocale, getAiLocale, getAllowEmoji, getContextWindow } from "../model/openai";
 import type { ChatMessage } from "../model/types";
@@ -38,7 +38,7 @@ import { type AgentRuntime, createAgentRuntime } from "../runtime/AgentRuntime";
 import { buildRunContext } from "../runtime/buildRunContext";
 import { bindRuntimeEmitter } from "../runtime/runEmit";
 import { setSubagentDefinitions } from "../subagents/registry";
-import { cancelBackgroundTasksByRunId } from "../tools/task/execute";
+import { cancelBackgroundTasksByRunId, cancelOneBackgroundTask } from "../tools/task/execute";
 import { configureAgentTrace } from "../trace/emit";
 import { setAllowAiDeleteFiles, setWorkspaceAccess, setWorkspaceRoot } from "../workspace";
 import { handleBrowserEvent } from "./browserClient";
@@ -101,20 +101,17 @@ export class UtilityHost {
   }
 
   /**
-   * 应用本轮模型目录 / 选用 / 旧单字段回退，以及 AI 语言。
+   * 应用本轮模型目录 / 选用，以及 AI 语言。
    * chatWithFailover 依赖 catalog；仅 configureChatModel 不够。
    */
   private applyConfig(options: {
     catalog?: ModelCatalog | null;
     selection?: ModelSelection | null;
-    model?: ModelSettings | null;
     aiLocale?: AiLocale;
-    route?: { userText?: string; contextPaths?: string[] };
+    route?: { userText?: string; contextPaths?: string[]; hasImages?: boolean };
   }): void {
     if (options.catalog || options.selection || options.route) {
       configureModelCatalog(options.catalog, options.selection, options.route);
-    } else if (options.model) {
-      configureFromLegacyModel(options.model);
     }
     if (options.aiLocale) configureAiLocale(options.aiLocale);
   }
@@ -152,6 +149,8 @@ export class UtilityHost {
         return this.onRun(message);
       case "cancel":
         return this.onCancel(message);
+      case "cancelTask":
+        return this.onCancelTask(message);
       case "resume":
         return this.onResume(message);
       case "contextUsage":
@@ -217,7 +216,7 @@ export class UtilityHost {
     this.applyTrace({ traceEnabled: message.traceEnabled });
     agentLog("host").info("hello", {
       meta: {
-        hasModel: Boolean(message.model?.apiKey),
+        hasCatalog: Boolean(message.catalog),
         aiLocale: message.aiLocale ?? null,
         workspaceAccess: message.workspaceAccess ?? null,
         allowAiDeleteFiles: message.allowAiDeleteFiles ?? null,
@@ -232,7 +231,6 @@ export class UtilityHost {
     this.applyConfig({
       catalog: message.catalog,
       selection: message.selection,
-      model: message.model,
       aiLocale: message.aiLocale,
     });
     this.applyWorkspaceAccess(message.workspaceAccess);
@@ -271,14 +269,20 @@ export class UtilityHost {
       threadId: message.threadId,
       meta: withTextPreview(text, "message", PREVIEW_BODY_CHARS),
     });
+    const runImages = Array.isArray(message.command.images)
+      ? message.command.images.filter((i) => i && typeof i.path === "string" && i.path.trim())
+      : [];
+    const historyHasImages = (message.command.history ?? []).some(
+      (m) => m.role === "user" && Array.isArray(m.images) && m.images.length > 0,
+    );
     this.applyConfig({
       catalog: message.catalog,
       selection: message.selection,
-      model: message.model,
       aiLocale: message.aiLocale,
       route: {
         userText: text,
         contextPaths: message.command.contextPaths,
+        hasImages: runImages.length > 0 || historyHasImages,
       },
     });
     setChatMode(message.chatMode);
@@ -308,6 +312,7 @@ export class UtilityHost {
           runId: message.runId,
           ts: Date.now(),
           error: "No workspace root configured. Open a workspace before chatting.",
+          code: "failed",
         },
       });
       return;
@@ -326,6 +331,7 @@ export class UtilityHost {
           runId: message.runId,
           ts: Date.now(),
           error,
+          code: "failed",
           ...(message.sessionId ? { chatSessionId: message.sessionId } : {}),
         },
       });
@@ -351,10 +357,15 @@ export class UtilityHost {
       allowAiBrowser: message.allowAiBrowser,
       shellApprovalMode: message.shellApprovalMode,
       shellAllowlist: message.shellAllowlist,
+      shellBlocklist: message.shellBlocklist,
       shell: message.shell,
       catalog: message.catalog,
       selection: message.selection,
-      route: { userText: text, contextPaths: message.command.contextPaths },
+      route: {
+        userText: text,
+        contextPaths: message.command.contextPaths,
+        hasImages: runImages.length > 0 || historyHasImages,
+      },
       emit,
     });
     await runtime.run({
@@ -363,6 +374,7 @@ export class UtilityHost {
       sessionId: message.sessionId,
       traceId,
       message: text,
+      images: runImages.length > 0 ? runImages : undefined,
       history: message.command.history,
       contextPaths: message.command.contextPaths,
       workspaceRoot,
@@ -381,6 +393,17 @@ export class UtilityHost {
     this.runtime?.cancel(runId);
   }
 
+  /** 取消单个后台 Task；不 abort 父 run。 */
+  private onCancelTask(message: UtilityCancelTask): void {
+    const taskId = message.command.taskId?.trim() ?? "";
+    const runId = message.command.runId?.trim() || undefined;
+    agentLog("host").info("cancelTask", { runId, meta: { taskId } });
+    if (!taskId) return;
+    cancelOneBackgroundTask(taskId, "Cancelled.", {
+      expectedParentRunId: runId,
+    });
+  }
+
   private async onResume(message: UtilityResume): Promise<void> {
     this.ensureLog(message.loggingEnabled);
     this.applyLogPolicy({
@@ -395,7 +418,6 @@ export class UtilityHost {
       this.applyConfig({
         catalog: message.catalog,
         selection: message.selection,
-        model: message.model,
         aiLocale: message.aiLocale,
       });
       setChatMode(message.chatMode);
@@ -440,6 +462,7 @@ export class UtilityHost {
             allowAiBrowser: message.allowAiBrowser,
             shellApprovalMode: message.shellApprovalMode,
             shellAllowlist: message.shellAllowlist,
+            shellBlocklist: message.shellBlocklist,
             shell: message.shell,
             catalog: message.catalog,
             selection: message.selection,
@@ -464,6 +487,7 @@ export class UtilityHost {
           runId,
           ts: Date.now(),
           error,
+          code: "failed",
           ...(message.sessionId ? { chatSessionId: message.sessionId } : {}),
         },
       });
@@ -475,7 +499,6 @@ export class UtilityHost {
     this.applyConfig({
       catalog: message.catalog,
       selection: message.selection,
-      model: message.model,
       aiLocale: message.aiLocale,
     });
     this.applyWorkspaceAccess(message.workspaceAccess);
@@ -500,7 +523,7 @@ export class UtilityHost {
         messages,
         aiLocale: message.aiLocale ?? getAiLocale(),
         allowEmoji: getAllowEmoji(),
-        contextWindow: message.model?.contextWindow ?? getContextWindow(),
+        contextWindow: getContextWindow(),
         dataDir: message.dataDir,
         workspaceRoot: workspaceRoot ?? undefined,
         contextPaths: message.request.contextPaths,

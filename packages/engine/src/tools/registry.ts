@@ -23,7 +23,7 @@ import { listDirToolSpec } from "./list_dir/tool";
 import { readFileToolSpec } from "./read_file/tool";
 import { searchFilesToolSpec } from "./search_files/tool";
 import { shellAwaitToolSpec, shellToolSpec, shellWriteToolSpec } from "./shell/tool";
-import { taskAwaitToolSpec, taskToolSpec } from "./task/tool";
+import { taskAwaitToolSpec, taskCancelToolSpec, taskToolSpec } from "./task/tool";
 import { timeToolSpec } from "./time/tool";
 import type { ToolSpec } from "./types";
 import { writeFileToolSpec } from "./write_file/tool";
@@ -42,6 +42,7 @@ const tools = new Map<string, ToolSpec>([
   [shellWriteToolSpec.name, shellWriteToolSpec],
   [taskToolSpec.name, taskToolSpec],
   [taskAwaitToolSpec.name, taskAwaitToolSpec],
+  [taskCancelToolSpec.name, taskCancelToolSpec],
   [browserNavigateToolSpec.name, browserNavigateToolSpec],
   [browserLockToolSpec.name, browserLockToolSpec],
   [browserSnapshotToolSpec.name, browserSnapshotToolSpec],

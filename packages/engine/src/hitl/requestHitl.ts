@@ -25,14 +25,6 @@ export function resolveHitl(response: HitlResponse): void {
   p.resolve(response);
 }
 
-/** @deprecated 全清；并行路径请用 rejectHitlByRunId。 */
-export function rejectAllHitl(reason = "Run cancelled."): void {
-  for (const [id, p] of pending) {
-    pending.delete(id);
-    p.reject(new Error(reason));
-  }
-}
-
 /** 仅拒绝指定 run 的挂起 HITL。 */
 export function rejectHitlByRunId(runId: string, reason = "Run cancelled."): void {
   const id = runId?.trim();

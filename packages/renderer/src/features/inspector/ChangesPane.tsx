@@ -41,7 +41,7 @@ type FloatingMenuCoords = {
   minWidth: number;
 };
 
-/** 右对齐触发器，必要时夹入视口，避免被侧栏 overflow 裁切（配?portal）。*/
+/** 右对齐触发器，必要时夹入视口，避免被侧栏 overflow 裁切（配合 portal）。*/
 function placeFloatingMenu(trigger: DOMRect, minWidth: number): FloatingMenuCoords {
   const vw = window.innerWidth;
   const width = Math.max(minWidth, trigger.width);
@@ -57,7 +57,7 @@ function placeFloatingMenu(trigger: DOMRect, minWidth: number): FloatingMenuCoor
   };
 }
 
-/** 将菜单挂?body，并随触发器 / 滚动 / 窗口变化重算位置。*/
+/** 将菜单挂到 body，并随触发器 / 滚动 / 窗口变化重算位置。*/
 function useFloatingMenuCoords(
   open: boolean,
   triggerRef: RefObject<HTMLElement | null>,
@@ -119,7 +119,7 @@ function PortalMenu({
   );
 }
 
-/** 限制并行 git diff 请求，避免「全部展开」打?runtime。*/
+/** 限制并行 git diff 请求，避免「全部展开」打满 runtime。*/
 const DIFF_FETCH_LIMIT = 3;
 let diffFetchesActive = 0;
 const diffFetchWaiters: Array<() => void> = [];
@@ -165,7 +165,7 @@ function scheduleIdle(cb: () => void): () => void {
 /** 全局高亮队列：多文件同时在视口时轮转分片，避免并行打满主线程。*/
 type HighlightJob = {
   cancelled: boolean;
-  /** 执行一片；还有剩余则返?true。*/
+  /** 执行一片；还有剩余则返回 true。*/
   tick: () => boolean;
 };
 
@@ -195,7 +195,8 @@ function pumpHighlightQueue() {
       if (!more || job.cancelled) {
         highlightQueue.shift();
       } else {
-        // 轮转到队尾，让其它文件也有机会推? highlightQueue.push(highlightQueue.shift()!);
+        // 轮转到队尾，让其它文件也有机会推进
+        highlightQueue.push(highlightQueue.shift()!);
         break;
       }
     }
@@ -328,7 +329,7 @@ function parseUnifiedDiff(patch: string): DiffRow[] {
   return rows;
 }
 
-/** 扩展?→highlight.js 语言 id（与聊天 FileDiffView 对齐）。*/
+/** 扩展名 → highlight.js 语言 id（与聊天 FileDiffView 对齐）。*/
 function langFromPath(path: string): string | undefined {
   const base = path.split(/[/\\]/).pop() ?? path;
   const dot = base.lastIndexOf(".");
@@ -999,7 +1000,7 @@ export function ChangesPane({
     return () => window.removeEventListener("mousedown", onPointer, true);
   }, [viewMenuOpen, ctaMenuOpen]);
 
-  // 聊天?keep-alive（hidden）时 portal 菜单仍挂?body，切页时主动关掉
+  // 聊天页 keep-alive（hidden）时 portal 菜单仍挂在 body，切页时主动关掉
   useEffect(() => {
     if (!viewMenuOpen && !ctaMenuOpen) return;
     const triggers = [viewWrapRef.current, ctaSplitRef.current].filter(

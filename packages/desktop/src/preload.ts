@@ -5,6 +5,7 @@
  */
 
 import {
+  type AgentCancelTaskCommand,
   type AgentEvent,
   type AgentResumeCommand,
   type AgentRunCommand,
@@ -23,6 +24,7 @@ import {
   IpcChannels,
   type LogRecord,
   type LogsQuery,
+  type McpImportConflict,
   type McpServerRuntimeStatus,
   type McpServerUpsertInput,
   type ModelCatalogPatch,
@@ -51,8 +53,18 @@ const api: ThinkerApi = {
   run(command: AgentRunCommand | string): Promise<RunResult> {
     return ipcRenderer.invoke(IpcChannels.agentRun, command);
   },
-  cancel(runId?: string): Promise<void> {
-    return ipcRenderer.invoke(IpcChannels.agentCancel, runId?.trim() ? { runId } : {});
+  cancel(command?: string | import("@thinker-workbench/shared").AgentCancelCommand): Promise<{
+    ok: boolean;
+    error?: string;
+  }> {
+    if (typeof command === "string") {
+      const runId = command.trim();
+      return ipcRenderer.invoke(IpcChannels.agentCancel, runId ? { runId } : {});
+    }
+    return ipcRenderer.invoke(IpcChannels.agentCancel, command ?? {});
+  },
+  cancelTask(command: AgentCancelTaskCommand): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IpcChannels.agentCancelTask, command);
   },
   resume(command: AgentResumeCommand): Promise<RunResult> {
     return ipcRenderer.invoke(IpcChannels.agentResume, command);
@@ -192,6 +204,15 @@ const api: ThinkerApi = {
     removeSession: (sessionId) => ipcRenderer.invoke(IpcChannels.chatSessionsRemove, sessionId),
     saveMessages: (sessionId, messages: ChatMessage[]) =>
       ipcRenderer.invoke(IpcChannels.chatSessionsSaveMessages, { sessionId, messages }),
+    saveChatImage: (workspaceId, input) =>
+      ipcRenderer.invoke(IpcChannels.chatImagesSave, {
+        workspaceId,
+        bytes: input.bytes,
+        mime: input.mime,
+        name: input.name,
+      }),
+    readChatImagePreview: (imagePath) =>
+      ipcRenderer.invoke(IpcChannels.chatImagesReadPreview, imagePath),
     setActiveSession: (sessionId) =>
       ipcRenderer.invoke(IpcChannels.chatSessionsSetActive, sessionId),
     getActiveSessionId: () => ipcRenderer.invoke(IpcChannels.chatSessionsGetActive),
@@ -243,6 +264,8 @@ const api: ThinkerApi = {
     setBounds: (bounds: BrowserBounds) => ipcRenderer.invoke(IpcChannels.browserSetBounds, bounds),
     setVisible: (visible: boolean) => ipcRenderer.invoke(IpcChannels.browserSetVisible, visible),
     takeControl: () => ipcRenderer.invoke(IpcChannels.browserTakeControl),
+    readScreenshot: (absolutePath: string) =>
+      ipcRenderer.invoke(IpcChannels.browserReadScreenshot, absolutePath),
     onEvent(cb: (event: BrowserEvent) => void) {
       const handler = (_evt: unknown, event: BrowserEvent) => cb(event);
       ipcRenderer.on(IpcChannels.browserEvent, handler);
@@ -293,13 +316,16 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.traceExportSession, sessionId),
   },
   mcp: {
-    list: () => ipcRenderer.invoke(IpcChannels.mcpList),
+    list: (workspaceRoot?: string | null) => ipcRenderer.invoke(IpcChannels.mcpList, workspaceRoot),
     upsert: (input: McpServerUpsertInput) => ipcRenderer.invoke(IpcChannels.mcpUpsert, input),
-    remove: (id: string) => ipcRenderer.invoke(IpcChannels.mcpRemove, id),
-    setEnabled: (id: string, enabled: boolean) =>
-      ipcRenderer.invoke(IpcChannels.mcpSetEnabled, id, enabled),
+    remove: (id: string, scope?: CustomizeScope) =>
+      ipcRenderer.invoke(IpcChannels.mcpRemove, id, scope),
+    setEnabled: (id: string, enabled: boolean, scope?: CustomizeScope) =>
+      ipcRenderer.invoke(IpcChannels.mcpSetEnabled, id, enabled, scope),
     test: (input: McpServerUpsertInput) => ipcRenderer.invoke(IpcChannels.mcpTest, input),
-    importFile: () => ipcRenderer.invoke(IpcChannels.mcpImportFile),
+    importFile: (conflict?: McpImportConflict, scope?: CustomizeScope) =>
+      ipcRenderer.invoke(IpcChannels.mcpImportFile, conflict, scope),
+    exportFile: (scope?: CustomizeScope) => ipcRenderer.invoke(IpcChannels.mcpExportFile, scope),
     onStatus(cb: (status: McpServerRuntimeStatus) => void) {
       const handler = (_evt: unknown, status: McpServerRuntimeStatus) => cb(status);
       ipcRenderer.on(IpcChannels.mcpStatus, handler);

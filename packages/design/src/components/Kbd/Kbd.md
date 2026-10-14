@@ -21,6 +21,7 @@ import { Kbd } from "@thinker-workbench/design/react";
 | --- | --- | --- | --- |
 | `children` | `ReactNode` | — | 键位文案 |
 | `recording` | `boolean` | — | 录制高亮 |
+| `compact` | `boolean` | — | 菜单内的紧凑键帽 |
 | `onClick` | `MouseEventHandler` | — | 有则渲染为 button |
 | `disabled` | `boolean` | — | 仅按钮形态 |
 | `aria-label` | `string` | — | 仅按钮形态 |

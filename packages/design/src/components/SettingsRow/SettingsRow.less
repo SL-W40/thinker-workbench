@@ -1,0 +1,51 @@
+/* SettingsRow 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-settings-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  box-sizing: border-box;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--tw-border, var(--line));
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &--stack {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+.tw-settings-row__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.tw-settings-row__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tw-fg, var(--ink));
+}
+
+.tw-settings-row__desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tw-fg-muted, var(--muted));
+}
+
+.tw-settings-row__control {
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.tw-settings-row--stack .tw-settings-row__control {
+  align-self: stretch;
+  width: 100%;
+}

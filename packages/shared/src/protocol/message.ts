@@ -30,8 +30,8 @@ export type ChatTimelineStatusStep = {
   durationMs?: number;
 };
 
-/** 探索工具结果路径类型（与 list_dir 等 UI 标签对齐）。 */
-export type ChatTimelineResultPathKind = "dir" | "file" | "link";
+/** 探索工具结果路径类型（与 list_dir / browser 截图等 UI 标签对齐）。 */
+export type ChatTimelineResultPathKind = "dir" | "file" | "link" | "image";
 
 /** 时间线：工具调用行（可含文件 diff）。 */
 export type ChatTimelineToolStep = {
@@ -152,6 +152,23 @@ export type ChatTimelineStep =
   | ChatTimelineModelSwitchStep
   | ChatTimelineSubagentStep;
 
+/**
+ * 用户消息附图引用（像素在工作空间 images 目录；会话只存元数据）。
+ * `path` 为绝对路径，须落在 `{dataDir}/workspaces/{workspaceId}/images/` 下。
+ */
+export type ChatImageRef = {
+  /** 附件唯一 id（亦用于文件名）。 */
+  id: string;
+  /** 落盘绝对路径。 */
+  path: string;
+  /** MIME（如 image/png）。 */
+  mime: string;
+  /** 像素宽。 */
+  width: number;
+  /** 像素高。 */
+  height: number;
+};
+
 /** 单条聊天消息（序列化友好，可写入会话快照）。 */
 export type ChatMessage = {
   /** 消息唯一 id。 */
@@ -160,6 +177,8 @@ export type ChatMessage = {
   role: Role;
   /** 正文文本。 */
   text: string;
+  /** 用户附图（仅 user；全部保留，不截断）。 */
+  images?: ChatImageRef[];
   /** 消息在 UI 中创建时的 Unix 毫秒时间戳。 */
   createdAt?: number;
   /** 为 true 表示仍在流式生成 / 等待完成，尚未定稿。 */

@@ -6,6 +6,7 @@ import {
   type HitlRequest,
   type HitlResponse,
   IpcChannels,
+  isShellTokenBlocked,
   shellCommandBaseToken,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, Notification } from "electron";
@@ -66,22 +67,25 @@ export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
   if (response.actionId === "allow_and_whitelist" && req) {
     const command = typeof req.payload?.command === "string" ? req.payload.command : "";
     const token = shellCommandBaseToken(command);
-    if (token) {
-      const general = getGeneralSettings();
-      if (!general.shellAllowlist.includes(token)) {
-        const next = saveGeneralSettings({
-          shellAllowlist: [...general.shellAllowlist, token],
-        });
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send(IpcChannels.settingsGeneralChanged, next);
-          }
+    const general = getGeneralSettings();
+    // 硬拒绝不能经确认写入白名单；落盘规范化也会再剔一次。答复仍交给 agent。
+    if (
+      token &&
+      !isShellTokenBlocked(token, general.shellBlocklist) &&
+      !general.shellAllowlist.includes(token)
+    ) {
+      const next = saveGeneralSettings({
+        shellAllowlist: [...general.shellAllowlist, token],
+      });
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IpcChannels.settingsGeneralChanged, next);
         }
-        try {
-          pushAgentHello(bridge);
-        } catch {
-          /* agent 未就绪时忽略 */
-        }
+      }
+      try {
+        pushAgentHello(bridge);
+      } catch {
+        /* agent 未就绪时忽略 */
       }
     }
   }
@@ -101,6 +105,40 @@ export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(IpcChannels.agentEvent, event);
+    }
+  }
+}
+
+/**
+ * 按 runId 清掉主进程 HITL pending，并向渲染层广播 resolved。
+ * run 结算（取消 / 崩溃 / 失败）时调用，避免批准框孤儿。
+ */
+export function clearHitlForRun(runId: string, _bridge: AgentBridge): void {
+  const id = runId?.trim();
+  if (!id) return;
+  const toClear: HitlRequest[] = [];
+  for (const [hitlId, req] of pending) {
+    if (req.runId === id) {
+      toClear.push(req);
+      pending.delete(hitlId);
+      resolved.add(hitlId);
+    }
+  }
+  for (const req of toClear) {
+    const event: AgentEvent = {
+      type: "hitl",
+      phase: "resolved",
+      hitlId: req.hitlId,
+      kind: req.kind,
+      threadId: req.threadId,
+      runId: req.runId,
+      ts: Date.now(),
+      response: { hitlId: req.hitlId, actionId: "deny" },
+    };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IpcChannels.agentEvent, event);
+      }
     }
   }
 }

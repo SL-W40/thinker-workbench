@@ -33,7 +33,7 @@ export type UseGeneralSettingsResult = {
   previewBusy: AttentionPreviewKind | null;
   tryPreview: (kind: AttentionPreviewKind) => Promise<void>;
   toggleBool: (id: BooleanToggleId) => Promise<void>;
-  /** 根目?*/
+  /** 根目录。 */
   dataDirDraft: string;
   setDataDirDraft: (value: string) => void;
   dataDirDirty: boolean;
@@ -76,7 +76,7 @@ export function useGeneralSettings(active = true): UseGeneralSettingsResult {
   const canApplyDataDir = Boolean(window.thinker?.settings?.applyDataDirChange);
   const dataDirDirty = dataDirDraft.trim() !== general.dataDir.trim();
 
-  // 避免?apply* 放进加载 effect 依赖：Appearance 每次 apply 都可能换引用
+  // 避免把 apply* 放进加载 effect 依赖：Appearance 每次 apply 都可能换引用
   const applyGeneralRef = useRef(applyGeneral);
   const applyAppearanceRef = useRef(applyAppearance);
   applyGeneralRef.current = applyGeneral;

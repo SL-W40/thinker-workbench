@@ -498,6 +498,7 @@ export function ModelSettingsForm() {
                 <Table.Header>{t("settings.model.model")}</Table.Header>
                 <Table.Header>{t("settings.model.providerLabel")}</Table.Header>
                 <Table.Header>{t("settings.model.tags")}</Table.Header>
+                <Table.Header fit>{t("settings.model.vision.column")}</Table.Header>
                 <Table.Header fit>{t("settings.model.enabled")}</Table.Header>
                 <Table.Header fit>{t("settings.model.actions")}</Table.Header>
               </Table.Row>
@@ -512,8 +513,11 @@ export function ModelSettingsForm() {
                   m.health === "error" && m.lastError
                     ? `${statusLabel}: ${m.lastError}`
                     : statusLabel;
-                const tagLabels = m.tags.map((tag) => t(`settings.model.tag.${tag}`));
-                const tagTip = tagLabels.join(" · ");
+                const routeTags = m.tags.filter((tag) => tag !== "general" && tag !== "vision");
+                const tagTip = [
+                  t("settings.model.tag.general"),
+                  ...routeTags.map((tag) => t(`settings.model.tag.${tag}`)),
+                ].join(" · ");
                 const prov = providerName(m.providerId);
                 return (
                   <Table.Row key={m.id}>
@@ -531,19 +535,26 @@ export function ModelSettingsForm() {
                     </Table.Cell>
                     <Table.Cell title={tagTip}>
                       <div className="settings-model-tag-chips">
-                        {m.tags
-                          .filter((tag) => tag !== "general")
-                          .map((tag) => (
-                            <Badge key={tag} variant="accent">
-                              {t(`settings.model.tag.${tag}`)}
-                            </Badge>
-                          ))}
-                        {m.tags.every((tag) => tag === "general") ? (
+                        {routeTags.map((tag) => (
+                          <Badge key={tag} variant="accent">
+                            {t(`settings.model.tag.${tag}`)}
+                          </Badge>
+                        ))}
+                        {routeTags.length === 0 ? (
                           <span className="settings-model-tag-fallback">
                             {t("settings.model.tag.general")}
                           </span>
                         ) : null}
                       </div>
+                    </Table.Cell>
+                    <Table.Cell fit>
+                      {m.tags.includes("vision") ? (
+                        <Badge variant="success">{t("settings.model.vision.on")}</Badge>
+                      ) : (
+                        <span className="settings-model-tag-fallback">
+                          {t("settings.model.vision.off")}
+                        </span>
+                      )}
                     </Table.Cell>
                     <Table.Cell fit>
                       <Switch
@@ -736,19 +747,31 @@ export function ModelSettingsForm() {
                 }
               />
             </Field>
-            <div className="settings-model-tags">
-              <span className="settings-model-tags__label">{t("settings.model.tags")}</span>
-              {MODEL_TAGS.map((tag) => (
-                <Checkbox
-                  key={tag}
-                  checked={modelForm.tags.includes(tag)}
-                  disabled={tag === "general"}
-                  onChange={() => toggleFormTag(tag)}
-                  aria-label={t(`settings.model.tag.${tag}`)}
-                >
-                  {t(`settings.model.tag.${tag}`)}
-                </Checkbox>
-              ))}
+            <Field label={t("settings.model.tags")}>
+              <div className="settings-model-tags__grid">
+                {MODEL_TAGS.filter((tag) => tag !== "vision").map((tag) => (
+                  <Checkbox
+                    key={tag}
+                    checked={modelForm.tags.includes(tag)}
+                    disabled={tag === "general"}
+                    onChange={() => toggleFormTag(tag)}
+                    aria-label={t(`settings.model.tag.${tag}`)}
+                  >
+                    {t(`settings.model.tag.${tag}`)}
+                  </Checkbox>
+                ))}
+              </div>
+            </Field>
+            <div className="settings-model-vision">
+              <div className="settings-model-vision__copy">
+                <strong>{t("settings.model.vision.title")}</strong>
+                <span>{t("settings.model.vision.description")}</span>
+              </div>
+              <Switch
+                checked={modelForm.tags.includes("vision")}
+                onChange={() => toggleFormTag("vision")}
+                aria-label={t("settings.model.vision.title")}
+              />
             </div>
             <label className="settings-model-enabled">
               <Switch

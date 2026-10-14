@@ -737,16 +737,36 @@ code {
   color: var(--muted);
 }
 
-.settings-model-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
+.settings-model-tags__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
 }
 
-.settings-model-tags__label {
-  font-size: 12px;
-  color: var(--muted);
+.settings-model-vision {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-model-vision__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+
+  strong {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  span {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+  }
 }
 
 .settings-model-enabled {
@@ -981,7 +1001,7 @@ code {
   }
 }
 
-/* Shell 白名单 / 黑名单 token 编辑器 */
+/* Shell 首 token 编辑器（白名单 / 黑名单） */
 .settings-token-list {
   display: grid;
   gap: 10px;
@@ -1008,50 +1028,6 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.settings-token-list__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 28px;
-  padding: 0 2px 0 10px;
-  border: 1.5px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-elev, transparent);
-  color: var(--ink);
-  font-size: 13px;
-
-  code {
-    font-family: var(--mono, ui-monospace, monospace);
-    font-size: 13px;
-    color: inherit;
-  }
-
-  &--danger {
-    border-color: color-mix(in srgb, var(--danger, #9b3b2e) 55%, var(--line));
-    background: var(--danger-bg, rgba(155, 59, 46, 0.1));
-    color: var(--danger, #9b3b2e);
-  }
-}
-
-.settings-token-list__remove.tw-icon-btn {
-  width: 22px;
-  height: 22px;
-  min-height: 0;
-  border-radius: 999px;
-  color: inherit;
-  opacity: 0.55;
-
-  &:hover:not(:disabled) {
-    opacity: 1;
-    background: color-mix(in srgb, currentColor 12%, transparent);
-  }
-
-  svg {
-    width: 0.85em;
-    height: 0.85em;
-  }
 }
 
 .settings-toggle-copy {
@@ -1225,8 +1201,9 @@ kbd {
   padding-right: 10px;
 }
 
-.titlebar--win .titlebar-actions {
-  padding-right: 0;
+/* Windows：右侧留给系统最小化 / 最大化 / 关闭；宽度由 WCO 几何写入 */
+.titlebar--wco {
+  padding-right: var(--wco-width, 138px);
 }
 
 /* 左侧可点区：logo / tab / 侧栏开关 */
@@ -2892,6 +2869,39 @@ html[data-tw-theme="dark"] .mention-chip--at {
   );
 }
 
+/* browser_snapshot 等：展开后显示截图预览 */
+.run-timeline-explore-files__shot-item {
+  min-width: 0;
+  padding: 2px;
+}
+
+.run-timeline-explore-files__shot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  padding: 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+
+  &.is-loading,
+  &.is-failed {
+    min-height: 48px;
+  }
+}
+
+.run-timeline-explore-files__img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
 /* > 紧跟标题：收起默认隐藏，悬停才露；展开常显；与文字垂直居中对齐 */
 .run-timeline-chevron.tw-icon {
   flex: 0 0 auto;
@@ -3384,6 +3394,82 @@ html[data-tw-theme="dark"] .mention-chip--at {
   &.is-busy {
     border-color: var(--accent-ring);
   }
+
+  &.is-dragover {
+    border-color: var(--accent-ring);
+    background: color-mix(in srgb, var(--accent-ring) 8%, var(--bg-elev));
+  }
+}
+
+.chat-image-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.chat-image-thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-soft, var(--bg, #f4f2ee));
+  border: 1px solid var(--line, #e4e0d8);
+  flex: 0 0 auto;
+
+  &.is-uploading {
+    opacity: 0.7;
+  }
+
+  &__img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &__fallback,
+  &__loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 6px;
+    box-sizing: border-box;
+    font-size: 10px;
+    line-height: 1.2;
+    text-align: center;
+    color: var(--ink-muted, #6b655c);
+    word-break: break-all;
+  }
+
+  &__spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--bg-elev) 55%, transparent);
+  }
+
+  &__remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  &:hover &__remove,
+  &:focus-within &__remove {
+    opacity: 1;
+  }
+}
+
+.user-prompt .chat-image-strip {
+  margin-bottom: 8px;
 }
 
 .composer-input {
@@ -3684,6 +3770,24 @@ html[data-tw-theme="dark"] .mention-chip--at {
   font-size: 11px;
   line-height: 1.35;
   color: var(--ink-muted, #6b655c);
+}
+
+.composer-attach.tw-icon-btn {
+  width: 28px;
+  height: 28px;
+  /* 比用量环更轻一档，避免和发送箭头抢重量 */
+  color: color-mix(in srgb, var(--ink-muted, #6b655c) 58%, var(--bg, #fff));
+  flex-shrink: 0;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.25;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--ink-muted, #6b655c);
+  }
 }
 
 .composer-send {

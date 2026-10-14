@@ -632,11 +632,6 @@ export function getModelCatalog(): ModelCatalog {
   return cloneModelCatalog(loadSettings().model);
 }
 
-/** @deprecated 兼容旧名：返回目录（非单字段）。 */
-export function getModelSettings(): ModelCatalog {
-  return getModelCatalog();
-}
-
 /**
  * 从目录解析首个候选的「展示/估算用」模型元数据（不要求已有明文 apiKey）。
  * 用于 contextUsage 等只需要 contextWindow / allowEmoji 的路径。

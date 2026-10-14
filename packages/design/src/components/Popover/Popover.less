@@ -1,0 +1,21 @@
+/* Popover 只负责定位；dialog 才带表面。菜单样式在 Menu.less。 */
+
+.tw-popover {
+  position: fixed;
+  z-index: 9200;
+  box-sizing: border-box;
+}
+
+.tw-popover--chrome {
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  background: var(--tw-bg-elev, var(--bg-elev));
+  box-shadow: 0 8px 24px var(--tw-shadow-soft, rgba(0, 0, 0, 0.12));
+  color: var(--tw-fg, var(--ink));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+  font-size: 13px;
+  line-height: 1.45;
+}

@@ -1,12 +1,21 @@
 /**
  * Markdown React 渲染入口：解析 AST 并输出 `.tw-md` 文章树。
  */
-import { type CSSProperties, type MouseEvent, type ReactNode, useMemo, useState } from "react";
+import {
+  createContext,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { parseMarkdownDocument } from "../parse/blocks";
+import { sanitizeImageSrc, sanitizeUrl } from "../parse/url";
 import { parseMarkdownStreaming } from "../stream";
 import { resolveTheme } from "../themes";
 import type { MarkdownThemeInput } from "../themes/types";
-import type { BlockNode, FootnoteDef, InlineNode, ListItem } from "../types";
+import type { AlertKind, BlockNode, FootnoteDef, InlineNode, ListItem } from "../types";
 import { CodeBlock } from "./CodeBlock";
 import {
   MarkdownLinkClickContext,
@@ -36,6 +45,45 @@ export type MarkdownViewProps = {
   onLinkClick?: MarkdownLinkClickHandler;
 };
 
+const ALERT_LABEL: Record<AlertKind, string> = {
+  note: "Note",
+  tip: "Tip",
+  important: "Important",
+  warning: "Warning",
+  caution: "Caution",
+};
+
+type FnRegistry = { next: (id: string) => string };
+
+const FootnoteRefContext = createContext<FnRegistry | null>(null);
+
+function createFnRegistry(): FnRegistry {
+  const counts = new Map<string, number>();
+  return {
+    next(id: string) {
+      const n = counts.get(id) ?? 0;
+      counts.set(id, n + 1);
+      const enc = encodeURIComponent(id);
+      return n === 0 ? `fnref-${enc}` : `fnref-${enc}-${n}`;
+    },
+  };
+}
+
+function ownsLiveCaret(node: BlockNode): boolean {
+  if (node.type === "pending") return true;
+  if (
+    (node.type === "code" || node.type === "diagram" || node.type === "math" || node.type === "table") &&
+    node.incomplete
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function Caret() {
+  return <span className="tw-md-caret" aria-hidden="true" />;
+}
+
 function useLinkClickHandler() {
   const onLinkClick = useMarkdownLinkClick();
   return (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
@@ -50,6 +98,7 @@ function useLinkClickHandler() {
 
 function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
   const onAnchorClick = useLinkClickHandler();
+  const fnRefs = useContext(FootnoteRefContext);
   return nodes.map((node, index) => {
     switch (node.type) {
       case "text":
@@ -100,31 +149,42 @@ function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
             <InlineView nodes={node.children} />
           </u>
         );
-      case "link":
+      case "link": {
+        const href = sanitizeUrl(node.href);
+        if (!href) {
+          return (
+            <span key={index}>
+              <InlineView nodes={node.children} />
+            </span>
+          );
+        }
         return (
-          <a key={index} href={node.href} title={node.title} onClick={onAnchorClick(node.href)}>
+          <a key={index} href={href} title={node.title} onClick={onAnchorClick(href)}>
             <InlineView nodes={node.children} />
           </a>
         );
-      case "autolink":
+      }
+      case "autolink": {
+        const href = sanitizeUrl(node.href);
+        if (!href) return <span key={index}>{node.text}</span>;
         return (
-          <a key={index} href={node.href} onClick={onAnchorClick(node.href)}>
+          <a key={index} href={href} onClick={onAnchorClick(href)}>
             {node.text}
           </a>
         );
+      }
       case "image":
         return <MdImage key={index} src={node.src} alt={node.alt} title={node.title} />;
-      case "footnoteRef":
+      case "footnoteRef": {
+        const refId = fnRefs?.next(node.id) ?? `fnref-${encodeURIComponent(node.id)}`;
         return (
           <sup key={index} className="tw-md-fn-ref">
-            <a
-              href={`#fn-${encodeURIComponent(node.id)}`}
-              id={`fnref-${encodeURIComponent(node.id)}`}
-            >
+            <a href={`#fn-${encodeURIComponent(node.id)}`} id={refId}>
               {node.id}
             </a>
           </sup>
         );
+      }
       case "math":
         return <MathView key={index} value={node.value} />;
       case "break":
@@ -137,37 +197,53 @@ function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
 
 function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
   const [failed, setFailed] = useState(false);
-  if (failed || !src) {
+  const safeSrc = sanitizeImageSrc(src);
+  if (failed || !safeSrc) {
     return (
       <span className="tw-md-img-fallback" role="img" aria-label={alt || "image"}>
         {alt || "image"}
       </span>
     );
   }
-  return <img src={src} alt={alt} title={title} onError={() => setFailed(true)} />;
+  return <img src={safeSrc} alt={alt} title={title} onError={() => setFailed(true)} />;
 }
 
-function Blocks({ nodes }: { nodes: BlockNode[] }): ReactNode {
-  return nodes.map((node, index) => <BlockView key={index} node={node} />);
+function Blocks({ nodes, caretOnLast = false }: { nodes: BlockNode[]; caretOnLast?: boolean }): ReactNode {
+  return nodes.map((node, index) => (
+    <BlockView
+      key={index}
+      node={node}
+      caret={caretOnLast && index === nodes.length - 1 && !ownsLiveCaret(node)}
+    />
+  ));
 }
 
-function ListItemView({ item }: { item: ListItem }) {
-  const body =
-    item.children.length === 1 && item.children[0]?.type === "paragraph" ? (
-      <InlineView nodes={item.children[0].children} />
-    ) : (
-      <Blocks nodes={item.children} />
-    );
+function ListItemView({ item, caret = false }: { item: ListItem; caret?: boolean }) {
+  const singlePara = item.children.length === 1 && item.children[0]?.type === "paragraph";
+  const body = singlePara ? (
+    <InlineView nodes={item.children[0].type === "paragraph" ? item.children[0].children : []} />
+  ) : (
+    <Blocks nodes={item.children} caretOnLast={caret} />
+  );
+  const tail = caret && singlePara ? <Caret /> : null;
 
   if (item.task) {
     return (
       <li className="tw-md-task-item">
         <input type="checkbox" checked={item.checked} readOnly />
-        <span className="tw-md-task-text">{body}</span>
+        <span className="tw-md-task-text">
+          {body}
+          {tail}
+        </span>
       </li>
     );
   }
-  return <li>{body}</li>;
+  return (
+    <li>
+      {body}
+      {tail}
+    </li>
+  );
 }
 
 /** 尚未凑齐分隔行的管道表：按行软预览成表格。 */
@@ -249,13 +325,15 @@ function Footnotes({ footnotes }: { footnotes: FootnoteDef[] }) {
   );
 }
 
-function BlockView({ node }: { node: BlockNode }): ReactNode {
+function BlockView({ node, caret = false }: { node: BlockNode; caret?: boolean }): ReactNode {
+  const tail = caret ? <Caret /> : null;
   switch (node.type) {
     case "heading": {
       const Tag = `h${node.level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
       return (
         <Tag id={node.id}>
           <InlineView nodes={node.children} />
+          {tail}
         </Tag>
       );
     }
@@ -263,23 +341,39 @@ function BlockView({ node }: { node: BlockNode }): ReactNode {
       return (
         <p>
           <InlineView nodes={node.children} />
+          {tail}
         </p>
       );
     case "blockquote":
       return (
-        <blockquote>
-          <Blocks nodes={node.children} />
+        <blockquote
+          className={node.alert ? `tw-md-alert tw-md-alert--${node.alert}` : undefined}
+          data-alert={node.alert}
+        >
+          {node.alert ? <div className="tw-md-alert-title">{ALERT_LABEL[node.alert]}</div> : null}
+          <Blocks nodes={node.children} caretOnLast={caret} />
+          {caret && node.children.length === 0 ? tail : null}
         </blockquote>
       );
     case "code":
-      return <CodeBlock lang={node.lang} value={node.value} incomplete={node.incomplete} />;
+      return (
+        <>
+          <CodeBlock lang={node.lang} value={node.value} incomplete={node.incomplete} />
+          {tail}
+        </>
+      );
     case "diagram":
-      return <MermaidDiagram value={node.value} incomplete={node.incomplete} />;
+      return (
+        <>
+          <MermaidDiagram value={node.value} incomplete={node.incomplete} />
+          {tail}
+        </>
+      );
     case "math":
       return (
         <div className="tw-md-math-block">
           <MathView value={node.value} display />
-          {node.incomplete ? <span className="tw-md-caret" aria-hidden="true" /> : null}
+          {node.incomplete ? <span className="tw-md-caret" aria-hidden="true" /> : tail}
         </div>
       );
     case "list": {
@@ -300,7 +394,11 @@ function BlockView({ node }: { node: BlockNode }): ReactNode {
       return (
         <Tag className={className} start={node.start} style={style}>
           {node.items.map((item, index) => (
-            <ListItemView key={index} item={item} />
+            <ListItemView
+              key={index}
+              item={item}
+              caret={Boolean(caret) && index === node.items.length - 1}
+            />
           ))}
         </Tag>
       );
@@ -315,7 +413,14 @@ function BlockView({ node }: { node: BlockNode }): ReactNode {
               </dt>
               {item.definitions.map((def, dIndex) => (
                 <dd key={dIndex}>
-                  <Blocks nodes={def} />
+                  <Blocks
+                    nodes={def}
+                    caretOnLast={
+                      Boolean(caret) &&
+                      index === node.items.length - 1 &&
+                      dIndex === item.definitions.length - 1
+                    }
+                  />
                 </dd>
               ))}
             </div>
@@ -356,11 +461,17 @@ function BlockView({ node }: { node: BlockNode }): ReactNode {
           {node.incomplete && node.rows.length === 0 ? (
             <span className="tw-md-caret tw-md-caret--after-table" aria-hidden="true" />
           ) : null}
+          {tail}
         </div>
       );
     }
     case "hr":
-      return <hr />;
+      return (
+        <>
+          <hr />
+          {tail}
+        </>
+      );
     case "pending":
       return <PendingBlock kind={node.kind} value={node.value} />;
     default:
@@ -402,8 +513,16 @@ export function MarkdownView({
           data-streaming={streaming ? "true" : "false"}
           style={style}
         >
-          <Blocks nodes={doc.blocks} />
-          <Footnotes footnotes={doc.footnotes} />
+          <FootnoteRefContext.Provider value={createFnRegistry()}>
+            {doc.blocks.length === 0 && streaming ? (
+              <p>
+                <Caret />
+              </p>
+            ) : (
+              <Blocks nodes={doc.blocks} caretOnLast={streaming} />
+            )}
+            <Footnotes footnotes={doc.footnotes} />
+          </FootnoteRefContext.Provider>
         </article>
       </MarkdownLinkClickContext.Provider>
     </MarkdownThemeProvider>

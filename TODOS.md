@@ -4,6 +4,10 @@
 
 Deferred product backlog from the multi-session parallel architecture. Not committed for the current release — tracked here for prioritization. See also [README](./README.md).
 
+Shipped admission queue (no longer listed below): one global FIFO. A send queues only when every parallel slot is taken, and a non-empty queue accepts new sends at the tail only. Model, mode, shell, permissions, and the workspace root are read at dispatch, not frozen at enqueue. The turn payload stays in the main-process memory; after quit or crash a leftover `queued` row becomes failed and is not replayed. HITL stays `running` and keeps its slot.
+
+Shipped shell blocklist (no longer listed below): `shellBlocklist` on GeneralSettings is sent on hello and every run/resume. The engine refuses a blocked first token before unrestricted, allowlist, AI review, and HITL. Confirmation cannot whitelist it. A token on both lists is dropped from the allowlist.
+
 ---
 
 ## 1. Same-workspace concurrent mutation conflicts
@@ -30,29 +34,3 @@ Pick one product stance later:
 - Concurrent mutating runs on the same path either serialize safely or are rejected with a clear error.
 - UI surfaces which session holds / blocked on a contested path (or workspace).
 - No silent overwrite of another run’s in-flight edit.
-
----
-
-## 2. Session / run admission FIFO queue
-
-| | |
-|---|---|
-| **Status** | Deferred |
-| **Context** | `RunCoordinator` enforces `GeneralSettings.maxParallelRuns` (Settings → Permissions) and same-thread exclusivity by **rejecting** overflow with an explicit error. There is no global wait queue. |
-
-### Problem
-
-Users who hit the parallel cap (or a future resource gate) must stop a run or retry manually. A FIFO (or priority) queue would smooth bursts, but silent queuing obscures “is it running?”, cancel semantics, and model/mode changes made while waiting.
-
-### Directions to evaluate
-
-- **Explicit queued state** — `runStatus: "queued"` (or equivalent) in session row + sidebar; user can cancel the queue entry without touching other runs.
-- **Bounded queue** — max depth + timeout; overflow still fails visibly.
-- **Admission policy** — FIFO by default; optional priority for foreground session or HITL-waiting runs.
-- **No silent start** — dequeue must emit a clear transition (`queued` → `running`) and respect current session settings at start time (not at enqueue time), or freeze a settings snapshot at enqueue — document the chosen contract.
-
-### Acceptance sketch
-
-- Over-cap send does not look like an active run until dequeued.
-- Cancel while queued only drops that admission; does not cancel unrelated running sessions.
-- Queue wait is observable (sidebar / toast / composer), with an upper bound and visible failure on expiry.

@@ -6,6 +6,8 @@ import {
   getDefaultEnvironment,
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type {
   McpServerConfig,
   McpServerRuntimeStatus,
@@ -24,7 +26,7 @@ const MAX_TOOLS_TOTAL = 128;
 type ServerSession = {
   config: McpServerConfig;
   client: Client;
-  transport: StdioClientTransport;
+  transport: Transport;
   tools: Array<{
     name: string;
     description: string;
@@ -45,12 +47,36 @@ function resolveCommand(command: string): string {
 }
 
 function configKey(c: McpServerConfig): string {
+  if (c.transport === "http") {
+    return JSON.stringify({
+      id: c.id,
+      transport: "http",
+      url: c.url,
+      headers: c.headers ?? {},
+    });
+  }
   return JSON.stringify({
     id: c.id,
+    transport: "stdio",
     command: c.command,
     args: c.args,
     env: c.env,
     cwd: c.cwd ?? null,
+  });
+}
+
+function openTransport(cfg: McpServerConfig): Transport {
+  if (cfg.transport === "http") {
+    return new StreamableHTTPClientTransport(new URL(cfg.url), {
+      requestInit: { headers: cfg.headers },
+    });
+  }
+  return new StdioClientTransport({
+    command: resolveCommand(cfg.command),
+    args: cfg.args ?? [],
+    env: { ...getDefaultEnvironment(), ...cfg.env },
+    cwd: cfg.cwd?.trim() || undefined,
+    stderr: "pipe",
   });
 }
 
@@ -68,9 +94,9 @@ export class McpManager {
     this.listener?.(status);
   }
 
-  /** 按快照重载（仅 enabled + stdio）。 */
+  /** 按快照重载已启用的 stdio / http 服务。 */
   async reload(configs: McpServerConfig[]): Promise<void> {
-    const enabled = configs.filter((c) => c.enabled && c.transport === "stdio");
+    const enabled = configs.filter((c) => c.enabled);
     const wantIds = new Set(enabled.map((c) => sanitizeMcpPart(c.id)));
 
     for (const id of [...this.sessions.keys()]) {
@@ -120,15 +146,8 @@ export class McpManager {
     const id = sanitizeMcpPart(cfg.id);
     this.emitStatus({ id, state: "starting" });
     const log = agentLog("mcp");
-    const command = resolveCommand(cfg.command);
-    const env = { ...getDefaultEnvironment(), ...cfg.env };
-    const transport = new StdioClientTransport({
-      command,
-      args: cfg.args ?? [],
-      env,
-      cwd: cfg.cwd?.trim() || undefined,
-      stderr: "pipe",
-    });
+    const command = cfg.transport === "stdio" ? resolveCommand(cfg.command) : cfg.url;
+    const transport = openTransport(cfg);
     const client = new Client({ name: "thinker-workbench", version: "0.1.0" });
 
     try {

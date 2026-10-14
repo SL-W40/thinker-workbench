@@ -1,11 +1,10 @@
 /**
  * shell / shell_await 时间线卡片：命令、轻量状态、去 ANSI 输出、HITL、「打开终端」。 * 输出默认 4 行，超出底部渐隐 + 居中下箭头展开。 */
 import { Badge, Button } from "@thinker-workbench/design/react";
-import type { ChatTimelineToolStep } from "@thinker-workbench/shared";
+import { type ChatTimelineToolStep, stripAnsi } from "@thinker-workbench/shared";
 import { useLayoutEffect, useRef, useState } from "react";
 import { respondHitl } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
-import { stripAnsi } from "./stripAnsi";
 
 /** 折叠时可见行数*/
 const COLLAPSED_LINES = 4;

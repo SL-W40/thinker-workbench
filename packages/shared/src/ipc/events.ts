@@ -99,11 +99,16 @@ export type AgentDoneEvent = AgentEventBase & {
   text: string;
 };
 
+/** 运行失败的类型化终态（主进程按此写会话状态，勿靠文案正则）。 */
+export type AgentErrorCode = "cancelled" | "failed" | "crashed";
+
 /** 运行失败。 */
 export type AgentErrorEvent = AgentEventBase & {
   type: "error";
   /** 错误信息。 */
   error: string;
+  /** 终态分类；缺省时宿主按 failed 处理。 */
+  code: AgentErrorCode;
 };
 
 /**

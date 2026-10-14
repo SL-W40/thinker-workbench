@@ -42,7 +42,11 @@ import { ContextMenu } from "@thinker-workbench/design/react";
 | `disabled` | `boolean` | — | 禁用 |
 | `icon` | `ReactNode` | — | 左侧图标 |
 | `separatorBefore` | `boolean` | — | 项前分隔线 |
+| `description` | `string` | — | 标签下说明 |
+| `shortcut` | `string` | — | 右侧快捷键 |
+| `checked` | `boolean` | — | 勾选 |
+| `items` | `ContextMenuItemProps[]` | — | 子菜单；有子菜单时 → / Enter 展开 |
 
 ## 样式
 
-文件：`ContextMenu.less`。类名：`.tw-context-menu`。
+文件：`Menu.less`（与 Menu 共用）。类名：`.tw-context-menu`、`.tw-menu`。

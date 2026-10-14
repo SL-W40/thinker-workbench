@@ -5,6 +5,23 @@ import fs from "node:fs";
 import path from "node:path";
 import type { WorkspaceFile, WorkspaceMediaKind, WorkspaceNode } from "@thinker-workbench/shared";
 
+type ProcessWithAsar = NodeJS.Process & { noAsar?: boolean };
+
+/**
+ * Electron 会把路径里的 `.asar` 当成应用归档，`stat` 时调用已弃用的 `fs.Stats` 构造函数（DEP0180）。
+ * 工作空间是用户磁盘，列出和读写期间关掉 asar 拦截，把 `app.asar` 等当成普通文件。
+ */
+function withoutAsar<T>(fn: () => T): T {
+  const proc = process as ProcessWithAsar;
+  const prev = proc.noAsar;
+  proc.noAsar = true;
+  try {
+    return fn();
+  } finally {
+    proc.noAsar = prev;
+  }
+}
+
 const SKIP_NAMES = new Set(["node_modules", ".git", ".DS_Store", "diff-cache", "dist", ".next"]);
 
 const TEXT_EXT =
@@ -80,6 +97,10 @@ function looksBinary(filePath: string, buf: Buffer): boolean {
  * 列出工作空间目录树（深度上限，跳过常见噪音目录）。
  */
 export function listTree(root: string, maxDepth = 6): WorkspaceNode {
+  return withoutAsar(() => listTreeInner(root, maxDepth));
+}
+
+function listTreeInner(root: string, maxDepth: number): WorkspaceNode {
   const abs = path.resolve(root);
   if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
     throw new Error("Workspace path missing.");
@@ -112,6 +133,10 @@ export function listTree(root: string, maxDepth = 6): WorkspaceNode {
 
 /** 读取工作空间内文件；媒体附带 data URL 预览。缺失时返回 `missing: true`（不抛错）。 */
 export function readWorkspaceFile(root: string, relPath: string): WorkspaceFile {
+  return withoutAsar(() => readWorkspaceFileInner(root, relPath));
+}
+
+function readWorkspaceFileInner(root: string, relPath: string): WorkspaceFile {
   const rel = (relPath || ".").replace(/\\/g, "/").replace(/^\.\//, "");
   const abs = assertInside(root, path.join(root, rel));
   const posix = rel.replace(/\\/g, "/");
@@ -182,6 +207,10 @@ export function readWorkspaceFile(root: string, relPath: string): WorkspaceFile 
 
 /** 写入工作空间内文本文件（父目录不存在则创建）；始终 UTF-8，无 BOM。 */
 export function writeWorkspaceFile(root: string, relPath: string, content: string): void {
+  withoutAsar(() => writeWorkspaceFileInner(root, relPath, content));
+}
+
+function writeWorkspaceFileInner(root: string, relPath: string, content: string): void {
   const rel = (relPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
   if (!rel || rel === ".") throw new Error("Invalid file path.");
   const abs = assertInside(root, path.join(root, rel));

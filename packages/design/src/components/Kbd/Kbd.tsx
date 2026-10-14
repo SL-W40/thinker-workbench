@@ -8,6 +8,8 @@ export type KbdProps = {
   children: ReactNode;
   /** 高亮录制 / 捕获状态。 */
   recording?: boolean;
+  /** 菜单等紧凑场景：去掉大键帽的最小宽高。 */
+  compact?: boolean;
   /** 追加到根节点的 class。 */
   className?: string;
   /** 有点击时以按钮呈现。 */
@@ -51,12 +53,13 @@ function renderLabel(label: string): ReactNode {
 export function Kbd({
   children,
   recording,
+  compact,
   className,
   onClick,
   disabled,
   "aria-label": ariaLabel,
 }: KbdProps) {
-  const cls = ["tw-kbd", recording ? "is-recording" : "", className ?? ""]
+  const cls = ["tw-kbd", compact ? "tw-kbd--compact" : "", recording ? "is-recording" : "", className ?? ""]
     .filter(Boolean)
     .join(" ");
 

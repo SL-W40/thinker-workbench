@@ -246,9 +246,14 @@ export type GeneralSettings = {
   /**
    * 免审命令首 token 白名单。
    * 磁盘缺字段时用 `DEFAULT_SHELL_ALLOWLIST`；已存空数组 `[]` 保留为空。
+   * 与 `shellBlocklist` 重叠时以黑名单为准，重叠项从本列表剔除。
    */
   shellAllowlist: string[];
-  /** 禁止执行的首 token 黑名单（与 allowlist 正交）。 */
+  /**
+   * 命令首 token 硬拒绝名单。
+   * 命中后任何审批模式、白名单免审、AI 放行与 HITL 确认都不能执行，也不能加入白名单。
+   * 磁盘缺字段时为空（不回填）；已存空数组 `[]` 保留为空。
+   */
   shellBlocklist: string[];
   /** 本地 file:// 链接是否在内置浏览器打开（否则走系统默认应用）。 */
   openLocalLinksInBrowser: boolean;
@@ -256,9 +261,19 @@ export type GeneralSettings = {
   httpCompatibilityMode: HttpCompatibilityMode;
   /**
    * 同时处于 running 的聊天会话软上限（跨工作区合计）。
-   * 超限时新 run 被拒绝（不排队）；同 thread 仍始终互斥。
+   * 超限时新 run 进入 FIFO；队列也满（或深度为 0）才拒绝。同 thread 仍始终互斥。
    */
   maxParallelRuns: number;
+  /**
+   * 全局等待队列最大深度。0 表示不排队。
+   * 调低后已在队列中的项保留，只拒绝新的入队。
+   */
+  maxQueuedRuns: number;
+  /**
+   * 单条排队的最长等待（分钟）。0 表示不超时。
+   * 超时后该条失败，不影响其它 run。
+   */
+  queueTimeoutMin: number;
   /** 主会话 agent↔tools 最大轮次。 */
   maxAgentSteps: number;
   /** Task / 子代理独立模型轮次上限。 */
@@ -352,13 +367,11 @@ export function normalizeShellApprovalMode(
     : fallback;
 }
 
-/**
- * 规范化白名单。
- * `raw` 为 `undefined` 时用默认列表；传入数组（含空）则去空白、去重、小写化。
- */
-export function normalizeShellAllowlist(raw: unknown): string[] {
-  if (raw === undefined) return [...DEFAULT_SHELL_ALLOWLIST];
-  if (!Array.isArray(raw)) return [...DEFAULT_SHELL_ALLOWLIST];
+/** 出厂黑名单为空：硬拒绝由用户显式添加，缺字段不回填。 */
+export const DEFAULT_SHELL_BLOCKLIST: readonly string[] = [];
+
+/** 去空白、去重、小写化；非字符串跳过。 */
+function normalizeShellTokenItems(raw: unknown[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of raw) {
@@ -371,19 +384,51 @@ export function normalizeShellAllowlist(raw: unknown): string[] {
   return out;
 }
 
-/** 规范化 shell 黑名单（缺省为空；传入数组则去重小写化）。 */
+/**
+ * 规范化白名单。
+ * `raw` 为 `undefined` 时用默认列表；传入数组（含空）则去空白、去重、小写化。
+ */
+export function normalizeShellAllowlist(raw: unknown): string[] {
+  if (raw === undefined) return [...DEFAULT_SHELL_ALLOWLIST];
+  if (!Array.isArray(raw)) return [...DEFAULT_SHELL_ALLOWLIST];
+  return normalizeShellTokenItems(raw);
+}
+
+/**
+ * 规范化硬拒绝名单。
+ * 缺字段、非数组都得到空列表；数组项再按命令首 token 折叠（剥路径与 Windows 扩展名）。
+ */
 export function normalizeShellBlocklist(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) return [...DEFAULT_SHELL_BLOCKLIST];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of raw) {
     if (typeof item !== "string") continue;
-    const token = item.trim().toLowerCase();
+    const token = shellCommandBaseToken(item);
     if (!token || seen.has(token)) continue;
     seen.add(token);
     out.push(token);
   }
   return out;
+}
+
+/** 首 token 是否落在硬拒绝名单上。名单须已规范化。 */
+export function isShellTokenBlocked(token: string, blocklist: readonly string[]): boolean {
+  const base = shellCommandBaseToken(token);
+  if (!base) return false;
+  return blocklist.includes(base);
+}
+
+/**
+ * 黑名单优先：从白名单去掉已被硬拒绝的 token。
+ * 比对时同样折叠路径与扩展名，避免 `rm.exe` 留在白名单而 `rm` 在黑名单。
+ */
+export function shellAllowlistWithoutBlocked(
+  allowlist: readonly string[],
+  blocklist: readonly string[],
+): string[] {
+  if (blocklist.length === 0) return [...allowlist];
+  return allowlist.filter((token) => !isShellTokenBlocked(token, blocklist));
 }
 
 /** 规范化 shell profile id。 */
@@ -394,8 +439,8 @@ export function normalizeShellProfileId(value: unknown, fallback = "default"): s
 }
 
 /**
- * 取命令行首 token（剥路径与 Windows 扩展名），供白名单匹配。
- * 与 engine `commandBaseToken` 语义一致。
+ * 取命令行首 token（剥路径与 Windows 可执行扩展名），供白名单 / 黑名单匹配。
+ * 含 `.com`（如 `format.com`）。与 engine `commandBaseToken` 语义一致。
  */
 export function shellCommandBaseToken(command: string): string {
   const trimmed = command.trim();
@@ -403,7 +448,7 @@ export function shellCommandBaseToken(command: string): string {
   const first = trimmed.split(/\s+/)[0] ?? "";
   const base = first.replace(/^["']|["']$/g, "");
   const name = base.split(/[/\\]/).pop() ?? base;
-  return name.replace(/\.(exe|cmd|bat|ps1)$/i, "").toLowerCase();
+  return name.replace(/\.(exe|cmd|bat|com|ps1)$/i, "").toLowerCase();
 }
 
 /** 设置页可选的日志保留天数（含「永不」= 0）。 */
@@ -420,6 +465,18 @@ export const DEFAULT_MAX_PARALLEL_RUNS = 3;
 
 /** 设置页可选的并行上限。 */
 export const MAX_PARALLEL_RUNS_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10] as const;
+
+/** 等待队列默认深度。0 表示不排队，超限直接拒绝。 */
+export const DEFAULT_MAX_QUEUED_RUNS = 8;
+
+/** 设置页可选的等待队列深度。 */
+export const MAX_QUEUED_RUNS_OPTIONS = [0, 1, 2, 4, 8, 16, 32] as const;
+
+/** 排队超时默认分钟数。0 表示不超时。 */
+export const DEFAULT_QUEUE_TIMEOUT_MIN = 10;
+
+/** 设置页可选的排队超时（分钟）。 */
+export const QUEUE_TIMEOUT_MIN_OPTIONS = [0, 5, 10, 30, 60] as const;
 
 /** 主会话默认最大轮次。 */
 export const DEFAULT_MAX_AGENT_STEPS = 16;
@@ -460,6 +517,26 @@ export function normalizeMaxParallelRuns(
 ): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(1, Math.min(10, Math.floor(value)));
+}
+
+/** 将未知值规范为等待队列深度（仅允许设置页选项）。 */
+export function normalizeMaxQueuedRuns(
+  value: unknown,
+  fallback: number = DEFAULT_MAX_QUEUED_RUNS,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  const n = Math.floor(value);
+  return (MAX_QUEUED_RUNS_OPTIONS as readonly number[]).includes(n) ? n : fallback;
+}
+
+/** 将未知值规范为排队超时分钟数（仅允许设置页选项）。 */
+export function normalizeQueueTimeoutMin(
+  value: unknown,
+  fallback: number = DEFAULT_QUEUE_TIMEOUT_MIN,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  const n = Math.floor(value);
+  return (QUEUE_TIMEOUT_MIN_OPTIONS as readonly number[]).includes(n) ? n : fallback;
 }
 
 /** 整数落在 [min, max]；非法回退 fallback。 */
@@ -573,10 +650,12 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   shellProfileId: "default",
   shellApprovalMode: DEFAULT_SHELL_APPROVAL_MODE,
   shellAllowlist: [...DEFAULT_SHELL_ALLOWLIST],
-  shellBlocklist: [],
+  shellBlocklist: [...DEFAULT_SHELL_BLOCKLIST],
   openLocalLinksInBrowser: false,
   httpCompatibilityMode: DEFAULT_HTTP_COMPATIBILITY_MODE,
   maxParallelRuns: DEFAULT_MAX_PARALLEL_RUNS,
+  maxQueuedRuns: DEFAULT_MAX_QUEUED_RUNS,
+  queueTimeoutMin: DEFAULT_QUEUE_TIMEOUT_MIN,
   maxAgentSteps: DEFAULT_MAX_AGENT_STEPS,
   maxSubagentSteps: DEFAULT_MAX_SUBAGENT_STEPS,
   modelRetryMaxAttempts: DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
@@ -717,15 +796,25 @@ export function normalizeGeneral(
   } else {
     base.shellAllowlist = [...DEFAULT_SHELL_ALLOWLIST];
   }
+  // 缺字段与非法类型都是空黑名单；显式 [] 保留为空
   if (Object.hasOwn(obj, "shellBlocklist")) {
     base.shellBlocklist = normalizeShellBlocklist(obj.shellBlocklist);
+  } else {
+    base.shellBlocklist = [...DEFAULT_SHELL_BLOCKLIST];
   }
+  base.shellAllowlist = shellAllowlistWithoutBlocked(base.shellAllowlist, base.shellBlocklist);
   if (typeof obj.openLocalLinksInBrowser === "boolean") {
     base.openLocalLinksInBrowser = obj.openLocalLinksInBrowser;
   }
   base.httpCompatibilityMode = normalizeHttpCompatibilityMode(obj.httpCompatibilityMode);
   if (Object.hasOwn(obj, "maxParallelRuns")) {
     base.maxParallelRuns = normalizeMaxParallelRuns(obj.maxParallelRuns);
+  }
+  if (Object.hasOwn(obj, "maxQueuedRuns")) {
+    base.maxQueuedRuns = normalizeMaxQueuedRuns(obj.maxQueuedRuns);
+  }
+  if (Object.hasOwn(obj, "queueTimeoutMin")) {
+    base.queueTimeoutMin = normalizeQueueTimeoutMin(obj.queueTimeoutMin);
   }
   if (Object.hasOwn(obj, "maxAgentSteps")) {
     base.maxAgentSteps = normalizeMaxAgentSteps(obj.maxAgentSteps);

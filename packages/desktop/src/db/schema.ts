@@ -46,6 +46,14 @@ CREATE TABLE IF NOT EXISTS spans (
 
 CREATE INDEX IF NOT EXISTS idx_spans_session ON spans(session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_last ON sessions(last_ts DESC);
+
+CREATE TABLE IF NOT EXISTS payloads (
+  session_id TEXT NOT NULL,
+  payload_id TEXT NOT NULL,
+  offset INTEGER NOT NULL,
+  length INTEGER NOT NULL,
+  PRIMARY KEY (session_id, payload_id)
+);
 `;
 
 /** 全局目录库：工作空间列表 + app_kv。 */

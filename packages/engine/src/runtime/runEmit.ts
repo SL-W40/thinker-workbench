@@ -5,7 +5,7 @@
  * AgentRuntime 用 runWithContext 包住整次图遍历，并由 bindRuntimeEmitter
  * 补上 threadId / runId / sessionId / ts，转成完整 AgentEvent。
  *
- * 真相在 RunContext；模块级 fallback 仅兼容无 ALS 的遗留路径。
+ * 发射器与 run 标识只从 RunContext（ALS）读取；不在 run 内时为 null。
  */
 import type {
   AgentEvent,
@@ -52,41 +52,16 @@ export type RunEmitEvent =
 
 export type RunEmitter = (event: RunEmitEvent) => void;
 
-/** 无 ALS 时的遗留 fallback（不应在并行 run 路径使用）。 */
-let fallbackEmit: RunEmitter | null = null;
-let fallbackIds: { threadId: string; runId: string; sessionId?: string } | null = null;
-
 /** 供 agent / tools 节点取当前 run 的发射器。 */
 export function getRunEmitter(): RunEmitter | null {
-  return getRunContext()?.emit ?? fallbackEmit;
+  return getRunContext()?.emit ?? null;
 }
 
 /** 当前 run 标识；不在 run 内时为 null。 */
 export function getRunIds(): { threadId: string; runId: string; sessionId?: string } | null {
   const ctx = getRunContext();
-  if (ctx) {
-    return { threadId: ctx.threadId, runId: ctx.runId, sessionId: ctx.sessionId };
-  }
-  return fallbackIds;
-}
-
-/** @deprecated 用 getRunIds().sessionId；保留别名。 */
-export function getChatSessionId(): string | undefined {
-  return getRunIds()?.sessionId;
-}
-
-/**
- * @deprecated 并行安全路径请用 runWithContext；本函数仅嵌套兼容。
- * 在 work 执行期间设置 fallback emitter。
- */
-export async function withRunEmitter<T>(emit: RunEmitter, work: () => Promise<T>): Promise<T> {
-  const prev = fallbackEmit;
-  fallbackEmit = emit;
-  try {
-    return await work();
-  } finally {
-    fallbackEmit = prev;
-  }
+  if (!ctx) return null;
+  return { threadId: ctx.threadId, runId: ctx.runId, sessionId: ctx.sessionId };
 }
 
 /**
@@ -98,9 +73,7 @@ export function bindRuntimeEmitter(
   runId: string,
   sessionId?: string,
 ): RunEmitter {
-  fallbackIds = { threadId, runId, sessionId };
   return (event) => {
-    fallbackIds = { threadId, runId, sessionId };
     // 工具事件自带 sessionId=终端 id，勿覆盖；聊天会话用 chatSessionId
     emit({
       ...event,

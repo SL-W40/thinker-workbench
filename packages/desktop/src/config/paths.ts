@@ -91,6 +91,11 @@ export function getWorkspaceChatDbPath(workspaceId: string): string {
   return path.join(getWorkspaceDataDir(workspaceId), "chat.db");
 }
 
+/** 工作空间用户附图目录：`<dataDir>/workspaces/<id>/images`。 */
+export function getWorkspaceImagesDir(workspaceId: string): string {
+  return path.join(getWorkspaceDataDir(workspaceId), "images");
+}
+
 /** 全局目录库（工作空间元数据 + app_kv）。 */
 export function getCatalogDbPath(): string {
   return path.join(getDataDir(), "catalog.db");

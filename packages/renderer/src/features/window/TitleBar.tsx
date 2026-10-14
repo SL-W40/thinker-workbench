@@ -1,6 +1,6 @@
 /**
  * 自定义标题栏：左品牌 / 控制台 tab / 左侧栏；中空白拖窗；右「展开右侧面板」。
- * Windows 最右侧另绘窗口控件；macOS 用系统 traffic lights（左侧留白）。
+ * macOS 用系统 traffic lights（左侧留白）；Windows 用系统字幕按钮（右侧留白）。
  * 可点控件勿放进 drag 区，否则 Electron 不显示 pointer 小手。
  */
 
@@ -25,8 +25,50 @@ import type { PageId } from "../nav/usePageStack";
 import { TOOL_TAB_IDS, type ToolTabId, toolTabIcon, toolTabLabel } from "../tools/ToolsPane";
 import "../tools/tools.less";
 
-/** macOS：原生红绿灯；其它平台：渲染进程画最小化 / 最大化 / 关闭。 */
-const useNativeWindowControls = processPlatform() === "darwin";
+/** macOS / Windows 用系统窗口按钮；Linux 仍由渲染进程绘制。 */
+const useSystemWindowControls = processPlatform() === "darwin" || processPlatform() === "win32";
+
+/** Win11 三颗字幕按钮在 100% 缩放下的大约宽度，WCO 几何未就绪时兜底。 */
+const WCO_WIDTH_FALLBACK_PX = 138;
+
+/** Electron 在启用 titleBarOverlay 后挂上的 Window Controls Overlay。 */
+type CaptionOverlay = {
+  visible: boolean;
+  getTitlebarAreaRect: () => DOMRect;
+  addEventListener: (type: "geometrychange", listener: () => void) => void;
+  removeEventListener: (type: "geometrychange", listener: () => void) => void;
+};
+
+function captionOverlay(): CaptionOverlay | undefined {
+  return (navigator as Navigator & { windowControlsOverlay?: CaptionOverlay })
+    .windowControlsOverlay;
+}
+
+/** 把系统字幕按钮占用的宽度写到 `--wco-width`，避免标题栏内容压到按钮上。 */
+function useWindowsCaptionInset(): void {
+  useEffect(() => {
+    if (processPlatform() !== "win32") return;
+    const overlay = captionOverlay();
+    const root = document.documentElement;
+    const apply = () => {
+      if (!overlay?.visible) {
+        root.style.setProperty("--wco-width", `${WCO_WIDTH_FALLBACK_PX}px`);
+        return;
+      }
+      const rect = overlay.getTitlebarAreaRect();
+      const width = Math.round(window.innerWidth - rect.x - rect.width);
+      root.style.setProperty("--wco-width", `${width > 0 ? width : WCO_WIDTH_FALLBACK_PX}px`);
+    };
+    apply();
+    overlay?.addEventListener("geometrychange", apply);
+    window.addEventListener("resize", apply);
+    return () => {
+      overlay?.removeEventListener("geometrychange", apply);
+      window.removeEventListener("resize", apply);
+      root.style.removeProperty("--wco-width");
+    };
+  }, []);
+}
 
 type TitleBarProps = {
   /** 当前窗口角色；辅助窗渲染精简栏。 */
@@ -127,7 +169,7 @@ function ConsoleTabs({
   );
 }
 
-/** Windows 风格自定义窗口按钮（macOS 不渲染）。 */
+/** Linux 无边框窗的自定义窗口按钮（macOS / Windows 用系统按钮，不渲染）。 */
 function WinControls({ closeOnly }: { closeOnly?: boolean }) {
   const t = useT();
   const api = windowApi();
@@ -193,15 +235,18 @@ export function TitleBar({
   const onChat = current === "chat";
   const onConsole = current === "tools" || current === "settings";
   const isAux = role.kind === "aux";
+  const platform = processPlatform();
+  useWindowsCaptionInset();
   const titlebarClass = [
     "titlebar",
     isAux ? "titlebar--aux" : "",
-    useNativeWindowControls ? "titlebar--mac" : "titlebar--win",
+    platform === "darwin" ? "titlebar--mac" : "",
+    platform === "win32" ? "titlebar--wco" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
-  // 辅助窗口：左品牌 + 控制台 tab；（非 Mac 时）右关闭
+  // 辅助窗口：左品牌 + 控制台 tab；Linux 另绘关闭按钮
   // 布局：leading(控件) | drag-spacer(拖拽) | actions(控件) — 控件勿放进 drag，否则无小手
   if (isAux) {
     const isTools = role.page === "tools" || role.page === "settings";
@@ -227,7 +272,7 @@ export function TitleBar({
           ) : null}
         </div>
         <div className="titlebar-drag-spacer" aria-hidden />
-        {useNativeWindowControls ? null : (
+        {useSystemWindowControls ? null : (
           <div className="titlebar-actions">
             <WinControls closeOnly />
           </div>
@@ -287,7 +332,7 @@ export function TitleBar({
             </IconButton>
           </div>
         ) : null}
-        {useNativeWindowControls ? null : <WinControls />}
+        {useSystemWindowControls ? null : <WinControls />}
       </div>
     </header>
   );

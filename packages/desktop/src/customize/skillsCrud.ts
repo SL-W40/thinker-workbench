@@ -3,22 +3,17 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  CustomizeScope,
-  CustomizeSource,
-  SkillListItem,
-  SkillListResult,
-  SkillUpsertInput,
+import {
+  type CustomizeScope,
+  type CustomizeSource,
+  parseYamlFrontmatter,
+  type SkillListItem,
+  type SkillListResult,
+  type SkillUpsertInput,
 } from "@thinker-workbench/shared";
 import { listWorkspaces } from "../db/workspacesStore";
 import { listSkillSummaries } from "../skills/listSkills";
-import {
-  metaBool,
-  metaString,
-  parseFrontmatter,
-  sanitizeKebabName,
-  serializeFrontmatter,
-} from "./frontmatter";
+import { metaBool, metaString, sanitizeKebabName, serializeFrontmatter } from "./frontmatter";
 import { ensureDir, resolveWritableRoot } from "./paths";
 
 type ScanRoot = {
@@ -64,7 +59,7 @@ function parseDetailed(
     return null;
   }
   const folderName = path.basename(path.dirname(absPath));
-  const { meta, body } = parseFrontmatter(raw);
+  const { data: meta, body } = parseYamlFrontmatter(raw);
   const name = sanitizeKebabName(metaString(meta, "name", folderName), folderName);
   const description = metaString(meta, "description");
   return {

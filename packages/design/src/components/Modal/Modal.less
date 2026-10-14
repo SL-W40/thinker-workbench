@@ -59,6 +59,34 @@
   gap: 18px;
 }
 
+.tw-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tw-modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.tw-modal__body {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--tw-fg-muted, var(--muted));
+}
+
+.tw-modal__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* 进场：蒙层淡入，面板轻微上移 + 缩放。 */
 .tw-modal.is-enter .tw-modal__backdrop {
   animation: tw-modal-backdrop-in 180ms ease both;

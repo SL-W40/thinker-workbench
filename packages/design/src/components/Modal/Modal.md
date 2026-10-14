@@ -12,11 +12,15 @@ import { Modal, Button } from "@thinker-workbench/design/react";
 
 ```tsx
 <Modal open={open} onClose={() => setOpen(false)} closeOnBackdrop closeOnEscape aria-labelledby="t">
-  <h2 id="t">标题</h2>
-  <p>正文</p>
-  <Button onClick={() => setOpen(false)}>关闭</Button>
+  <Modal.Header title="标题" titleId="t" />
+  <Modal.Body>正文</Modal.Body>
+  <Modal.Footer>
+    <Button onClick={() => setOpen(false)}>关闭</Button>
+  </Modal.Footer>
 </Modal>
 ```
+
+也可以继续把任意节点放进面板。`Modal.Header` / `Modal.Body` / `Modal.Footer` 只是排版插槽。
 
 ## API
 
@@ -32,6 +36,14 @@ import { Modal, Button } from "@thinker-workbench/design/react";
 | `className` | `string` | — | 根节点 class |
 | `panelClassName` | `string` | — | 面板 class |
 
+## 插槽
+
+| 组件 | 属性 | 说明 |
+| --- | --- | --- |
+| `Modal.Header` | `title` / `titleId` / `children` | 标题行；`children` 在标题右侧 |
+| `Modal.Body` | `children` | 正文 |
+| `Modal.Footer` | `children` | 底栏，操作靠右 |
+
 ## 样式
 
-文件：`Modal.less`。类名：`.tw-modal`、`.tw-modal__scroll`、`.tw-modal__panel`。蒙层固定；过高内容在滚动层滚（隐藏滚动条）。打开时锁定 `body` 滚动。
+文件：`Modal.less`。类名：`.tw-modal`、`.tw-modal__scroll`、`.tw-modal__panel`、`.tw-modal__header`、`.tw-modal__body`、`.tw-modal__footer`。蒙层固定；过高内容在滚动层滚（隐藏滚动条）。打开时锁定 `body` 滚动。

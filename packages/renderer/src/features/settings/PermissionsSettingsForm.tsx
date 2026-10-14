@@ -1,9 +1,14 @@
 /**
- * 设置 →权限：工作区访问、AI 能力开关、Shell 配置与白/黑名单、删文件恢复 TTL。 */
+ * 设置 → 权限：工作区访问、AI 能力开关、Shell 审批、白名单与硬拒绝名单、删文件恢复 TTL。
+ */
 import { Select, Switch } from "@thinker-workbench/design/react";
 import {
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
+  isShellTokenBlocked,
   MAX_PARALLEL_RUNS_OPTIONS,
+  MAX_QUEUED_RUNS_OPTIONS,
+  normalizeShellBlocklist,
+  QUEUE_TIMEOUT_MIN_OPTIONS,
   SHELL_APPROVAL_MODES,
   type ShellApprovalMode,
   WORKSPACE_ACCESS_OPTIONS,
@@ -52,6 +57,27 @@ export function PermissionsSettingsForm({ active = true }: Props) {
     [],
   );
 
+  const maxQueuedOptions = useMemo(
+    () =>
+      MAX_QUEUED_RUNS_OPTIONS.map((n) => ({
+        value: String(n),
+        label: n === 0 ? t("settings.general.maxQueuedRuns.off") : String(n),
+      })),
+    [t],
+  );
+
+  const queueTimeoutOptions = useMemo(
+    () =>
+      QUEUE_TIMEOUT_MIN_OPTIONS.map((n) => ({
+        value: String(n),
+        label:
+          n === 0
+            ? t("settings.general.queueTimeoutMin.off")
+            : t("settings.general.queueTimeoutMin.minutes", { n: String(n) }),
+      })),
+    [t],
+  );
+
   const shellProfileOptions = useMemo(() => {
     const opts = [
       { value: "default", label: t("settings.general.shellProfile.default") },
@@ -90,20 +116,21 @@ export function PermissionsSettingsForm({ active = true }: Props) {
     if (!token) return;
     setAllowlistDraft("");
     if (general.shellAllowlist.includes(token)) return;
+    // 已在硬拒绝名单上的 token 保持可见的拒绝，不写入白名单
+    if (isShellTokenBlocked(token, general.shellBlocklist)) return;
     void patchGeneral({
       shellAllowlist: [...general.shellAllowlist, token],
-      // 加入白名单时移出黑名? shellBlocklist: general.shellBlocklist.filter((x) => x !== token),
     });
   }
 
   function addBlocklistToken() {
-    const token = blocklistDraft.trim().toLowerCase();
+    const token = normalizeShellBlocklist([blocklistDraft])[0];
     if (!token) return;
     setBlocklistDraft("");
     if (general.shellBlocklist.includes(token)) return;
     void patchGeneral({
       shellBlocklist: [...general.shellBlocklist, token],
-      // 加入黑名单时移出白名? shellAllowlist: general.shellAllowlist.filter((x) => x !== token),
+      shellAllowlist: general.shellAllowlist.filter((item) => !isShellTokenBlocked(item, [token])),
     });
   }
 
@@ -127,6 +154,32 @@ export function PermissionsSettingsForm({ active = true }: Props) {
             options={maxParallelOptions}
             aria-label={t("settings.general.maxParallelRuns.title")}
             onChange={(value) => void patchGeneral({ maxParallelRuns: Number(value) })}
+          />
+        </li>
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.maxQueuedRuns.title")}</strong>
+            <span>{t("settings.general.maxQueuedRuns.description")}</span>
+          </div>
+          <Select
+            className="settings-locale-select"
+            value={String(general.maxQueuedRuns)}
+            options={maxQueuedOptions}
+            aria-label={t("settings.general.maxQueuedRuns.title")}
+            onChange={(value) => void patchGeneral({ maxQueuedRuns: Number(value) })}
+          />
+        </li>
+        <li className="settings-toggle-row">
+          <div className="settings-toggle-copy">
+            <strong>{t("settings.general.queueTimeoutMin.title")}</strong>
+            <span>{t("settings.general.queueTimeoutMin.description")}</span>
+          </div>
+          <Select
+            className="settings-locale-select"
+            value={String(general.queueTimeoutMin)}
+            options={queueTimeoutOptions}
+            aria-label={t("settings.general.queueTimeoutMin.title")}
+            onChange={(value) => void patchGeneral({ queueTimeoutMin: Number(value) })}
           />
         </li>
         <li className="settings-toggle-row">

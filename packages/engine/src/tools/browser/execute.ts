@@ -1,8 +1,9 @@
 /**
  * 内置浏览器工具执行体（经 utility → main WebContentsView）。
+ * 有截图时写入 ui.resultPaths（kind=image），供时间线展开预览。
  */
 import { browserCall } from "../../host/browserClient";
-import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
+import type { ToolArgs, ToolContext, ToolExecuteResult, ToolUiPayload } from "../types";
 
 function str(args: ToolArgs, key: string): string | undefined {
   const v = args[key];
@@ -24,6 +25,28 @@ function formatResult(result: { output: string; screenshotPath?: string }): stri
   return `${result.output}\n\nscreenshotPath: ${result.screenshotPath}`;
 }
 
+/** 有截图则附带 image 路径，供 Explored 行展开。 */
+function withScreenshotUi(
+  result: { output: string; screenshotPath?: string },
+  extras?: Pick<ToolUiPayload, "path">,
+): ToolExecuteResult {
+  const shot = result.screenshotPath?.trim();
+  const ui: ToolUiPayload = {
+    ...(extras?.path ? { path: extras.path } : {}),
+    ...(shot
+      ? {
+          resultPaths: [shot],
+          resultPathKinds: ["image"],
+        }
+      : {}),
+  };
+  const hasUi = Boolean(ui.path || ui.resultPaths?.length);
+  return {
+    output: formatResult(result),
+    ...(hasUi ? { ui } : {}),
+  };
+}
+
 export async function browserNavigateTool(
   args: ToolArgs,
   ctx: ToolContext,
@@ -39,7 +62,7 @@ export async function browserNavigateTool(
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result, { path: url.trim() });
 }
 
 export async function browserLockTool(
@@ -58,12 +81,10 @@ export async function browserSnapshotTool(
   args: ToolArgs,
   ctx: ToolContext,
 ): Promise<ToolExecuteResult> {
-  const result = await browserCall(
-    "snapshot",
-    { takeScreenshotAfterwards: bool(args, "take_screenshot_afterwards") },
-    ctx.signal,
-  );
-  return { output: formatResult(result) };
+  // 默认截图：时间线展开需要预览；显式 false 才跳过
+  const takeShot = bool(args, "take_screenshot_afterwards") !== false;
+  const result = await browserCall("snapshot", { takeScreenshotAfterwards: takeShot }, ctx.signal);
+  return withScreenshotUi(result, { path: "snapshot" });
 }
 
 export async function browserClickTool(
@@ -84,7 +105,7 @@ export async function browserClickTool(
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result);
 }
 
 export async function browserTypeTool(
@@ -105,7 +126,7 @@ export async function browserTypeTool(
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result);
 }
 
 export async function browserFillTool(
@@ -126,7 +147,7 @@ export async function browserFillTool(
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result);
 }
 
 export async function browserPressKeyTool(
@@ -144,26 +165,25 @@ export async function browserPressKeyTool(
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result);
 }
 
 export async function browserScrollTool(
   args: ToolArgs,
   ctx: ToolContext,
 ): Promise<ToolExecuteResult> {
-  const direction = str(args, "direction") as "up" | "down" | "left" | "right" | undefined;
   const result = await browserCall(
     "scroll",
     {
       ref: str(args, "ref"),
-      direction,
+      direction: str(args, "direction") as "up" | "down" | "left" | "right" | undefined,
       amount: num(args, "amount"),
       scrollIntoView: bool(args, "scroll_into_view"),
       takeScreenshotAfterwards: bool(args, "take_screenshot_afterwards"),
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result);
 }
 
 export async function browserEvaluateTool(
@@ -180,7 +200,7 @@ export async function browserEvaluateTool(
     },
     ctx.signal,
   );
-  return { output: formatResult(result) };
+  return withScreenshotUi(result);
 }
 
 export async function browserResizeTool(
@@ -189,7 +209,9 @@ export async function browserResizeTool(
 ): Promise<ToolExecuteResult> {
   const width = num(args, "width");
   const height = num(args, "height");
-  if (width == null || height == null) throw new Error("width and height are required");
+  if (typeof width !== "number" || typeof height !== "number") {
+    throw new Error("width and height are required");
+  }
   const result = await browserCall("resize", { width, height }, ctx.signal);
   return { output: formatResult(result) };
 }
@@ -221,5 +243,5 @@ export async function browserScreenshotTool(
   ctx: ToolContext,
 ): Promise<ToolExecuteResult> {
   const result = await browserCall("screenshot", {}, ctx.signal);
-  return { output: formatResult(result) };
+  return withScreenshotUi(result, { path: "screenshot" });
 }

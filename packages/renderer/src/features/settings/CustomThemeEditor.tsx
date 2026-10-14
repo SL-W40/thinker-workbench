@@ -149,7 +149,7 @@ export function CustomThemeEditor({ open, record, customsBaseline, onClose, onSa
           }
         }
       } catch {
-        /* 保留?themeVariables */
+        /* 保留原 themeVariables */
       }
       const toSave: CustomThemeRecord = {
         ...draft,

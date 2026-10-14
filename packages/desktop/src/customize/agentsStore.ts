@@ -3,21 +3,16 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  CustomizeScope,
-  CustomizeSource,
-  SubagentDefinition,
-  SubagentListResult,
-  SubagentUpsertInput,
+import {
+  type CustomizeScope,
+  type CustomizeSource,
+  parseYamlFrontmatter,
+  type SubagentDefinition,
+  type SubagentListResult,
+  type SubagentUpsertInput,
 } from "@thinker-workbench/shared";
 import { listWorkspaces } from "../db/workspacesStore";
-import {
-  metaBool,
-  metaString,
-  parseFrontmatter,
-  sanitizeKebabName,
-  serializeFrontmatter,
-} from "./frontmatter";
+import { metaBool, metaString, sanitizeKebabName, serializeFrontmatter } from "./frontmatter";
 import { ensureDir, resolveWritableRoot } from "./paths";
 
 type ScanRoot = {
@@ -44,7 +39,7 @@ function parseAgentFile(
     return null;
   }
   const base = path.basename(absPath, path.extname(absPath));
-  const { meta, body } = parseFrontmatter(raw);
+  const { data: meta, body } = parseYamlFrontmatter(raw);
   const name = sanitizeKebabName(metaString(meta, "name", base), base);
   return {
     name,

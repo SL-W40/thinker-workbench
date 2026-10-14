@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createId, type TracePayloadRecord } from "@thinker-workbench/shared";
 import { getTraceDir } from "../config/paths";
+import { deletePayloadIndex, findPayloadIndex, notePayloadIndex } from "./traceDb";
 
 function sessionsDir(): string {
   return path.join(getTraceDir(), "sessions");
@@ -19,7 +20,7 @@ export function ensureTraceDirs(): void {
   fs.mkdirSync(sessionsDir(), { recursive: true });
 }
 
-/** 追加一条 payload，返回 payload id。 */
+/** 追加一条 payload，并记下字节偏移。 */
 export function appendPayload(
   sessionId: string,
   record: Omit<TracePayloadRecord, "id"> & { id?: string },
@@ -35,25 +36,84 @@ export function appendPayload(
     truncated: record.truncated,
     json: record.json,
   };
-  fs.appendFileSync(sessionFile(sessionId), `${JSON.stringify(line)}\n`, "utf8");
+  const file = sessionFile(sessionId);
+  const payload = Buffer.from(`${JSON.stringify(line)}\n`, "utf8");
+  let offset = 0;
+  try {
+    offset = fs.statSync(file).size;
+  } catch {
+    offset = 0;
+  }
+  fs.appendFileSync(file, payload);
+  notePayloadIndex(sessionId, id, offset, payload.length);
   return id;
 }
 
-/** 按 id 扫描 jsonl（会话内载荷量可控；大文件可后续加索引）。 */
+/** 按偏移读一条 payload。 */
+function readPayloadSlice(
+  sessionId: string,
+  offset: number,
+  length: number,
+): TracePayloadRecord | null {
+  const file = sessionFile(sessionId);
+  if (!Number.isFinite(offset) || !Number.isFinite(length) || length <= 0) return null;
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(length);
+    const n = fs.readSync(fd, buf, 0, length, offset);
+    const text = buf.subarray(0, n).toString("utf8").trim();
+    if (!text) return null;
+    return JSON.parse(text) as TracePayloadRecord;
+  } catch {
+    return null;
+  } finally {
+    if (fd != null) fs.closeSync(fd);
+  }
+}
+
+/**
+ * 为缺少索引的旧 jsonl 建一次偏移表。
+ * 之后 readPayload 只按偏移取行。
+ */
+function rebuildPayloadIndex(sessionId: string): void {
+  const file = sessionFile(sessionId);
+  if (!fs.existsSync(file)) return;
+  const buf = fs.readFileSync(file);
+  deletePayloadIndex(sessionId);
+  let offset = 0;
+  while (offset < buf.length) {
+    let end = buf.indexOf(0x0a, offset);
+    const includeNl = end >= 0;
+    if (!includeNl) end = buf.length;
+    else end += 1;
+    const text = buf
+      .subarray(offset, includeNl ? end - 1 : end)
+      .toString("utf8")
+      .trim();
+    if (text) {
+      try {
+        const row = JSON.parse(text) as TracePayloadRecord;
+        if (row.id) notePayloadIndex(sessionId, row.id, offset, end - offset);
+      } catch {
+        /* 跳过坏行 */
+      }
+    }
+    offset = end;
+  }
+}
+
+/** 按 id 读取 payload；索引缺失时对该会话建一次索引再定位。 */
 export function readPayload(sessionId: string, payloadId: string): TracePayloadRecord | null {
   const file = sessionFile(sessionId);
   if (!fs.existsSync(file)) return null;
-  const text = fs.readFileSync(file, "utf8");
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const row = JSON.parse(line) as TracePayloadRecord;
-      if (row.id === payloadId) return row;
-    } catch {
-      /* 跳过坏行 */
-    }
-  }
-  return null;
+  const load = (loc: { offset: number; length: number } | null) =>
+    loc ? readPayloadSlice(sessionId, loc.offset, loc.length) : null;
+  const first = load(findPayloadIndex(sessionId, payloadId));
+  if (first?.id === payloadId) return first;
+  rebuildPayloadIndex(sessionId);
+  const second = load(findPayloadIndex(sessionId, payloadId));
+  return second?.id === payloadId ? second : null;
 }
 
 export function sessionJsonlPath(sessionId: string): string {
@@ -75,6 +135,11 @@ export function removeSessionJsonl(sessionId: string): void {
     fs.unlinkSync(file);
   } catch {
     /* ignore */
+  }
+  try {
+    deletePayloadIndex(sessionId);
+  } catch {
+    /* 索引库尚未打开时忽略 */
   }
 }
 

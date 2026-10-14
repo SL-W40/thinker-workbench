@@ -2,9 +2,16 @@
  * 底部输入区：多行草稿 + `/` Skills / `@` 文件弹出 + 发送/停止。
 
  */
-import { Button, Callout, FolderIcon, IconButton } from "@thinker-workbench/design/react";
+import {
+  Button,
+  Callout,
+  FolderIcon,
+  IconButton,
+  PaperclipIcon,
+} from "@thinker-workbench/design/react";
 import type { ChatMessage, SkillListItem } from "@thinker-workbench/shared";
 import {
+  type DragEvent,
   type KeyboardEvent,
   type RefObject,
   useCallback,
@@ -13,11 +20,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { listSkills } from "../../bridge/thinker";
+import { getModelSettings, getSessionModelSelection, listSkills } from "../../bridge/thinker";
 import { workspaceTree } from "../../bridge/workspaceFs";
 import { useT } from "../../i18n/useI18n";
 import { loadFileRecents } from "../inspector/fileRecents";
 import { BackgroundTasksBar } from "./BackgroundTasksBar";
+import { ChatImageStrip, type DraftChatImage } from "./ChatImageStrip";
 import { ComposerEditor, type ComposerEditorHandle } from "./ComposerEditor";
 import { ComposerMentionPopup, type MentionItem } from "./ComposerMentionPopup";
 import { ContextUsageControl } from "./ContextUsageControl";
@@ -34,7 +42,12 @@ import { ModePicker } from "./ModePicker";
 
 type Props = {
   draft: string;
+  draftImages?: DraftChatImage[];
+  onAttachImages?: (files: File[]) => void;
+  onRemoveImage?: (id: string) => void;
   busy: boolean;
+  /** 本会话在 FIFO 中等待：可取消，但模型 / 模式仍可改。 */
+  queued?: boolean;
   inputRef: RefObject<ComposerEditorHandle | null>;
   onDraftChange: (value: string) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
@@ -125,7 +138,11 @@ const SKILLS_PAGE = 8;
 
 export function Composer({
   draft,
+  draftImages = [],
+  onAttachImages,
+  onRemoveImage,
   busy,
+  queued = false,
   inputRef,
   onDraftChange,
   onKeyDown,
@@ -142,6 +159,10 @@ export function Composer({
   onOpenTerminal,
 }: Props) {
   const t = useT();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  /** 当前选用模型未标 vision 时提示（仍发送图片）。 */
+  const [visionUntagged, setVisionUntagged] = useState(false);
   const [mention, setMention] = useState<ActiveMention | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number } | null>(null);
@@ -234,6 +255,38 @@ export function Composer({
   useEffect(() => {
     refreshMention();
   }, [refreshMention]);
+
+  const hasReadyImages = draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
+
+  useEffect(() => {
+    if (!hasReadyImages) {
+      setVisionUntagged(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cat = await getModelSettings();
+        let sel = cat.selection;
+        if (sessionId) {
+          const override = await getSessionModelSelection(sessionId);
+          if (override) sel = override;
+        }
+        if (cancelled) return;
+        const healthy = cat.models.filter((m) => m.enabled && m.health === "ok");
+        const untagged =
+          sel.mode === "manual"
+            ? !cat.models.find((m) => m.id === sel.modelId)?.tags.includes("vision")
+            : !healthy.some((m) => m.tags.includes("vision"));
+        setVisionUntagged(untagged);
+      } catch {
+        if (!cancelled) setVisionUntagged(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasReadyImages, sessionId]);
 
   const recentPaths = useMemo(() => loadFileRecents(workspaceId), [workspaceId]);
 
@@ -340,9 +393,42 @@ export function Composer({
     onKeyDown(e);
   }
 
+  const canSend =
+    Boolean(draft.trim()) || draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
+
+  function takeImageFiles(list: FileList | File[] | null | undefined): File[] {
+    if (!list) return [];
+    return Array.from(list).filter((f) => f.type.startsWith("image/"));
+  }
+
+  function onDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDragOver(true);
+  }
+
+  function onDragLeave(e: DragEvent<HTMLDivElement>) {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragOver(false);
+  }
+
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    setDragOver(false);
+    const files = takeImageFiles(e.dataTransfer.files);
+    if (files.length === 0) return;
+    e.preventDefault();
+    onAttachImages?.(files);
+  }
+
   return (
     <footer className="composer-dock">
       <BackgroundTasksBar threadId={threadId ?? undefined} onOpenTerminal={onOpenTerminal} />
+      {visionUntagged && hasReadyImages ? (
+        <Callout tone="warning" className="composer-gate">
+          {t("chat.images.visionUntagged")}
+        </Callout>
+      ) : null}
       {gateMessage ? (
         <Callout
           tone="warning"
@@ -358,7 +444,13 @@ export function Composer({
           {gateMessage}
         </Callout>
       ) : null}
-      <div className={`composer-shell${busy ? " is-busy" : ""}`}>
+      <div
+        className={`composer-shell${busy ? " is-busy" : ""}${dragOver ? " is-dragover" : ""}`}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        <ChatImageStrip images={draftImages} onRemove={onRemoveImage} />
         <ComposerEditor
           ref={inputRef}
           value={draft}
@@ -366,6 +458,23 @@ export function Composer({
           onChange={onDraftChange}
           onKeyDown={handleKeyDown}
           onCaretChange={refreshMention}
+          onPasteImages={(files) => {
+            if (!onAttachImages || files.length === 0) return false;
+            void onAttachImages(files);
+            return true;
+          }}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = takeImageFiles(e.target.files);
+            e.target.value = "";
+            if (files.length) onAttachImages?.(files);
+          }}
         />
         <div className="composer-bar">
           <div className="composer-bar-left">
@@ -375,20 +484,31 @@ export function Composer({
           <div className="composer-bar-right">
             <ContextUsageControl messages={messages} draft={draft} workspaceRoot={workspaceRoot} />
             <IconButton
-              className={`composer-send${busy ? " composer-send--stop" : ""}`}
+              className="composer-attach"
+              size="md"
+              variant="ghost"
+              disabled={busy}
+              aria-label={t("chat.images.attach")}
+              title={t("chat.images.attach")}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PaperclipIcon />
+            </IconButton>
+            <IconButton
+              className={`composer-send${busy || queued ? " composer-send--stop" : ""}`}
               size="lg"
               variant="secondary"
-              disabled={busy ? false : !draft.trim()}
+              disabled={busy || queued ? false : !canSend}
               onClick={() => {
-                if (busy) onCancel();
+                if (busy || queued) onCancel();
                 else onSend();
               }}
-              aria-label={busy ? t("chat.stop") : t("chat.send")}
+              aria-label={busy ? t("chat.stop") : queued ? t("chat.leaveQueue") : t("chat.send")}
               aria-busy={busy || undefined}
-              title={busy ? t("chat.stop") : t("chat.sendHint")}
+              title={busy ? t("chat.stop") : queued ? t("chat.leaveQueue") : t("chat.sendHint")}
             >
               <span className="composer-send__ico" aria-hidden="true">
-                {busy ? <StopGlyph /> : <SendGlyph />}
+                {busy || queued ? <StopGlyph /> : <SendGlyph />}
               </span>
             </IconButton>
           </div>

@@ -1,5 +1,5 @@
 /**
- * 右侧 inspector：子代理时间?tab（头部固定，正文可滚、无横向滚动）。 */
+ * 右侧 inspector：子代理时间线 tab（头部固定，正文可滚、无横向滚动）。 */
 import { useSyncExternalStore } from "react";
 import { getSubagentStep, subscribeSubagentSteps } from "../../bridge/subagent";
 import { useT } from "../../i18n/useI18n";

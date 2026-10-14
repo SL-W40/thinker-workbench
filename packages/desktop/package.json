@@ -24,13 +24,18 @@
     "node-pty": "1.1.0",
     "yazl": "^3.3.1"
   },
+  "peerDependencies": {
+    "electron": "^37.0.0"
+  },
   "devDependencies": {
     "@electron/rebuild": "^4.2.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.10.5",
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
+    "electron": "^37.10.3",
     "esbuild": "^0.28.2",
+    "vitest": "^3.2.4",
     "yauzl": "^3.4.0"
   }
 }

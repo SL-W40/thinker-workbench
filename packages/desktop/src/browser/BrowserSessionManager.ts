@@ -1,17 +1,26 @@
 /**
  * 内置浏览器：主窗口 WebContentsView + AI 锁定蒙层 + 自动化动作。
+ *
+ * 设计要点（参考 Cursor WebviewBrowserManager，不照搬）：
+ * - reveal 只开面板，不带 url 回写导航（避免 pendingUrl → navigate 死循环）
+ * - 同 URL 且已落定则跳过 loadURL
+ * - 导航中再次 navigate 则 stop 后换目标；动作前等待加载落定
+ * - UI 尚未上报 bounds 时用离屏占位尺寸，保证截图可用
  */
 import fs from "node:fs";
 import path from "node:path";
 import {
+  BROWSER_ABOUT_BLANK,
   type BrowserBounds,
   type BrowserEvent,
   type BrowserState,
+  browserUrlsEqual,
   IpcChannels,
+  normalizeBrowserUrl,
   resolveVisualThemeId,
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";
-import { BrowserWindow, nativeTheme, session, WebContentsView } from "electron";
+import { BrowserWindow, nativeTheme, session, type WebContents, WebContentsView } from "electron";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { getMainWindow } from "../window/createWindow";
@@ -28,7 +37,11 @@ import {
 } from "./pageScripts";
 
 const PARTITION = "persist:thinker-browser";
-const ABOUT_BLANK = "about:blank";
+/** UI 未量洞前的离屏占位（CSS px）。 */
+const FALLBACK_VIEWPORT_W = 1280;
+const FALLBACK_VIEWPORT_H = 720;
+/** 等待主文档加载落定的上限。 */
+const LOAD_SETTLE_TIMEOUT_MS = 30_000;
 
 function broadcast(event: BrowserEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -36,13 +49,6 @@ function broadcast(event: BrowserEvent): void {
       win.webContents.send(IpcChannels.browserEvent, event);
     }
   }
-}
-
-function normalizeUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return ABOUT_BLANK;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
 }
 
 class BrowserSessionManager {
@@ -58,20 +64,22 @@ class BrowserSessionManager {
   private loading = false;
   private deviceMetricsActive = false;
   private overlayConsoleBound = false;
+  /** 导航世代：并发 navigate 时旧 load 结果作废。 */
+  private loadSeq = 0;
 
   /** 当前状态快照。 */
   getState(): BrowserState {
     const wc = this.view?.webContents;
     return {
-      url: wc && !wc.isDestroyed() ? wc.getURL() : ABOUT_BLANK,
+      url: wc && !wc.isDestroyed() ? wc.getURL() : BROWSER_ABOUT_BLANK,
       title: wc && !wc.isDestroyed() ? wc.getTitle() : "",
       loading: this.loading,
       canGoBack: Boolean(wc && !wc.isDestroyed() && wc.navigationHistory.canGoBack()),
       canGoForward: Boolean(wc && !wc.isDestroyed() && wc.navigationHistory.canGoForward()),
       locked: this.locked,
       visible: this.visible && this.bounds.width > 0 && this.bounds.height > 0,
-      viewportWidth: this.viewportWidth || this.bounds.width,
-      viewportHeight: this.viewportHeight || this.bounds.height,
+      viewportWidth: this.viewportWidth || this.bounds.width || FALLBACK_VIEWPORT_W,
+      viewportHeight: this.viewportHeight || this.bounds.height || FALLBACK_VIEWPORT_H,
     };
   }
 
@@ -79,12 +87,19 @@ class BrowserSessionManager {
     broadcast({ type: "state", state: this.getState() });
   }
 
-  /** 确保页面 view 已创建并挂到主窗。 */
-  private ensureView(): WebContentsView {
+  private requireMainWindow(): NonNullable<ReturnType<typeof getMainWindow>> {
     const win = getMainWindow();
     if (!win || win.isDestroyed()) {
-      throw new Error("Main window is not available.");
+      throw new Error(
+        "Built-in browser is unavailable (main window not ready). Open the app window and retry.",
+      );
     }
+    return win;
+  }
+
+  /** 确保页面 view 已创建并挂到主窗。 */
+  private ensureView(): WebContentsView {
+    const win = this.requireMainWindow();
     if (!this.view) {
       const ses = session.fromPartition(PARTITION);
       this.view = new WebContentsView({
@@ -139,10 +154,7 @@ class BrowserSessionManager {
   }
 
   private ensureOverlay(): WebContentsView {
-    const win = getMainWindow();
-    if (!win || win.isDestroyed()) {
-      throw new Error("Main window is not available.");
-    }
+    const win = this.requireMainWindow();
     if (!this.overlay) {
       this.overlay = new WebContentsView({
         webPreferences: {
@@ -169,7 +181,7 @@ class BrowserSessionManager {
     const overlay = this.ensureOverlay();
     const general = getGeneralSettings();
     const visual = resolveVisualThemeId(general.uiTheme, nativeTheme.shouldUseDarkColors);
-    const tokens = overlayTokensForVisual(String(visual));
+    const tokens = overlayTokensForVisual(String(visual), general.customThemes);
     const copy = this.overlayCopy();
     const url = buildOverlayDataUrl({ tokens, ...copy });
     await overlay.webContents.loadURL(url);
@@ -187,12 +199,24 @@ class BrowserSessionManager {
   }
 
   private applyBounds(): void {
-    const empty = !this.visible || this.bounds.width < 2 || this.bounds.height < 2;
+    const measured = this.bounds.width >= 2 && this.bounds.height >= 2;
     if (this.view) {
-      this.view.setBounds(empty ? { x: 0, y: 0, width: 0, height: 0 } : { ...this.bounds });
+      if (!this.visible) {
+        this.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+      } else if (measured) {
+        this.view.setBounds({ ...this.bounds });
+      } else {
+        // AI 已 reveal 但洞尚未量到：离屏占位，避免 0×0 截图空白与布局抖动
+        this.view.setBounds({
+          x: -10_000,
+          y: -10_000,
+          width: FALLBACK_VIEWPORT_W,
+          height: FALLBACK_VIEWPORT_H,
+        });
+      }
     }
     if (this.overlay) {
-      if (this.locked && !empty) {
+      if (this.locked && this.visible && measured) {
         this.overlay.setBounds({ ...this.bounds });
       } else {
         this.overlay.setBounds({ x: 0, y: 0, width: 0, height: 0 });
@@ -209,8 +233,8 @@ class BrowserSessionManager {
       height: Math.max(0, Math.round(bounds.height)),
     };
     if (!this.deviceMetricsActive) {
-      this.viewportWidth = this.bounds.width;
-      this.viewportHeight = this.bounds.height;
+      this.viewportWidth = this.bounds.width || FALLBACK_VIEWPORT_W;
+      this.viewportHeight = this.bounds.height || FALLBACK_VIEWPORT_H;
     }
     if (this.visible) this.ensureView();
     this.applyBounds();
@@ -226,24 +250,88 @@ class BrowserSessionManager {
   }
 
   /**
+   * 等待主文档加载落定（did-stop-loading / fail / 超时）。
+   * 已不在 loading 则立即返回。
+   */
+  private waitForLoadSettle(wc: WebContents, timeoutMs = LOAD_SETTLE_TIMEOUT_MS): Promise<void> {
+    if (wc.isDestroyed() || !wc.isLoading()) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        wc.removeListener("did-stop-loading", onStop);
+        wc.removeListener("did-fail-load", onFail);
+        resolve();
+      };
+      const onStop = () => finish();
+      const onFail = (
+        _e: Electron.Event,
+        _code: number,
+        _desc: string,
+        _url: string,
+        isMainFrame: boolean,
+      ) => {
+        if (isMainFrame) finish();
+      };
+      const timer = setTimeout(finish, timeoutMs);
+      wc.once("did-stop-loading", onStop);
+      wc.once("did-fail-load", onFail);
+    });
+  }
+
+  /**
    * 导航并可选要求 UI 打开面板。
    * `preferBuiltin: true` 时忽略「本地链接走系统浏览器」设置（供 AI 自动化）。
+   * reveal 不带 url：主进程已 load，renderer 只开 tab，避免再次 navigate 死循环。
    */
   async navigate(
     url: string,
     options?: { reveal?: boolean; preferBuiltin?: boolean },
   ): Promise<BrowserState> {
-    const target = normalizeUrl(url);
+    const target = normalizeBrowserUrl(url);
     if (!options?.preferBuiltin && maybeOpenLocalLinkExternally(target)) {
       return this.getState();
     }
     const view = this.ensureView();
+    const wc = view.webContents;
+
     if (options?.reveal !== false) {
-      broadcast({ type: "reveal", url: target });
+      broadcast({ type: "reveal" });
     }
     this.visible = true;
     this.applyBounds();
-    await view.webContents.loadURL(target);
+
+    // 已在目标页且不在加载：只 reveal，勿再 load（防 UI pendingUrl / 重复工具调用）
+    if (browserUrlsEqual(wc.getURL(), target) && !wc.isLoading()) {
+      this.emitState();
+      return this.getState();
+    }
+
+    const seq = ++this.loadSeq;
+    if (wc.isLoading()) {
+      try {
+        wc.stop();
+      } catch {
+        /* ignore */
+      }
+      await this.waitForLoadSettle(wc, 2_000);
+      if (seq !== this.loadSeq) return this.getState();
+    }
+
+    try {
+      await wc.loadURL(target);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // 被后续 navigate stop 掉时常见 ERR_ABORTED
+      if (seq !== this.loadSeq || /ERR_ABORTED|\(-3\)/i.test(msg)) {
+        return this.getState();
+      }
+      throw err;
+    }
+    if (seq !== this.loadSeq) return this.getState();
+    await this.waitForLoadSettle(wc);
     this.emitState();
     return this.getState();
   }
@@ -251,7 +339,12 @@ class BrowserSessionManager {
   async goBack(): Promise<BrowserState> {
     const view = this.ensureView();
     const history = view.webContents.navigationHistory;
-    if (history.canGoBack()) history.goBack();
+    if (history.canGoBack()) {
+      const seq = ++this.loadSeq;
+      history.goBack();
+      await this.waitForLoadSettle(view.webContents);
+      if (seq !== this.loadSeq) return this.getState();
+    }
     this.emitState();
     return this.getState();
   }
@@ -259,14 +352,22 @@ class BrowserSessionManager {
   async goForward(): Promise<BrowserState> {
     const view = this.ensureView();
     const history = view.webContents.navigationHistory;
-    if (history.canGoForward()) history.goForward();
+    if (history.canGoForward()) {
+      const seq = ++this.loadSeq;
+      history.goForward();
+      await this.waitForLoadSettle(view.webContents);
+      if (seq !== this.loadSeq) return this.getState();
+    }
     this.emitState();
     return this.getState();
   }
 
   async reload(): Promise<BrowserState> {
     const view = this.ensureView();
+    const seq = ++this.loadSeq;
     view.webContents.reload();
+    await this.waitForLoadSettle(view.webContents);
+    if (seq !== this.loadSeq) return this.getState();
     this.emitState();
     return this.getState();
   }
@@ -297,6 +398,7 @@ class BrowserSessionManager {
 
   private async evalPage<T>(script: string): Promise<T> {
     const view = this.ensureView();
+    await this.waitForLoadSettle(view.webContents);
     return (await view.webContents.executeJavaScript(script, true)) as T;
   }
 
@@ -307,6 +409,9 @@ class BrowserSessionManager {
 
   async screenshot(): Promise<string> {
     const view = this.ensureView();
+    await this.waitForLoadSettle(view.webContents);
+    // 确保有非零绘制面
+    this.applyBounds();
     const img = await view.webContents.capturePage();
     const dir = path.join(getDataDir(), "browser-screenshots");
     fs.mkdirSync(dir, { recursive: true });
@@ -501,6 +606,7 @@ class BrowserSessionManager {
     this.overlayAttached = false;
     this.visible = false;
     this.locked = false;
+    this.loadSeq = 0;
   }
 }
 

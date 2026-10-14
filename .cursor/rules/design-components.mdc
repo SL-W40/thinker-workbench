@@ -13,19 +13,26 @@ Import from `@thinker-workbench/design/react`. Global chrome: `@thinker-workbenc
 
 | Control | Use for |
 |---|---|
-| `Button` | Labeled actions (`primary` / `secondary` / `ghost` / `text` / `danger`; `text` = inline “Try it” style) |
+| `Button` | Labeled actions (`primary` / `secondary` / `ghost` / `text` / `danger`; `text` = inline “Try it” style; `busy` shows a spinner) |
 | `IconButton` | Icon-only actions (requires `aria-label`) |
 | `*Icon` / `Icon` | Named SVG icons (`ChevronLeftIcon`, …); 16×16 / stroke 1.5; catalog via `listDesignIcons()` |
 | `Input` / `TextArea` | Text fields (spellcheck / autofill off by default) |
 | `Field` | Label + description + error around a control |
+| `SettingsRow` | Settings line: title + description, control on the right (`stack` drops it below) |
 | `Select` | Single choice listbox (portaled menu) |
 | `SegmentedControl` | Compact 2–3 choice toggle |
 | `Switch` / `Checkbox` / `RadioGroup` | Boolean / multi-option toggles |
-| `Modal` | Dialogs (backdrop dismiss opt-in) |
+| `Chip` | Removable label (`onRemove` + `removeLabel`) |
+| `Badge` | Small status chips (not removable) |
+| `Tabs` | Underline tabs, or closable document tabs (`variant="document"`, dirty dot) |
+| `Disclosure` | Collapsible group with optional count and header actions |
+| `Popover` | Anchored floating panel (dialog chrome when `role="dialog"`) |
+| `Menu` | Trigger-anchored menu: groups, description, check, shortcut, submenu |
+| `ContextMenu` | Pointer-anchored menu; same item model as `Menu` |
+| `Modal` | Dialogs (`Modal.Header` / `Body` / `Footer`; backdrop dismiss opt-in) |
 | `ChoiceCard` | Selectable option cards (e.g. theme pickers) |
 | `SideNavItem` | Side navigation rows |
-| `Kbd` | Shortcut keycaps |
-| `Badge` | Small status chips |
+| `Kbd` | Shortcut keycaps (`compact` for menu shortcuts) |
 | `Callout` | Inline info / warning / danger notices |
 | `EmptyState` | Empty placeholders + optional action |
 | `Spinner` / `Progress` | Loading / progress |

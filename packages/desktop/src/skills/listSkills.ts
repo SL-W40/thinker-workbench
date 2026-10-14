@@ -4,9 +4,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { SkillListItem } from "@thinker-workbench/shared";
+import { parseYamlFrontmatter, type SkillListItem } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/paths";
-import { metaString, parseFrontmatter, sanitizeKebabName } from "../customize/frontmatter";
+import { metaString, sanitizeKebabName } from "../customize/frontmatter";
 
 function walkSkillMd(root: string): string[] {
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
@@ -38,7 +38,7 @@ function parseSkillSummary(absPath: string, source: string): SkillListItem | nul
     return null;
   }
   const folderName = path.basename(path.dirname(absPath));
-  const { meta } = parseFrontmatter(raw);
+  const { data: meta } = parseYamlFrontmatter(raw);
   const name = sanitizeKebabName(metaString(meta, "name", folderName), folderName);
   const description = metaString(meta, "description");
   return {

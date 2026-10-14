@@ -1,17 +1,19 @@
 /**
- * Run 准入协调：同 thread 互斥、并行上限；不负责执行本身。
- * activeSessionId 仅 UI 焦点，不参与所有权判断。
- * 并行上限读自 GeneralSettings.maxParallelRuns。
+ * Run 准入协调：同 thread 互斥与工作区根校验；不负责执行本身。
+ * 并行槽与 FIFO 由 RunLedger 决定。activeSessionId 仅 UI 焦点，不参与所有权判断。
  */
 import {
   type ChatSessionRecord,
   DEFAULT_MAX_PARALLEL_RUNS,
+  DEFAULT_MAX_QUEUED_RUNS,
+  DEFAULT_QUEUE_TIMEOUT_MIN,
   normalizeMaxParallelRuns,
+  normalizeMaxQueuedRuns,
+  normalizeQueueTimeoutMin,
 } from "@thinker-workbench/shared";
 import { getGeneralSettings } from "../config/settingsStore";
 import {
   assertWorkspaceRoot,
-  countRunningSessions,
   getSession,
   getSessionByActiveRunId,
   getSessionByThreadId,
@@ -30,11 +32,28 @@ export function getMaxParallelRuns(): number {
   }
 }
 
+/** 读取等待队列深度。0 表示超限直接拒绝。 */
+export function getMaxQueuedRuns(): number {
+  try {
+    return normalizeMaxQueuedRuns(getGeneralSettings().maxQueuedRuns);
+  } catch {
+    return DEFAULT_MAX_QUEUED_RUNS;
+  }
+}
+
+/** 读取排队超时（分钟）。0 表示不超时。 */
+export function getQueueTimeoutMin(): number {
+  try {
+    return normalizeQueueTimeoutMin(getGeneralSettings().queueTimeoutMin);
+  } catch {
+    return DEFAULT_QUEUE_TIMEOUT_MIN;
+  }
+}
+
 export type AdmitRunRequest = {
   sessionId?: string;
   threadId?: string;
-  /** 命令显式工作区根；缺省由 session → workspace 解析。 */
-  workspaceRoot?: string;
+  /** 显示名覆盖；根路径一律由 session.workspaceId → workspace.rootPath 解析。 */
   workspaceName?: string;
 };
 
@@ -53,12 +72,23 @@ export type AdmitRunErr = {
 
 export type AdmitRunResult = AdmitRunOk | AdmitRunErr;
 
-const NO_SESSION = "No chat session. Create or select a session before sending.";
-const NO_WORKSPACE = "No workspace open. Open a workspace and start a chat before sending.";
-const THREAD_BUSY = "This session already has a running agent. Stop it or wait.";
+export const NO_SESSION = "No chat session. Create or select a session before sending.";
+export const NO_WORKSPACE = "No workspace open. Open a workspace and start a chat before sending.";
+export const THREAD_BUSY = "This session already has a running agent. Stop it or wait.";
 
-function parallelLimitError(max: number): string {
+/** 并行槽已满且不允许排队时的拒绝文案。 */
+export function parallelCapError(max: number): string {
   return `Too many parallel sessions (max ${max}). Stop one before starting another.`;
+}
+
+/** 等待队列已满。 */
+export function queueFullError(max: number): string {
+  return `Too many queued sessions (max ${max}). Stop a queued session or wait.`;
+}
+
+/** 排队等待超时。 */
+export function queueTimeoutError(minutes: number): string {
+  return `Queued run timed out after ${minutes} minutes.`;
 }
 
 /**
@@ -71,16 +101,12 @@ export function admitRun(request: AdmitRunRequest): AdmitRunResult {
     return { ok: false, error: NO_SESSION };
   }
 
-  if (session.runStatus === "running" && session.activeRunId) {
+  // queued 与 running 一样占着这条会话，不能再叠一条
+  if (
+    (session.runStatus === "running" || session.runStatus === "queued") &&
+    session.activeRunId
+  ) {
     return { ok: false, error: THREAD_BUSY };
-  }
-
-  const maxParallel = getMaxParallelRuns();
-  // 本会话尚未标 running 时计入其它会话；本会话重入已在上方拒绝
-  const running = countRunningSessions();
-  const selfAlreadyCounted = session.runStatus === "running" ? 1 : 0;
-  if (running - selfAlreadyCounted >= maxParallel) {
-    return { ok: false, error: parallelLimitError(maxParallel) };
   }
 
   const workspace = getWorkspace(session.workspaceId);
@@ -88,11 +114,10 @@ export function admitRun(request: AdmitRunRequest): AdmitRunResult {
     return { ok: false, error: NO_WORKSPACE };
   }
 
+  // 只信登记根：不接受请求里自带的路径（即使目录存在）。
   let workspaceRoot: string;
   try {
-    workspaceRoot = request.workspaceRoot?.trim()
-      ? assertWorkspaceRoot(request.workspaceRoot.trim())
-      : assertWorkspaceRoot(workspace.rootPath);
+    workspaceRoot = assertWorkspaceRoot(workspace.rootPath);
   } catch {
     return { ok: false, error: NO_WORKSPACE };
   }

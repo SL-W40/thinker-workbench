@@ -76,16 +76,18 @@ export function hasOpenFence(md: string): boolean {
   const lines = (md ?? "").replace(/\r\n/g, "\n").split("\n");
   let open: { ch: string; count: number } | null = null;
   for (const line of lines) {
-    const m = /^(`{3,}|~{3,})(.*)$/.exec(line);
+    const m = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
     if (!m) continue;
-    const fence = m[1];
+    const fence = m[2] ?? "";
     const ch = fence[0]!;
     const count = fence.length;
+    const rest = m[3] ?? "";
     if (!open) {
+      if (ch === "`" && rest.includes("`")) continue;
       open = { ch, count };
       continue;
     }
-    if (ch === open.ch && count >= open.count && !m[2].trim()) {
+    if (ch === open.ch && count >= open.count && !rest.trim()) {
       open = null;
     }
   }

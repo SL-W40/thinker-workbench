@@ -51,9 +51,9 @@ function resolveDefaultProfile(
 }
 
 type Props = {
-  /** 面板是否可见（不可见时跳?fit，显示时补一次）。*/
+  /** 面板是否可见（不可见时跳过 fit，显示时补一次）。*/
   active?: boolean;
-  /** 外部请求聚焦的会?id。*/
+  /** 外部请求聚焦的会话 id。*/
   focusSessionId?: string | null;
   onFocusSessionConsumed?: () => void;
 };
@@ -73,6 +73,11 @@ export function TerminalPane({
   const buffersRef = useRef(new Map<string, string>());
   /** 避免切换会话时旧 getOutput 覆盖新会话。*/
   const loadSeqRef = useRef(0);
+  /** 按帧合并写入 xterm，避免高频 chunk 连刷。 */
+  const pendingWriteRef = useRef("");
+  const pendingWriteSessionRef = useRef<string | null>(null);
+  const writeRafRef = useRef<number | null>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -90,7 +95,38 @@ export function TerminalPane({
     sessionsRef.current = sessions;
   }, [sessions]);
 
-  // 初始?xterm
+  /** 丢弃未刷写（切换会话时缓冲已在 buffersRef）。 */
+  function clearPendingWrite() {
+    if (writeRafRef.current != null) {
+      window.cancelAnimationFrame(writeRafRef.current);
+      writeRafRef.current = null;
+    }
+    pendingWriteRef.current = "";
+    pendingWriteSessionRef.current = null;
+  }
+
+  /** 将待写 chunk 在下一帧一次写入 xterm。 */
+  function scheduleTermWrite(sessionId: string, chunk: string) {
+    if (!chunk) return;
+    if (pendingWriteSessionRef.current && pendingWriteSessionRef.current !== sessionId) {
+      clearPendingWrite();
+    }
+    pendingWriteSessionRef.current = sessionId;
+    pendingWriteRef.current += chunk;
+    if (writeRafRef.current != null) return;
+    writeRafRef.current = window.requestAnimationFrame(() => {
+      writeRafRef.current = null;
+      const data = pendingWriteRef.current;
+      const sid = pendingWriteSessionRef.current;
+      pendingWriteRef.current = "";
+      pendingWriteSessionRef.current = null;
+      if (data && sid && activeIdRef.current === sid) {
+        termRef.current?.write(data);
+      }
+    });
+  }
+
+  // 初始化 xterm
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -102,7 +138,8 @@ export function TerminalPane({
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
       theme: readXtermTheme(theme),
       allowTransparency: false,
-      // xterm 6 自绘滚动条宽度（默认 14）；略宽于全局 7px，避免胶囊边再削后过? overviewRuler: { width: 10 },
+      // xterm 6 自绘滚动条宽度（默认 14）；略宽于全局 7px，避免胶囊边再削后过窄
+      overviewRuler: { width: 10 },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -116,7 +153,7 @@ export function TerminalPane({
       const id = activeIdRef.current;
       if (!id || id.startsWith("preview:")) return;
       const meta = sessionsRef.current.find((s) => s.sessionId === id);
-      // 已退出的会话不再写入；运行中可交互（?Ctrl+C：
+      // 已退出的会话不再写入；运行中可交互（含 Ctrl+C）
       if (meta && meta.status !== "running" && meta.status !== "starting") return;
       void writeTerminal(id, data);
     });
@@ -124,16 +161,21 @@ export function TerminalPane({
     const ro =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
-            try {
-              fit.fit();
-              const dims = { cols: term.cols, rows: term.rows };
-              const id = activeIdRef.current;
-              if (id && !id.startsWith("preview:")) {
-                void resizeTerminal(id, dims.cols, dims.rows);
+            // 拖拽面板时合并 resize，避免连发 PTY resize IPC
+            if (resizeTimerRef.current != null) clearTimeout(resizeTimerRef.current);
+            resizeTimerRef.current = setTimeout(() => {
+              resizeTimerRef.current = null;
+              try {
+                fit.fit();
+                const dims = { cols: term.cols, rows: term.rows };
+                const id = activeIdRef.current;
+                if (id && !id.startsWith("preview:")) {
+                  void resizeTerminal(id, dims.cols, dims.rows);
+                }
+              } catch {
+                /* 未挂载时忽略 */
               }
-            } catch {
-              /* 未挂载时忽略 */
-            }
+            }, 50);
           })
         : null;
     ro?.observe(host);
@@ -141,15 +183,17 @@ export function TerminalPane({
     return () => {
       disposable.dispose();
       ro?.disconnect();
+      if (resizeTimerRef.current != null) clearTimeout(resizeTimerRef.current);
+      clearPendingWrite();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
     };
-    // 仅挂载一次；主题变更由下?effect 同步
+    // 仅挂载一次；主题变更由下方 effect 同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
-  // 外观变更时同?xterm + 宿主底色
+  // 外观变更时同步 xterm + 宿主底色
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -223,7 +267,7 @@ export function TerminalPane({
         const prev = buffersRef.current.get(event.sessionId) ?? "";
         buffersRef.current.set(event.sessionId, prev + event.data);
         if (activeIdRef.current === event.sessionId) {
-          termRef.current?.write(event.data);
+          scheduleTermWrite(event.sessionId, event.data);
         }
       }
     });
@@ -231,7 +275,10 @@ export function TerminalPane({
     return () => {
       cancelled = true;
       unsub();
+      clearPendingWrite();
     };
+    // scheduleTermWrite / clearPendingWrite 稳定于闭包外的 ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 切换会话：清屏，优先本地缓冲，否则从主进程拉
@@ -239,6 +286,8 @@ export function TerminalPane({
     const term = termRef.current;
     if (!term || !activeId) return;
     const seq = ++loadSeqRef.current;
+    // 缓冲已含未刷写内容；丢弃 pending，避免写到错误会话
+    clearPendingWrite();
     term.reset();
     const local = buffersRef.current.get(activeId) ?? "";
     if (local) term.write(local);
@@ -269,7 +318,7 @@ export function TerminalPane({
   function focusSession(detail: OpenTerminalDetail) {
     const id = detail.sessionId?.trim();
     if (id) {
-      // 有真?sessionId 时以主进程缓冲为准，不用时间线截断预览覆?
+      // 有真实 sessionId 时以主进程缓冲为准，不用时间线截断预览覆盖
       setSessions((prev) => {
         if (prev.some((s) => s.sessionId === id)) return prev;
         return [
@@ -338,7 +387,7 @@ export function TerminalPane({
   useEffect(() => {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<OpenTerminalDetail>).detail ?? {};
-      // 事件已派发则清空 pending，避?mount 消费重复
+      // 事件已派发则清空 pending，避免 mount 消费重复
       consumePendingOpenTerminal();
       focusSession(detail);
     }
@@ -444,7 +493,7 @@ export function TerminalPane({
             ) : null}
           </div>
         ) : null}
-        {/* xterm 宿主需常挂，避免空态时销毁实…?*/}
+        {/* xterm 宿主需常挂，避免空态时销毁实例 */}
         <div ref={hostRef} className="terminal-pane__xterm" hidden={showEmpty} />
         {showEmpty ? (
           <div className="terminal-pane__empty">

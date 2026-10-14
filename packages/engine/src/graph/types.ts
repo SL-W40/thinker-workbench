@@ -31,6 +31,12 @@ export type GraphState = {
   reply: string;
   /** 最近一轮 agent 产出的 tool_calls；tools 节点跑完后清空。 */
   pendingToolCalls: ChatToolCall[];
+  /**
+   * 已开工但可能尚未写入 tool 结果的 callId。
+   * 开工前落盘，resume 时用于跳过重放（已开工无结果 → 注入中断说明）。
+   * 旧 checkpoint 缺字段时按 []。
+   */
+  startedToolCallIds: string[];
   /** 本图遍历中 agent 节点已执行次数。 */
   step: number;
   /** 用户 `@` 选中的工作区相对路径（注入 context_files）。 */

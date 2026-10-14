@@ -1,7 +1,7 @@
 ﻿/**
  * 主 BrowserWindow 的创建与生命周期。
  *
- * 无边框窗口、按 session 恢复几何与 hash、快捷键重载、最大化状态 IPC、
+ * 自定义标题栏（Windows 用系统字幕按钮）、按 session 恢复几何与 hash、快捷键重载、最大化状态 IPC、
  * 关闭时写 session / 可选隐藏到托盘，以及开发态等待 Vite 后再 loadURL。
  */
 import path from "node:path";
@@ -19,7 +19,7 @@ import {
 import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStore";
 import { isShortcutRecording } from "../config/shortcutRecording";
 import { closeAllAuxWindows, syncAuxWindowBackgrounds } from "./auxWindows";
-import { windowChromeOptions } from "./chromeOptions";
+import { syncBrowserWindowChrome, windowChromeOptions } from "./chromeOptions";
 import { fitWindowToDisplay, windowMinSize } from "./defaultBounds";
 import { clearApplicationMenu } from "./menu";
 import { windowBackgroundForTheme } from "./themeBackground";
@@ -54,10 +54,9 @@ export function getMainWindow(): BrowserWindow | null {
   return win;
 }
 
-/** 设置 → 外观变更时，同步主窗与辅助窗原生填充色。 */
+/** 设置 → 外观变更时，同步主窗与辅助窗底色，以及 Windows 系统按钮区。 */
 export function syncWindowBackgroundFromSettings(): void {
-  const color = windowBackgroundForTheme(getGeneralSettings().uiTheme);
-  if (win && !win.isDestroyed()) win.setBackgroundColor(color);
+  if (win && !win.isDestroyed()) syncBrowserWindowChrome(win);
   syncAuxWindowBackgrounds();
 }
 

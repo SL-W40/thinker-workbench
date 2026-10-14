@@ -136,14 +136,16 @@ describe("exportBundle", () => {
       },
     });
 
-    assert.ok(files["manifest.json"]);
-    assert.ok(files["trace/spans.json"]);
+    const manifestJson = files["manifest.json"];
+    const spansJson = files["trace/spans.json"];
+    assert.ok(manifestJson);
+    assert.ok(spansJson);
     assert.ok(files["README.txt"]);
-    const manifest = JSON.parse(files["manifest.json"]!) as Record<string, unknown>;
+    const manifest = JSON.parse(manifestJson) as Record<string, unknown>;
     assert.equal(manifest.sessionId, "sess_export");
     const settings = manifest.traceSettings as Record<string, unknown>;
     assert.equal(settings.apiKey, "***");
-    assert.equal(JSON.parse(files["trace/spans.json"]!).length, 2);
+    assert.equal(JSON.parse(spansJson).length, 2);
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw-export-"));
     const zipPath = path.join(dir, "out.zip");
@@ -161,7 +163,9 @@ describe("exportBundle", () => {
     ]) {
       assert.ok(entries.has(name), `missing ${name}`);
     }
-    assert.equal(JSON.parse(entries.get("trace/spans.json")!).length, 2);
+    const zipSpans = entries.get("trace/spans.json");
+    assert.ok(zipSpans);
+    assert.equal(JSON.parse(zipSpans).length, 2);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

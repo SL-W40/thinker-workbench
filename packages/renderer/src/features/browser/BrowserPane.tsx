@@ -9,7 +9,7 @@ import {
   Input,
   RestartIcon,
 } from "@thinker-workbench/design/react";
-import type { BrowserState } from "@thinker-workbench/shared";
+import { type BrowserState, browserUrlsEqual } from "@thinker-workbench/shared";
 import { useEffect, useRef, useState } from "react";
 import {
   browserGetState,
@@ -25,9 +25,9 @@ import { useT } from "../../i18n/useI18n";
 import "./BrowserPane.less";
 
 type Props = {
-  /** 面板是否为当前激?tab。*/
+  /** 面板是否为当前激活 tab。*/
   active?: boolean;
-  /** 外部请求导航?URL（消费后清空）。*/
+  /** 外部请求导航到的 URL（消费后清空）。*/
   pendingUrl?: string | null;
   onPendingUrlConsumed?: () => void;
 };
@@ -113,7 +113,11 @@ export function BrowserPane({ active = true, pendingUrl = null, onPendingUrlCons
     const url = pendingUrl.trim();
     onPendingUrlConsumed?.();
     setUrlDraft(url);
-    void browserNavigate(url);
+    // 已在目标页则跳过，防止外部重复 open 触发刷新风暴
+    void browserGetState().then((s) => {
+      if (s && browserUrlsEqual(s.url, url) && !s.loading) return;
+      void browserNavigate(url);
+    });
   }, [pendingUrl, onPendingUrlConsumed]);
 
   async function submitUrl() {

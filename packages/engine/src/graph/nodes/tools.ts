@@ -1,19 +1,25 @@
 /**
  * tools 节点：执行上一轮 agent 留下的 pendingToolCalls，结果写回消息历史。
+ * Resume：已有结果则跳过；已开工无结果则注入分类中断说明（不重放）。
  */
 
 import { withJsonPreview, withTextPreview } from "@thinker-workbench/logger";
 import { agentLog } from "../../log/setup";
 import type { ChatMessage, ChatToolCall } from "../../model/types";
-import { getRunTurn } from "../../runtime/runContext";
+import { getRunTurn, markToolCallStarted } from "../../runtime/runContext";
 import { getRunEmitter } from "../../runtime/runEmit";
 import { runTool } from "../../tools/runTool";
 import { buildUnifiedDiff } from "../../tools/shared/diff";
-import { peekTaskLaunchesInBackground } from "../../tools/task/execute";
+import { peekTaskLaunchesInBackground, seedFailedBackgroundTask } from "../../tools/task/execute";
 import { deriveTaskTitle } from "../../tools/task/title";
 import type { ToolArgs } from "../../tools/types";
 import { agentEndSpan, agentStartSpan } from "../../trace/emit";
 import type { GraphState } from "../types";
+import {
+  appendStartedToolCallId,
+  interruptedToolMessage,
+  resolvePendingToolAction,
+} from "./toolsResume";
 
 /**
  * 当工具未附带 ui.diff 时，用参数拼一份可见 diff（改文档等大段写入也能在时间线展示）。
@@ -48,6 +54,16 @@ function parseToolArgs(raw: string): { ok: true; args: ToolArgs } | { ok: false;
 
 /** 从参数抽出 path / 一行摘要（搜索词等）；改文件预览走 diff，不再塞 replace 摘要。 */
 function toolUiHints(name: string, args: ToolArgs): { path?: string; summary?: string } {
+  // browser_navigate：用 url 作可点路径；snapshot / screenshot 用短标签触发展开
+  if (name === "browser_navigate" && typeof args.url === "string" && args.url.trim()) {
+    return { path: args.url.trim() };
+  }
+  if (name === "browser_snapshot") {
+    return { path: "snapshot" };
+  }
+  if (name === "browser_screenshot") {
+    return { path: "screenshot" };
+  }
   const path = typeof args.path === "string" ? args.path : undefined;
   const bits: string[] = [];
   if (typeof args.pattern === "string" && args.pattern) bits.push(args.pattern);
@@ -64,6 +80,29 @@ function toolUiHints(name: string, args: ToolArgs): { path?: string; summary?: s
   if (typeof args.command === "string" && args.command) bits.push(args.command.slice(0, 80));
   const summary = bits.length > 0 ? bits.join(" · ") : undefined;
   return { path, summary };
+}
+
+/** interrupt / reuse 时补发 tool end，避免 UI 悬空。 */
+function emitToolEndFromMessage(call: ChatToolCall, message: ChatMessage, ok: boolean): void {
+  const emit = getRunEmitter();
+  if (!emit) return;
+  const name = call.function.name;
+  const parsed = parseToolArgs(call.function.arguments);
+  const hints = parsed.ok ? toolUiHints(name, parsed.args) : {};
+  const commandHint =
+    parsed.ok && typeof parsed.args.command === "string" ? parsed.args.command : undefined;
+  emit({
+    type: "tool",
+    phase: "end",
+    name,
+    callId: call.id,
+    path: hints.path,
+    summary: hints.summary,
+    detail: ok ? "ok" : "interrupted",
+    ok,
+    command: commandHint,
+  });
+  void message;
 }
 
 /** 执行单个 tool_call，并发出 tool start/end 事件。 */
@@ -209,46 +248,160 @@ function takeBackgroundTaskBatch(pending: ChatToolCall[]): ChatToolCall[] {
   return batch.length >= 2 ? batch : [];
 }
 
+/** 对单个 call 按 resume 策略产出 tool 消息（可能跳过写入）。 */
+async function resolveOne(
+  state: GraphState,
+  call: ChatToolCall,
+  signal: AbortSignal,
+): Promise<{ message: ChatMessage | null; startedIds: string[] }> {
+  const action = resolvePendingToolAction(state, call);
+  const startedIds = state.startedToolCallIds;
+
+  if (action === "reuse") {
+    const existing = state.messages.find((m) => m.role === "tool" && m.tool_call_id === call.id);
+    if (existing)
+      emitToolEndFromMessage(
+        call,
+        existing,
+        !/\[tool:[^\]]+ error\]/.test(typeof existing.content === "string" ? existing.content : ""),
+      );
+    return { message: null, startedIds };
+  }
+
+  if (action === "interrupt") {
+    const message = interruptedToolMessage(call);
+    emitToolEndFromMessage(call, message, false);
+    if (call.function.name === "Task") {
+      const parsed = parseToolArgs(call.function.arguments);
+      const subagent =
+        parsed.ok && typeof parsed.args.subagent === "string" ? parsed.args.subagent.trim() : "";
+      seedFailedBackgroundTask(call.id, {
+        reason:
+          "Interrupted by process crash while this Task was in progress; outcome is uncertain.",
+        subagent: subagent || "unknown",
+      });
+    }
+    agentLog("graph.tools").warn("tool interrupted on resume", {
+      spanId: call.id,
+      meta: { name: call.function.name },
+    });
+    return { message, startedIds };
+  }
+
+  await markToolCallStarted(call.id);
+  const nextStarted = appendStartedToolCallId(startedIds, call.id);
+  const message = await runOne(call, signal);
+  return { message, startedIds: nextStarted };
+}
+
 /**
  * 默认每次只执行一个 pending tool，便于节点结束后落 checkpoint。
  * 例外：连续多个后台 Task 并行启动，避免「先说并行、卡片却一个个冒」。
  */
 export async function tools(state: GraphState, signal: AbortSignal): Promise<Partial<GraphState>> {
-  if (state.pendingToolCalls.length === 0) {
-    return { pendingToolCalls: [] };
+  const startedToolCallIds = Array.isArray(state.startedToolCallIds)
+    ? state.startedToolCallIds
+    : [];
+  const base: GraphState = { ...state, startedToolCallIds };
+
+  if (base.pendingToolCalls.length === 0) {
+    return { pendingToolCalls: [], startedToolCallIds };
   }
   if (signal.aborted) {
     throw new Error("Run cancelled.");
   }
 
-  const batch = takeBackgroundTaskBatch(state.pendingToolCalls);
+  const batch = takeBackgroundTaskBatch(base.pendingToolCalls);
   if (batch.length >= 2) {
     const log = agentLog("graph.tools");
     log.info("parallel background Task batch", {
       spanId: "tools-batch",
       meta: { count: batch.length, ids: batch.map((c) => c.id) },
     });
-    const toolMessages = await Promise.all(batch.map((call) => runOne(call, signal)));
+    // 并行前先逐个 mark（串行落盘），再 Promise.all 执行/中断
+    const prepared: Array<{
+      call: ChatToolCall;
+      action: ReturnType<typeof resolvePendingToolAction>;
+    }> = [];
+    let started = [...startedToolCallIds];
+    let working: GraphState = { ...base, startedToolCallIds: started };
+    for (const call of batch) {
+      const action = resolvePendingToolAction(working, call);
+      if (action === "run") {
+        await markToolCallStarted(call.id);
+        started = appendStartedToolCallId(started, call.id);
+        working = { ...working, startedToolCallIds: started };
+      }
+      prepared.push({ call, action });
+    }
+
+    const toolMessages: ChatMessage[] = [];
+    await Promise.all(
+      prepared.map(async ({ call, action }) => {
+        if (action === "reuse") {
+          const existing = working.messages.find(
+            (m) => m.role === "tool" && m.tool_call_id === call.id,
+          );
+          if (existing) {
+            emitToolEndFromMessage(
+              call,
+              existing,
+              !/\[tool:[^\]]+ error\]/.test(
+                typeof existing.content === "string" ? existing.content : "",
+              ),
+            );
+          }
+          return;
+        }
+        if (action === "interrupt") {
+          const message = interruptedToolMessage(call);
+          emitToolEndFromMessage(call, message, false);
+          const parsed = parseToolArgs(call.function.arguments);
+          const subagent =
+            parsed.ok && typeof parsed.args.subagent === "string"
+              ? parsed.args.subagent.trim()
+              : "";
+          seedFailedBackgroundTask(call.id, {
+            reason:
+              "Interrupted by process crash while this Task was in progress; outcome is uncertain.",
+            subagent: subagent || "unknown",
+          });
+          toolMessages.push(message);
+          return;
+        }
+        const message = await runOne(call, signal);
+        toolMessages.push(message);
+      }),
+    );
     if (signal.aborted) {
       throw new Error("Run cancelled.");
     }
+    // 保持与 batch 顺序一致
+    const ordered: ChatMessage[] = [];
+    for (const { call, action } of prepared) {
+      if (action === "reuse") continue;
+      const msg = toolMessages.find((m) => m.tool_call_id === call.id);
+      if (msg) ordered.push(msg);
+    }
     return {
-      messages: [...state.messages, ...toolMessages],
-      pendingToolCalls: state.pendingToolCalls.slice(batch.length),
+      messages: [...base.messages, ...ordered],
+      pendingToolCalls: base.pendingToolCalls.slice(batch.length),
+      startedToolCallIds: started,
     };
   }
 
-  const [call, ...rest] = state.pendingToolCalls;
+  const [call, ...rest] = base.pendingToolCalls;
   if (!call) {
-    return { pendingToolCalls: [] };
+    return { pendingToolCalls: [], startedToolCallIds };
   }
-  const toolMessage = await runOne(call, signal);
+  const { message, startedIds } = await resolveOne(base, call, signal);
   if (signal.aborted) {
     throw new Error("Run cancelled.");
   }
 
   return {
-    messages: [...state.messages, toolMessage],
+    messages: message ? [...base.messages, message] : base.messages,
     pendingToolCalls: rest,
+    startedToolCallIds: startedIds,
   };
 }

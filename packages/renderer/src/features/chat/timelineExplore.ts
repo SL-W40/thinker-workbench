@@ -11,9 +11,19 @@ import type { ChatTimelineStep } from "@thinker-workbench/shared";
 const FILE_TOOLS = new Set(["read_file", "list_dir"]);
 /** 搜索类 → searches 计数。 */
 const SEARCH_TOOLS = new Set(["grep", "search_files"]);
+/** 浏览器观察类 → pages 计数（进 Explored，可展开截图）。 */
+const BROWSER_EXPLORE_TOOLS = new Set([
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_screenshot",
+  "browser_scroll",
+  "browser_get_styles",
+  "browser_resize",
+  "browser_lock",
+]);
 
 function isExploreTool(name: string): boolean {
-  return FILE_TOOLS.has(name) || SEARCH_TOOLS.has(name);
+  return FILE_TOOLS.has(name) || SEARCH_TOOLS.has(name) || BROWSER_EXPLORE_TOOLS.has(name);
 }
 
 export type ExploreGroup = {
@@ -22,11 +32,12 @@ export type ExploreGroup = {
   steps: ChatTimelineStep[];
   fileCount: number;
   searchCount: number;
+  pageCount: number;
   /** 组内仍有工具在跑。 */
   active: boolean;
 };
 
-/** 是否为探索类工具（读 / 列 / 搜）。 */
+/** 是否为探索类工具（读 / 列 / 搜 / browser 观察）。 */
 export function isExploreToolName(name: string): boolean {
   return isExploreTool(name);
 }
@@ -62,18 +73,21 @@ function isActiveThinking(step: ChatTimelineStep): boolean {
 function countExplore(steps: ChatTimelineStep[]): {
   fileCount: number;
   searchCount: number;
+  pageCount: number;
   active: boolean;
 } {
   let fileCount = 0;
   let searchCount = 0;
+  let pageCount = 0;
   let active = false;
   for (const step of steps) {
     if (step.kind !== "tool") continue;
     if (FILE_TOOLS.has(step.name)) fileCount += 1;
     if (SEARCH_TOOLS.has(step.name)) searchCount += 1;
+    if (BROWSER_EXPLORE_TOOLS.has(step.name)) pageCount += 1;
     if (step.phase === "start" && step.active) active = true;
   }
-  return { fileCount, searchCount, active };
+  return { fileCount, searchCount, pageCount, active };
 }
 
 function pushSteps(items: TimelineDisplayItem[], steps: ChatTimelineStep[]): void {
@@ -87,13 +101,14 @@ function pushExplore(items: TimelineDisplayItem[], steps: ChatTimelineStep[]): v
     pushSteps(items, steps);
     return;
   }
-  const { fileCount, searchCount, active } = countExplore(steps);
+  const { fileCount, searchCount, pageCount, active } = countExplore(steps);
   items.push({
     type: "explore",
     id: `explore:${steps[0]?.id}`,
     steps,
     fileCount,
     searchCount,
+    pageCount,
     active,
   });
 }

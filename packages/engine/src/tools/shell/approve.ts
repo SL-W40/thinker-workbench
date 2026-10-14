@@ -1,13 +1,18 @@
 /**
- * shell 审批闸门：白名单 / AI 研判 / HITL。
+ * shell 审批闸门：硬拒绝优先，其后才是白名单 / AI 研判 / HITL。
  */
-import type { ShellApprovalMode } from "@thinker-workbench/shared";
+import { isShellTokenBlocked, type ShellApprovalMode } from "@thinker-workbench/shared";
 import { requestHitl } from "../../hitl/requestHitl";
-import { addShellAllowlistToken, getShellAllowlist, getShellApprovalMode } from "../../workspace";
+import {
+  addShellAllowlistToken,
+  getShellAllowlist,
+  getShellApprovalMode,
+  getShellBlocklist,
+} from "../../workspace";
 import { reviewCommand } from "./reviewCommand";
 import { getShellSessionCommand } from "./sessionMeta";
 
-/** 取命令首 token（剥 Windows 扩展名）。 */
+/** 取命令首 token（剥路径与 Windows 可执行扩展名，含 .com）。 */
 export function commandBaseToken(command: string): string {
   const trimmed = command.trim();
   if (!trimmed) return "";
@@ -15,7 +20,7 @@ export function commandBaseToken(command: string): string {
   const first = trimmed.split(/\s+/)[0] ?? "";
   const base = first.replace(/^["']|["']$/g, "");
   const name = base.split(/[/\\]/).pop() ?? base;
-  return name.replace(/\.(exe|cmd|bat|ps1)$/i, "").toLowerCase();
+  return name.replace(/\.(exe|cmd|bat|com|ps1)$/i, "").toLowerCase();
 }
 
 function isAllowlisted(command: string): boolean {
@@ -25,10 +30,25 @@ function isAllowlisted(command: string): boolean {
 }
 
 /**
+ * 硬拒绝命中时的错误；未命中返回 null。
+ * 文案固定，供模型与测试识别，不走静默跳过。
+ */
+function shellBlockError(command: string): Error | null {
+  const token = commandBaseToken(command);
+  if (!token || !isShellTokenBlocked(token, getShellBlocklist())) return null;
+  return new Error(
+    `Shell command blocked: "${token}" is on the hard-deny list and cannot be overridden.`,
+  );
+}
+
+/**
  * 按设置决定是否放行；需用户确认时走 HITL。
- * @returns true 放行；false 用户拒绝（应抛错或返回失败）
+ * 硬拒绝先于 unrestricted / 白名单 / AI 研判 / HITL，确认也不能放行。
  */
 export async function ensureShellApproved(command: string, signal: AbortSignal): Promise<void> {
+  const blocked = shellBlockError(command);
+  if (blocked) throw blocked;
+
   const mode: ShellApprovalMode = getShellApprovalMode();
 
   if (mode === "unrestricted") return;
@@ -76,6 +96,10 @@ export async function ensureShellApproved(command: string, signal: AbortSignal):
 }
 
 async function applyHitlResponse(response: { actionId: string }, command: string): Promise<void> {
+  // 确认到达时再查一次：期间加入黑名单的 token 不能执行，也不能写入白名单
+  const blocked = shellBlockError(command);
+  if (blocked) throw blocked;
+
   if (response.actionId === "deny") {
     throw new Error("Shell command denied by user.");
   }

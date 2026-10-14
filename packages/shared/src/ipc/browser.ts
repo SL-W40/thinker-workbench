@@ -33,6 +33,12 @@ export type BrowserEvent =
   | { type: "error"; message: string };
 
 /** Preload 暴露的浏览器 API。 */
+/** 时间线展开用的截图预览。 */
+export type BrowserScreenshotPreview = {
+  dataUrl: string;
+  size: number;
+};
+
 export type ThinkerBrowserApi = {
   getState(): Promise<BrowserState>;
   navigate(url: string): Promise<BrowserState>;
@@ -43,5 +49,10 @@ export type ThinkerBrowserApi = {
   setVisible(visible: boolean): Promise<void>;
   /** 用户点击「接管」解除 AI 锁定。 */
   takeControl(): Promise<BrowserState>;
+  /**
+   * 读取 dataDir/browser-screenshots 下的 PNG 为 data URL。
+   * 路径越界或不存在时返回 null。
+   */
+  readScreenshot?(absolutePath: string): Promise<BrowserScreenshotPreview | null>;
   onEvent(cb: (event: BrowserEvent) => void): () => void;
 };

@@ -7,9 +7,12 @@ import path from "node:path";
 import {
   DEFAULT_SHELL_ALLOWLIST,
   DEFAULT_SHELL_APPROVAL_MODE,
+  DEFAULT_SHELL_BLOCKLIST,
   DEFAULT_WORKSPACE_ACCESS,
+  isShellTokenBlocked,
   normalizeShellAllowlist,
   normalizeShellApprovalMode,
+  normalizeShellBlocklist,
   normalizeWorkspaceAccess,
   type ShellApprovalMode,
   type ShellProfile,
@@ -30,6 +33,8 @@ let allowAiShell = true;
 let allowAiBrowser = true;
 let shellApprovalMode: ShellApprovalMode = DEFAULT_SHELL_APPROVAL_MODE;
 let shellAllowlist: string[] = [...DEFAULT_SHELL_ALLOWLIST];
+/** 进程默认硬拒绝名单；run 内以 RunContext 为准。 */
+let shellBlocklist: string[] = [...DEFAULT_SHELL_BLOCKLIST];
 /** 当前 shell 事实（供 environment_context）。 */
 let currentShell: ShellProfile | null = null;
 
@@ -144,10 +149,22 @@ export function getShellAllowlist(): string[] {
   return shellAllowlist;
 }
 
-/** HITL「加入白名单」时即时追加（优先改当前 RunContext）。 */
+/** 设置硬拒绝名单（完整替换）。缺省不改当前值。 */
+export function setShellBlocklist(list: string[] | undefined | null): string[] {
+  if (Array.isArray(list)) shellBlocklist = normalizeShellBlocklist(list);
+  return shellBlocklist;
+}
+
+export function getShellBlocklist(): string[] {
+  const ctx = getRunContext();
+  if (ctx) return ctx.shellBlocklist;
+  return shellBlocklist;
+}
+
+/** HITL「加入白名单」时即时追加（优先改当前 RunContext）。硬拒绝 token 拒绝追加。 */
 export function addShellAllowlistToken(token: string): void {
   const t = token.trim().toLowerCase();
-  if (!t) return;
+  if (!t || isShellTokenBlocked(t, getShellBlocklist())) return;
   const ctx = getRunContext();
   if (ctx) {
     if (ctx.shellAllowlist.includes(t)) return;

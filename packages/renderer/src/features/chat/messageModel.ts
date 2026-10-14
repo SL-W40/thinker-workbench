@@ -3,6 +3,7 @@
  */
 import {
   type AgentHistoryMessage,
+  type ChatImageRef,
   type ChatMessage,
   type ChatTimelineStep,
   createId,
@@ -24,7 +25,7 @@ export function visibleAssistantText(message: ChatMessage): string {
 
 /**
  * 将 UI 消息列表转为 agent 多轮历史（不含当前待发送轮）。
- * 跳过 pending / 空正文 / system；排除 `excludeIds` 中的气泡。
+ * 跳过 pending / 空正文且无图 / system；排除 `excludeIds` 中的气泡。
  */
 export function toAgentHistory(
   messages: ChatMessage[],
@@ -36,7 +37,13 @@ export function toAgentHistory(
     if (m.pending) continue;
     if (m.role === "user") {
       const content = m.text?.trim() ?? "";
-      if (content) out.push({ role: "user", content });
+      const images = Array.isArray(m.images) && m.images.length > 0 ? m.images : undefined;
+      if (!content && !images?.length) continue;
+      out.push({
+        role: "user",
+        content,
+        ...(images ? { images } : {}),
+      });
       continue;
     }
     if (m.role === "assistant") {
@@ -47,12 +54,13 @@ export function toAgentHistory(
   return out;
 }
 
-/** 创建一条聊天消息（含 id、时间戳、可选 pending / timeline）。 */
+/** 创建一条聊天消息（含 id、时间戳、可选 pending / timeline / images）。 */
 export function createMessage(
   role: Role,
   text: string,
   pending = false,
   timeline?: ChatTimelineStep[],
+  images?: ChatImageRef[],
 ): ChatMessage {
   return {
     id: createId("msg"),
@@ -61,6 +69,7 @@ export function createMessage(
     createdAt: Date.now(),
     pending,
     ...(timeline ? { timeline } : {}),
+    ...(images?.length ? { images } : {}),
   };
 }
 

@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
 import { useT } from "../../i18n/useI18n";
 import { FileGlyph, IconFolder } from "../inspector/icons";
+import { BrowserScreenshotThumb } from "./BrowserScreenshotThumb";
 import { DeleteFileCard } from "./DeleteFileCard";
 import { FileDiffView } from "./FileDiffView";
 import { classifyRunError, isSoftStopCode } from "./runErrors";
@@ -117,7 +118,8 @@ function PathMidEllipsis({ path, className }: { path: string; className?: string
 
 /** 解析列表项类型：显式 kinds 优先，其次路径尾缀*/
 function resolvePathKind(path: string, kind?: ResultPathKind): ResultPathKind {
-  if (kind === "dir" || kind === "link" || kind === "file") return kind;
+  if (kind === "dir" || kind === "link" || kind === "file" || kind === "image") return kind;
+  if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(path)) return "image";
   if (/[/\\]$/.test(path)) return "dir";
   return "file";
 }
@@ -373,13 +375,18 @@ function ToolResultPathsPanel({
       if (!trigger || !panel) return;
       const tr = trigger.getBoundingClientRect();
       const pr = panel.getBoundingClientRect();
-      const width = Math.min(420, Math.max(260, tr.width + 72));
+      const hasImage =
+        (kinds ?? []).some((k) => k === "image") ||
+        paths.some((p) => resolvePathKind(p) === "image");
+      const width = hasImage
+        ? Math.min(480, Math.max(300, tr.width + 96))
+        : Math.min(420, Math.max(260, tr.width + 72));
       setCoords(placeResultPathsPanel(tr, width, pr.height));
     }
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [open, anchorRef]);
+  }, [open, anchorRef, paths, kinds]);
 
   useEffect(() => {
     if (!open) return;
@@ -425,6 +432,13 @@ function ToolResultPathsPanel({
       <ul className="run-timeline-explore-files__list">
         {paths.map((path, index) => {
           const kind = resolvePathKind(path, kinds?.[index]);
+          if (kind === "image") {
+            return (
+              <li key={`${path}-${index}`} className="run-timeline-explore-files__shot-item">
+                <BrowserScreenshotThumb absolutePath={path} />
+              </li>
+            );
+          }
           const name = pathBasename(path.replace(/[/\\]+$/, ""));
           const icon = kind === "dir" ? <IconFolder /> : <FileGlyph name={name || path} />;
           const canOpen = Boolean(onOpenFile) && kind !== "dir";
@@ -578,6 +592,14 @@ function formatExploreLabel(t: Translate, group: ExploreGroup): string {
       t(group.searchCount === 1 ? "chat.exploreSearchOne" : "chat.exploreSearchMany").replace(
         "{n}",
         String(group.searchCount),
+      ),
+    );
+  }
+  if (group.pageCount > 0) {
+    parts.push(
+      t(group.pageCount === 1 ? "chat.explorePageOne" : "chat.explorePageMany").replace(
+        "{n}",
+        String(group.pageCount),
       ),
     );
   }

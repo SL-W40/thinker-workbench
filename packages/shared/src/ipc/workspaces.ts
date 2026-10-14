@@ -9,8 +9,9 @@
  * - `crashed`：进程/utility 异常退出（可有 checkpoint → Resume）
  * - `failed`：业务错误且不可按 checkpoint 续跑
  * HITL 等人期间保持 `running`，不占用本枚举。
+ * `queued`：已准入但未占并行槽，等 FIFO 出队后才变为 `running`。
  */
-export type SessionRunStatus = "idle" | "running" | "cancelled" | "crashed" | "failed";
+export type SessionRunStatus = "idle" | "running" | "queued" | "cancelled" | "crashed" | "failed";
 
 /** 工作空间行（侧栏文件夹）。 */
 export type WorkspaceRecord = {
@@ -42,6 +43,8 @@ export type ThreadMeta = {
   pinned: boolean;
   sortOrder: number;
   runStatus: SessionRunStatus;
+  /** FIFO 名次（从 1 起）；仅 `queued` 且账本仍持有该条时有值。 */
+  queuePosition?: number;
 };
 
 /** 聊天会话完整记录（含消息 hydrate）。 */
@@ -118,6 +121,16 @@ export type ThinkerWorkspacesApi = {
     sessionId: string,
     messages: import("../protocol/message").ChatMessage[],
   ): Promise<void>;
+  /**
+   * 将用户附图写入 `{dataDir}/workspaces/{workspaceId}/images/`。
+   * 返回路径引用（不含字节）。
+   */
+  saveChatImage(
+    workspaceId: string,
+    input: { bytes: Uint8Array; mime: string; name?: string },
+  ): Promise<import("../protocol/message").ChatImageRef>;
+  /** 按绝对路径读取附图预览 data URL（须在工作空间 images 目录内）。 */
+  readChatImagePreview(imagePath: string): Promise<{ dataUrl: string } | null>;
   setActiveSession(sessionId: string | null): Promise<void>;
   getActiveSessionId(): Promise<string | null>;
   getLastWorkspaceId(): Promise<string | null>;

@@ -22,6 +22,13 @@ export function HitlHost() {
 
   useEffect(() => {
     return onAgentEvent((event) => {
+      // run 终态：关掉当前 Modal（账本也会发 hitl resolved，双保险）
+      if (event.type === "done" || event.type === "error") {
+        setPending((cur) => (cur && cur.runId === event.runId ? null : cur));
+        setBusy(false);
+        setSecret("");
+        return;
+      }
       if (event.type !== "hitl") return;
       if (event.phase === "resolved") {
         setPending((cur) => (cur?.hitlId === event.hitlId ? null : cur));

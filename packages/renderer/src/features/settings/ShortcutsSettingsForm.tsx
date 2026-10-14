@@ -26,7 +26,7 @@ type Props = {
   description: string;
 };
 
-/** ?ShortcutId 对应的标?描述文案键。*/
+/** 各 ShortcutId 对应的标题与描述文案键。*/
 const SHORTCUT_COPY: Record<ShortcutId, { titleKey: MessageKey; descriptionKey: MessageKey }> = {
   reload: {
     titleKey: "settings.shortcuts.reloadTitle",
@@ -87,7 +87,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const available = Boolean(window.thinker?.settings?.getShortcuts);
 
-  // 录制监听只用 ref，避?shortcuts/t 变化时拆?keydown 监听导致「录不上。
+  // 录制监听只用 ref，避免 shortcuts/t 变化时拆掉 keydown 监听导致录不上。
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
   const tRef = useRef(t);
@@ -121,7 +121,7 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
   useEffect(() => {
     if (!recording) return;
     setShortcutRecording(true);
-    // 离开按钮焦点，避?Space/Enter 再次点到 Kbd
+    // 离开按钮焦点，避免 Space/Enter 再次点到 Kbd
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }

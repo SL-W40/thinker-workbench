@@ -1,16 +1,28 @@
 /**
- * 进行中 Run 的内存投影：切换会话不取消；后台会话继续收事件并落库。
- * 前台 useChatSession 只绑定当前 sessionId 对应槽。
+ * 进行中 Run 的内存投影：所有 AgentEvent 写入会话槽；前台/后台共用。
+ * 切换会话不取消；DB 不覆盖未结算槽的流式尾部。
  */
-import type { AgentEvent, ChatMessage, ChatTimelineStep } from "@thinker-workbench/shared";
+import type {
+  AgentEvent,
+  ChatMessage,
+  ChatTimelineStep,
+  HitlRequest,
+} from "@thinker-workbench/shared";
 import { onAgentEvent } from "../../bridge/thinker";
 import { saveSessionMessages } from "../../bridge/workspaces";
+import { classifyRunError, softStopResumeKind } from "./runErrors";
 import {
   appendError,
+  appendModelSwitch,
   appendReplyText,
   appendThinkingText,
+  applyHitlRequest,
+  applyHitlResolved,
+  applyQueuedSlotEvent,
   applyStatus,
+  applySubagentEvent,
   applyToolEvent,
+  deactivateAll,
 } from "./timelineModel";
 
 export type LiveRunSlot = {
@@ -18,10 +30,16 @@ export type LiveRunSlot = {
   threadId: string;
   runId: string | null;
   busy: boolean;
+  /** 已请求停止、等待账本结算事件。 */
+  stopping: boolean;
   messages: ChatMessage[];
   streamText: string;
   timeline: ChatTimelineStep[];
   targetMsgId: string | null;
+  /** 非时间线 HITL（密钥 / 澄清）；时间线类挂在 tool.hitl。 */
+  modalHitl: HitlRequest | null;
+  /** 结算后的可恢复种类。 */
+  canResume: false | "cancelled" | "crashed";
 };
 
 type Listener = () => void;
@@ -37,12 +55,16 @@ function notify(): void {
   for (const l of listeners) l();
 }
 
+function isTimelineHitl(kind: string): boolean {
+  return kind === "shell_approval" || kind === "shell_write_approval";
+}
+
 /** 启动全局事件订阅（幂等）。 */
 export function ensureLiveRunRegistry(): void {
   if (started) return;
   started = true;
   unsub = onAgentEvent((event) => {
-    void applyBackgroundEvent(event);
+    void applyAgentEvent(event);
   });
 }
 
@@ -60,6 +82,10 @@ export function subscribeLiveRuns(listener: Listener): () => void {
 
 export function setForegroundSessionId(sessionId: string | null): void {
   foregroundSessionId = sessionId?.trim() || null;
+}
+
+export function getForegroundSessionId(): string | null {
+  return foregroundSessionId;
 }
 
 export function getLiveRunSlot(sessionId: string): LiveRunSlot | undefined {
@@ -80,6 +106,9 @@ export function upsertLiveRunSlot(partial: {
   timeline?: ChatTimelineStep[];
   targetMsgId?: string | null;
   busy?: boolean;
+  stopping?: boolean;
+  modalHitl?: HitlRequest | null;
+  canResume?: false | "cancelled" | "crashed";
 }): void {
   const sessionId = partial.sessionId.trim();
   if (!sessionId) return;
@@ -88,15 +117,26 @@ export function upsertLiveRunSlot(partial: {
     sessionId,
     threadId: partial.threadId,
     runId: partial.runId !== undefined ? partial.runId : (prev?.runId ?? null),
-    busy: partial.busy ?? true,
+    busy: partial.busy ?? prev?.busy ?? true,
+    stopping: partial.stopping ?? prev?.stopping ?? false,
     messages: partial.messages,
     streamText: partial.streamText ?? prev?.streamText ?? "",
     timeline: partial.timeline ?? prev?.timeline ?? [],
     targetMsgId:
       partial.targetMsgId !== undefined ? partial.targetMsgId : (prev?.targetMsgId ?? null),
+    modalHitl: partial.modalHitl !== undefined ? partial.modalHitl : (prev?.modalHitl ?? null),
+    canResume: partial.canResume !== undefined ? partial.canResume : (prev?.canResume ?? false),
   };
   slots.set(sessionId, slot);
   threadToSession.set(partial.threadId, sessionId);
+  notify();
+}
+
+/** 标记正在停止（取消请求已发出，等结算事件）。 */
+export function markLiveRunStopping(sessionId: string): void {
+  const slot = slots.get(sessionId.trim());
+  if (!slot) return;
+  slot.stopping = true;
   notify();
 }
 
@@ -112,7 +152,6 @@ export function parkForegroundRun(state: {
   busy: boolean;
 }): void {
   if (!state.busy && !state.runId) {
-    // idle 不必占槽
     const existing = slots.get(state.sessionId);
     if (existing && !existing.busy) slots.delete(state.sessionId);
     return;
@@ -123,9 +162,38 @@ export function parkForegroundRun(state: {
   });
 }
 
-/** 前台接管槽：取出后仍保留 busy 标记直到 done。 */
+/** 前台接管槽。 */
 export function takeLiveRunSlot(sessionId: string): LiveRunSlot | undefined {
   return slots.get(sessionId);
+}
+
+/**
+ * 进行中重载：槽未结算时用槽尾部覆盖 DB 快照中的同 id 消息。
+ */
+export function mergeDbWithLiveSlot(
+  sessionId: string,
+  dbMessages: ChatMessage[],
+): ChatMessage[] | null {
+  const slot = slots.get(sessionId);
+  if (!slot?.busy || !slot.targetMsgId) return null;
+  const byId = new Map(dbMessages.map((m) => [m.id, m]));
+  for (const m of slot.messages) {
+    byId.set(m.id, m);
+  }
+  // 保持槽内顺序优先：若槽消息是超集则用槽
+  if (slot.messages.length >= dbMessages.length) {
+    return slot.messages.map((m) =>
+      m.id === slot.targetMsgId
+        ? {
+            ...m,
+            text: slot.streamText || m.text,
+            pending: true,
+            timeline: [...slot.timeline],
+          }
+        : m,
+    );
+  }
+  return [...byId.values()];
 }
 
 function resolveSessionId(event: AgentEvent): string | null {
@@ -135,22 +203,76 @@ function resolveSessionId(event: AgentEvent): string | null {
 }
 
 /**
- * 处理后台（非前台）会话事件：更新槽并落库。
- * 前台事件仍由 useChatSession 主路径处理，此处跳过以免双写。
+ * 唯一事件应用入口：写入对应会话槽并通知订阅者。
+ * 前台 useChatSession 订阅后投影到 React state。
  */
-async function applyBackgroundEvent(event: AgentEvent): Promise<void> {
+async function applyAgentEvent(event: AgentEvent): Promise<void> {
   const sessionId = resolveSessionId(event);
   if (!sessionId) return;
-  if (foregroundSessionId && sessionId === foregroundSessionId) return;
 
-  const slot = slots.get(sessionId);
+  let slot = slots.get(sessionId);
   if (!slot) {
-    // 刷新后可能无槽；仅跟踪终态外的 running 需要侧栏，落库依赖主进程 status
-    if (event.type !== "token" && event.type !== "tool" && event.type !== "status") return;
-    return;
+    // 无槽时仍可登记终态外的流式事件（刷新后重挂依赖主进程 status + 前台 hydrate）
+    if (
+      event.type !== "token" &&
+      event.type !== "tool" &&
+      event.type !== "status" &&
+      event.type !== "hitl" &&
+      event.type !== "subagent" &&
+      event.type !== "done" &&
+      event.type !== "error"
+    ) {
+      return;
+    }
+    // 后台无槽的 hitl/token：无法投影，跳过（前台会自己 upsert）
+    if (!foregroundSessionId || sessionId !== foregroundSessionId) {
+      if (event.type === "hitl" || event.type === "subagent") {
+        // 后台会话必须有槽才能收 HITL；尝试用最小槽占位
+        slot = {
+          sessionId,
+          threadId: event.threadId,
+          runId: event.runId,
+          busy: true,
+          stopping: false,
+          messages: [],
+          streamText: "",
+          timeline: [],
+          targetMsgId: null,
+          modalHitl: null,
+          canResume: false,
+        };
+        slots.set(sessionId, slot);
+        threadToSession.set(event.threadId, sessionId);
+      } else {
+        return;
+      }
+    } else {
+      return;
+    }
   }
+
   if (slot.runId && event.runId !== slot.runId) return;
   if (!slot.runId) slot.runId = event.runId;
+
+  applyQueuedSlotEvent(slot, event.type);
+
+  if (event.type === "hitl") {
+    if (event.phase === "request" && event.request) {
+      if (isTimelineHitl(event.request.kind)) {
+        slot.timeline = applyHitlRequest(slot.timeline, event.request);
+        slot.modalHitl = null;
+      } else {
+        slot.modalHitl = event.request;
+      }
+    } else if (event.phase === "resolved") {
+      slot.timeline = applyHitlResolved(slot.timeline, event.hitlId, event.response?.actionId);
+      if (slot.modalHitl?.hitlId === event.hitlId) slot.modalHitl = null;
+    }
+    syncTargetMessage(slot);
+    scheduleBgSave(sessionId);
+    notify();
+    return;
+  }
 
   if (event.type === "token") {
     if (event.channel === "thinking") {
@@ -163,12 +285,48 @@ async function applyBackgroundEvent(event: AgentEvent): Promise<void> {
     slot.timeline = applyStatus(slot.timeline, event.status);
   } else if (event.type === "tool") {
     slot.timeline = applyToolEvent(slot.timeline, event);
+  } else if (event.type === "subagent") {
+    slot.timeline = applySubagentEvent(slot.timeline, event);
+  } else if (event.type === "model_switch") {
+    slot.timeline = appendModelSwitch(slot.timeline, event);
   } else if (event.type === "done" || event.type === "error") {
-    const text = event.type === "done" ? event.text || slot.streamText : slot.streamText;
-    const errText = event.type === "error" ? event.error : undefined;
-    if (errText) {
-      slot.timeline = appendError(slot.timeline, errText);
-    }
+    await settleSlot(slot, event);
+    notify();
+    return;
+  } else {
+    return;
+  }
+
+  syncTargetMessage(slot);
+  scheduleBgSave(sessionId);
+  notify();
+}
+
+function syncTargetMessage(slot: LiveRunSlot): void {
+  if (!slot.targetMsgId) return;
+  slot.messages = slot.messages.map((m) =>
+    m.id === slot.targetMsgId
+      ? {
+          ...m,
+          text: slot.streamText || m.text,
+          pending: true,
+          timeline: [...slot.timeline],
+        }
+      : m,
+  );
+}
+
+async function settleSlot(
+  slot: LiveRunSlot,
+  event: Extract<AgentEvent, { type: "done" | "error" }>,
+): Promise<void> {
+  const sessionId = slot.sessionId;
+  slot.timeline = deactivateAll(slot.timeline);
+  slot.modalHitl = null;
+  slot.stopping = false;
+
+  if (event.type === "done") {
+    const text = event.text || slot.streamText;
     slot.messages = slot.messages.map((m) =>
       m.id === slot.targetMsgId
         ? {
@@ -176,40 +334,47 @@ async function applyBackgroundEvent(event: AgentEvent): Promise<void> {
             text: text || m.text,
             pending: false,
             timeline: [...slot.timeline],
-            ...(errText ? { error: errText } : {}),
           }
         : m,
     );
-    slot.busy = false;
-    slot.runId = null;
-    slot.targetMsgId = null;
-    slot.streamText = "";
-    try {
-      await saveSessionMessages(sessionId, slot.messages);
-    } catch {
-      /* ignore */
-    }
-    notify();
-    return;
+    slot.canResume = false;
   } else {
-    return;
-  }
-
-  if (slot.targetMsgId) {
+    const errCode =
+      event.code === "cancelled"
+        ? "CANCELLED"
+        : event.code === "crashed"
+          ? "PROCESS_EXIT"
+          : classifyRunError(event.error);
+    const resume = softStopResumeKind(event.error, errCode);
+    slot.canResume = resume ?? false;
+    const display =
+      errCode === "PROCESS_EXIT"
+        ? "Exited unexpectedly."
+        : errCode === "CANCELLED"
+          ? "Stopped."
+          : event.error;
+    slot.timeline = appendError(slot.timeline, display, errCode);
     slot.messages = slot.messages.map((m) =>
       m.id === slot.targetMsgId
         ? {
             ...m,
             text: slot.streamText || m.text,
-            pending: true,
+            pending: false,
             timeline: [...slot.timeline],
           }
         : m,
     );
   }
-  // 节流落库：token 路径轻量 debounce
-  scheduleBgSave(sessionId);
-  notify();
+
+  slot.busy = false;
+  slot.runId = null;
+  slot.targetMsgId = null;
+  slot.streamText = "";
+  try {
+    await saveSessionMessages(sessionId, slot.messages);
+  } catch {
+    /* ignore */
+  }
 }
 
 const bgSaveTimers = new Map<string, number>();

@@ -9,6 +9,8 @@ export const IpcChannels = {
   agentRun: "agent:run",
   /** 取消指定（或当前）运行。 */
   agentCancel: "agent:cancel",
+  /** 取消单个后台 Task（不停止父 run）。 */
+  agentCancelTask: "agent:cancelTask",
   /** 从中断点恢复运行。 */
   agentResume: "agent:resume",
   /** 用户答复 HITL。 */
@@ -133,6 +135,10 @@ export const IpcChannels = {
   chatSessionsRemove: "chatSessions:remove",
   /** 落库会话消息。 */
   chatSessionsSaveMessages: "chatSessions:saveMessages",
+  /** 将用户附图写入工作空间 images 目录。 */
+  chatImagesSave: "chatImages:save",
+  /** 读取已落盘附图预览（data URL）。 */
+  chatImagesReadPreview: "chatImages:readPreview",
   /** 设置当前活动会话 id。 */
   chatSessionsSetActive: "chatSessions:setActive",
   /** 读取当前活动会话 id。 */
@@ -194,6 +200,8 @@ export const IpcChannels = {
   browserSetVisible: "browser:setVisible",
   /** 用户接管（解除 AI 锁定）。 */
   browserTakeControl: "browser:takeControl",
+  /** 读取 browser-screenshots 下截图为 data URL（时间线展开预览）。 */
+  browserReadScreenshot: "browser:readScreenshot",
   /** 主进程推送浏览器事件。 */
   browserEvent: "browser:event",
 
@@ -232,6 +240,8 @@ export const IpcChannels = {
   mcpTest: "mcp:test",
   /** 从 mcp.json 导入。 */
   mcpImportFile: "mcp:importFile",
+  /** 导出 mcp.json。 */
+  mcpExportFile: "mcp:exportFile",
   /** 主进程推送 MCP 运行时状态。 */
   mcpStatus: "mcp:status",
 } as const;

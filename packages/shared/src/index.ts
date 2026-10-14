@@ -3,7 +3,13 @@
  * 聚合 id、IPC 通道 / 命令 / 事件、utility 信封、设置与协议类型，供 app / desktop / agent 共用。
  */
 
+export {
+  BROWSER_ABOUT_BLANK,
+  browserUrlsEqual,
+  normalizeBrowserUrl,
+} from "./browser/url";
 export { estimateTokens } from "./estimateTokens";
+export { parseYamlFrontmatter, parseYamlObject, type YamlFrontmatter } from "./frontmatter";
 export {
   createId,
   createRunId,
@@ -22,6 +28,7 @@ export type {
 export type {
   BrowserBounds,
   BrowserEvent,
+  BrowserScreenshotPreview,
   BrowserState,
   ThinkerBrowserApi,
 } from "./ipc/browser";
@@ -35,6 +42,7 @@ export {
 } from "./ipc/chatMode";
 export type {
   AgentCancelCommand,
+  AgentCancelTaskCommand,
   AgentHistoryMessage,
   AgentResumeCommand,
   AgentRunCommand,
@@ -84,6 +92,7 @@ export type {
 } from "./ipc/dataDir";
 export type {
   AgentDoneEvent,
+  AgentErrorCode,
   AgentErrorEvent,
   AgentEvent,
   AgentEventBase,
@@ -127,22 +136,27 @@ export {
   DEFAULT_HTTP_COMPATIBILITY_MODE,
   DEFAULT_MAX_AGENT_STEPS,
   DEFAULT_MAX_PARALLEL_RUNS,
+  DEFAULT_MAX_QUEUED_RUNS,
   DEFAULT_MAX_SUBAGENT_STEPS,
   DEFAULT_MCP_CALL_TIMEOUT_MS,
   DEFAULT_MCP_CONNECT_TIMEOUT_MS,
   DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
   DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
+  DEFAULT_QUEUE_TIMEOUT_MIN,
   DEFAULT_READ_FILE_MAX_CHARS,
   DEFAULT_SHELL_ALLOWLIST,
   DEFAULT_SHELL_APPROVAL_MODE,
   DEFAULT_SHELL_BLOCK_UNTIL_MS,
+  DEFAULT_SHELL_BLOCKLIST,
   DEFAULT_SHELL_OUTPUT_CAP,
   DEFAULT_WORKSPACE_ACCESS,
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
   HTTP_COMPATIBILITY_MODES,
   isBuiltinAppTheme,
+  isShellTokenBlocked,
   LOG_RETENTION_DAY_OPTIONS,
   MAX_PARALLEL_RUNS_OPTIONS,
+  MAX_QUEUED_RUNS_OPTIONS,
   migrateAppThemeFromCatalogV1,
   normalizeAppFontScale,
   normalizeAppTheme,
@@ -155,12 +169,14 @@ export {
   normalizeIntInRange,
   normalizeMaxAgentSteps,
   normalizeMaxParallelRuns,
+  normalizeMaxQueuedRuns,
   normalizeMaxSubagentSteps,
   normalizeMcpCallTimeoutMs,
   normalizeMcpConnectTimeoutMs,
   normalizeModelRetryBaseDelayMs,
   normalizeModelRetryMaxAttempts,
   normalizeOptionalPath,
+  normalizeQueueTimeoutMin,
   normalizeReadFileDefaultMaxChars,
   normalizeShellAllowlist,
   normalizeShellApprovalMode,
@@ -169,8 +185,10 @@ export {
   normalizeShellProfileId,
   normalizeUiTheme,
   normalizeWorkspaceAccess,
+  QUEUE_TIMEOUT_MIN_OPTIONS,
   resolveVisualThemeId,
   SHELL_APPROVAL_MODES,
+  shellAllowlistWithoutBlocked,
   shellCommandBaseToken,
   THEME_CATALOG_VERSION,
   WORKSPACE_ACCESS_OPTIONS,
@@ -189,6 +207,7 @@ export {
 } from "./ipc/locale";
 export type { LogLevel, LogRecord, LogSource } from "./ipc/log";
 export type {
+  McpImportConflict,
   McpListResult,
   McpServerConfig,
   McpServerRuntimeState,
@@ -221,8 +240,6 @@ export type {
   ModelProviderPublic,
   ModelSelection,
   ModelSettings,
-  ModelSettingsPatch,
-  ModelSettingsPublic,
   ModelSwitchReason,
   ModelTag,
   ThinkerSettingsApi,
@@ -234,7 +251,6 @@ export {
   buildModelCandidates,
   classifyModelSwitchReason,
   emptyModelCatalog,
-  emptyModelSettings,
   MODEL_TAGS,
   migrateLegacyModelSettings,
   normalizeModelSelection,
@@ -242,7 +258,6 @@ export {
   resolveModelSettings,
   routeModelTag,
   toPublicModelCatalog,
-  toPublicModelSettings,
 } from "./ipc/settings";
 export type {
   ShortcutGroup,
@@ -321,6 +336,7 @@ export type {
   UtilityBrowserEvent,
   UtilityBrowserRequest,
   UtilityCancel,
+  UtilityCancelTask,
   UtilityContextUsage,
   UtilityContextUsageResult,
   UtilityCrashNotice,
@@ -363,6 +379,7 @@ export type {
   WorkspaceRecord,
 } from "./ipc/workspaces";
 export type {
+  ChatImageRef,
   ChatMessage,
   ChatTimelineErrorStep,
   ChatTimelineModelSwitchStep,
@@ -376,10 +393,16 @@ export type {
 } from "./protocol/message";
 export type { RunResult } from "./protocol/result";
 export { isCancelErrorMessage } from "./runErrors";
+export { stripAnsi } from "./stripAnsi";
 
 import type { ThinkerAgentsApi } from "./ipc/agents";
 import type { ThinkerBrowserApi } from "./ipc/browser";
-import type { AgentResumeCommand, AgentRunCommand } from "./ipc/commands";
+import type {
+  AgentCancelCommand,
+  AgentCancelTaskCommand,
+  AgentResumeCommand,
+  AgentRunCommand,
+} from "./ipc/commands";
 import type { ContextUsageRequest, ContextUsageSnapshot } from "./ipc/contextUsage";
 import type { AgentEvent } from "./ipc/events";
 import type { HitlResponse } from "./ipc/hitl";
@@ -406,9 +429,11 @@ export type ThinkerApi = {
   run(command: AgentRunCommand | string): Promise<RunResult>;
   /**
    * 取消运行。
-   * 省略或空 `runId` 时，由 desktop 桥接取消当前活动运行。
+   * 可传 runId 字符串，或 `{ runId?, sessionId? }`（至少一个）；由主进程账本解析。
    */
-  cancel(runId?: string): Promise<void>;
+  cancel(command?: string | AgentCancelCommand): Promise<{ ok: boolean; error?: string } | void>;
+  /** 取消单个后台 Task（不停止父 run）。 */
+  cancelTask?(command: AgentCancelTaskCommand): Promise<{ ok: boolean; error?: string }>;
   /** 从 checkpoint 恢复（崩溃后续跑）。 */
   resume?(command: AgentResumeCommand): Promise<RunResult>;
   /** 估算当前会话上下文占用（与模型请求同源组装）。 */

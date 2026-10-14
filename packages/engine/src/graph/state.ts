@@ -4,16 +4,36 @@
  * - reply / pendingToolCalls 为空
  * - step 从 0 起（进入 agent 后才会 +1）
  */
+import type { ChatImageRef } from "@thinker-workbench/shared";
+import { buildUserContent, contentToPlainText } from "../model/imageParts";
 import type { ChatMessage } from "../model/types";
 import type { GraphState } from "./types";
 
-/** 规范化多轮历史：只保留有正文的 user / assistant。 */
-function normalizeHistory(history: ChatMessage[] | undefined): ChatMessage[] {
+/** 规范化多轮历史：保留有正文或附图的 user / assistant。 */
+function normalizeHistory(
+  history:
+    | Array<{ role: string; content: string; images?: ChatImageRef[] }>
+    | ChatMessage[]
+    | undefined,
+): ChatMessage[] {
   if (!history?.length) return [];
   const out: ChatMessage[] = [];
   for (const m of history) {
     if (m.role !== "user" && m.role !== "assistant") continue;
-    const content = typeof m.content === "string" ? m.content.trim() : "";
+    const images =
+      "images" in m && Array.isArray(m.images) ? (m.images as ChatImageRef[]) : undefined;
+    if (m.role === "user" && images?.length) {
+      const text =
+        typeof m.content === "string"
+          ? m.content
+          : contentToPlainText(m.content as ChatMessage["content"]);
+      out.push({ role: "user", content: buildUserContent(text, images) });
+      continue;
+    }
+    const content =
+      typeof m.content === "string"
+        ? m.content.trim()
+        : contentToPlainText(m.content as ChatMessage["content"]).trim();
     if (!content) continue;
     out.push({ role: m.role, content });
   }
@@ -22,15 +42,36 @@ function normalizeHistory(history: ChatMessage[] | undefined): ChatMessage[] {
 
 export function initialState(
   message: string,
-  history?: ChatMessage[],
+  history?: Array<{ role: string; content: string; images?: ChatImageRef[] }> | ChatMessage[],
   contextPaths?: string[],
+  images?: ChatImageRef[],
 ): GraphState {
+  const userContent = buildUserContent(message, images);
   return {
     message,
-    messages: [...normalizeHistory(history), { role: "user", content: message }],
+    messages: [...normalizeHistory(history), { role: "user", content: userContent }],
     reply: "",
     pendingToolCalls: [],
+    startedToolCallIds: [],
     step: 0,
     ...(contextPaths?.length ? { contextPaths } : {}),
+  };
+}
+
+/** 读 checkpoint / 旧快照时补齐缺省字段。 */
+export function normalizeGraphState(raw: GraphState | (Partial<GraphState> & object)): GraphState {
+  const started = Array.isArray((raw as GraphState).startedToolCallIds)
+    ? (raw as GraphState).startedToolCallIds.filter((id) => typeof id === "string" && id.trim())
+    : [];
+  return {
+    message: typeof raw.message === "string" ? raw.message : "",
+    messages: Array.isArray(raw.messages) ? raw.messages : [],
+    reply: typeof raw.reply === "string" ? raw.reply : "",
+    pendingToolCalls: Array.isArray(raw.pendingToolCalls) ? raw.pendingToolCalls : [],
+    startedToolCallIds: started,
+    step: typeof raw.step === "number" && Number.isFinite(raw.step) ? raw.step : 0,
+    ...(Array.isArray(raw.contextPaths) && raw.contextPaths.length
+      ? { contextPaths: raw.contextPaths }
+      : {}),
   };
 }

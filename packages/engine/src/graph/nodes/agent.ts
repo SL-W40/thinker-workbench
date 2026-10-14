@@ -11,6 +11,7 @@ import { getMaxAgentSteps } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
 import { agentLog } from "../../log/setup";
 import { chatWithFailover } from "../../model/catalog";
+import { estimateTurnUsage } from "../../model/imageParts";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
 import { setRunTurn } from "../../runtime/runContext";
@@ -72,18 +73,27 @@ export async function agent(state: GraphState, signal: AbortSignal): Promise<Par
     signal,
   );
 
-  if (result.usage) {
-    emit({ type: "usage", usage: result.usage });
+  const usage =
+    result.usage ??
+    estimateTurnUsage({
+      system: ctx.system,
+      messages: ctx.messages,
+      output: result.content,
+      reasoning: result.reasoning,
+    });
+  if (usage.inputTokens > 0 || usage.outputTokens > 0) {
+    emit({ type: "usage", usage });
   }
 
   log.info("model result", {
     spanId: `agent-${step}`,
     meta: {
       toolCalls: result.toolCalls.map((tc) => tc.function.name),
-      ...(result.usage
+      ...(usage.inputTokens > 0 || usage.outputTokens > 0
         ? {
-            inputTokens: result.usage.inputTokens,
-            outputTokens: result.usage.outputTokens,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            usageEstimated: !result.usage,
           }
         : {}),
       ...withTextPreview(result.content, "content", PREVIEW_BODY_CHARS),
