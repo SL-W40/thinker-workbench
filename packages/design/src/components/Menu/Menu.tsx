@@ -1,9 +1,10 @@
 /**
  * 触发器锚定的菜单。触发器由调用方渲染，本组件只负责浮层与条目。
  */
+
+import type { PopoverAlign } from "../../overlay/place";
 import type { AnchorHandle } from "../Popover/Popover";
 import { Popover } from "../Popover/Popover";
-import type { PopoverAlign } from "../../overlay/place";
 import { flattenMenuGroups } from "./flatten";
 import { MenuList } from "./MenuList";
 import type { MenuGroup, MenuItem } from "./types";

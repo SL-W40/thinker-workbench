@@ -187,8 +187,8 @@ function parseMathInline(
 }
 
 /** 结尾不能是 ASCII 或中文标点，避免「https://example.com。」把句号吃进链接。 */
-const URL_RE = /https?:\/\/[^\s<]+[^<>\s.,;:!"')\]。，、；：！？（）【】《》「」『』]/yu;
-const WWW_RE = /www\.[^\s<]+[^<>\s.,;:!"')\]。，、；：！？（）【】《》「」『』]/yu;
+const URL_RE = /https?:\/\/[^\s<]+[^<>\s.,;:!"')\]。，、；：！？（）【】《》「」『』]/uy;
+const WWW_RE = /www\.[^\s<]+[^<>\s.,;:!"')\]。，、；：！？（）【】《》「」『』]/uy;
 
 function parseAutolinkBare(s: string, i: number): { node: InlineNode; next: number } | null {
   URL_RE.lastIndex = i;
@@ -263,12 +263,7 @@ function pushLink(
   });
 }
 
-function pushImage(
-  nodes: InlineNode[],
-  src: string,
-  alt: string,
-  title: string | undefined,
-): void {
+function pushImage(nodes: InlineNode[], src: string, alt: string, title: string | undefined): void {
   const safe = sanitizeImageSrc(decodeEntities(src));
   if (!safe) {
     pushText(nodes, alt || src);

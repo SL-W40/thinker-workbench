@@ -22,6 +22,7 @@ import { closeAllAuxWindows, syncAuxWindowBackgrounds } from "./auxWindows";
 import { syncBrowserWindowChrome, windowChromeOptions } from "./chromeOptions";
 import { fitWindowToDisplay, windowMinSize } from "./defaultBounds";
 import { clearApplicationMenu } from "./menu";
+import { reuseMainWindowIfAlive } from "./reuseMainWindow";
 import { windowBackgroundForTheme } from "./themeBackground";
 import { ensureTrayForHide, shouldHideToTray } from "./tray";
 import { waitForRenderer } from "./waitForRenderer";
@@ -113,10 +114,14 @@ function resolveInitialWindow(): SessionWindow {
 }
 
 /**
- * 创建（或重建）主窗口并开始加载内容。
- * @returns 新建的 BrowserWindow
+ * 确保主窗口存在：已有存活实例则聚焦复用，否则新建并加载内容。
+ * second-instance / whenReady / activate / 托盘可能并发调用，必须幂等以免叠窗。
+ * @returns 现有或新建的 BrowserWindow
  */
 export function createWindow(): BrowserWindow {
+  const existing = reuseMainWindowIfAlive(win);
+  if (existing) return existing as BrowserWindow;
+
   clearApplicationMenu();
 
   const initial = resolveInitialWindow();

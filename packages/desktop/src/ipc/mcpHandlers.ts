@@ -109,10 +109,11 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
   ipcMain.handle(
     IpcChannels.mcpSetEnabled,
     (_evt, id: string, enabled: boolean, scope?: CustomizeScope) => {
-    const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled), scope);
-    reloadMcpOnAgent(bridge);
-    return cfg;
-  });
+      const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled), scope);
+      reloadMcpOnAgent(bridge);
+      return cfg;
+    },
+  );
 
   ipcMain.handle(IpcChannels.mcpTest, async (_evt, input: McpServerUpsertInput) => {
     // 临时写入再 reload 过重；改为让 engine 用单次配置测试：
@@ -160,29 +161,30 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
   ipcMain.handle(
     IpcChannels.mcpImportFile,
     async (_evt, conflict?: McpImportConflict, scope?: CustomizeScope) => {
-    const win = BrowserWindow.getFocusedWindow();
-    const result = win
-      ? await dialog.showOpenDialog(win, {
-          title: "Import mcp.json",
-          filters: [{ name: "JSON", extensions: ["json"] }],
-          properties: ["openFile"],
-        })
-      : await dialog.showOpenDialog({
-          title: "Import mcp.json",
-          filters: [{ name: "JSON", extensions: ["json"] }],
-          properties: ["openFile"],
-        });
-    if (result.canceled || !result.filePaths[0]) {
-      return { imported: [] as string[], skipped: [] as string[] };
-    }
-    const out = importMcpJsonFile(
-      result.filePaths[0],
-      conflict === "overwrite" ? "overwrite" : "skip",
-      scope,
-    );
-    reloadMcpOnAgent(bridge);
-    return out;
-  });
+      const win = BrowserWindow.getFocusedWindow();
+      const result = win
+        ? await dialog.showOpenDialog(win, {
+            title: "Import mcp.json",
+            filters: [{ name: "JSON", extensions: ["json"] }],
+            properties: ["openFile"],
+          })
+        : await dialog.showOpenDialog({
+            title: "Import mcp.json",
+            filters: [{ name: "JSON", extensions: ["json"] }],
+            properties: ["openFile"],
+          });
+      if (result.canceled || !result.filePaths[0]) {
+        return { imported: [] as string[], skipped: [] as string[] };
+      }
+      const out = importMcpJsonFile(
+        result.filePaths[0],
+        conflict === "overwrite" ? "overwrite" : "skip",
+        scope,
+      );
+      reloadMcpOnAgent(bridge);
+      return out;
+    },
+  );
 
   ipcMain.handle(IpcChannels.mcpExportFile, async (_evt, scope?: CustomizeScope) => {
     const win = BrowserWindow.getFocusedWindow();
@@ -195,7 +197,11 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
       ? await dialog.showSaveDialog(win, options)
       : await dialog.showSaveDialog(options);
     if (result.canceled || !result.filePath) return { ok: false };
-    fs.writeFileSync(result.filePath, `${JSON.stringify(exportMcpServers(scope), null, 2)}\n`, "utf8");
+    fs.writeFileSync(
+      result.filePath,
+      `${JSON.stringify(exportMcpServers(scope), null, 2)}\n`,
+      "utf8",
+    );
     return { ok: true, path: result.filePath };
   });
 }

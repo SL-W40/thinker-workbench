@@ -107,8 +107,7 @@ export function placeBeside(input: {
   const side: "left" | "right" =
     spaceRight >= size.width || spaceRight >= spaceLeft ? "right" : "left";
 
-  let left =
-    side === "right" ? anchor.left + anchor.width + gap : anchor.left - gap - size.width;
+  let left = side === "right" ? anchor.left + anchor.width + gap : anchor.left - gap - size.width;
   const maxLeft = Math.max(pad, viewport.width - pad - size.width);
   if (left < pad) left = pad;
   if (left > maxLeft) left = maxLeft;

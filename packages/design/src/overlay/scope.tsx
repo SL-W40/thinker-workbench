@@ -10,7 +10,11 @@ export function useOverlayScope(): string | null {
 }
 
 /** 事件目标是否落在同一浮层标记内（含子菜单 Portal）。 */
-export function eventInOverlay(target: EventTarget | null, overlayId: string, root: Node | null): boolean {
+export function eventInOverlay(
+  target: EventTarget | null,
+  overlayId: string,
+  root: Node | null,
+): boolean {
   if (!(target instanceof Node)) return false;
   if (root?.contains(target)) return true;
   let node: Node | null = target;

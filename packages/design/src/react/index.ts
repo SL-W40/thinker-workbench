@@ -25,10 +25,10 @@ export {
   AgentModeIcon,
   AskModeIcon,
   BellIcon,
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsRightIcon,
-  CheckIcon,
   ClockIcon,
   CloseIcon,
   CodeIcon,
@@ -83,10 +83,17 @@ export {
   type MasonryBreakpoint,
   type MasonryProps,
 } from "../components/Masonry/Masonry";
-export { Modal, ModalBody, ModalFooter, ModalHeader, type ModalHeaderProps, type ModalProps, type ModalSectionProps } from "../components/Modal/Modal";
 export { Menu, type MenuGroup, type MenuItem, type MenuProps } from "../components/Menu/Menu";
-export { Popover, type AnchorHandle, type PopoverProps } from "../components/Popover/Popover";
-export type { PopoverAlign, PopoverPlacement } from "../overlay/place";
+export {
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  type ModalHeaderProps,
+  type ModalProps,
+  type ModalSectionProps,
+} from "../components/Modal/Modal";
+export { type AnchorHandle, Popover, type PopoverProps } from "../components/Popover/Popover";
 export { Progress, type ProgressProps } from "../components/Progress/Progress";
 export {
   RadioGroup,
@@ -104,7 +111,6 @@ export { SettingsRow, type SettingsRowProps } from "../components/SettingsRow/Se
 export { SideNavItem, type SideNavItemProps } from "../components/SideNavItem/SideNavItem";
 export { Spinner, type SpinnerProps, type SpinnerSize } from "../components/Spinner/Spinner";
 export { Switch, type SwitchProps } from "../components/Switch/Switch";
-export { Tabs, type TabItem, type TabsProps, type TabsVariant } from "../components/Tabs/Tabs";
 export {
   reorderTableRows,
   Table,
@@ -117,8 +123,10 @@ export {
   type TableScroll,
   type TableSectionProps,
 } from "../components/Table/Table";
+export { type TabItem, Tabs, type TabsProps, type TabsVariant } from "../components/Tabs/Tabs";
 export { TextArea, type TextAreaProps } from "../components/TextArea/TextArea";
 export { TitleTooltipHost } from "../components/TitleTooltipHost/TitleTooltipHost";
+export type { PopoverAlign, PopoverPlacement } from "../overlay/place";
 export {
   type CustomThemeLike,
   type DesignTheme,

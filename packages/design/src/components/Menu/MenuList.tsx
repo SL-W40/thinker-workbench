@@ -200,7 +200,12 @@ function MenuRow({
         {hasSub ? <ChevronRightIcon size="sm" /> : null}
       </button>
       {subOpen && item.items?.length ? (
-        <Submenu anchorRef={buttonRef} items={item.items} onClose={onClose} onCollapse={onCollapse} />
+        <Submenu
+          anchorRef={buttonRef}
+          items={item.items}
+          onClose={onClose}
+          onCollapse={onCollapse}
+        />
       ) : null}
     </div>
   );
@@ -233,7 +238,8 @@ function Submenu({
         viewport: { width: window.innerWidth, height: window.innerHeight },
       });
       setStyle((prev) => {
-        if (prev.left === next.left && prev.top === next.top && prev.maxHeight === next.maxHeight) return prev;
+        if (prev.left === next.left && prev.top === next.top && prev.maxHeight === next.maxHeight)
+          return prev;
         return { left: next.left, top: next.top, maxHeight: next.maxHeight };
       });
     };

@@ -1,9 +1,10 @@
 /**
  * 右键 / 坐标锚定的上下文菜单。条目模型与 Menu 相同。
  */
-import { Popover } from "../Popover/Popover";
+
 import { MenuList } from "../Menu/MenuList";
 import type { MenuItem } from "../Menu/types";
+import { Popover } from "../Popover/Popover";
 
 export type ContextMenuItemProps = MenuItem;
 

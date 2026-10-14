@@ -5,7 +5,11 @@
 type NavItem = { disabled?: boolean };
 
 /** 没有可选项时返回 -1。 */
-export function nextEnabledIndex(items: readonly NavItem[], current: number, delta: number): number {
+export function nextEnabledIndex(
+  items: readonly NavItem[],
+  current: number,
+  delta: number,
+): number {
   const enabled: number[] = [];
   items.forEach((item, index) => {
     if (!item.disabled) enabled.push(index);

@@ -47,10 +47,7 @@ describe("filesystem tools", () => {
     );
 
     // end 超出总行数时夹到末尾
-    const clamped = await readFileTool(
-      { path: "a.txt", start_line: 2, end_line: 99 },
-      ctx(root),
-    );
+    const clamped = await readFileTool({ path: "a.txt", start_line: 2, end_line: 99 }, ctx(root));
     assert.match(clamped, /lines\t2-4/);
     assert.match(clamped, /2\|two/);
 

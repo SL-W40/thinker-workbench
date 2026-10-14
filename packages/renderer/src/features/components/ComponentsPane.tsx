@@ -493,7 +493,10 @@ export function ComponentsPane({ active }: Props) {
               closeOnEscape
               aria-labelledby="components-modal-title"
             >
-              <Modal.Header title={t("components.demo.modalTitle")} titleId="components-modal-title" />
+              <Modal.Header
+                title={t("components.demo.modalTitle")}
+                titleId="components-modal-title"
+              />
               <Modal.Body>{t("components.demo.modalBody")}</Modal.Body>
               <Modal.Footer>
                 <Button variant="ghost" onClick={() => setModalOpen(false)}>
@@ -568,7 +571,11 @@ export function ComponentsPane({ active }: Props) {
           "components.section.popover",
           "components.section.popoverDesc",
           <>
-            <Button ref={popoverAnchorRef} variant="secondary" onClick={() => setPopoverOpen((v) => !v)}>
+            <Button
+              ref={popoverAnchorRef}
+              variant="secondary"
+              onClick={() => setPopoverOpen((v) => !v)}
+            >
               {t("components.demo.openPopover")}
             </Button>
             <Popover
@@ -655,7 +662,9 @@ export function ComponentsPane({ active }: Props) {
               value={docTab}
               onChange={setDocTab}
               onClose={(id) => {
-                setDocTabs((prev) => (prev.length <= 1 ? prev : prev.filter((tab) => tab.id !== id)));
+                setDocTabs((prev) =>
+                  prev.length <= 1 ? prev : prev.filter((tab) => tab.id !== id),
+                );
                 setDocTab((current) => {
                   if (current !== id) return current;
                   const next = docTabs.filter((tab) => tab.id !== id);
@@ -664,7 +673,11 @@ export function ComponentsPane({ active }: Props) {
               }}
               tabs={docTabs.map((tab) => ({
                 id: tab.id,
-                label: t(tab.id === "notes" ? "components.demo.docTabNotes" : "components.demo.docTabTerminal"),
+                label: t(
+                  tab.id === "notes"
+                    ? "components.demo.docTabNotes"
+                    : "components.demo.docTabTerminal",
+                ),
                 dirty: tab.dirty,
                 closable: true,
                 closeLabel: t("components.demo.tabClose"),
@@ -701,7 +714,11 @@ export function ComponentsPane({ active }: Props) {
               title={t("components.demo.settingsRowTitle")}
               description={t("components.demo.settingsRowDesc")}
             >
-              <Switch checked={on} aria-label={t("components.demo.settingsRowTitle")} onChange={setOn} />
+              <Switch
+                checked={on}
+                aria-label={t("components.demo.settingsRowTitle")}
+                onChange={setOn}
+              />
             </SettingsRow>
             <SettingsRow
               stack

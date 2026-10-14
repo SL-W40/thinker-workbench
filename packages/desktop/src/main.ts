@@ -4,7 +4,8 @@
  * 负责：应用标识与图标、加载 settings/session、注入 CSP、启动 agent utilityProcess、
  * 注册 IPC、创建主窗口与托盘，以及 macOS activate / 全窗口关闭时的退出策略。
  */
-import { app, BrowserWindow, ipcMain, nativeImage, nativeTheme } from "electron";
+import { app, ipcMain, nativeImage, nativeTheme } from "electron";
+import { runLedger } from "./agent/runLedger";
 import { APP_NAME, APP_USER_MODEL_ID } from "./config/appIdentity";
 import { reloadSessionAfterDataDirChange } from "./config/dataDirMigrate";
 import { getAppIconPath } from "./config/paths";
@@ -12,7 +13,6 @@ import { loadSession } from "./config/sessionStore";
 import { getGeneralSettings, loadSettings } from "./config/settingsStore";
 import { ensureBundledCustomize } from "./customize/ensureBundledCustomize";
 import { closeThinkerDb, openCatalogDb } from "./db/thinkerDb";
-import { runLedger } from "./agent/runLedger";
 import { ensureDefaultWorkspace, healRunningSessions } from "./db/workspacesStore";
 import { registerIpc } from "./ipc/register";
 import { broadcastThreadsChanged } from "./ipc/workspacesHandlers";
@@ -25,11 +25,8 @@ import { ensureBundledSkills } from "./skills/ensureBundledSkills";
 import { terminalSessionManager } from "./terminal/TerminalSessionManager";
 import { pruneTraceStore } from "./trace/retention";
 import { pushAgentHello, startAgentProcess } from "./utility/startAgentProcess";
-import {
-  createWindow,
-  getMainWindow,
-  syncWindowBackgroundFromSettings,
-} from "./window/createWindow";
+import { createWindow, syncWindowBackgroundFromSettings } from "./window/createWindow";
+import { startDevParentWatch } from "./window/devParentWatch";
 import { startDevToolsPrefsBridge } from "./window/devToolsEnv";
 import { isAppQuitting, setTrayEnsureWindow, syncTrayFromSettings } from "./window/tray";
 
@@ -45,8 +42,8 @@ if (process.platform === "win32") {
 app.commandLine.appendSwitch("log-level", "3");
 
 /**
- * 单实例：上次 `pnpm dev` 未干净退出时常见孤儿 Electron，再启动会多一个空窗。
- * 未抢到锁则立刻退出；二次启动则聚焦已有主窗。
+ * 单实例：上次 `pnpm:dev` 未干净退出时常见孤儿 Electron，再启动会多一个空窗。
+ * 未抢到锁则立刻退出；二次启动则 ensure 主窗（createWindow 幂等，只聚焦不叠窗）。
  */
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -55,14 +52,9 @@ if (!gotSingleInstanceLock) {
 
 app.on("second-instance", () => {
   if (!gotSingleInstanceLock) return;
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) {
-    if (app.isReady()) createWindow();
-    return;
-  }
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  // whenReady 尚未完成时勿建窗，避免与首启 createWindow 竞态叠窗
+  if (!app.isReady()) return;
+  createWindow();
 });
 
 /** 从打包资源加载应用图标；macOS 额外设置 Dock 图标。 */
@@ -105,10 +97,12 @@ app.whenReady().then(() => {
   applyAppIcon();
   applyContentSecurityPolicy();
   ensureWindowsToastShortcut();
-  // 托盘「显示窗口」时若主窗口已销毁则重建
+  // 托盘「显示窗口」：createWindow 幂等（已有则聚焦）
   setTrayEnsureWindow(() => {
-    if (!getMainWindow() || getMainWindow()?.isDestroyed()) createWindow();
+    createWindow();
   });
+  // 开发态：包装进程被强杀时随父进程退出，避免孤儿占锁
+  startDevParentWatch();
   configureDesktopLog();
   pruneExpiredLogs(getGeneralSettings().logRetentionDays);
   try {
@@ -218,13 +212,8 @@ app.whenReady().then(() => {
   );
 
   app.on("activate", () => {
-    // macOS：点击 Dock 图标时恢复或重建窗口
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    else {
-      const win = getMainWindow();
-      win?.show();
-      win?.focus();
-    }
+    // macOS：点击 Dock 图标时确保主窗（仅有辅助窗时也会重建主窗）
+    createWindow();
   });
 });
 

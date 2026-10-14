@@ -7,7 +7,7 @@
   "ext": "js",
   "ignore": ["**/node_modules/**"],
   "exec": "node scripts/run-electron.mjs product -- --log-level=3 .",
-  "delay": 5000,
-  "signal": "SIGKILL",
+  "delay": 1200,
+  "signal": "SIGTERM",
   "quiet": true
 }

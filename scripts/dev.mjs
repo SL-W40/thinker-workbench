@@ -8,14 +8,25 @@
  *
  * --devtools（或 THINKER_OPEN_DEVTOOLS=1）：
  * - 启动后自动打开主窗 DevTools（detach）
+ *
+ * 热启动会先删掉 desktop/engine 旧 bundle，避免 wait-on 吃到上次产物、
+ * Electron 先起一窗，等 esbuild --watch 首轮写完又被 nodemon 重启。
  */
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** pnpm 可能传入单独的 `--`，忽略。 */
 const argv = process.argv.slice(2).filter((a) => a !== "--");
+
+/** nodemon 监听的 bundle；热启动前清掉，强制等本轮 esbuild。 */
+const HOT_BUNDLES = [
+  "packages/desktop/artifacts/main.js",
+  "packages/desktop/artifacts/preload.js",
+  "packages/engine/artifacts/entry.js",
+];
 
 function flag(name, envKeys) {
   if (argv.includes(name)) return true;
@@ -43,6 +54,18 @@ function runSync(command, args) {
   }
 }
 
+/** 删除热重启监听的旧产物（不存在则忽略）。 */
+function clearHotBundles() {
+  for (const rel of HOT_BUNDLES) {
+    const abs = path.join(root, rel);
+    try {
+      fs.unlinkSync(abs);
+    } catch {
+      /* 不存在 */
+    }
+  }
+}
+
 runSync("node", ["scripts/copy-desktop-resources.mjs"]);
 runSync("node", ["scripts/dev-prepare.mjs"]);
 
@@ -53,6 +76,9 @@ if (noHot) {
   runSync("pnpm", ["--filter", "@thinker-workbench/desktop", "run", "bundle:main"]);
   runSync("pnpm", ["--filter", "@thinker-workbench/desktop", "run", "bundle:preload"]);
   runSync("pnpm", ["--filter", "@thinker-workbench/engine", "run", "bundle:entry"]);
+} else {
+  clearHotBundles();
+  console.log("[dev] cleared stale main/preload/entry so Electron waits for fresh esbuild");
 }
 if (openDevtools) {
   console.log("[dev] --devtools: 启动后打开 DevTools");

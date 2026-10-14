@@ -2,8 +2,8 @@
  * Markdown React 渲染入口：解析 AST 并输出 `.tw-md` 文章树。
  */
 import {
-  createContext,
   type CSSProperties,
+  createContext,
   type MouseEvent,
   type ReactNode,
   useContext,
@@ -72,7 +72,10 @@ function createFnRegistry(): FnRegistry {
 function ownsLiveCaret(node: BlockNode): boolean {
   if (node.type === "pending") return true;
   if (
-    (node.type === "code" || node.type === "diagram" || node.type === "math" || node.type === "table") &&
+    (node.type === "code" ||
+      node.type === "diagram" ||
+      node.type === "math" ||
+      node.type === "table") &&
     node.incomplete
   ) {
     return true;
@@ -208,7 +211,13 @@ function MdImage({ src, alt, title }: { src: string; alt: string; title?: string
   return <img src={safeSrc} alt={alt} title={title} onError={() => setFailed(true)} />;
 }
 
-function Blocks({ nodes, caretOnLast = false }: { nodes: BlockNode[]; caretOnLast?: boolean }): ReactNode {
+function Blocks({
+  nodes,
+  caretOnLast = false,
+}: {
+  nodes: BlockNode[];
+  caretOnLast?: boolean;
+}): ReactNode {
   return nodes.map((node, index) => (
     <BlockView
       key={index}

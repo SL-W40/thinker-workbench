@@ -87,24 +87,30 @@ describe("SettingsRow", () => {
 describe("Disclosure", () => {
   it("hides the panel while collapsed", () => {
     const closed = renderToStaticMarkup(
-      createElement(Disclosure, {
-        title: "工作区",
-        count: 2,
-        open: false,
-        onOpenChange: () => undefined,
-        children: "正文",
-      }),
+      createElement(
+        Disclosure,
+        {
+          title: "工作区",
+          count: 2,
+          open: false,
+          onOpenChange: () => undefined,
+        },
+        "正文",
+      ),
     );
     assert.match(closed, /aria-expanded="false"/);
     assert.doesNotMatch(closed, /正文/);
 
     const open = renderToStaticMarkup(
-      createElement(Disclosure, {
-        title: "工作区",
-        open: true,
-        onOpenChange: () => undefined,
-        children: "正文",
-      }),
+      createElement(
+        Disclosure,
+        {
+          title: "工作区",
+          open: true,
+          onOpenChange: () => undefined,
+        },
+        "正文",
+      ),
     );
     assert.match(open, /aria-expanded="true"/);
     assert.match(open, /正文/);

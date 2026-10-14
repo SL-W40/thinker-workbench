@@ -60,10 +60,7 @@ describe("parseLineRange", () => {
 
 describe("resolveRangeInFile / formatNumberedSlice / replaceLineRange", () => {
   it("空文件不能用区间；start 越界报错；end 越界夹到末尾；缺省 end 到末尾", () => {
-    assert.throws(
-      () => resolveRangeInFile({ start: 1, end: 1 }, 0, "a.txt"),
-      /empty file: a.txt/,
-    );
+    assert.throws(() => resolveRangeInFile({ start: 1, end: 1 }, 0, "a.txt"), /empty file: a.txt/);
     assert.throws(
       () => resolveRangeInFile({ start: 5, end: 6 }, 2, "a.txt"),
       /start_line \(5\) out of bounds for a.txt \(2 lines\)/,

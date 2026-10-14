@@ -51,8 +51,12 @@ describe("payload index", () => {
     const loc = findPayloadIndex(sessionId, second);
     assert.ok(loc);
     assert.ok(loc.offset > 0);
-    assert.equal((readPayload(sessionId, first)?.json as { n: number }).n, 1);
-    assert.equal((readPayload(sessionId, second)?.json as { n: number }).n, 2);
+    const firstPayload = readPayload(sessionId, first);
+    const secondPayload = readPayload(sessionId, second);
+    assert.ok(firstPayload);
+    assert.ok(secondPayload);
+    assert.equal((firstPayload.json as { n: number }).n, 1);
+    assert.equal((secondPayload.json as { n: number }).n, 2);
     removeSessionJsonl(sessionId);
     assert.equal(findPayloadIndex(sessionId, first), null);
     assert.equal(readPayload(sessionId, first), null);

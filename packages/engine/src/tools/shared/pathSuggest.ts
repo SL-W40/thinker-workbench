@@ -37,7 +37,10 @@ export function scorePathSuggestion(requestedRel: string, candidateRel: string):
   while (
     shared < reqParts.length &&
     shared < candParts.length &&
-    basenameEquals(reqParts[reqParts.length - 1 - shared]!, candParts[candParts.length - 1 - shared]!)
+    basenameEquals(
+      reqParts[reqParts.length - 1 - shared]!,
+      candParts[candParts.length - 1 - shared]!,
+    )
   ) {
     shared++;
   }

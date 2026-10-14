@@ -70,7 +70,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ) : startIcon ? (
         <span className="tw-btn__icon">{startIcon}</span>
       ) : null}
-      {children != null && children !== "" ? <span className="tw-btn__label">{children}</span> : null}
+      {children != null && children !== "" ? (
+        <span className="tw-btn__label">{children}</span>
+      ) : null}
       {showBusyText ? <span className="tw-btn__busy-label">{busyLabel}</span> : null}
       {endIcon ? <span className="tw-btn__icon">{endIcon}</span> : null}
     </button>

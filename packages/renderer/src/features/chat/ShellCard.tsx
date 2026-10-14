@@ -1,13 +1,13 @@
 /**
- * shell / shell_await 时间线卡片：命令、轻量状态、去 ANSI 输出、HITL、「打开终端」。 * 输出默认 4 行，超出底部渐隐 + 居中下箭头展开。 */
+ * shell / shell_await 时间线卡片：命令、轻量状态、去 ANSI 输出、HITL、「打开终端」。
+ * 输出默认折叠，超出时底部渐隐 + 居中箭头展开。
+ */
 import { Badge, Button } from "@thinker-workbench/design/react";
 import { type ChatTimelineToolStep, stripAnsi } from "@thinker-workbench/shared";
 import { useLayoutEffect, useRef, useState } from "react";
 import { respondHitl } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
-
-/** 折叠时可见行数*/
-const COLLAPSED_LINES = 4;
+import { SHELL_COLLAPSED_LINES, shellOutputLikelyOverflows } from "./shellOutputOverflow";
 
 type Props = {
   step: ChatTimelineToolStep;
@@ -59,16 +59,25 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
         ? hitlBody
         : "";
 
+  // 流式输出会变长：必须随 displayOut 重测。空依赖会导致首帧无输出时 overflows=false，之后永远不出现展开。
   useLayoutEffect(() => {
     const el = outputRef.current;
-    if (!el) {
+    if (!el || !displayOut) {
       setOverflows(false);
       return;
     }
-    setOverflows(el.scrollHeight > el.clientHeight + 2);
-  }, []);
+    const measure = () => {
+      setOverflows(el.scrollHeight > el.clientHeight + 2);
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [displayOut, expanded]);
 
-  const showMore = Boolean(displayOut) && (overflows || expanded);
+  const showMore =
+    Boolean(displayOut) &&
+    (expanded || overflows || shellOutputLikelyOverflows(displayOut, SHELL_COLLAPSED_LINES));
 
   async function onHitlAction(actionId: string) {
     if (!hitl || busy) return;
@@ -162,7 +171,7 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
           <pre
             ref={outputRef}
             className="run-shell-card__output"
-            style={{ ["--shell-collapsed-lines" as string]: String(COLLAPSED_LINES) }}
+            style={{ ["--shell-collapsed-lines" as string]: String(SHELL_COLLAPSED_LINES) }}
           >
             {displayOut}
           </pre>

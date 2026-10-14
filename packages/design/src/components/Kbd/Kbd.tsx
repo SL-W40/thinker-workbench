@@ -59,7 +59,12 @@ export function Kbd({
   disabled,
   "aria-label": ariaLabel,
 }: KbdProps) {
-  const cls = ["tw-kbd", compact ? "tw-kbd--compact" : "", recording ? "is-recording" : "", className ?? ""]
+  const cls = [
+    "tw-kbd",
+    compact ? "tw-kbd--compact" : "",
+    recording ? "is-recording" : "",
+    className ?? "",
+  ]
     .filter(Boolean)
     .join(" ");
 

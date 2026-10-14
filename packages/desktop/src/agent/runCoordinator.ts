@@ -102,10 +102,7 @@ export function admitRun(request: AdmitRunRequest): AdmitRunResult {
   }
 
   // queued 与 running 一样占着这条会话，不能再叠一条
-  if (
-    (session.runStatus === "running" || session.runStatus === "queued") &&
-    session.activeRunId
-  ) {
+  if ((session.runStatus === "running" || session.runStatus === "queued") && session.activeRunId) {
     return { ok: false, error: THREAD_BUSY };
   }
 

@@ -631,7 +631,7 @@ function parseDefinitionList(
           next.startsWith("#") ||
           matchFenceOpen(next) ||
           /^ {0,3}>/.test(next) ||
-          Boolean(matchListMarker(next)) ||
+          matchListMarker(next) ||
           (i + 1 < lines.length && /^:\s+/.test(lines[i + 1]) && !/^\s/.test(next))
         ) {
           // 下一 term：未缩进且后面是 :
@@ -673,7 +673,11 @@ function isDefinitionStart(lines: string[], i: number): boolean {
   if (!/^:[ \t]+\S/.test(lines[i + 1] ?? "")) return false;
   const term = (lines[i] ?? "").trim();
   if (!term || /[:：]\s*$/.test(term)) return false;
-  if (matchAtx(lines[i] ?? "") || matchFenceOpen(lines[i] ?? "") || isThematicBreak(lines[i] ?? "")) {
+  if (
+    matchAtx(lines[i] ?? "") ||
+    matchFenceOpen(lines[i] ?? "") ||
+    isThematicBreak(lines[i] ?? "")
+  ) {
     return false;
   }
   if (matchListMarker(lines[i] ?? "") || /^ {0,3}>/.test(lines[i] ?? "")) return false;
@@ -715,7 +719,10 @@ function parseIndentedCode(
     i += 1;
   }
   if (!buf.length) return null;
-  return { node: { type: "code", lang: "", value: buf.join("\n") }, next: i - pendingBlanks.length };
+  return {
+    node: { type: "code", lang: "", value: buf.join("\n") },
+    next: i - pendingBlanks.length,
+  };
 }
 
 /** 流式表格：仅当表是文末块且缓冲区未以换行闭合时标 incomplete。 */
@@ -891,7 +898,11 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
     }
 
     const para: string[] = [];
-    while (i < lines.length && (lines[i] ?? "").trim() && !isBlockStart(lines[i] ?? "", streaming, lines, i)) {
+    while (
+      i < lines.length &&
+      (lines[i] ?? "").trim() &&
+      !isBlockStart(lines[i] ?? "", streaming, lines, i)
+    ) {
       if (isDefinitionStart(lines, i)) break;
       para.push(lines[i] ?? "");
       i += 1;

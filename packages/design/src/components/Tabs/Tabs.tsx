@@ -51,9 +51,14 @@ export function Tabs({
   const uid = useId();
 
   function selectByDelta(delta: number) {
-    const enabled = tabs.map((tab, index) => (tab.disabled ? -1 : index)).filter((index) => index >= 0);
+    const enabled = tabs
+      .map((tab, index) => (tab.disabled ? -1 : index))
+      .filter((index) => index >= 0);
     if (enabled.length === 0) return;
-    const current = Math.max(0, tabs.findIndex((tab) => tab.id === value));
+    const current = Math.max(
+      0,
+      tabs.findIndex((tab) => tab.id === value),
+    );
     const pos = enabled.indexOf(current);
     const start = pos === -1 ? 0 : pos;
     const next = enabled[(start + delta + enabled.length) % enabled.length];

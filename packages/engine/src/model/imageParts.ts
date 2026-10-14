@@ -4,7 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { estimateTokens, type ChatImageRef } from "@thinker-workbench/shared";
+import { type ChatImageRef, estimateTokens } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/dataDir";
 import type { ChatContentPart, ChatImageRefPart, ChatMessage, ChatUsage } from "./types";
 
@@ -23,7 +23,8 @@ export function estimateTurnUsage(input: {
   let inputTokens = estimateTokens(input.system ?? "");
   for (const message of input.messages) {
     const text = contentToPlainText(message.content);
-    inputTokens += (text ? estimateTokens(text) : 0) + countImageRefs(message.content) * IMAGE_TOKEN_ESTIMATE;
+    inputTokens +=
+      (text ? estimateTokens(text) : 0) + countImageRefs(message.content) * IMAGE_TOKEN_ESTIMATE;
   }
   const reasoningTokens = input.reasoning ? estimateTokens(input.reasoning) : 0;
   const outputTokens = (input.output ? estimateTokens(input.output) : 0) + reasoningTokens;
