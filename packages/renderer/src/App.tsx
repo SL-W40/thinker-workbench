@@ -313,7 +313,12 @@ export function App() {
       ) : null}
       <main className="app-body">
         {!hideChrome ? (
-          <div className="chat-shell" hidden={!onChat} inert={!onChat || undefined}>
+          <div
+            className="chat-shell"
+            ref={panels.shellRef}
+            hidden={!onChat}
+            inert={!onChat || undefined}
+          >
             <ChatSidePanel
               side="left"
               open={panels.leftOpen}
@@ -339,7 +344,12 @@ export function App() {
                 onOpenTrace={openTraceForSession}
               />
             </ChatSidePanel>
-            <div className="chat-main">
+            <div
+              className="chat-main"
+              style={
+                panels.mainWidth > 0 ? { flex: `0 0 ${panels.mainWidth}px` } : undefined
+              }
+            >
               <ChatStage
                 empty={session.empty}
                 messages={session.messages}

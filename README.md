@@ -4,12 +4,19 @@
 
 License: [Apache-2.0](./LICENSE) · Deferred work: [TODOS](./TODOS.md)
 
-## What you get
+## About
 
-- Chat-driven agent with file tools, skills, rules, and MCP (stdio)
-- Multi-session runs with a configurable parallel cap
-- Data and keys stay on your machine (`~/.thinker` by default; API keys via OS `safeStorage`)
-- OpenAI-compatible model endpoint (API key + base URL + model)
+Thinker Workbench is a desktop AI coding app for local repositories. You chat in a workspace; the agent can read and edit files and run shell commands. Sessions, settings, and keys stay on your machine; models use whatever OpenAI-compatible endpoint you configure.
+
+What it covers day to day:
+
+- **Modes** — Agent edits code, Ask answers read-only, Plan drafts before changing anything
+- **Parallel Tasks and subagents** — split larger jobs and follow progress on the timeline
+- **Changes and diffs** — review edits beside the chat, not only the final reply
+- **Skills, Rules, and MCP** — extend behavior globally or per workspace; `/` picks a skill, `@` mentions files
+- **Local data** — default root `~/.thinker`; API keys via OS `safeStorage`
+
+![Thinker Workbench — chat, agent tasks, and workspace changes](./docs/screenshot.jpg)
 
 ## Requirements
 
@@ -158,7 +165,4 @@ Disable a server in Settings to drop its tools; quitting should leave no orphan 
 
 ## Contributing
 
-- **pnpm** only.
-- Run `pnpm run check` before sending changes.
-- Source comments / JSDoc: **中文** (identifiers and i18n strings stay as they are).
-- Product backlog / deferred items: [TODOS.md](./TODOS.md).
+How to branch, review, and land changes: **[CONTRIBUTING.md](./CONTRIBUTING.md)** ([简体中文](./CONTRIBUTING.zh-CN.md)). Deferred backlog: [TODOS.md](./TODOS.md).

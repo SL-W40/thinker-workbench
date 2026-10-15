@@ -312,15 +312,20 @@ export function useChatSession(visible = true) {
   /**
    * 取出未入账流式文本的粗估 usage，并清空缓冲。
    * 尚无官方 input 时，顺带用可见历史粗估 input。
+   * 缓冲为空且消息尚无 usage 时，用最终正文兜底（停在流中 / usage 包未到常见）。
    */
   function consumeUnbilledUsageEstimate(
     assistantId: string,
     existing: ChatMessage["usage"],
+    fallbackReply?: string,
   ): ChatMessage["usage"] | null {
-    const reply = unbilledReply.current;
+    let reply = unbilledReply.current;
     const thinking = unbilledThinking.current;
     resetUnbilled();
     const base = existing ?? EMPTY_USAGE;
+    if (!reply && !thinking && totalTokens(base) <= 0 && fallbackReply?.trim()) {
+      reply = fallbackReply;
+    }
     const delta = estimatePartialUsage({
       reply,
       thinking,
@@ -333,9 +338,10 @@ export function useChatSession(visible = true) {
     return delta;
   }
 
-  /** 中断 / 取消收束时把粗估 usage 打进助手消息*/
+  /** 中断 / 收束时把粗估 usage 打进助手消息（官方 usage 已有则只叠加未入账增量）。 */
   function withUnbilledUsageEstimate(message: ChatMessage): ChatMessage {
-    const delta = consumeUnbilledUsageEstimate(message.id, message.usage);
+    const fallback = streamText.current || message.text || "";
+    const delta = consumeUnbilledUsageEstimate(message.id, message.usage, fallback);
     if (!delta) return message;
     return { ...message, usage: addUsage(message.usage ?? EMPTY_USAGE, delta) };
   }
@@ -1037,13 +1043,15 @@ export function useChatSession(visible = true) {
         setMessages((prev) => {
           const next = prev.map((m) =>
             m.id === id
-              ? settleMessageClock({
-                  ...m,
-                  pending: false,
-                  role: "assistant" as const,
-                  text,
-                  timeline: [...timelineRef.current],
-                })
+              ? settleMessageClock(
+                  withUnbilledUsageEstimate({
+                    ...m,
+                    pending: false,
+                    role: "assistant" as const,
+                    text,
+                    timeline: [...timelineRef.current],
+                  }),
+                )
               : m,
           );
           messagesRef.current = next;
@@ -1080,17 +1088,20 @@ export function useChatSession(visible = true) {
             const baseTimeline = timelineRef.current.length
               ? timelineRef.current
               : (m.timeline ?? []);
-            // 本地已写入「已停止」CANCELLED 时，保留友好文案，勿被 agent 的 "…cancelled" 覆盖
+            // 本地已写入「已停止」CANCELLED 时，保留友好文案，勿被 agent 的 "…cancelled" 覆盖；
+            // 仍要补粗估 usage（此前漏掉会导致 Tokens: 0）。
             const alreadyStopped = baseTimeline.some(
               (s) => s.kind === "error" && s.code === "CANCELLED",
             );
             if (errCode === "CANCELLED" && alreadyStopped) {
-              const settled = settleMessageClock({
-                ...m,
-                pending: false,
-                text: streamText.current || m.text,
-                timeline: deactivateAll(baseTimeline),
-              });
+              const settled = settleMessageClock(
+                withUnbilledUsageEstimate({
+                  ...m,
+                  pending: false,
+                  text: streamText.current || m.text,
+                  timeline: deactivateAll(baseTimeline),
+                }),
+              );
               timelineRef.current = settled.timeline ?? [];
               return settled;
             }

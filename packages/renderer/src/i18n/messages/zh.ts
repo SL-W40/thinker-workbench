@@ -444,6 +444,9 @@ export const zh: MessageTree = {
     /** 点击已发送用户消息的读屏标签。 */
     editUserMessage: "编辑并重新发送",
     editUserMessageHint: "点击后在原位置编辑；点空白处或 Esc 取消，发送后从该条重新开始",
+    /** 助手气泡底部：复制正文。 */
+    copyMessage: "复制",
+    copiedMessage: "已复制",
     welcomeLabel: "欢迎",
     welcomeLead: "可以直接提问、了解这个项目，或点下面的快捷方式开始。",
     /** 工作空间无文件时的引导（勿假设已有项目）。 */
@@ -548,6 +551,8 @@ export const zh: MessageTree = {
       elapsed: "耗时",
       trace: "Trace",
       traceAria: "查看追踪 {id}",
+      /** 底栏过窄时，溢出项收入「⋯」。 */
+      more: "更多",
       detailTitle: "Token 消耗明细",
       total: "总计 {n}",
       input: "输入",

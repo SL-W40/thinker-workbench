@@ -43,7 +43,9 @@ export function ChatSidePanel({
     const onMove = (event: PointerEvent) => {
       const delta = event.clientX - startX.current;
       const next = side === "left" ? startWidth.current + delta : startWidth.current - delta;
-      onWidthChange(Math.min(maxWidth, Math.max(minWidth, next)));
+      // 空间紧时 max 可能 < 名义 min，取两者较小值作下限，避免强行超宽盖住中间列
+      const lo = Math.min(minWidth, maxWidth);
+      onWidthChange(Math.min(maxWidth, Math.max(lo, next)));
     };
 
     const onUp = () => setDragging(false);

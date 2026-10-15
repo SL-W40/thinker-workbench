@@ -1,17 +1,30 @@
 /**
  * Tokens / 耗时 / Trace 胶囊：消息级挂在助手气泡下；亦可作会话级底栏。
+ * 单行不换行；宽度不足时右侧溢出入「⋯」悬停菜单。
  */
 import {
+  CheckIcon,
   ClockIcon,
+  CopyIcon,
   DatabaseIcon,
   InfoIcon,
   LogsIcon,
   Separator,
 } from "@thinker-workbench/design/react";
 import type { ModelUsage } from "@thinker-workbench/shared";
-import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../../i18n/useI18n";
+import { visiblePillCount } from "./usageBarOverflow";
 import {
   cacheHitRate,
   cacheMissTokens,
@@ -22,6 +35,23 @@ import {
   totalTokens,
 } from "./usageStats";
 import "./ChatUsageBar.less";
+
+type SlotId = "copy" | "tokens" | "elapsed" | "trace";
+
+const PILL_GAP = 8;
+/** 与 `.chat-usage-more__trigger` 视觉宽度一致，避免 more 未挂载时测不准。 */
+const MORE_TRIGGER_WIDTH = 28;
+
+/** 三点触发器内的圆点。 */
+function MoreDots() {
+  return (
+    <span className="chat-usage-more__dots" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
 
 /** 展示用短 id：取末段 8 位*/
 function shortTraceId(id: string): string {
@@ -36,12 +66,21 @@ type PopoverCoords = {
   bottom?: number;
 };
 
+/** 「⋯」菜单：宽高随内容，仅定位用。 */
+type MoreMenuCoords = {
+  left: number;
+  top?: number;
+  bottom?: number;
+};
+
 const POPOVER_GAP = 8;
 const POPOVER_PAD = 8;
 const POPOVER_WIDTH = 280;
 
 /**
- * 相对触发器放置明细浮层：哪边空间更大就往哪边开。 * 不设 maxHeight、不滚内层——窗口太小时宁可被裁切。 */
+ * 相对触发器放置明细浮层：哪边空间更大就往哪边开。
+ * 不设 maxHeight、不滚内层——窗口太小时宁可被裁切。
+ */
 function placeUsagePopover(trigger: DOMRect): PopoverCoords {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -70,6 +109,42 @@ function placeUsagePopover(trigger: DOMRect): PopoverCoords {
   };
 }
 
+/**
+ * 「⋯」溢出菜单定位：挂到 body 的 fixed；上下取空间更大一侧，水平夹入视口。
+ */
+function placeMoreMenu(trigger: DOMRect, menuWidth: number, menuHeight: number): MoreMenuCoords {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const width = Math.min(Math.max(menuWidth, 1), vw - POPOVER_PAD * 2);
+  let left = trigger.left;
+  if (left + width > vw - POPOVER_PAD) {
+    left = Math.max(POPOVER_PAD, trigger.right - width);
+  }
+  if (left < POPOVER_PAD) left = POPOVER_PAD;
+
+  const spaceAbove = trigger.top - POPOVER_GAP;
+  const spaceBelow = vh - trigger.bottom - POPOVER_GAP;
+  const preferAbove = spaceAbove >= spaceBelow && spaceAbove >= menuHeight;
+
+  if (preferAbove) {
+    return {
+      bottom: vh - trigger.top + POPOVER_GAP,
+      left,
+    };
+  }
+  // 下方不够且上方更大时仍向上
+  if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+    return {
+      bottom: vh - trigger.top + POPOVER_GAP,
+      left,
+    };
+  }
+  return {
+    top: trigger.bottom + POPOVER_GAP,
+    left,
+  };
+}
+
 type Props = {
   usage: ModelUsage;
   /** 已累计结束轮次耗时（ms）*/
@@ -83,6 +158,12 @@ type Props = {
   traceId?: string | null;
   /** 点击 Trace 胶囊：跳转控制台 Logs 并筛选该 id*/
   onOpenTrace?: (traceId: string) => void;
+  /** 是否在「⋯」中提供复制（与胶囊同级数据，菜单内统一渲染）*/
+  showCopy?: boolean;
+  /** 刚复制成功时切换文案 / 图标*/
+  copied?: boolean;
+  /** 复制正文*/
+  onCopy?: () => void;
 };
 
 /** 明细行：色点 + 标签 + 数值*/
@@ -124,15 +205,80 @@ export function ChatUsageBar({
   variant = "session",
   traceId = null,
   onOpenTrace,
+  showCopy = false,
+  copied = false,
+  onCopy,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [coords, setCoords] = useState<PopoverCoords | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreCoords, setMoreCoords] = useState<MoreMenuCoords | null>(null);
+  /** 主行可见槽位数；初始用大数先全部挂载测宽，再收敛，避免 opacity 闪烁 */
+  const [visibleCount, setVisibleCount] = useState(16);
   const rootRef = useRef<HTMLDivElement>(null);
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const moreWrapRef = useRef<HTMLDivElement>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreCloseTimerRef = useRef<number | null>(null);
+  const widthCacheRef = useRef<Partial<Record<SlotId, number>>>({});
   const panelId = useId();
+  const moreMenuId = useId();
+
+  // Copy 默认只在「⋯」里；主行仅 Tokens / 耗时 / Trace
+  const hasCopy = Boolean(showCopy && onCopy);
+  const hasTrace = Boolean(traceId);
+  const mainSlotOrder = useMemo(() => {
+    const ids: SlotId[] = ["tokens", "elapsed"];
+    if (hasTrace) ids.push("trace");
+    return ids;
+  }, [hasTrace]);
+
+  const effectiveVisible = Math.min(visibleCount, mainSlotOrder.length);
+  const visibleIds = mainSlotOrder.slice(0, effectiveVisible);
+  const overflowIds = useMemo(() => {
+    const ids: SlotId[] = [];
+    if (hasCopy) ids.push("copy");
+    for (let i = effectiveVisible; i < mainSlotOrder.length; i++) {
+      ids.push(mainSlotOrder[i]!);
+    }
+    return ids;
+  }, [hasCopy, effectiveVisible, mainSlotOrder]);
+  const showMore = overflowIds.length > 0;
+  // Tokens 明细浮层在 body 上：从 overflow 菜单点开后，鼠标离开「⋯」也不要卸掉菜单
+  const moreMenuOpen = moreOpen || (open && overflowIds.includes("tokens"));
+  const overflowKey = overflowIds.join(",");
+
+  function cancelMoreClose() {
+    if (moreCloseTimerRef.current != null) {
+      window.clearTimeout(moreCloseTimerRef.current);
+      moreCloseTimerRef.current = null;
+    }
+  }
+
+  function openMoreMenu() {
+    cancelMoreClose();
+    setMoreOpen(true);
+  }
+
+  function scheduleCloseMoreMenu() {
+    cancelMoreClose();
+    moreCloseTimerRef.current = window.setTimeout(() => {
+      moreCloseTimerRef.current = null;
+      const overTrigger = moreWrapRef.current?.matches(":hover");
+      const overMenu = moreMenuRef.current?.matches(":hover");
+      if (!overTrigger && !overMenu) setMoreOpen(false);
+    }, 120);
+  }
+
+  useEffect(() => {
+    return () => cancelMoreClose();
+  }, []);
 
   // 忙碌时每秒刷新耗时
   useEffect(() => {
@@ -142,16 +288,123 @@ export function ChatUsageBar({
     return () => window.clearInterval(id);
   }, [busy, runStartedAt]);
 
+  const liveExtra = busy && runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
+  const displayMs = durationMs + liveExtra;
+  const total = totalTokens(usage);
+  const miss = cacheMissTokens(usage);
+  const reply = replyTokens(usage);
+  const hitRate = cacheHitRate(usage);
+  const hitShare = usage.cacheReadTokens;
+  const writeShare = usage.cacheWriteTokens;
+  const missShare = miss;
+  const barDenom = hitShare + writeShare + missShare;
+
+  // 按容器宽度决定主行可见个数（测宽条常驻，不因收敛卸载）
+  useLayoutEffect(() => {
+    const row = pillsRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return;
+
+    function recompute() {
+      if (!row || !measure) return;
+      const slots = measure.querySelectorAll<HTMLElement>("[data-usage-slot]");
+      for (const el of slots) {
+        const id = el.dataset.usageSlot as SlotId | undefined;
+        if (!id) continue;
+        const w = el.offsetWidth;
+        if (w > 0) widthCacheRef.current[id] = w;
+      }
+      const widths = mainSlotOrder.map((id) => widthCacheRef.current[id] ?? 0);
+      if (widths.some((w) => w <= 0)) return;
+      const moreEl = measure.querySelector<HTMLElement>("[data-usage-more-measure]");
+      const moreW = moreEl?.offsetWidth || MORE_TRIGGER_WIDTH;
+      const next = visiblePillCount(widths, row.clientWidth, moreW, PILL_GAP, {
+        alwaysReserveMore: hasCopy,
+      });
+      setVisibleCount((prev) => (prev === next ? prev : next));
+    }
+
+    recompute();
+    // 只观察主行容器宽度；测宽条随 deps 重跑即可，避免 RO 循环触发
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(recompute) : null;
+    ro?.observe(row);
+    window.addEventListener("resize", recompute);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", recompute);
+    };
+  }, [mainSlotOrder, total, displayMs, hasTrace, hasCopy]);
+
+  // 「⋯」菜单：fixed + portal，按触发器上下翻转（坐标未变则不 setState，避免死循环）
+  useLayoutEffect(() => {
+    if (!moreMenuOpen) {
+      setMoreCoords((prev) => (prev == null ? prev : null));
+      return;
+    }
+    function update() {
+      const trigger = moreTriggerRef.current;
+      const menu = moreMenuRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const mw = menu?.offsetWidth ?? 160;
+      const mh = menu?.offsetHeight ?? 48;
+      const next = placeMoreMenu(rect, mw, mh);
+      setMoreCoords((prev) => {
+        if (
+          prev &&
+          prev.left === next.left &&
+          prev.top === next.top &&
+          prev.bottom === next.bottom
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    }
+    update();
+    // 菜单首次挂载后尺寸才准，再测一次
+    const raf = window.requestAnimationFrame(update);
+    window.addEventListener("resize", update);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", update);
+    };
+  }, [moreMenuOpen, overflowKey, total, displayMs]);
+
+  // 滚动时关掉「⋯」菜单（Tokens 明细另有逻辑）
+  useEffect(() => {
+    if (!moreMenuOpen || open) return;
+    const onScroll = (e: Event) => {
+      const t = e.target;
+      if (t instanceof Node && moreMenuRef.current?.contains(t)) return;
+      setMoreOpen(false);
+    };
+    window.addEventListener("scroll", onScroll, true);
+    return () => window.removeEventListener("scroll", onScroll, true);
+  }, [moreMenuOpen, open]);
+
   // 打开时按触发器位置重算；缩放时跟随，滚动则关闭（见下：
   useLayoutEffect(() => {
     if (!open) {
-      setCoords(null);
+      setCoords((prev) => (prev == null ? prev : null));
       return;
     }
     function update() {
       const trigger = pillRef.current;
       if (!trigger) return;
-      setCoords(placeUsagePopover(trigger.getBoundingClientRect()));
+      const next = placeUsagePopover(trigger.getBoundingClientRect());
+      setCoords((prev) => {
+        if (
+          prev &&
+          prev.left === next.left &&
+          prev.width === next.width &&
+          prev.top === next.top &&
+          prev.bottom === next.bottom
+        ) {
+          return prev;
+        }
+        return next;
+      });
     }
     update();
     window.addEventListener("resize", update);
@@ -219,17 +472,6 @@ export function ChatUsageBar({
       window.removeEventListener("hashchange", close);
     };
   }, [open]);
-
-  const liveExtra = busy && runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
-  const displayMs = durationMs + liveExtra;
-  const total = totalTokens(usage);
-  const miss = cacheMissTokens(usage);
-  const reply = replyTokens(usage);
-  const hitRate = cacheHitRate(usage);
-  const hitShare = usage.cacheReadTokens;
-  const writeShare = usage.cacheWriteTokens;
-  const missShare = miss;
-  const barDenom = hitShare + writeShare + missShare;
 
   const popoverStyle: CSSProperties | undefined = coords
     ? {
@@ -363,65 +605,265 @@ export function ChatUsageBar({
         )
       : null;
 
-  return (
-    <div
-      className={`chat-usage-bar${variant === "message" ? " chat-usage-bar--message" : ""}`}
-      ref={rootRef}
-    >
-      <div className="chat-usage-bar__pills">
-        <div className="chat-usage-pill-wrap">
+  /** 主行胶囊。 */
+  function renderPill(id: SlotId): ReactNode {
+    switch (id) {
+      case "tokens":
+        return (
+          <div className="chat-usage-pill-wrap">
+            <button
+              ref={pillRef}
+              type="button"
+              className={`chat-usage-pill${open ? " is-open" : ""}`}
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <DatabaseIcon size="sm" />
+              <span>
+                {t("chat.usage.tokens")}: {formatTokenCount(total)}
+              </span>
+              <InfoIcon size="sm" className="chat-usage-pill__info" />
+            </button>
+            {popover}
+          </div>
+        );
+      case "elapsed":
+        return (
+          <span className="chat-usage-pill is-static" aria-label={t("chat.usage.elapsed")}>
+            <ClockIcon size="sm" />
+            <span>
+              {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
+            </span>
+          </span>
+        );
+      case "trace":
+        if (!traceId) return null;
+        return onOpenTrace ? (
           <button
-            ref={pillRef}
             type="button"
-            className={`chat-usage-pill${open ? " is-open" : ""}`}
-            aria-expanded={open}
-            aria-controls={panelId}
-            onClick={() => setOpen((v) => !v)}
+            className="chat-usage-pill"
+            aria-label={t("chat.usage.traceAria", { id: traceId })}
+            title={traceId}
+            onClick={() => onOpenTrace(traceId)}
           >
+            <LogsIcon size="sm" />
+            <span>
+              {t("chat.usage.trace")}: {shortTraceId(traceId)}
+            </span>
+          </button>
+        ) : (
+          <span
+            className="chat-usage-pill is-static"
+            aria-label={t("chat.usage.traceAria", { id: traceId })}
+            title={traceId}
+          >
+            <LogsIcon size="sm" />
+            <span>
+              {t("chat.usage.trace")}: {shortTraceId(traceId)}
+            </span>
+          </span>
+        );
+      default:
+        return null;
+    }
+  }
+
+  /** 「⋯」菜单行：统一 chat-usage-action（图标列对齐）。 */
+  function renderMenuAction(id: SlotId): ReactNode {
+    switch (id) {
+      case "copy":
+        if (!onCopy) return null;
+        return (
+          <button
+            type="button"
+            className="chat-usage-action"
+            aria-label={copied ? t("chat.copiedMessage") : t("chat.copyMessage")}
+            onClick={() => onCopy()}
+          >
+            {copied ? <CheckIcon size="sm" /> : <CopyIcon size="sm" />}
+            <span>{copied ? t("chat.copiedMessage") : t("chat.copyMessage")}</span>
+          </button>
+        );
+      case "tokens":
+        return (
+          <div className="chat-usage-pill-wrap">
+            <button
+              ref={pillRef}
+              type="button"
+              className={`chat-usage-action${open ? " is-open" : ""}`}
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <DatabaseIcon size="sm" />
+              <span>
+                {t("chat.usage.tokens")}: {formatTokenCount(total)}
+              </span>
+            </button>
+            {popover}
+          </div>
+        );
+      case "elapsed":
+        return (
+          <span className="chat-usage-action is-static" aria-label={t("chat.usage.elapsed")}>
+            <ClockIcon size="sm" />
+            <span>
+              {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
+            </span>
+          </span>
+        );
+      case "trace":
+        if (!traceId) return null;
+        return onOpenTrace ? (
+          <button
+            type="button"
+            className="chat-usage-action"
+            aria-label={t("chat.usage.traceAria", { id: traceId })}
+            title={traceId}
+            onClick={() => onOpenTrace(traceId)}
+          >
+            <LogsIcon size="sm" />
+            <span>
+              {t("chat.usage.trace")}: {shortTraceId(traceId)}
+            </span>
+          </button>
+        ) : (
+          <span
+            className="chat-usage-action is-static"
+            aria-label={t("chat.usage.traceAria", { id: traceId })}
+            title={traceId}
+          >
+            <LogsIcon size="sm" />
+            <span>
+              {t("chat.usage.trace")}: {shortTraceId(traceId)}
+            </span>
+          </span>
+        );
+      default:
+        return null;
+    }
+  }
+
+  /** 测宽用静态克隆。 */
+  function renderMeasureSlot(id: SlotId): ReactNode {
+    switch (id) {
+      case "tokens":
+        return (
+          <span className="chat-usage-pill">
             <DatabaseIcon size="sm" />
             <span>
               {t("chat.usage.tokens")}: {formatTokenCount(total)}
             </span>
             <InfoIcon size="sm" className="chat-usage-pill__info" />
-          </button>
-          {popover}
-        </div>
-
-        <span className="chat-usage-pill is-static" aria-label={t("chat.usage.elapsed")}>
-          <ClockIcon size="sm" />
-          <span>
-            {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
           </span>
-        </span>
-
-        {traceId ? (
-          onOpenTrace ? (
-            <button
-              type="button"
-              className="chat-usage-pill"
-              aria-label={t("chat.usage.traceAria", { id: traceId })}
-              title={traceId}
-              onClick={() => onOpenTrace(traceId)}
-            >
-              <LogsIcon size="sm" />
-              <span>
-                {t("chat.usage.trace")}: {shortTraceId(traceId)}
-              </span>
-            </button>
-          ) : (
-            <span
-              className="chat-usage-pill is-static"
-              aria-label={t("chat.usage.traceAria", { id: traceId })}
-              title={traceId}
-            >
-              <LogsIcon size="sm" />
-              <span>
-                {t("chat.usage.trace")}: {shortTraceId(traceId)}
-              </span>
+        );
+      case "elapsed":
+        return (
+          <span className="chat-usage-pill is-static">
+            <ClockIcon size="sm" />
+            <span>
+              {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
             </span>
-          )
+          </span>
+        );
+      case "trace":
+        if (!traceId) return null;
+        return (
+          <span className="chat-usage-pill">
+            <LogsIcon size="sm" />
+            <span>
+              {t("chat.usage.trace")}: {shortTraceId(traceId)}
+            </span>
+          </span>
+        );
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div
+      className={`chat-usage-bar${variant === "message" ? " chat-usage-bar--message" : ""}`}
+      ref={rootRef}
+    >
+      <div className="chat-usage-bar__measure" ref={measureRef} aria-hidden="true">
+        {mainSlotOrder.map((id) => (
+          <div key={id} className="chat-usage-bar__slot" data-usage-slot={id}>
+            {renderMeasureSlot(id)}
+          </div>
+        ))}
+        <button
+          type="button"
+          className="chat-usage-more__trigger"
+          data-usage-more-measure=""
+          tabIndex={-1}
+        >
+          <MoreDots />
+        </button>
+      </div>
+      <div className="chat-usage-bar__pills" ref={pillsRef}>
+        {visibleIds.map((id) => (
+          <div key={id} className="chat-usage-bar__slot">
+            {renderPill(id)}
+          </div>
+        ))}
+        {showMore ? (
+          <div
+            className={`chat-usage-more${moreMenuOpen ? " is-open" : ""}`}
+            ref={moreWrapRef}
+            onMouseEnter={openMoreMenu}
+            onMouseLeave={scheduleCloseMoreMenu}
+            onFocus={openMoreMenu}
+            onBlur={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (next && moreMenuRef.current?.contains(next)) return;
+              scheduleCloseMoreMenu();
+            }}
+          >
+            <button
+              ref={moreTriggerRef}
+              type="button"
+              className="chat-usage-more__trigger"
+              aria-label={t("chat.usage.more")}
+              aria-expanded={moreMenuOpen}
+              aria-controls={moreMenuId}
+              aria-haspopup="menu"
+            >
+              <MoreDots />
+            </button>
+          </div>
         ) : null}
       </div>
+      {moreMenuOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={moreMenuRef}
+              id={moreMenuId}
+              className="chat-usage-more__menu"
+              role="menu"
+              aria-label={t("chat.usage.more")}
+              style={
+                moreCoords
+                  ? {
+                      left: moreCoords.left,
+                      ...(moreCoords.top != null ? { top: moreCoords.top } : {}),
+                      ...(moreCoords.bottom != null ? { bottom: moreCoords.bottom } : {}),
+                    }
+                  : { visibility: "hidden" as const }
+              }
+              onMouseEnter={openMoreMenu}
+              onMouseLeave={scheduleCloseMoreMenu}
+            >
+              {overflowIds.map((id) => (
+                <div key={id} className="chat-usage-more__item" role="none">
+                  {renderMenuAction(id)}
+                </div>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

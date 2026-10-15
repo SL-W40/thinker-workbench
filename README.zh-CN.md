@@ -4,12 +4,19 @@
 
 许可证：[Apache-2.0](./LICENSE) · 暂缓事项：[TODOS](./TODOS.zh-CN.md)
 
-## 你能做什么
+## 项目说明
 
-- 对话驱动的 agent：文件工具、skills、rules、MCP（stdio）
-- 多会话并行，并行上限可配
-- 数据与密钥留在本机（默认 `~/.thinker`；API key 经系统 `safeStorage`）
-- OpenAI 兼容模型端点（API key + base URL + model）
+Thinker Workbench 是面向本地仓库的 AI 编程桌面端。你在工作区里对话，agent 可以读改文件、执行 Shell；会话、设置与密钥留在本机，模型走你自己配置的 OpenAI 兼容端点。
+
+日常能力大致包括：
+
+- **多模式**：Agent 改代码，Ask 只读答疑，Plan 先出方案再动手
+- **并行 Task 与子代理**：把大任务拆开跑，时间线里跟进度
+- **Changes 与 diff**：和聊天同屏核对改动，而不是只看最终文字
+- **Skills、Rules、MCP**：按全局或工作区扩展行为；`/` 选 skill，`@` 引用文件
+- **本机数据**：默认目录 `~/.thinker`，API key 经系统 `safeStorage` 保管
+
+![Thinker Workbench — 对话、agent 任务与工作区变更](./docs/screenshot.jpg)
 
 ## 环境要求
 
@@ -158,7 +165,4 @@ Windows 下 `npx` / `npm` / `node` 会自动解析为 `*.cmd`。
 
 ## 贡献
 
-- 只用 **pnpm**。
-- 提交前跑 `pnpm run check`。
-- 源码注释 / JSDoc 用 **中文**（标识符与 i18n 文案保持原样）。
-- 产品 backlog / 暂缓项：[TODOS.zh-CN.md](./TODOS.zh-CN.md)。
+分支、评审与合入约定见 **[CONTRIBUTING.zh-CN.md](./CONTRIBUTING.zh-CN.md)**（[English](./CONTRIBUTING.md)）。暂缓项：[TODOS.zh-CN.md](./TODOS.zh-CN.md)。

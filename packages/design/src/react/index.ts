@@ -33,6 +33,7 @@ export {
   CloseIcon,
   CodeIcon,
   ConsoleIcon,
+  CopyIcon,
   CubeIcon,
   createIcon,
   DatabaseIcon,

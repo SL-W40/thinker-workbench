@@ -125,7 +125,7 @@ function readPrefersDark(): boolean {
 
 export function ThemePicker({
   savedTheme,
-  customThemes = [],
+  customThemes,
   onSelect,
   onCustomThemesChange,
   showIntro = true,
@@ -133,7 +133,9 @@ export function ThemePicker({
 }: Props) {
   const { t } = useI18n();
   const { themeId, applyAppearance, customThemes: liveCustoms } = useAppearance();
-  const customs = customThemes.length ? customThemes : liveCustoms;
+  // 设置页用已保存目录（可为空）；勿在 empty 时回退 liveCustoms，
+  // 否则编辑器实时预览会把未保存草稿当成「已创建」卡片。
+  const customs = onCustomThemesChange ? (customThemes ?? []) : (customThemes ?? liveCustoms);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [forkOpen, setForkOpen] = useState(false);

@@ -1,13 +1,21 @@
 /**
  * 单条聊天气泡。
  */
-import { IconButton, RestartIcon, useDesignTheme } from "@thinker-workbench/design/react";
+import {
+  Button,
+  CheckIcon,
+  CopyIcon,
+  IconButton,
+  RestartIcon,
+  useDesignTheme,
+} from "@thinker-workbench/design/react";
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
 import type { ChatMessage, ChatTimelineStep } from "@thinker-workbench/shared";
 import {
   type FocusEvent,
   type KeyboardEvent,
   type RefObject,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -20,10 +28,36 @@ import { ComposerEditor, type ComposerEditorHandle } from "../features/chat/Comp
 import { MentionsRichText } from "../features/chat/MentionsRichText";
 import { ModelPicker } from "../features/chat/ModelPicker";
 import { ModePicker } from "../features/chat/ModePicker";
-import { normalizeChatMessage } from "../features/chat/messageModel";
+import { normalizeChatMessage, visibleAssistantText } from "../features/chat/messageModel";
 import { RunTimeline } from "../features/chat/RunTimeline";
 import { EMPTY_USAGE, totalTokens } from "../features/chat/usageStats";
 import { useT } from "../i18n/useI18n";
+
+/** 写入剪贴板；失败时回退 execCommand。 */
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* 回退 */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 /** 焦点是否在模型选用器（portal 菜单在 body 下，不算进编辑壳）。*/
 function focusInModelPicker(node: Node | null): boolean {
@@ -154,6 +188,36 @@ export function Bubble({
     role === "assistant" &&
     !live &&
     (totalTokens(usage) > 0 || durationMs > 0 || Boolean(view.traceId));
+  const copyableText = role === "assistant" ? visibleAssistantText(view) : "";
+  // 流式结束后才显示复制；正文可来自 message.text 或时间线 text 步
+  const showCopy = role === "assistant" && !live && Boolean(copyableText);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  async function onCopyMessage() {
+    if (!copyableText) return;
+    const ok = await copyTextToClipboard(copyableText);
+    if (ok) setCopied(true);
+  }
+
+  const copyButton = showCopy ? (
+    <Button
+      className="bubble-actions__copy"
+      variant="text"
+      size="sm"
+      startIcon={copied ? <CheckIcon size="sm" /> : <CopyIcon size="sm" />}
+      aria-label={copied ? t("chat.copiedMessage") : t("chat.copyMessage")}
+      title={copied ? t("chat.copiedMessage") : t("chat.copyMessage")}
+      onClick={() => void onCopyMessage()}
+    >
+      {copied ? t("chat.copiedMessage") : t("chat.copyMessage")}
+    </Button>
+  ) : null;
 
   if (role === "user") {
     if (editing) {
@@ -283,7 +347,12 @@ export function Bubble({
             variant="message"
             traceId={view.traceId}
             onOpenTrace={onOpenTrace}
+            showCopy={showCopy}
+            copied={copied}
+            onCopy={() => void onCopyMessage()}
           />
+        ) : showCopy ? (
+          <div className="bubble-actions">{copyButton}</div>
         ) : null}
       </div>
     </li>

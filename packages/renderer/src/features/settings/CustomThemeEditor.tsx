@@ -80,7 +80,7 @@ export function CustomThemeEditor({ open, record, customsBaseline, onClose, onSa
   const [busy, setBusy] = useState(false);
   const [varsText, setVarsText] = useState("{}");
 
-  // 打开时克隆进蝉稿，并坳时预览
+  // 打开时克隆进草稿并即时预览（仅套色，不写入已保存目录）
   useEffect(() => {
     if (!open || !record) {
       setDraft(null);
@@ -92,7 +92,9 @@ export function CustomThemeEditor({ open, record, customsBaseline, onClose, onSa
     setVarsText(JSON.stringify(next.theme.mermaid.themeVariables ?? {}, null, 2));
     const merged = [...customsBaseline.filter((c) => c.id !== next.id), next];
     applyAppearance(next.id, merged);
-  }, [open, record?.id, customsBaseline.filter, record, applyAppearance]); // eslint-disable-line react-hooks/exhaustive-deps
+    // 仅在打开 / 切换记录时初始化；customsBaseline 由父级在关闭时回滚
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, record?.id]);
 
   const tabOptions = useMemo(
     () =>

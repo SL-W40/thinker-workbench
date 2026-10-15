@@ -456,6 +456,9 @@ export const en = {
     editUserMessage: "Edit and resend",
     editUserMessageHint:
       "Click to edit in place. Click away or press Esc to cancel; sending restarts from this message",
+    /** Copy assistant reply text from the message footer. */
+    copyMessage: "Copy",
+    copiedMessage: "Copied",
     welcomeLabel: "Welcome",
     welcomeLead: "Ask a question, explore this project, or pick a shortcut below to get started.",
     /** 工作空间无文件时的引导（勿假设已有项目）。 */
@@ -566,6 +569,8 @@ export const en = {
       elapsed: "Time",
       trace: "Trace",
       traceAria: "View trace {id}",
+      /** Overflow “…” control when the usage row is too narrow. */
+      more: "More",
       detailTitle: "Token usage",
       total: "Total {n}",
       input: "Input",

@@ -235,6 +235,16 @@ export const RestartIcon = createIcon(
   VB,
 );
 
+/** 复制：叠放双矩形。 */
+export const CopyIcon = createIcon(
+  "CopyIcon",
+  <>
+    <rect x="5.5" y="5.5" width="6.75" height="6.75" rx="1.15" />
+    <path d="M10.5 5.5V4.15A1.15 1.15 0 0 0 9.35 3H4.15A1.15 1.15 0 0 0 3 4.15v5.2A1.15 1.15 0 0 0 4.15 10.5H5.5" />
+  </>,
+  VB,
+);
+
 /** 数据库 / Tokens 统计。 */
 export const DatabaseIcon = createIcon(
   "DatabaseIcon",

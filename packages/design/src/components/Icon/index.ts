@@ -16,6 +16,7 @@ export {
   CloseIcon,
   CodeIcon,
   ConsoleIcon,
+  CopyIcon,
   CubeIcon,
   DatabaseIcon,
   DebugModeIcon,

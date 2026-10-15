@@ -1,7 +1,17 @@
 /**
  * 聊天左右侧栏开合与宽度；状态持久化到 localStorage（`tw-chat-panels`）。
+ * 根据壳宽动态钳制，避免侧栏把中间聊天区挤没。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  allocateMainWidth,
+  clampPanelWidth,
+  effectivePanelMinWidth,
+  fitChatPanelWidths,
+  maxSidePanelWidth,
+  MIN_CHAT_MAIN_WIDTH,
+  resizeSidePanel,
+} from "./chatPanelLayout";
 
 const STORAGE_KEY = "tw-chat-panels";
 
@@ -30,11 +40,6 @@ const DEFAULTS: ChatPanelsState = {
   rightWidth: DEFAULT_RIGHT_WIDTH,
 };
 
-/** 将宽度钳制到 [min, max] 并取整。 */
-function clampWidth(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Math.round(n)));
-}
-
 /** 从 localStorage 读取侧栏状态；损坏或缺失时用默认值。 */
 function readStored(): ChatPanelsState {
   try {
@@ -46,11 +51,11 @@ function readStored(): ChatPanelsState {
       rightOpen: Boolean(parsed.rightOpen),
       leftWidth:
         typeof parsed.leftWidth === "number"
-          ? clampWidth(parsed.leftWidth, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH)
+          ? clampPanelWidth(parsed.leftWidth, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH)
           : DEFAULT_WIDTH,
       rightWidth:
         typeof parsed.rightWidth === "number"
-          ? clampWidth(parsed.rightWidth, MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH)
+          ? clampPanelWidth(parsed.rightWidth, MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH)
           : DEFAULT_RIGHT_WIDTH,
     };
   } catch {
@@ -60,6 +65,25 @@ function readStored(): ChatPanelsState {
 
 export function useChatPanels() {
   const [state, setState] = useState<ChatPanelsState>(() => readStored());
+  const [shellWidth, setShellWidth] = useState(0);
+  const shellRoRef = useRef<ResizeObserver | null>(null);
+
+  /** 挂到 `.chat-shell`，用 ResizeObserver 跟踪可用宽度。 */
+  const shellRef = useCallback((node: HTMLDivElement | null) => {
+    shellRoRef.current?.disconnect();
+    shellRoRef.current = null;
+    if (!node) {
+      setShellWidth(0);
+      return;
+    }
+    const apply = () => setShellWidth(node.clientWidth);
+    apply();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(apply);
+      ro.observe(node);
+      shellRoRef.current = ro;
+    }
+  }, []);
 
   // 任意字段变化即写回 localStorage
   useEffect(() => {
@@ -69,6 +93,29 @@ export function useChatPanels() {
       /* 忽略配额等错误 */
     }
   }, [state]);
+
+  // 壳宽或开合变化时，压缩侧栏以保住聊天最小宽
+  useLayoutEffect(() => {
+    if (shellWidth <= 0) return;
+    setState((prev) => {
+      const fitted = fitChatPanelWidths({
+        shellWidth,
+        leftOpen: prev.leftOpen,
+        rightOpen: prev.rightOpen,
+        leftWidth: prev.leftWidth,
+        rightWidth: prev.rightWidth,
+        minLeft: MIN_LEFT_WIDTH,
+        maxLeft: MAX_LEFT_WIDTH,
+        minRight: MIN_RIGHT_WIDTH,
+        maxRight: MAX_RIGHT_WIDTH,
+        minChat: MIN_CHAT_MAIN_WIDTH,
+      });
+      if (fitted.leftWidth === prev.leftWidth && fitted.rightWidth === prev.rightWidth) {
+        return prev;
+      }
+      return { ...prev, leftWidth: fitted.leftWidth, rightWidth: fitted.rightWidth };
+    });
+  }, [shellWidth, state.leftOpen, state.rightOpen]);
 
   const toggleLeft = useCallback(() => {
     setState((prev) => ({ ...prev, leftOpen: !prev.leftOpen }));
@@ -82,26 +129,89 @@ export function useChatPanels() {
     setState((prev) => (prev.rightOpen === open ? prev : { ...prev, rightOpen: open }));
   }, []);
 
-  const setLeftWidth = useCallback((width: number) => {
-    setState((prev) => ({
-      ...prev,
-      leftWidth: clampWidth(width, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH),
-    }));
-  }, []);
+  // 拖拽上限按「对侧可让到 min」计算，否则中间锁死后本侧拉不动
+  const effectiveMaxLeft = maxSidePanelWidth({
+    shellWidth,
+    otherTaken: state.rightOpen ? MIN_RIGHT_WIDTH : 0,
+    maxWidth: MAX_LEFT_WIDTH,
+    minChat: MIN_CHAT_MAIN_WIDTH,
+  });
 
-  const setRightWidth = useCallback((width: number) => {
-    setState((prev) => ({
-      ...prev,
-      rightWidth: clampWidth(width, MIN_RIGHT_WIDTH, MAX_RIGHT_WIDTH),
-    }));
-  }, []);
+  const effectiveMaxRight = maxSidePanelWidth({
+    shellWidth,
+    otherTaken: state.leftOpen ? MIN_LEFT_WIDTH : 0,
+    maxWidth: MAX_RIGHT_WIDTH,
+    minChat: MIN_CHAT_MAIN_WIDTH,
+  });
+
+  const setLeftWidth = useCallback(
+    (width: number) => {
+      setState((prev) => {
+        const next = resizeSidePanel({
+          side: "left",
+          nextWidth: width,
+          shellWidth,
+          leftOpen: prev.leftOpen,
+          rightOpen: prev.rightOpen,
+          leftWidth: prev.leftWidth,
+          rightWidth: prev.rightWidth,
+          minLeft: MIN_LEFT_WIDTH,
+          maxLeft: MAX_LEFT_WIDTH,
+          minRight: MIN_RIGHT_WIDTH,
+          maxRight: MAX_RIGHT_WIDTH,
+          minChat: MIN_CHAT_MAIN_WIDTH,
+        });
+        if (next.leftWidth === prev.leftWidth && next.rightWidth === prev.rightWidth) {
+          return prev;
+        }
+        return { ...prev, leftWidth: next.leftWidth, rightWidth: next.rightWidth };
+      });
+    },
+    [shellWidth],
+  );
+
+  const setRightWidth = useCallback(
+    (width: number) => {
+      setState((prev) => {
+        const next = resizeSidePanel({
+          side: "right",
+          nextWidth: width,
+          shellWidth,
+          leftOpen: prev.leftOpen,
+          rightOpen: prev.rightOpen,
+          leftWidth: prev.leftWidth,
+          rightWidth: prev.rightWidth,
+          minLeft: MIN_LEFT_WIDTH,
+          maxLeft: MAX_LEFT_WIDTH,
+          minRight: MIN_RIGHT_WIDTH,
+          maxRight: MAX_RIGHT_WIDTH,
+          minChat: MIN_CHAT_MAIN_WIDTH,
+        });
+        if (next.leftWidth === prev.leftWidth && next.rightWidth === prev.rightWidth) {
+          return prev;
+        }
+        return { ...prev, leftWidth: next.leftWidth, rightWidth: next.rightWidth };
+      });
+    },
+    [shellWidth],
+  );
+
+  const mainWidth = allocateMainWidth({
+    shellWidth,
+    leftOpen: state.leftOpen,
+    rightOpen: state.rightOpen,
+    leftWidth: state.leftWidth,
+    rightWidth: state.rightWidth,
+  });
 
   return {
     ...state,
-    minWidth: MIN_LEFT_WIDTH,
-    minRightWidth: MIN_RIGHT_WIDTH,
-    maxLeftWidth: MAX_LEFT_WIDTH,
-    maxRightWidth: MAX_RIGHT_WIDTH,
+    shellRef,
+    mainWidth,
+    minWidth: effectivePanelMinWidth(MIN_LEFT_WIDTH, effectiveMaxLeft),
+    minRightWidth: effectivePanelMinWidth(MIN_RIGHT_WIDTH, effectiveMaxRight),
+    maxLeftWidth: effectiveMaxLeft,
+    maxRightWidth: effectiveMaxRight,
     toggleLeft,
     toggleRight,
     setRightOpen,
