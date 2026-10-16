@@ -231,8 +231,10 @@
     font-family: var(--md-font-mono);
   }
 
+  /* max-content：列按内容撑开；min-width:100%：窄表仍铺满容器 */
   table {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     border-collapse: collapse;
     font-size: 15px;
     background: var(--md-panel);
@@ -243,6 +245,8 @@
     border: 1px solid var(--md-border);
     padding: 9px 11px;
     vertical-align: top;
+    /* 避免被压成极窄列；超长内容由外层横向滚动承接 */
+    white-space: nowrap;
   }
 
   th {
@@ -304,6 +308,16 @@
     border-radius: 0;
     background: color-mix(in srgb, var(--md-fg) 2.5%, var(--md-panel));
     color: var(--md-fg);
+  }
+
+  /* 表格外壳：滚动交给内部 wrap，避免顶栏被横向拖走 */
+  &--table .tw-md-stream-body {
+    overflow: hidden;
+  }
+
+  &--table .tw-md-table-wrap {
+    margin: 0;
+    max-width: 100%;
   }
 
 }
@@ -433,7 +447,7 @@
   top: calc(100% + 4px);
   right: 0;
   z-index: 20;
-  min-width: 120px;
+  min-width: 158px;
   padding: 4px;
   border: 1px solid var(--md-border);
   border-radius: 8px;
@@ -574,9 +588,13 @@
   }
 }
 
+/* 宽表在气泡 / flex 窄列里横向滚动，而不是挤扁换行 */
 .tw-md-table-wrap {
   margin: 16px 0;
-  overflow: auto;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .tw-md-table-wrap--streaming {
@@ -607,12 +625,14 @@
   font-size: 0.9em;
 }
 
-// —— Mermaid（纸面 token） ——
+// —— Mermaid（纸面 token；无扫光骨架，流式靠防抖真渲染） ——
 
-.tw-md-mermaid-canvas {
-  padding: 22px 20px 24px;
-  text-align: center;
-  overflow: auto;
+.tw-md-mermaid-viewport {
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+  touch-action: none;
+  cursor: grab;
   background-color: var(--md-mermaid-paper);
   background-image:
     linear-gradient(
@@ -630,30 +650,49 @@
     ),
     radial-gradient(120% 90% at 50% 0%, var(--md-mermaid-glow), transparent 55%);
 
-  &--preview {
-    position: relative;
+  &:active {
+    cursor: grabbing;
+  }
+}
 
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background: linear-gradient(
-        105deg,
-        transparent 35%,
-        color-mix(in srgb, var(--md-accent) 10%, transparent) 50%,
-        transparent 65%
-      );
-      background-size: 220% 100%;
-      animation: tw-md-shimmer 1.8s linear infinite;
-    }
+.tw-md-mermaid-viewport__stage {
+  /* 仅平移；缩放改 SVG 宽高，避免 scale 栅格化发糊 */
+  transform-origin: 0 0;
+  display: inline-block;
+}
+
+.tw-md-mermaid-canvas {
+  padding: 22px 20px 24px;
+  text-align: center;
+  background: transparent;
+
+  &--empty {
+    min-height: 120px;
+    background-color: var(--md-mermaid-paper);
+    background-image:
+      linear-gradient(
+        90deg,
+        var(--md-mermaid-margin) 0,
+        var(--md-mermaid-margin) 1px,
+        transparent 1px
+      ),
+      repeating-linear-gradient(
+        180deg,
+        transparent 0,
+        transparent 27px,
+        var(--md-mermaid-rule) 27px,
+        var(--md-mermaid-rule) 28px
+      ),
+      radial-gradient(120% 90% at 50% 0%, var(--md-mermaid-glow), transparent 55%);
   }
 
   svg {
-    max-width: 100%;
+    max-width: none;
     height: auto;
     display: block;
     margin: 0 auto;
+    pointer-events: none;
+    user-select: none;
 
     text,
     .nodeLabel,
@@ -669,6 +708,66 @@
   }
 }
 
+.tw-md-mermaid-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 2px;
+  padding: 1px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-fg) 5%, transparent);
+}
+
+.tw-md-mermaid-zoom__btn,
+.tw-md-mermaid-zoom__pct {
+  appearance: none;
+  box-sizing: border-box;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--md-fg-muted);
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--md-fg) 8%, transparent);
+    color: var(--md-fg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--md-accent);
+    outline-offset: 1px;
+  }
+}
+
+.tw-md-mermaid-zoom__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.tw-md-mermaid-zoom__pct {
+  min-width: 44px;
+  height: 24px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tw-md-code-menu__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .tw-md-mermaid-error {
   margin: 0;
   padding: 12px 14px;
@@ -677,157 +776,9 @@
   white-space: pre-wrap;
   font-size: 14px;
   background: var(--md-danger-bg);
-}
 
-.tw-md-mermaid-loading {
-  position: relative;
-  min-height: 148px;
-  overflow: hidden;
-  background-color: var(--md-mermaid-paper);
-  background-image:
-    linear-gradient(
-      90deg,
-      var(--md-mermaid-margin) 0,
-      var(--md-mermaid-margin) 1px,
-      transparent 1px
-    ),
-    repeating-linear-gradient(
-      180deg,
-      transparent 0,
-      transparent 27px,
-      var(--md-mermaid-rule) 27px,
-      var(--md-mermaid-rule) 28px
-    ),
-    radial-gradient(120% 90% at 50% 0%, var(--md-mermaid-glow), transparent 55%);
-}
-
-.tw-md-mermaid-loading-stage {
-  min-height: inherit;
-}
-
-.tw-md-mermaid-canvas--dim {
-  opacity: 0.35;
-  filter: saturate(0.75);
-}
-
-.tw-md-mermaid-loading-veil {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 28%,
-    color-mix(in srgb, var(--md-accent) 16%, transparent) 48%,
-    transparent 68%
-  );
-  background-size: 220% 100%;
-  animation: tw-md-shimmer 1.7s linear infinite;
-}
-
-.tw-md-mermaid-skeleton {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  min-height: 168px;
-  padding: 32px 28px 36px;
-}
-
-.tw-md-mermaid-skeleton-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-
-  &--fork {
-    gap: 18px;
-  }
-}
-
-.tw-md-mermaid-skeleton-node {
-  display: block;
-  width: 78px;
-  height: 34px;
-  border-radius: 12px;
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--md-accent) 22%, var(--md-mermaid-paper)) 0%,
-    color-mix(in srgb, var(--md-accent) 10%, var(--md-mermaid-paper)) 100%
-  );
-  border: 1.5px solid color-mix(in srgb, var(--md-accent) 42%, var(--md-border));
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--md-accent) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
-  animation: tw-md-skeleton 1.6s ease-in-out infinite;
-
-  &--pill {
-    width: 96px;
-    border-radius: 999px;
-    animation-delay: 0s;
-  }
-
-  &--wide {
-    width: 108px;
-    animation-delay: 0.18s;
-  }
-
-  &--soft {
-    width: 86px;
-    border-radius: 14px;
-    opacity: 0.92;
-    animation-delay: 0.32s;
-  }
-}
-
-.tw-md-mermaid-skeleton-hedge {
-  width: 42px;
-  height: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-accent) 40%, var(--md-fg-muted));
-  position: relative;
-  animation: tw-md-skeleton 1.6s ease-in-out infinite;
-  animation-delay: 0.1s;
-
-  &::after {
-    content: "";
-    position: absolute;
-    right: -1px;
-    top: 50%;
-    width: 0;
-    height: 0;
-    border-top: 4px solid transparent;
-    border-bottom: 4px solid transparent;
-    border-left: 7px solid color-mix(in srgb, var(--md-accent) 40%, var(--md-fg-muted));
-    transform: translateY(-50%);
-  }
-}
-
-.tw-md-mermaid-skeleton-vedge {
-  width: 2px;
-  height: 22px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-accent) 40%, var(--md-fg-muted));
-  position: relative;
-  animation: tw-md-skeleton 1.6s ease-in-out infinite;
-  animation-delay: 0.06s;
-
-  &--short {
-    height: 16px;
-    animation-delay: 0.24s;
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: -1px;
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 7px solid color-mix(in srgb, var(--md-accent) 40%, var(--md-fg-muted));
-    transform: translateX(-50%);
+  &--banner {
+    border-bottom: 1px solid color-mix(in srgb, var(--md-danger) 28%, var(--md-border));
   }
 }
 
@@ -1020,27 +971,6 @@
   }
 }
 
-@keyframes tw-md-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
-
-@keyframes tw-md-skeleton {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-1px);
-  }
-}
-
 @keyframes tw-md-arrive {
   from {
     opacity: 0.35;
@@ -1056,11 +986,6 @@
   .tw-md-stream--live,
   .tw-md-stream-pulse,
   .tw-md-caret,
-  .tw-md-mermaid-canvas--preview::after,
-  .tw-md-mermaid-loading-veil,
-  .tw-md-mermaid-skeleton-node,
-  .tw-md-mermaid-skeleton-hedge,
-  .tw-md-mermaid-skeleton-vedge,
   .tw-md--streaming > :last-child {
     animation: none;
   }

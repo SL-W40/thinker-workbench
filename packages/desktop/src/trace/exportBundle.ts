@@ -66,7 +66,7 @@ export function buildTraceSummary(spans: TraceSpanRecord[]): Record<string, unkn
   const turns = new Map<number, { count: number; names: string[] }>();
 
   for (const s of spans) {
-    byKind[s.kind] = (byKind[s.kind] ?? 0) + 1;
+    byKind[s.runType] = (byKind[s.runType] ?? 0) + 1;
     byName[s.name] = (byName[s.name] ?? 0) + 1;
     const st = s.status ?? "unknown";
     byStatus[st] = (byStatus[st] ?? 0) + 1;
@@ -83,7 +83,7 @@ export function buildTraceSummary(spans: TraceSpanRecord[]): Record<string, unkn
 
     if (s.name === "model.chat") {
       modelChats.push({
-        spanId: s.spanId,
+        id: s.id,
         status: s.status,
         turn,
         summary: s.summary,
@@ -93,7 +93,7 @@ export function buildTraceSummary(spans: TraceSpanRecord[]): Record<string, unkn
     }
     if (s.status === "cancelled" || s.status === "error") {
       cancelledOrPartial.push({
-        spanId: s.spanId,
+        id: s.id,
         name: s.name,
         status: s.status,
         turn,

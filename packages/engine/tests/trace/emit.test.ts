@@ -17,8 +17,8 @@ type SpanStart = {
   kind: string;
   phase: string;
   span: {
-    spanId: string;
-    parentSpanId?: string;
+    id: string;
+    parentId?: string;
     taskId?: string;
     name: string;
     attrs?: Record<string, unknown>;
@@ -73,7 +73,7 @@ describe("trace emit parallel Task", () => {
   it("并行 Task：各自 model/tool 带正确 taskId，主会话无 taskId", async () => {
     const graphId = agentStartSpan({
       name: "graph.tools",
-      kind: "graph",
+      runType: "chain",
       spanId: "span_graph_tools",
     });
 
@@ -82,13 +82,13 @@ describe("trace emit parallel Task", () => {
         assert.equal(getActiveAgentTaskId(), "task_A");
         const sub = agentStartSpan({
           name: "subagent:explorer",
-          kind: "subagent",
+          runType: "chain",
           taskId: "task_A",
         });
         await sleep(30);
-        const model = agentStartSpan({ name: "model.chat", kind: "model" });
+        const model = agentStartSpan({ name: "model.chat", runType: "llm" });
         await sleep(20);
-        const tool = agentStartSpan({ name: "tool:read_file", kind: "tool" });
+        const tool = agentStartSpan({ name: "tool:read_file", runType: "tool" });
         agentEndSpan(tool);
         agentEndSpan(model);
         agentEndSpan(sub);
@@ -97,13 +97,13 @@ describe("trace emit parallel Task", () => {
         assert.equal(getActiveAgentTaskId(), "task_B");
         const sub = agentStartSpan({
           name: "subagent:explorer",
-          kind: "subagent",
+          runType: "chain",
           taskId: "task_B",
         });
         await sleep(10);
-        const model = agentStartSpan({ name: "model.chat", kind: "model" });
+        const model = agentStartSpan({ name: "model.chat", runType: "llm" });
         await sleep(40);
-        const tool = agentStartSpan({ name: "tool:grep", kind: "tool" });
+        const tool = agentStartSpan({ name: "tool:grep", runType: "tool" });
         agentEndSpan(tool);
         agentEndSpan(model);
         agentEndSpan(sub);
@@ -111,7 +111,7 @@ describe("trace emit parallel Task", () => {
       (async () => {
         await sleep(15);
         assert.equal(getActiveAgentTaskId(), undefined);
-        const agent = agentStartSpan({ name: "graph.agent", kind: "graph" });
+        const agent = agentStartSpan({ name: "graph.agent", runType: "chain" });
         agentEndSpan(agent);
       })(),
     ]);
@@ -138,7 +138,7 @@ describe("trace emit parallel Task", () => {
       (async () => {
         const a = agentStartSpan({
           name: "tool:Task",
-          kind: "tool",
+          runType: "tool",
           taskId: "task_A",
         });
         await sleep(20);
@@ -147,7 +147,7 @@ describe("trace emit parallel Task", () => {
       (async () => {
         const b = agentStartSpan({
           name: "tool:Task",
-          kind: "tool",
+          runType: "tool",
           taskId: "task_B",
         });
         await sleep(20);
@@ -158,16 +158,16 @@ describe("trace emit parallel Task", () => {
     const tasks = startsNamed("tool:Task");
     assert.equal(tasks.length, 2);
     for (const t of tasks) {
-      assert.equal(t.span.parentSpanId, "span_graph_tools");
+      assert.equal(t.span.parentId, "span_graph_tools");
     }
-    assert.notEqual(tasks[0]?.span.spanId, tasks[1]?.span.parentSpanId);
-    assert.notEqual(tasks[1]?.span.spanId, tasks[0]?.span.parentSpanId);
+    assert.notEqual(tasks[0]?.span.id, tasks[1]?.span.parentId);
+    assert.notEqual(tasks[1]?.span.id, tasks[0]?.span.parentId);
   });
 
   it("task 栈空时 parent 回落到 tool:Task 锚点", async () => {
     const taskSpan = agentStartSpan({
       name: "tool:Task",
-      kind: "tool",
+      runType: "tool",
       taskId: "task_C",
     });
     agentEndSpan(taskSpan);
@@ -175,7 +175,7 @@ describe("trace emit parallel Task", () => {
     await runWithAgentTaskId("task_C", async () => {
       const sub = agentStartSpan({
         name: "subagent:explorer",
-        kind: "subagent",
+        runType: "chain",
         taskId: "task_C",
       });
       agentEndSpan(sub);
@@ -183,7 +183,7 @@ describe("trace emit parallel Task", () => {
 
     const sub = startsNamed("subagent:explorer")[0];
     assert.ok(sub);
-    assert.equal(sub.span.parentSpanId, taskSpan);
+    assert.equal(sub.span.parentId, taskSpan);
     assert.equal(sub.span.taskId, "task_C");
   });
 
@@ -191,19 +191,19 @@ describe("trace emit parallel Task", () => {
     assert.equal(peekAgentSpanId(), "span_bridge");
     const runId = agentStartSpan({
       name: "runtime.run",
-      kind: "other",
+      runType: "chain",
       spanId: "span_runtime_run",
     });
     assert.equal(peekAgentSpanId(), runId);
     const graphId = agentStartSpan({
       name: "graph.agent",
-      kind: "graph",
+      runType: "chain",
       spanId: "span_graph_agent",
     });
     assert.equal(peekAgentSpanId(), graphId);
     const graph = startsNamed("graph.agent")[0];
     assert.ok(graph);
-    assert.equal(graph.span.parentSpanId, runId);
+    assert.equal(graph.span.parentId, runId);
     agentEndSpan(graphId);
     assert.equal(peekAgentSpanId(), runId);
     agentEndSpan(runId);
@@ -213,12 +213,12 @@ describe("trace emit parallel Task", () => {
   it("model.candidate 挂在 model.chat 下", () => {
     const chat = agentStartSpan({
       name: "model.chat",
-      kind: "model",
+      runType: "llm",
       spanId: "span_model_chat",
     });
     const cand = agentStartSpan({
       name: "model.candidate",
-      kind: "model",
+      runType: "llm",
       spanId: "span_model_cand",
       attrs: { modelId: "mdl_x" },
     });
@@ -226,7 +226,7 @@ describe("trace emit parallel Task", () => {
     agentEndSpan(chat);
     const c = startsNamed("model.candidate")[0];
     assert.ok(c);
-    assert.equal(c.span.parentSpanId, chat);
+    assert.equal(c.span.parentId, chat);
   });
 
   it("会话标题写入 sessionTitle，不覆盖 Task attrs.title", () => {
@@ -240,7 +240,7 @@ describe("trace emit parallel Task", () => {
     });
     agentStartSpan({
       name: "tool:Task",
-      kind: "tool",
+      runType: "tool",
       taskId: "task_t",
       attrs: { title: "Engine 包深度探索", background: true },
     });

@@ -33,7 +33,7 @@ describe("payload index", () => {
   it("追加后按 id 读到对应行，删除会话清掉索引", () => {
     const sessionId = "sess-payload";
     const first = appendPayload(sessionId, {
-      spanId: "sp1",
+      runId: "sp1",
       side: "in",
       ts: 1,
       bytes: 1,
@@ -41,7 +41,7 @@ describe("payload index", () => {
       json: { n: 1 },
     });
     const second = appendPayload(sessionId, {
-      spanId: "sp2",
+      runId: "sp2",
       side: "out",
       ts: 2,
       bytes: 1,

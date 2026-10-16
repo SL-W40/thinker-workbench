@@ -185,7 +185,7 @@ export async function chatWithFailover(
   const turnLabel = turn != null ? ` · turn ${turn}` : "";
   const modelSpanId = agentStartSpan({
     name: "model.chat",
-    kind: "model",
+    runType: "llm",
     summary: `model.chat${turnLabel}`,
     input: modelChatInputSummary(request),
     attrs: {
@@ -212,7 +212,7 @@ export async function chatWithFailover(
 
     const candSpanId = agentStartSpan({
       name: "model.candidate",
-      kind: "model",
+      runType: "llm",
       summary: `model.candidate${turnLabel} · ${entry.id}`,
       attrs: {
         modelId: entry.id,

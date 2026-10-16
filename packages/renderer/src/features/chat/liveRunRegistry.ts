@@ -202,10 +202,7 @@ function resolveSessionId(event: AgentEvent): string | null {
   return threadToSession.get(event.threadId) ?? null;
 }
 
-/**
- * 唯一事件应用入口：写入对应会话槽并通知订阅者。
- * 前台 useChatSession 订阅后投影到 React state。
- */
+/** 将 AgentEvent 写入对应会话的 LiveRun 槽。 */
 async function applyAgentEvent(event: AgentEvent): Promise<void> {
   const sessionId = resolveSessionId(event);
   if (!sessionId) return;

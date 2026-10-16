@@ -272,6 +272,20 @@ const api: ThinkerApi = {
       return () => ipcRenderer.removeListener(IpcChannels.browserEvent, handler);
     },
   },
+  trace: {
+    listSessions: (query?: TraceListSessionsQuery) =>
+      ipcRenderer.invoke(IpcChannels.traceListSessions, query),
+    getSessionSpans: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceGetSessionSpans, sessionId),
+    getPayload: (sessionId: string, payloadId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceGetPayload, sessionId, payloadId),
+    startSpan: (req: TraceStartSpanRequest) => ipcRenderer.invoke(IpcChannels.traceStartSpan, req),
+    endSpan: (req: TraceEndSpanRequest) => ipcRenderer.invoke(IpcChannels.traceEndSpan, req),
+    deleteSession: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceDeleteSession, sessionId),
+    exportSession: (sessionId: string) =>
+      ipcRenderer.invoke(IpcChannels.traceExportSession, sessionId),
+  },
   skills: {
     list: (workspaceRoot?: string | null) =>
       ipcRenderer.invoke(IpcChannels.skillsList, workspaceRoot ?? null),
@@ -300,20 +314,6 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.agentsRemove, scope, name),
     copyToScope: (name: string, fromPath: string, scope: CustomizeScope) =>
       ipcRenderer.invoke(IpcChannels.agentsCopyToScope, name, fromPath, scope),
-  },
-  trace: {
-    listSessions: (query?: TraceListSessionsQuery) =>
-      ipcRenderer.invoke(IpcChannels.traceListSessions, query),
-    getSessionSpans: (sessionId: string) =>
-      ipcRenderer.invoke(IpcChannels.traceGetSessionSpans, sessionId),
-    getPayload: (sessionId: string, payloadId: string) =>
-      ipcRenderer.invoke(IpcChannels.traceGetPayload, sessionId, payloadId),
-    startSpan: (req: TraceStartSpanRequest) => ipcRenderer.invoke(IpcChannels.traceStartSpan, req),
-    endSpan: (req: TraceEndSpanRequest) => ipcRenderer.invoke(IpcChannels.traceEndSpan, req),
-    deleteSession: (sessionId: string) =>
-      ipcRenderer.invoke(IpcChannels.traceDeleteSession, sessionId),
-    exportSession: (sessionId: string) =>
-      ipcRenderer.invoke(IpcChannels.traceExportSession, sessionId),
   },
   mcp: {
     list: (workspaceRoot?: string | null) => ipcRenderer.invoke(IpcChannels.mcpList, workspaceRoot),

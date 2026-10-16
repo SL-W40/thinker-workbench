@@ -59,7 +59,6 @@ pnpm run dev -- --devtools    # 启动时打开 DevTools              (THINKER_O
 | `pnpm test` / `test:report` | Vitest（报告 → `test-results/report/`） |
 | `pnpm run check` | Biome lint + format 检查 |
 | `pnpm run format` / `lint` | 仅格式化写入 / 仅 lint |
-| `pnpm run dev:logger:web` | 日志查看器 → http://127.0.0.1:5181 |
 | `pnpm run pack:zip` | 打包仓库 zip（遵循 `.gitignore`） |
 | `pnpm run stage:desktop` | 组装 `.stage/app` + `.stage/payload`（需先 `pnpm build`） |
 | `pnpm run pack:desktop` | build → stage → electron-builder 打当前 OS 目标 |
@@ -84,19 +83,19 @@ Desktop (ipcMain) ── SQLite / settings / FS IPC
     │
     └── AgentBridge ── utilityProcess
                           └── engine/artifacts/entry.js
-                                UtilityHost → AgentRuntime → graph
+                                UtilityHost → AgentRuntime → LangGraph StateGraph
 ```
 
 | 层 | 包 | 职责 |
 |---|---|---|
 | UI | `renderer` | 聊天、设置、工具面板 |
 | Shell | `desktop` | Electron main、preload、IPC、SQLite |
-| Agent | `engine` | 图、工具、模型客户端 |
+| Agent | `engine` | LangGraph 图、工具、模型客户端 |
 | Kit | `design` / `markdown` | 共享 UI + Markdown |
 | 契约 | `shared` | IPC channel、命令、事件 |
-| 可观测 | `logger`（+ `logger-web`） | 结构化日志 / 查看器 |
+| 可观测 | 本机自建 | 设置 → 数据开关。控制台内类 LangSmith 的 run 树 / 瀑布 / 入参出参。无需 Docker 或云账号。 |
 
-默认图：`packages/engine/src/graph/` 中的 `start → agent ⇄ tools → end`。文件工具作用在 **工作区根目录**，不是 monorepo cwd。UI 优先用 `@thinker-workbench/design/react`；应用内目录页 `#/components`。
+默认图：`packages/engine/src/graph/` 中 LangGraph `START → agent ⇄ tools → END`。Checkpoint 为 SqliteSaver（`<dataDir>/checkpoints/langgraph.sqlite`）。文件工具作用在 **工作区根目录**，不是 monorepo cwd。UI 优先用 `@thinker-workbench/design/react`；应用内目录页 `#/components`。
 
 构建产物在各包 `artifacts/`（已 gitignore）。冷启动缺产物时由 `scripts/dev-prepare.mjs` 准备。
 

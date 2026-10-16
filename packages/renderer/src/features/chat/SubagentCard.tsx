@@ -12,14 +12,15 @@ type Props = {
   step: ChatTimelineSubagentStep;
 };
 
-/** 卡片底栏：思考中后接实时正文*/
+/** 卡片底栏：无正文用规划下一步；有 reasoning 预览才显示思考中。 */
 function formatFootLive(t: ReturnType<typeof useT>, raw: string): string {
   const s = raw.trim();
   if (!s || s === "Starting…") return t("chat.subagent.liveStarting");
-  if (s === "Thinking…") return t("chat.subagent.liveThinking");
+  // 引擎稳定英文基座 / 旧版无正文 Thinking…
+  if (s === "Planning next moves" || s === "Thinking…") return t("chat.planning");
   if (s.startsWith("Thinking…")) {
     const rest = s.slice("Thinking…".length).trim();
-    return rest ? `${t("chat.subagent.liveThinking")} ${rest}` : t("chat.subagent.liveThinking");
+    return rest ? `${t("chat.subagent.liveThinking")} ${rest}` : t("chat.planning");
   }
   return s;
 }

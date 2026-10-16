@@ -20,7 +20,7 @@ import type { LogRecord } from "./log";
 import type { McpServerConfig, McpServerRuntimeStatus } from "./mcp";
 import type { ModelCatalog, ModelSelection } from "./settings";
 import type { ShellProfile } from "./terminal";
-import type { TraceSpanMessage } from "./trace";
+import type { TraceSettings, TraceSpanMessage } from "./trace";
 
 /** 主进程 → 子进程：握手，下发检查点目录与初始模型 / 语言。 */
 export type UtilityHello = {
@@ -28,10 +28,10 @@ export type UtilityHello = {
   kind: "hello";
   /** 检查点落盘目录；省略则由子进程使用默认策略。 */
   checkpointDir?: string;
-  /** 写入日志 meta 时是否截断长文本。 */
-  logTruncateLongContent?: boolean;
-  /** 是否产出 agent 日志。 */
+  /** 是否产出 agent 控制台日志。 */
   loggingEnabled?: boolean;
+  /** 本机 Trace 采集。 */
+  trace?: TraceSettings;
   /** 完整模型目录（含明文 key）。 */
   catalog?: ModelCatalog;
   /** 本轮生效的选用（会话覆盖或全局）。 */
@@ -144,12 +144,11 @@ export type UtilityRun = {
   contextFilesMaxFileBytes?: number;
   contextFilesMaxTotalBytes?: number;
   readFileDefaultMaxChars?: number;
-  traceEnabled?: boolean;
   shell?: ShellProfile;
-  /** 本轮起是否截断日志长文本（与通用设置同步）。 */
-  logTruncateLongContent?: boolean;
-  /** 本轮起是否产出日志（与通用设置同步）。 */
+  /** 本轮起是否产出控制台日志。 */
   loggingEnabled?: boolean;
+  /** Trace 采集。 */
+  trace?: TraceSettings;
   /** 本轮工作区根。 */
   workspaceRoot?: string;
   /** 本轮数据根（rules / skills）。 */
@@ -216,12 +215,11 @@ export type UtilityResume = {
   contextFilesMaxFileBytes?: number;
   contextFilesMaxTotalBytes?: number;
   readFileDefaultMaxChars?: number;
-  traceEnabled?: boolean;
   shell?: ShellProfile;
-  /** 本轮起是否截断日志长文本（与通用设置同步）。 */
-  logTruncateLongContent?: boolean;
-  /** 本轮起是否产出日志（与通用设置同步）。 */
+  /** 本轮起是否产出控制台日志。 */
   loggingEnabled?: boolean;
+  /** Trace 采集。 */
+  trace?: TraceSettings;
   /** 本轮数据根（rules / skills）。 */
   dataDir?: string;
   /** 本轮子代理定义快照（可选；省略则沿用 hello）。 */

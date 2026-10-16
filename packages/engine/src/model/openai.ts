@@ -6,7 +6,6 @@
  * - tool_calls 在流式过程中按 index 累加，结束后再交给图
  * - 每个网络读块后 yield 事件循环，避免长时间占满 utility 线程影响 IPC
  */
-import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
 import {
   type AiLocale,
   DEFAULT_AI_LOCALE,
@@ -15,10 +14,9 @@ import {
 } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/dataDir";
 import { getModelRetryMaxAttempts } from "../config/runtimeLimits";
-import { agentLog } from "../log/setup";
 import { buildSystemPrompt } from "../prompts/system";
 import { modelFetch } from "./httpFetch";
-import { contentToPlainText, messageToApiContent } from "./imageParts";
+import { messageToApiContent } from "./imageParts";
 import { formatErrorMessage, isRetryableError, isRetryableHttpStatus, sleepBackoff } from "./retry";
 import type {
   ChatCompletionResult,
@@ -327,11 +325,9 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
 
   return {
     async chat(request: ChatRequest, signal: AbortSignal): Promise<ChatCompletionResult> {
-      const log = agentLog("model.openai");
       const system = request.system ?? buildSystemPrompt(aiLocale, allowEmoji);
       const onToken = request.onToken;
       const streaming = typeof onToken === "function";
-      const toolCount = request.tools?.length ?? 0;
       const body: Record<string, unknown> = {
         model,
         stream: streaming,
@@ -346,18 +342,6 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
         body.tool_choice = "auto";
       }
 
-      const lastUser = [...request.messages].reverse().find((m) => m.role === "user");
-      const lastUserText = lastUser ? contentToPlainText(lastUser.content) : "";
-      log.info("request", {
-        meta: {
-          model,
-          streaming,
-          messages: request.messages.length,
-          tools: toolCount,
-          ...(lastUserText ? withTextPreview(lastUserText, "lastUser", PREVIEW_BODY_CHARS) : {}),
-        },
-      });
-
       let lastError: unknown;
       const maxAttempts = getModelRetryMaxAttempts();
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -365,17 +349,9 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
           throw new Error("Chat completion cancelled.");
         }
         if (attempt > 1) {
-          log.warn("retry", {
-            meta: {
-              attempt,
-              maxAttempts,
-              error: formatErrorMessage(lastError),
-            },
-          });
           await sleepBackoff(attempt - 1, signal);
         }
 
-        const started = Date.now();
         /** 本轮是否已向 UI 推送过 token；推送后失败不可整请求重试。 */
         let emittedTokens = false;
         const trackToken: typeof onToken =
@@ -400,25 +376,15 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
               signal,
             });
           } catch (err) {
-            const error = formatErrorMessage(err);
-            log.error("fetch failed", { meta: { error, ms: Date.now() - started, attempt } });
             lastError = err;
             if (attempt < maxAttempts && isRetryableError(err, { emittedTokens })) {
               continue;
             }
-            throw new Error(error);
+            throw new Error(formatErrorMessage(err));
           }
 
           if (!res.ok) {
             const errBody = await res.text().catch(() => "");
-            log.error("http error", {
-              meta: {
-                status: res.status,
-                body: errBody.slice(0, 200),
-                ms: Date.now() - started,
-                attempt,
-              },
-            });
             const httpErr = new Error(`OpenAI HTTP ${res.status}: ${errBody.slice(0, 400)}`);
             lastError = httpErr;
             if (attempt < maxAttempts && isRetryableHttpStatus(res.status)) {
@@ -426,19 +392,6 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             }
             throw httpErr;
           }
-
-          const finish = (result: ChatCompletionResult, mode: string) => {
-            log.info("response", {
-              meta: {
-                mode,
-                toolCalls: result.toolCalls.map((tc) => tc.function.name),
-                ms: Date.now() - started,
-                attempt,
-                ...withTextPreview(result.content, "content", PREVIEW_BODY_CHARS),
-              },
-            });
-            return result;
-          };
 
           if (streaming) {
             const contentType = res.headers.get("content-type") ?? "";
@@ -470,14 +423,11 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
               if (!result.content.trim() && result.toolCalls.length === 0) {
                 throw new Error("OpenAI response missing content and tool calls.");
               }
-              return finish(
-                {
-                  ...result,
-                  ...(usage ? { usage } : {}),
-                  ...(providerResponseId ? { providerResponseId } : {}),
-                },
-                "json-fallback",
-              );
+              return {
+                ...result,
+                ...(usage ? { usage } : {}),
+                ...(providerResponseId ? { providerResponseId } : {}),
+              };
             }
             if (!res.body) throw new Error("OpenAI stream missing body.");
             try {
@@ -485,7 +435,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
               if (!result.content.trim() && result.toolCalls.length === 0) {
                 throw new Error("OpenAI stream produced empty content and no tool calls.");
               }
-              return finish(result, "sse");
+              return result;
             } catch (err) {
               // 流已部分落地则不可重试，避免重复 token
               lastError = err;
@@ -508,14 +458,11 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
           if (!result.content.trim() && result.toolCalls.length === 0) {
             throw new Error("OpenAI response missing content and tool calls.");
           }
-          return finish(
-            {
-              ...result,
-              ...(usage ? { usage } : {}),
-              ...(providerResponseId ? { providerResponseId } : {}),
-            },
-            "json",
-          );
+          return {
+            ...result,
+            ...(usage ? { usage } : {}),
+            ...(providerResponseId ? { providerResponseId } : {}),
+          };
         } catch (err) {
           lastError = err;
           if (attempt < maxAttempts && isRetryableError(err, { emittedTokens })) {

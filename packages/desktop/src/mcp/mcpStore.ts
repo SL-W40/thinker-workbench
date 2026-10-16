@@ -27,7 +27,7 @@ function scopeOf(raw?: CustomizeScope | null): CustomizeScope {
 }
 
 function dirFor(scope: CustomizeScope): string {
-  return ensureDir(resolveWritableRoot(scope, "mcps"));
+  return resolveWritableRoot(scope, "mcps");
 }
 
 function filePath(scope: CustomizeScope, id: string): string {
@@ -75,6 +75,8 @@ function normalizeConfig(
 
 function readScope(scope: CustomizeScope): McpServerConfig[] {
   const dir = dirFor(scope);
+  // 只读：目录不存在时不要 mkdir，否则启动 list 会污染每个工作区根
+  if (!fs.existsSync(dir)) return [];
   let names: string[];
   try {
     names = fs.readdirSync(dir);
@@ -125,6 +127,7 @@ function persist(scope: CustomizeScope, cfg: McpServerConfig): void {
   const stored = { ...cfg };
   delete stored.scope;
   delete stored.writable;
+  ensureDir(dirFor(scope));
   fs.writeFileSync(filePath(scope, cfg.id), `${JSON.stringify(stored, null, 2)}\n`, "utf8");
 }
 

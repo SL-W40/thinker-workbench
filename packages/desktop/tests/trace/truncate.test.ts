@@ -2,7 +2,6 @@
  * Trace 载荷截断与脱敏。循环引用会让 walk 无限递归，这里不覆盖那条路径。
  */
 import assert from "node:assert/strict";
-import type { GeneralSettings } from "@thinker-workbench/shared";
 import { describe, it } from "vitest";
 import { limitsFromGeneral, type TruncateLimits, truncateForTrace } from "../../src/trace/truncate";
 
@@ -27,30 +26,28 @@ describe("truncateForTrace", () => {
     assert.equal(result.bytes, Buffer.byteLength(JSON.stringify({ a: 1 }), "utf8"));
   });
 
-  it("脱敏键、正文按字符截、历史只留头尾", () => {
+  it("脱敏键、字段按字节截、数组只留前缀", () => {
     const result = truncateForTrace(
       {
         apiKey: "secret",
         content: "hello world",
         messages: ["a", "b", "c", "d"],
       },
-      limits(),
+      limits({ maxFieldBytes: 5 }),
     );
     const value = result.value as {
       apiKey: string;
       content: string;
       messages: unknown[];
     };
-    assert.equal(value.apiKey, "***");
+    assert.equal(value.apiKey, "[redacted]");
     const blank = truncateForTrace({ token: "" }, limits({ redactKeys: ["token"] }));
-    assert.equal((blank.value as { token: string }).token, "***");
-    assert.equal(blank.truncated, false);
+    assert.equal((blank.value as { token: string }).token, "[redacted]");
+    assert.equal(blank.truncated, true);
     assert.equal(value.content, "hello…");
     assert.equal(result.truncated, true);
-    assert.equal(value.messages.length, 4);
-    assert.deepEqual(value.messages[0], "a");
-    assert.deepEqual(value.messages[2], { __omitted: 1, __note: "1 messages omitted" });
-    assert.deepEqual(value.messages[3], "d");
+    assert.equal(value.messages.length, 3);
+    assert.deepEqual(value.messages, ["a", "b", "c"]);
   });
 
   it("二进制可省略或只留长度；整包超限时换成预览壳", () => {
@@ -64,23 +61,16 @@ describe("truncateForTrace", () => {
       "x".repeat(100),
       limits({ maxPayloadBytes: 20, maxFieldBytes: 32 }),
     );
-    const shell = huge.value as { __truncatedPayload: boolean; preview: string };
-    assert.equal(shell.__truncatedPayload, true);
+    const shell = huge.value as { __truncated: boolean; preview: string };
+    assert.equal(shell.__truncated, true);
     assert.ok(shell.preview.length < 100);
   });
 
-  it("从通用设置取出截断字段", () => {
-    const got = limitsFromGeneral({
-      traceTruncateEnabled: false,
-      traceMaxFieldBytes: 1,
-      traceMaxPayloadBytes: 2,
-      traceMaxMessageChars: 3,
-      traceMaxHistoryMessages: 4,
-      traceCaptureBinary: "omit",
-      traceRedactKeys: ["token"],
-    } as GeneralSettings);
-    assert.equal(got.truncateEnabled, false);
-    assert.deepEqual(got.redactKeys, ["token"]);
-    assert.equal(got.captureBinary, "omit");
+  it("limitsFromGeneral 使用内置默认截断策略", () => {
+    const got = limitsFromGeneral();
+    assert.equal(got.truncateEnabled, true);
+    assert.ok(got.redactKeys.includes("apiKey"));
+    assert.equal(got.captureBinary, "meta");
+    assert.ok(got.maxFieldBytes > 0);
   });
 });

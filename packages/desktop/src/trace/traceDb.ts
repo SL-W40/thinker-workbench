@@ -5,9 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   TraceListSessionsQuery,
+  TraceRunType,
   TraceSessionSummary,
   TraceSource,
-  TraceSpanKind,
   TraceSpanRecord,
   TraceSpanStatus,
 } from "@thinker-workbench/shared";
@@ -81,14 +81,14 @@ function rowToSpan(r: SpanRow): TraceSpanRecord {
     }
   }
   return {
-    spanId: r.span_id,
+    id: r.span_id,
     sessionId: r.session_id,
-    runId: r.run_id ?? undefined,
+    agentRunId: r.run_id ?? undefined,
     traceId: r.trace_id ?? undefined,
-    parentSpanId: r.parent_span_id ?? undefined,
+    parentId: r.parent_span_id ?? undefined,
     taskId: r.task_id ?? undefined,
     name: r.name,
-    kind: r.kind as TraceSpanKind,
+    runType: r.kind as TraceRunType,
     source: r.source as TraceSource,
     status: (r.status as TraceSpanStatus | null) ?? undefined,
     startTs: r.start_ts,
@@ -159,14 +159,14 @@ export function insertSpanStart(span: TraceSpanRecord): void {
       name, kind, source, status, start_ts, end_ts, summary, input_ref, output_ref, attrs_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    span.spanId,
+    span.id,
     span.sessionId,
-    span.runId ?? null,
+    span.agentRunId ?? null,
     span.traceId ?? null,
-    span.parentSpanId ?? null,
+    span.parentId ?? null,
     span.taskId ?? null,
     span.name,
-    span.kind,
+    span.runType,
     span.source,
     span.status ?? "running",
     span.startTs,

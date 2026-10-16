@@ -320,12 +320,16 @@ function emitSubagent(
   });
 }
 
+/** 卡片底栏稳定英文基座：无正文时 Planning，有 reasoning 才带 Thinking 预览。 */
+const LIVE_PLANNING = "Planning next moves";
+const LIVE_THINKING = "Thinking…";
+
 /** 卡片底栏：思考/回复预览（单行）。 */
 function formatThinkingLiveLine(buf: string): string {
   const compact = buf.replace(/\s+/g, " ").trim();
-  if (!compact) return "Thinking…";
+  if (!compact) return LIVE_PLANNING;
   const tail = compact.length > 96 ? compact.slice(-96) : compact;
-  return `Thinking… ${tail}`;
+  return `${LIVE_THINKING} ${tail}`;
 }
 
 /** 子代理工具调用的单行活跃文案（卡片底部）。 */
@@ -471,7 +475,7 @@ export async function runChildAgent(options: {
     withChildFrame(async () => {
       const subSpanId = agentStartSpan({
         name: `subagent:${options.subagent}`,
-        kind: "subagent",
+        runType: "chain",
         taskId: options.taskId,
         summary: title ? `${options.subagent} · ${title}` : `subagent:${options.subagent}`,
         input: {
@@ -513,7 +517,7 @@ export async function runChildAgent(options: {
 
         try {
           const messages: ChatMessage[] = [{ role: "user", content: options.prompt }];
-          emitProgress("Starting…", { type: "status", status: "thinking" });
+          emitProgress("Starting…", { type: "status", status: "planning" });
 
           for (let step = 0; step < getMaxSubagentSteps(); step++) {
             if (options.signal.aborted) {
@@ -521,7 +525,8 @@ export async function runChildAgent(options: {
             }
             const frame = getRunContext();
             if (frame) frame.turn = step + 1;
-            emitProgress("Thinking…", { type: "status", status: "thinking" });
+            // 尚无 reasoning：planning；有 thinking token 后再升为 Thinking
+            emitProgress(LIVE_PLANNING, { type: "status", status: "planning" });
 
             const assembled = assembleContext({
               messages,
@@ -561,7 +566,7 @@ export async function runChildAgent(options: {
                   } else {
                     replyBuf += text;
                     const compact = replyBuf.replace(/\s+/g, " ").trim();
-                    emitProgress(compact.slice(-96) || "Thinking…", {
+                    emitProgress(compact.slice(-96) || LIVE_PLANNING, {
                       type: "token",
                       text,
                       channel: "reply",
@@ -613,7 +618,7 @@ export async function runChildAgent(options: {
               // 显式打 tool:* span（parent = 当前 subagent；runTool 本身不建 span）
               const childToolSpanId = agentStartSpan({
                 name: `tool:${toolName || "unknown"}`,
-                kind: "tool",
+                runType: "tool",
                 taskId: options.taskId,
                 summary: toolName || "tool",
                 input: parsed,
@@ -783,7 +788,7 @@ export async function runTaskTool(args: ToolArgs, ctx: ToolContext): Promise<Too
     title,
     background: useBackground,
     liveLine: "Starting…",
-    childEvent: { type: "status", status: "thinking" },
+    childEvent: { type: "status", status: "planning" },
   });
 
   if (useBackground) {

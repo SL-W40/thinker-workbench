@@ -23,7 +23,6 @@ import { ensureWindowsToastShortcut } from "./notify/windowsToastShortcut";
 import { applyContentSecurityPolicy } from "./security/csp";
 import { ensureBundledSkills } from "./skills/ensureBundledSkills";
 import { terminalSessionManager } from "./terminal/TerminalSessionManager";
-import { pruneTraceStore } from "./trace/retention";
 import { pushAgentHello, startAgentProcess } from "./utility/startAgentProcess";
 import { createWindow, syncWindowBackgroundFromSettings } from "./window/createWindow";
 import { startDevParentWatch } from "./window/devParentWatch";
@@ -106,7 +105,6 @@ app.whenReady().then(() => {
   configureDesktopLog();
   pruneExpiredLogs(getGeneralSettings().logRetentionDays);
   try {
-    pruneTraceStore();
   } catch {
     /* Trace 清理失败不拖垮启动 */
   }
@@ -128,7 +126,6 @@ app.whenReady().then(() => {
       configureDesktopLog();
       pruneExpiredLogs(getGeneralSettings().logRetentionDays);
       try {
-        pruneTraceStore();
       } catch {
         /* ignore */
       }
@@ -173,7 +170,6 @@ app.whenReady().then(() => {
       configureDesktopLog();
       pruneExpiredLogs(getGeneralSettings().logRetentionDays);
       try {
-        pruneTraceStore();
       } catch {
         /* ignore */
       }
@@ -203,7 +199,6 @@ app.whenReady().then(() => {
         /* 清理失败不拖垮主进程 */
       }
       try {
-        pruneTraceStore();
       } catch {
         /* ignore */
       }

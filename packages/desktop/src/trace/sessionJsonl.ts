@@ -29,7 +29,7 @@ export function appendPayload(
   const id = record.id ?? createId("pl");
   const line: TracePayloadRecord = {
     id,
-    spanId: record.spanId,
+    runId: record.runId,
     side: record.side,
     ts: record.ts,
     bytes: record.bytes,

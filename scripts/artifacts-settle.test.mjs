@@ -15,7 +15,7 @@ describe("artifactMtimeKey", () => {
 describe("waitForArtifactsSettle", () => {
   it("mtime 连续安静 quietMs 后 resolve", async () => {
     let t = 0;
-    let key = "1,1,1";
+    const key = "1,1,1";
     await waitForArtifactsSettle({
       files: ["a", "b", "c"],
       quietMs: 100,

@@ -23,8 +23,11 @@
     "test": "pnpm -w exec vitest run packages/engine/tests"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.17",
+    "@langchain/langgraph": "^1.5.0",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.1.0",
+    "@langchain/openai": "^1.6.2",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "@thinker-workbench/logger": "workspace:*",
     "@thinker-workbench/shared": "workspace:*",
     "gpt-tokenizer": "^4.0.0",
     "undici": "^6.29.0"

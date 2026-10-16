@@ -54,21 +54,9 @@ function collectFromDisk(sessionId: string): BuildExportBundleInput {
     workspace: ws ? { id: ws.id, name: ws.name, rootPath: ws.rootPath } : null,
     payloadsJsonl,
     traceSettings: {
-      traceEnabled: general.traceEnabled,
-      traceTruncateEnabled: general.traceTruncateEnabled,
-      traceMaxFieldBytes: general.traceMaxFieldBytes,
-      traceMaxPayloadBytes: general.traceMaxPayloadBytes,
-      traceMaxMessageChars: general.traceMaxMessageChars,
-      traceMaxHistoryMessages: general.traceMaxHistoryMessages,
-      traceCaptureBinary: general.traceCaptureBinary,
-      traceRetentionDays: general.traceRetentionDays,
-      traceMaxSessions: general.traceMaxSessions,
-      traceMaxTotalBytes: general.traceMaxTotalBytes,
-      traceRedactKeys: general.traceRedactKeys,
+      observabilityEnabled: general.observabilityEnabled,
     },
-    redactKeys: general.traceRedactKeys?.length
-      ? general.traceRedactKeys
-      : DEFAULT_TRACE_REDACT_KEYS,
+    redactKeys: [...DEFAULT_TRACE_REDACT_KEYS],
   };
 }
 

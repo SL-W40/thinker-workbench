@@ -11,7 +11,6 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@thinker-workbench/design": "workspace:*",
-    "@thinker-workbench/logger": "workspace:*",
     "@thinker-workbench/markdown": "workspace:*",
     "@thinker-workbench/shared": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",

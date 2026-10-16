@@ -11,7 +11,7 @@ import {
   normalizeSettingsSection,
   type SettingsSectionId,
 } from "../settings/sections";
-import { isToolTabId, type ToolTabId } from "../tools/ToolsPane";
+import { isToolTabId, normalizeToolTabId, type ToolTabId } from "../tools/ToolsPane";
 import type { PageId } from "./usePageStack";
 
 /** 解析后的应用位置：当前页 + 控制台 tab + 设置分区。 */
@@ -51,8 +51,18 @@ export function parseHash(raw: string = location.hash): AppLocation {
       const section = normalizeSettingsSection(parts[2]);
       return { page: "tools", tab: "settings", section };
     }
-    if (isToolTabId(tabRaw)) {
-      return { page: "tools", tab: tabRaw, section: DEFAULT_SETTINGS_SECTION };
+    if (
+      tabRaw === "langfuse" ||
+      tabRaw === "observability" ||
+      tabRaw === "logs" ||
+      tabRaw === "trace" ||
+      isToolTabId(tabRaw)
+    ) {
+      return {
+        page: "tools",
+        tab: normalizeToolTabId(tabRaw),
+        section: DEFAULT_SETTINGS_SECTION,
+      };
     }
     return { page: "tools", tab: "settings", section: DEFAULT_SETTINGS_SECTION };
   }

@@ -1,71 +1,31 @@
 /**
- * 渲染进程会话日志：本地 memory sink + 经 IPC 由主进程写入 SQLite。
- * 同一 traceId 把前端发送与后端图遍历串在一条时间线上。
+ * Renderer 轻量控制台日志（自研 logger 已移除）。
  */
-import {
-  configureLog,
-  configureLogPreview,
-  createCallbackSink,
-  createLogger,
-  createMemorySink,
-  isLoggingEnabled,
-  type LogRecord,
-  type MemorySink,
-} from "@thinker-workbench/logger";
-import { DEFAULT_GENERAL_SETTINGS, type GeneralSettings } from "@thinker-workbench/shared";
-import { GENERAL_SETTINGS_CHANGED, onLog } from "../bridge/thinker";
 
-const memory = createMemorySink(800);
-let bootstrapped = false;
+type LogFn = (msg: string, fields?: Record<string, unknown>) => void;
 
-export function getSessionMemorySink(): MemorySink {
-  return memory;
-}
+export type AppLogger = {
+  info: LogFn;
+  warn: LogFn;
+  error: LogFn;
+  debug: LogFn;
+};
 
-/** 按通用设置同步附属 logger 开关与截断策略（落盘由 Trace）。 */
-function applyAppLogPolicy(general?: GeneralSettings): void {
-  const g = general ?? window.thinker?.settings?.getGeneralSync?.() ?? DEFAULT_GENERAL_SETTINGS;
-  configureLogPreview({ truncateLongContent: g.traceTruncateEnabled });
-  configureLog({ enabled: g.traceEnabled });
-}
-
-/** 应用启动时调用一次。 */
 export function bootstrapAppLog(): void {
-  if (bootstrapped) return;
-  bootstrapped = true;
-  const general = window.thinker?.settings?.getGeneralSync?.() ?? DEFAULT_GENERAL_SETTINGS;
-  configureLog({
-    minLevel: "debug",
-    enabled: general.traceEnabled,
-    sinks: [
-      memory,
-      createCallbackSink((record) => {
-        try {
-          window.thinker?.reportLog?.(record);
-        } catch {
-          /* preload 未就绪时忽略 */
-        }
-      }),
-    ],
-  });
-  configureLogPreview({ truncateLongContent: general.traceTruncateEnabled });
-  createLogger({ scope: "app", source: "app" }).info("log ready");
-
-  // 并入 desktop / agent 广播，便于内存时间线与同进程调试
-  onLog(ingestRemoteLog);
-
-  window.addEventListener(GENERAL_SETTINGS_CHANGED, ((event: CustomEvent<GeneralSettings>) => {
-    applyAppLogPolicy(event.detail);
-  }) as EventListener);
+  /* no-op：运行细节走本机 Trace */
 }
 
-export function appLog(scope: string) {
-  return createLogger({ scope, source: "app" });
-}
-
-/** 把远端（desktop / agent）记录并入同一 memory sink。 */
-export function ingestRemoteLog(record: LogRecord): void {
-  if (!isLoggingEnabled()) return;
-  if (record.source === "app") return;
-  memory.write(record);
+export function appLog(scope: string): AppLogger {
+  const write = (level: string, msg: string, fields?: Record<string, unknown>) => {
+    const line = `[app:${scope}] ${msg}`;
+    if (level === "error") console.error(line, fields ?? "");
+    else if (level === "warn") console.warn(line, fields ?? "");
+    else console.info(line, fields ?? "");
+  };
+  return {
+    info: (msg, fields) => write("info", msg, fields),
+    warn: (msg, fields) => write("warn", msg, fields),
+    error: (msg, fields) => write("error", msg, fields),
+    debug: (msg, fields) => write("debug", msg, fields),
+  };
 }

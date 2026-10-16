@@ -1,7 +1,13 @@
 /**
  * Trace 载荷截断 / 脱敏（Main 落盘前统一执行）。
  */
-import type { GeneralSettings } from "@thinker-workbench/shared";
+import {
+  DEFAULT_TRACE_MAX_FIELD_BYTES,
+  DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
+  DEFAULT_TRACE_MAX_MESSAGE_CHARS,
+  DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
+  DEFAULT_TRACE_REDACT_KEYS,
+} from "@thinker-workbench/shared";
 
 export type TruncateLimits = {
   truncateEnabled: boolean;
@@ -19,15 +25,16 @@ export type TruncateResult = {
   bytes: number;
 };
 
-export function limitsFromGeneral(g: GeneralSettings): TruncateLimits {
+/** Local 后端使用内置默认截断策略（不再占用 GeneralSettings）。 */
+export function limitsFromGeneral(): TruncateLimits {
   return {
-    truncateEnabled: g.traceTruncateEnabled,
-    maxFieldBytes: g.traceMaxFieldBytes,
-    maxPayloadBytes: g.traceMaxPayloadBytes,
-    maxMessageChars: g.traceMaxMessageChars,
-    maxHistoryMessages: g.traceMaxHistoryMessages,
-    captureBinary: g.traceCaptureBinary,
-    redactKeys: g.traceRedactKeys,
+    truncateEnabled: true,
+    maxFieldBytes: DEFAULT_TRACE_MAX_FIELD_BYTES,
+    maxPayloadBytes: DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
+    maxMessageChars: DEFAULT_TRACE_MAX_MESSAGE_CHARS,
+    maxHistoryMessages: DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
+    captureBinary: "meta",
+    redactKeys: [...DEFAULT_TRACE_REDACT_KEYS],
   };
 }
 
@@ -48,94 +55,57 @@ function truncateString(s: string, maxBytes: number): { text: string; truncated:
 }
 
 /**
- * 按配置截断 / 脱敏任意 JSON 可序列化值。
- * `bytes` 为截断前 JSON.stringify 字节数（失败则用估算）。
+ * 递归截断 / 脱敏任意 JSON 值。
  */
 export function truncateForTrace(value: unknown, limits: TruncateLimits): TruncateResult {
-  let bytes = 0;
-  try {
-    bytes = utf8Bytes(JSON.stringify(value) ?? "null");
-  } catch {
-    bytes = utf8Bytes(String(value));
-  }
-
   if (!limits.truncateEnabled) {
-    return { value, truncated: false, bytes };
+    const json = JSON.stringify(value);
+    return { value, truncated: false, bytes: utf8Bytes(json ?? "null") };
   }
 
-  const redact = new Set(limits.redactKeys.map((k) => k.toLowerCase()));
   let truncated = false;
 
-  function walk(v: unknown, keyHint?: string): unknown {
-    if (keyHint && isRedactKey(keyHint, [...redact])) {
-      if (v !== undefined && v !== null && v !== "") truncated = true;
-      return "***";
-    }
+  const walk = (v: unknown, depth: number): unknown => {
+    if (v == null) return v;
     if (typeof v === "string") {
-      // messages content 用字符上限，其它用字节上限
-      if (keyHint === "content" || keyHint === "text" || keyHint === "output") {
-        if (v.length > limits.maxMessageChars) {
-          truncated = true;
-          return `${v.slice(0, limits.maxMessageChars)}…`;
-        }
-      }
-      const t = truncateString(v, limits.maxFieldBytes);
-      if (t.truncated) truncated = true;
-      return t.text;
+      const r = truncateString(v, limits.maxFieldBytes);
+      if (r.truncated) truncated = true;
+      return r.text;
     }
-    if (typeof v === "number" || typeof v === "boolean" || v == null) return v;
+    if (typeof v === "number" || typeof v === "boolean") return v;
     if (typeof Buffer !== "undefined" && Buffer.isBuffer(v)) {
       truncated = true;
-      if (limits.captureBinary === "omit") return undefined;
-      return { __binary: true, bytes: v.length };
+      return limits.captureBinary === "omit" ? undefined : { __binary: true, bytes: v.byteLength };
     }
     if (Array.isArray(v)) {
-      // history / messages 条数限制
-      if (
-        (keyHint === "history" || keyHint === "messages") &&
-        limits.maxHistoryMessages > 0 &&
-        v.length > limits.maxHistoryMessages
-      ) {
-        truncated = true;
-        const keep = limits.maxHistoryMessages;
-        const head = Math.ceil(keep / 2);
-        const tail = keep - head;
-        const omitted = v.length - keep;
-        return [
-          ...v.slice(0, head).map((item) => walk(item)),
-          { __omitted: omitted, __note: `${omitted} messages omitted` },
-          ...v.slice(v.length - tail).map((item) => walk(item)),
-        ];
-      }
-      return v.map((item) => walk(item));
+      const maxItems = Math.min(v.length, limits.maxHistoryMessages);
+      if (v.length > maxItems) truncated = true;
+      return v.slice(0, maxItems).map((item) => walk(item, depth + 1));
     }
     if (typeof v === "object") {
       const out: Record<string, unknown> = {};
-      for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
-        const next = walk(child, k);
-        if (next !== undefined) out[k] = next;
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        if (isRedactKey(k, limits.redactKeys)) {
+          out[k] = "[redacted]";
+          truncated = true;
+          continue;
+        }
+        out[k] = walk(val, depth + 1);
       }
       return out;
     }
     return String(v);
-  }
+  };
 
-  let next = walk(value);
-  try {
-    const serialized = JSON.stringify(next) ?? "null";
-    if (utf8Bytes(serialized) > limits.maxPayloadBytes) {
-      truncated = true;
-      // 整体再砍：保留摘要壳
-      next = {
-        __truncatedPayload: true,
-        preview: truncateString(serialized, Math.min(limits.maxFieldBytes, 64_000)).text,
-        originalBytes: bytes,
-      };
-    }
-  } catch {
+  let next = walk(value, 0);
+  let json = JSON.stringify(next) ?? "null";
+  if (utf8Bytes(json) > limits.maxPayloadBytes) {
     truncated = true;
-    next = { __unserializable: true, originalBytes: bytes };
+    next = {
+      __truncated: true,
+      preview: truncateString(json, Math.min(limits.maxFieldBytes, limits.maxPayloadBytes)).text,
+    };
+    json = JSON.stringify(next) ?? "null";
   }
-
-  return { value: next, truncated, bytes };
+  return { value: next, truncated, bytes: utf8Bytes(json) };
 }

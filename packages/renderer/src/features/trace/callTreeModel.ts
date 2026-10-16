@@ -1,5 +1,5 @@
 /**
- * 追踪树数据：行标题、按 parentSpanId DFS 扁平化（面向混合图 / Chrome Performance 风）。
+ * 追踪树数据：行标题、按 parentId DFS 扁平化（面向混合图 / Chrome Performance 风）。
  * 树结构以采集侧 parent/taskId 为准，不做历史错挂矫正。
  */
 import type { TraceSpanRecord } from "@thinker-workbench/shared";
@@ -136,10 +136,10 @@ export function spanTurn(s: TraceSpanRecord): number | undefined {
   return undefined;
 }
 
-/** 无 runId 的 span 归入此桶。 */
+/** 无 agentRunId 的 span 归入此桶。 */
 export const UNKNOWN_RUN_ID = "_";
 
-/** 按 runId 分组后的一棵树。 */
+/** 按 agentRunId 分组后的一棵树。 */
 export type TraceRunGroup = {
   runId: string;
   spans: TraceSpanRecord[];
@@ -147,11 +147,11 @@ export type TraceRunGroup = {
   startTs: number;
 };
 
-/** 按 runId 分组；缺省 run 归 UNKNOWN_RUN_ID；按 startTs 升序。 */
+/** 按 agentRunId 分组；缺省归 UNKNOWN_RUN_ID；按 startTs 升序。 */
 export function groupSpansByRun(spans: TraceSpanRecord[]): TraceRunGroup[] {
   const map = new Map<string, TraceSpanRecord[]>();
   for (const s of spans) {
-    const key = s.runId?.trim() || UNKNOWN_RUN_ID;
+    const key = s.agentRunId?.trim() || UNKNOWN_RUN_ID;
     const list = map.get(key) ?? [];
     list.push(s);
     map.set(key, list);
@@ -199,29 +199,28 @@ export function callTreeLabel(s: TraceSpanRecord): string {
     if (tt) return clipLabel(`Task · ${tt}`);
     return "Task";
   }
-  if (s.kind === "subagent") {
+  // 展示按 name 前缀识别 graph / subagent / model
+  if (/^subagent:/i.test(name)) {
     const agent = name.replace(/^subagent:/i, "") || "subagent";
-    // 形如 "explorer · Engine 包深度探索"
     if (summary.includes("·")) return clipLabel(summary);
     if (tt) return clipLabel(`${agent} · ${tt}`);
     return clipLabel(agent);
   }
-  if (s.kind === "model") {
+  if (s.runType === "llm" || /^model\./i.test(name)) {
     if (/^model\.candidate/i.test(name)) {
       return clipLabel(name);
     }
-    const m = name.match(/mdl_[\w]+/) || summary.match(/mdl_[\w]+/);
-    return m ? `model.chat · ${m[0]}` : "model.chat";
+    return "model.chat";
   }
-  if (s.kind === "tool") {
+  if (s.runType === "tool" || /^tool:/i.test(name)) {
     return clipLabel(name.replace(/^tool:/i, "") || "tool");
   }
-  if (s.kind === "graph") {
+  if (/^graph\./i.test(name) || (s.runType === "chain" && /^graph\./i.test(name))) {
     return clipLabel(name.replace(/^graph\./i, "graph.") || name || "graph");
   }
   if (name) return clipLabel(name);
   if (tt) return clipLabel(tt);
-  return clipLabel(shortFromSummary(summary) || s.spanId);
+  return clipLabel(shortFromSummary(summary) || s.id);
 }
 
 export function spanDurationMs(s: TraceSpanRecord): number {
@@ -242,26 +241,26 @@ export function buildCallTreeRows(
     ...s,
     endTs: s.endTs ?? s.startTs,
   }));
-  const byId = new Map(spans.map((s) => [s.spanId, s]));
+  const byId = new Map(spans.map((s) => [s.id, s]));
   const parByTask = buildParClusters(spans);
   const children = new Map<string, TraceSpanRecord[]>();
-  for (const s of spans) children.set(s.spanId, []);
+  for (const s of spans) children.set(s.id, []);
   const roots: TraceSpanRecord[] = [];
   for (const s of spans) {
-    const p = s.parentSpanId && byId.has(s.parentSpanId) ? s.parentSpanId : null;
+    const p = s.parentId && byId.has(s.parentId) ? s.parentId : null;
     if (!p) roots.push(s);
     else children.get(p)?.push(s);
   }
   for (const list of children.values()) {
-    list.sort((a, b) => a.startTs - b.startTs || a.spanId.localeCompare(b.spanId));
+    list.sort((a, b) => a.startTs - b.startTs || a.id.localeCompare(b.id));
   }
-  roots.sort((a, b) => a.startTs - b.startTs || a.spanId.localeCompare(b.spanId));
+  roots.sort((a, b) => a.startTs - b.startTs || a.id.localeCompare(b.id));
 
   type ParMeta = { key: string; size: number; colorIdx: number; taskId: string };
   const rows: CallTreeRow[] = [];
   const walk = (node: TraceSpanRecord, depth: number, inherit?: ParMeta) => {
-    const kids = children.get(node.spanId) || [];
-    const isCollapsed = collapsed.has(node.spanId);
+    const kids = children.get(node.id) || [];
+    const isCollapsed = collapsed.has(node.id);
     const own =
       node.taskId && parByTask.has(node.taskId)
         ? {

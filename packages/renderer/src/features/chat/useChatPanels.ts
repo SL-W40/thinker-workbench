@@ -8,8 +8,8 @@ import {
   clampPanelWidth,
   effectivePanelMinWidth,
   fitChatPanelWidths,
-  maxSidePanelWidth,
   MIN_CHAT_MAIN_WIDTH,
+  maxSidePanelWidth,
   resizeSidePanel,
 } from "./chatPanelLayout";
 

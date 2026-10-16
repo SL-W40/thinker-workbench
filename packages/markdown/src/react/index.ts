@@ -7,5 +7,6 @@ export { MarkdownView, type MarkdownViewProps } from "./MarkdownView";
 export { MathView } from "./MathView";
 export { MermaidDiagram } from "./MermaidDiagram";
 export { StreamingMarkdownView, type StreamingMarkdownViewProps } from "./StreamingMarkdownView";
+export { TableBlock } from "./TableBlock";
 export { MarkdownThemeProvider, useMarkdownTheme } from "./ThemeContext";
 export { type UseStreamingMarkdownOptions, useStreamingMarkdown } from "./useStreamingMarkdown";

@@ -117,6 +117,8 @@ type BubbleProps = {
   message: ChatMessage;
   /** 当前会话是否正在跑（pending 且 busy 才算 live，避免中断后永远 Planning）。*/
   running?: boolean;
+  /** 是否为线程末条（刚跑完的末条保持展开；重开 / 跟随后历史折成 Worked for）。*/
+  trailing?: boolean;
   /** 跳转到设置 → 模型（缺 API key 错误行用）。*/
   onOpenModelSettings?: () => void;
   // reply 已按序插入时间线时，不再在底部重复渲染整段正文
@@ -151,6 +153,7 @@ type BubbleProps = {
 export function Bubble({
   message,
   running = false,
+  trailing = false,
   onOpenModelSettings,
   onOpenTrace,
   onOpenFile,
@@ -316,6 +319,8 @@ export function Bubble({
           <RunTimeline
             steps={timeline}
             live={live}
+            durationMs={durationMs}
+            trailing={trailing}
             onOpenModelSettings={onOpenModelSettings}
             onOpenFile={onOpenFile}
             onOpenTerminal={onOpenTerminal}

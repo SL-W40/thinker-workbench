@@ -4,7 +4,7 @@
  * 负责：attach 子进程、等待 ready、派发 run/cancel/hello、
  * 将 AgentEvent / LogRecord 分发给监听者。会话终态由 RunLedger 收口。
  */
-import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
+
 import {
   type AgentEvent,
   type AgentResumeCommand,
@@ -45,6 +45,7 @@ import { desktopLog } from "../log/setup";
 import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
+import { PREVIEW_BODY_CHARS, withTextPreview } from "../util/preview";
 import { shellSettingsPayload } from "./shellSettingsPayload";
 import { isUtilityToParent } from "./transfer";
 
@@ -109,9 +110,7 @@ export class AgentBridge {
         return;
       }
       if (raw.kind === "log") {
-        for (const listener of this.logListeners) {
-          listener(raw.record);
-        }
+        // 自研日志管道已移除；忽略 agent 旧版 log 信封
         return;
       }
       if (raw.kind === "contextUsageResult") {
@@ -131,15 +130,14 @@ export class AgentBridge {
         return;
       }
       if (raw.kind === "hitl") {
-        // 转成 AgentEvent 推给 renderer / 通知；engine 仍 await hitlResult
         this.onAgentEvent({
           type: "hitl",
-          phase: "request",
-          hitlId: raw.request.hitlId,
-          kind: raw.request.kind,
           threadId: raw.request.threadId,
           runId: raw.request.runId,
           ts: Date.now(),
+          phase: "request",
+          hitlId: raw.request.hitlId,
+          kind: raw.request.kind,
           request: raw.request,
         });
         return;
@@ -160,14 +158,14 @@ export class AgentBridge {
             const s = raw.span;
             const attrs = s.attrs ?? {};
             startTraceSpan({
-              spanId: s.spanId,
+              spanId: s.id,
               sessionId: s.sessionId,
-              runId: s.runId,
+              agentRunId: s.agentRunId,
               traceId: s.traceId,
-              parentSpanId: s.parentSpanId,
+              parentId: s.parentId,
               taskId: s.taskId,
               name: s.name,
-              kind: s.kind,
+              runType: s.runType,
               source: s.source ?? "agent",
               summary: s.summary,
               attrs,
@@ -175,7 +173,6 @@ export class AgentBridge {
               startTs: s.startTs,
               workspaceId: typeof attrs.workspaceId === "string" ? attrs.workspaceId : undefined,
               threadId: typeof attrs.threadId === "string" ? attrs.threadId : undefined,
-              // 会话列表标题：优先 sessionTitle（emit 新键）；旧数据可能仍写在 title
               title:
                 typeof attrs.sessionTitle === "string"
                   ? attrs.sessionTitle
@@ -195,8 +192,9 @@ export class AgentBridge {
             });
           }
         } catch {
-          /* Trace 写入失败不拖垮 bridge */
+          /* ignore */
         }
+        return;
       }
     });
   }
@@ -773,9 +771,8 @@ export class AgentBridge {
         ...this.shellPayload(),
         httpCompatibilityMode: general.httpCompatibilityMode,
         ...this.runtimeLimitsPayload(),
-        logTruncateLongContent: general.logTruncateLongContent,
         loggingEnabled: general.loggingEnabled,
-        traceEnabled: general.traceEnabled,
+        trace: { enabled: general.observabilityEnabled !== false },
         workspaceRoot: options.command.workspaceRoot,
         dataDir: getDataDir(),
       });
@@ -842,9 +839,8 @@ export class AgentBridge {
         ...this.shellPayload(),
         httpCompatibilityMode: general.httpCompatibilityMode,
         ...this.runtimeLimitsPayload(),
-        logTruncateLongContent: general.logTruncateLongContent,
         loggingEnabled: general.loggingEnabled,
-        traceEnabled: general.traceEnabled,
+        trace: { enabled: general.observabilityEnabled !== false },
         dataDir: getDataDir(),
       });
       runLedger.markDispatched(runId);

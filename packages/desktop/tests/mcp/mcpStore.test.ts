@@ -1,5 +1,5 @@
 /**
- * MCP 落盘：http 配置保留，导入可跳过或覆盖。
+ * MCP 落盘：http 配置保留，导入可跳过或覆盖；list 不 mkdir。
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -70,5 +70,12 @@ describe("mcpStore", () => {
     importMcpJsonFile(file, "overwrite", { kind: "user" });
     const after = listMcpConfigs(null).find((item) => item.id === "local");
     assert.ok(after && after.transport === "stdio" && after.command === "new");
+  });
+
+  it("list 用户 scope 时不预先 mkdir mcps", () => {
+    const mcps = path.join(tmp, "mcps");
+    assert.equal(fs.existsSync(mcps), false);
+    listMcpConfigs(null);
+    assert.equal(fs.existsSync(mcps), false);
   });
 });

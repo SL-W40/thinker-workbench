@@ -335,15 +335,6 @@
   color: var(--muted);
 }
 
-.trace-pane__toolbar-hint {
-  margin: 0;
-  flex: 1 1 192px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
 .trace-pane__tree {
   list-style: none;
   margin: 0;
@@ -1108,10 +1099,10 @@
 }
 
 .trace-seq__arrowhead {
-  fill: color-mix(in srgb, var(--ink) 50%, var(--accent));
+  fill: color-mix(in srgb, var(--ink) 50%, var(--tw-accent, var(--accent)));
 
   &.is-selected {
-    fill: var(--accent);
+    fill: var(--tw-accent-strong, var(--tw-accent, var(--accent)));
   }
 }
 
@@ -1143,9 +1134,16 @@
 
 .trace-seq__msg {
   cursor: pointer;
+  /* SVG <g tabIndex> 默认焦点框又粗又跳，关掉；选中态用下方 is-selected 表达 */
+  outline: none;
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
 
   &:hover .trace-seq__arrow {
-    stroke: var(--accent);
+    stroke: var(--tw-accent, var(--accent));
     stroke-width: 2.25;
   }
 
@@ -1154,36 +1152,39 @@
   }
 
   &.is-related .trace-seq__arrow {
-    stroke: color-mix(in srgb, var(--accent) 75%, var(--ink));
+    stroke: color-mix(in srgb, var(--tw-accent, var(--accent)) 75%, var(--ink));
     stroke-width: 2.1;
   }
 
   &.is-selected .trace-seq__arrow {
-    stroke: var(--accent);
-    stroke-width: 2.5;
+    stroke: var(--tw-accent-strong, var(--tw-accent, var(--accent)));
+    stroke-width: 2.25;
   }
 
   &.is-selected .trace-seq__activation {
-    fill: color-mix(in srgb, var(--accent) 45%, var(--panel));
-    stroke: var(--accent);
+    fill: color-mix(in srgb, var(--tw-accent, var(--accent)) 28%, var(--panel));
+    stroke: color-mix(in srgb, var(--tw-accent, var(--accent)) 70%, transparent);
+    stroke-width: 1.25;
   }
 
   &.is-selected .trace-seq__label-bg {
-    fill: color-mix(in srgb, var(--accent) 12%, var(--panel));
+    fill: var(--tw-accent-soft, color-mix(in srgb, var(--tw-accent, var(--accent)) 14%, var(--panel)));
+    stroke: color-mix(in srgb, var(--tw-accent, var(--accent)) 45%, transparent);
+    stroke-width: 1;
   }
 
   &.is-selected .trace-seq__seq-badge {
-    fill: var(--accent);
-    stroke: var(--accent);
+    fill: var(--tw-accent, var(--accent));
+    stroke: var(--tw-accent-strong, var(--tw-accent, var(--accent)));
   }
 
   &.is-selected .trace-seq__seq-num {
-    fill: var(--panel);
+    fill: var(--tw-accent-ink, var(--panel));
   }
 
   &.is-selected .trace-seq__msg-label {
-    font-weight: 700;
-    fill: var(--accent);
+    font-weight: 650;
+    fill: var(--tw-fg, var(--ink));
   }
 
   &.is-error .trace-seq__arrow,

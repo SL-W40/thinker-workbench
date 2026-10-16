@@ -1,19 +1,14 @@
 /**
  * Agent 侧 IPC 宿主：监听主进程 `utility` 通道，驱动 AgentRuntime。
- * runtime 事件以 `kind: "event"`、日志以 `kind: "log"` 回推主进程。
+ * runtime 事件以 `kind: "event"` 回推主进程；Trace span 经 `kind: "span"` 上报。
  */
-import {
-  configureLog,
-  configureLogPreview,
-  PREVIEW_BODY_CHARS,
-  withTextPreview,
-} from "@thinker-workbench/logger";
 import {
   type AiLocale,
   emptyContextUsageSnapshot,
   type McpServerConfig,
   type ModelCatalog,
   type ModelSelection,
+  type TraceSettings,
   type UtilityCancel,
   type UtilityCancelTask,
   type UtilityContextUsage,
@@ -28,7 +23,6 @@ import { setDataDir } from "../config/dataDir";
 import { configureRuntimeLimits } from "../config/runtimeLimits";
 import { assembleContext } from "../context/assembleContext";
 import { rejectHitlByRunId, resolveHitl } from "../hitl/requestHitl";
-import { agentLog, configureAgentLog } from "../log/setup";
 import { getMcpManager } from "../mcp/McpManager";
 import { configureModelCatalog } from "../model/catalog";
 import { configureHttpCompatibilityMode } from "../model/httpFetch";
@@ -48,7 +42,6 @@ import { applyShellConfig } from "./shellConfig";
 
 export class UtilityHost {
   private runtime: AgentRuntime | null = null;
-  private logReady = false;
 
   /** 绑定 parentPort，并通知主进程本进程已就绪。 */
   start(): void {
@@ -70,20 +63,6 @@ export class UtilityHost {
     });
 
     postToParent({ channel: "utility", kind: "ready" });
-  }
-
-  private ensureLog(enabled?: boolean): void {
-    if (this.logReady) {
-      if (typeof enabled === "boolean") configureLog({ enabled });
-      return;
-    }
-    configureAgentLog({
-      enabled,
-      onRecord: (record) => {
-        postToParent({ channel: "utility", kind: "log", record });
-      },
-    });
-    this.logReady = true;
   }
 
   /**
@@ -126,17 +105,11 @@ export class UtilityHost {
     setAllowAiDeleteFiles(value);
   }
 
-  /** 同步桌面下发的日志策略（截断 + 总开关）。 */
-  private applyLogPolicy(options: {
-    truncateLongContent?: boolean;
-    loggingEnabled?: boolean;
-  }): void {
-    if (typeof options.truncateLongContent === "boolean") {
-      configureLogPreview({ truncateLongContent: options.truncateLongContent });
-    }
-    if (typeof options.loggingEnabled === "boolean") {
-      configureLog({ enabled: options.loggingEnabled });
-    }
+  /** 同步 Trace 采集开关。 */
+  private applyTrace(raw?: TraceSettings): void {
+    const enabled = raw?.enabled !== false;
+    configureAgentTrace({ enabled });
+    this.ensureRuntime().applyTrace({ enabled });
   }
 
   private async onMessage(message: UtilityToChild): Promise<void> {
@@ -184,50 +157,9 @@ export class UtilityHost {
     if (typeof dir === "string") setDataDir(dir);
   }
 
-  /** 同步 Trace 开关与本轮会话上下文。 */
-  private applyTrace(message: {
-    traceEnabled?: boolean;
-    sessionId?: string;
-    workspaceId?: string;
-    sessionTitle?: string;
-    runId?: string;
-    threadId?: string;
-    traceId?: string;
-  }): void {
-    configureAgentTrace({
-      enabled: message.traceEnabled !== false,
-      sessionId: message.sessionId?.trim() || undefined,
-      workspaceId: message.workspaceId?.trim() || undefined,
-      title: message.sessionTitle?.trim() || undefined,
-      runId: message.runId?.trim() || undefined,
-      threadId: message.threadId?.trim() || undefined,
-      traceId: message.traceId?.trim() || undefined,
-      nodeSpanId: undefined,
-      parentSpanId: undefined,
-    });
-  }
-
   private onHello(message: UtilityHello): void {
-    this.ensureLog(message.loggingEnabled);
-    this.applyLogPolicy({
-      truncateLongContent: message.logTruncateLongContent,
-      loggingEnabled: message.loggingEnabled,
-    });
-    this.applyTrace({ traceEnabled: message.traceEnabled });
-    agentLog("host").info("hello", {
-      meta: {
-        hasCatalog: Boolean(message.catalog),
-        aiLocale: message.aiLocale ?? null,
-        workspaceAccess: message.workspaceAccess ?? null,
-        allowAiDeleteFiles: message.allowAiDeleteFiles ?? null,
-        checkpointDir: message.checkpointDir ?? null,
-        loggingEnabled: message.loggingEnabled ?? null,
-        logTruncateLongContent: message.logTruncateLongContent ?? null,
-        workspaceRoot: message.workspaceRoot ?? null,
-        dataDir: message.dataDir ?? null,
-        traceEnabled: message.traceEnabled ?? null,
-      },
-    });
+    this.ensureRuntime(message.checkpointDir);
+    this.applyTrace(message.trace);
     this.applyConfig({
       catalog: message.catalog,
       selection: message.selection,
@@ -244,31 +176,17 @@ export class UtilityHost {
     if (message.workspaceRoot) {
       try {
         setWorkspaceRoot(message.workspaceRoot);
-      } catch (err) {
-        agentLog("host").warn("workspaceRoot invalid", {
-          meta: { error: err instanceof Error ? err.message : String(err) },
-        });
+      } catch {
+        /* 无效根：等 run 时再报错给 UI */
       }
     }
-    this.ensureRuntime(message.checkpointDir);
   }
 
   private async onRun(message: UtilityRun): Promise<void> {
-    this.ensureLog(message.loggingEnabled);
-    this.applyLogPolicy({
-      truncateLongContent: message.logTruncateLongContent,
-      loggingEnabled: message.loggingEnabled,
-    });
     const traceId = message.traceId || message.command.traceId;
     const text = typeof message.command.message === "string" ? message.command.message : "";
     const workspaceRoot = message.workspaceRoot ?? message.command.workspaceRoot;
     const workspaceName = message.command.workspaceName;
-    agentLog("host.run").info("accept", {
-      traceId,
-      runId: message.runId,
-      threadId: message.threadId,
-      meta: withTextPreview(text, "message", PREVIEW_BODY_CHARS),
-    });
     const runImages = Array.isArray(message.command.images)
       ? message.command.images.filter((i) => i && typeof i.path === "string" && i.path.trim())
       : [];
@@ -293,14 +211,14 @@ export class UtilityHost {
     configureHttpCompatibilityMode(message.httpCompatibilityMode);
     configureRuntimeLimits(message);
     this.applyDataDir(message.dataDir);
-    this.applyTrace({
-      traceEnabled: message.traceEnabled,
+    this.applyTrace(message.trace);
+    configureAgentTrace({
       sessionId: message.sessionId,
       workspaceId: message.workspaceId,
-      sessionTitle: message.sessionTitle,
       runId: message.runId,
+      traceId: message.traceId,
       threadId: message.threadId,
-      traceId,
+      title: message.sessionTitle,
     });
     if (!workspaceRoot?.trim()) {
       postToParent({
@@ -385,7 +303,6 @@ export class UtilityHost {
 
   private onCancel(message: UtilityCancel): void {
     const runId = message.command.runId?.trim() ?? "";
-    agentLog("host").info("cancel", { runId });
     if (!runId) return;
     // 仅作用本 run：勿 rejectAll / cancel 全部 Task
     rejectHitlByRunId(runId, "Run cancelled.");
@@ -397,7 +314,6 @@ export class UtilityHost {
   private onCancelTask(message: UtilityCancelTask): void {
     const taskId = message.command.taskId?.trim() ?? "";
     const runId = message.command.runId?.trim() || undefined;
-    agentLog("host").info("cancelTask", { runId, meta: { taskId } });
     if (!taskId) return;
     cancelOneBackgroundTask(taskId, "Cancelled.", {
       expectedParentRunId: runId,
@@ -405,15 +321,8 @@ export class UtilityHost {
   }
 
   private async onResume(message: UtilityResume): Promise<void> {
-    this.ensureLog(message.loggingEnabled);
-    this.applyLogPolicy({
-      truncateLongContent: message.logTruncateLongContent,
-      loggingEnabled: message.loggingEnabled,
-    });
     const { runId } = message;
     const { threadId } = message.command;
-    const traceId = message.command.traceId;
-    agentLog("host").info("resume", { runId, threadId, traceId });
     try {
       this.applyConfig({
         catalog: message.catalog,
@@ -428,14 +337,14 @@ export class UtilityHost {
       configureHttpCompatibilityMode(message.httpCompatibilityMode);
       configureRuntimeLimits(message);
       this.applyDataDir(message.dataDir);
-      this.applyTrace({
-        traceEnabled: message.traceEnabled,
+      this.applyTrace(message.trace);
+      configureAgentTrace({
         sessionId: message.sessionId,
         workspaceId: message.workspaceId,
-        sessionTitle: message.sessionTitle,
         runId: message.runId,
-        threadId,
-        traceId,
+        traceId: message.command.traceId,
+        threadId: message.command.threadId,
+        title: message.sessionTitle,
       });
       if (message.workspaceRoot) {
         setWorkspaceRoot(message.workspaceRoot, { name: message.command.workspaceName });
@@ -477,7 +386,6 @@ export class UtilityHost {
       });
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      agentLog("host").error("resume failed", { runId, threadId, meta: { error } });
       postToParent({
         channel: "utility",
         kind: "event",
@@ -534,10 +442,7 @@ export class UtilityHost {
         requestId: message.requestId,
         usage: ctx.usage,
       });
-    } catch (err) {
-      agentLog("host").warn("contextUsage failed", {
-        meta: { error: err instanceof Error ? err.message : String(err) },
-      });
+    } catch {
       postToParent({
         channel: "utility",
         kind: "contextUsageResult",

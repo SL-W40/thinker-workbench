@@ -85,7 +85,7 @@ type SessionMenuState = {
 
 /** 默认选中时间线上第一个 span（列表按 start_ts 升序）。 */
 function defaultSpanId(rows: TraceSpanRecord[]): string | null {
-  return rows[0]?.spanId ?? null;
+  return rows[0]?.id ?? null;
 }
 
 /** 取最新 run（startTs 最大）。 */
@@ -295,12 +295,12 @@ export function TracePane({ active, focusSessionId = null }: Props) {
       if (selectedSpanId) setSelectedSpanId(null);
       return;
     }
-    if (selectedSpanId && runSpans.some((s) => s.spanId === selectedSpanId)) return;
+    if (selectedSpanId && runSpans.some((s) => s.id === selectedSpanId)) return;
     setSelectedSpanId(defaultSpanId(runSpans));
   }, [runSpans, selectedSpanId]);
 
   const selectedSpan = useMemo(
-    () => runSpans.find((s) => s.spanId === selectedSpanId) ?? null,
+    () => runSpans.find((s) => s.id === selectedSpanId) ?? null,
     [runSpans, selectedSpanId],
   );
 
@@ -602,11 +602,6 @@ export function TracePane({ active, focusSessionId = null }: Props) {
                   { value: "sequence", label: t("tools.trace.viewSequence") },
                 ]}
               />
-              <p className="trace-pane__toolbar-hint">
-                {view === "calltree"
-                  ? t("tools.trace.callTreeHint")
-                  : t("tools.trace.sequenceHint")}
-              </p>
             </div>
             {view === "calltree" ? (
               <CallTreeDiagram
@@ -653,8 +648,8 @@ export function TracePane({ active, focusSessionId = null }: Props) {
             <h3>{callTreeLabel(selectedSpan)}</h3>
             <dl className="trace-pane__facts">
               <div>
-                <dt>kind</dt>
-                <dd>{selectedSpan.kind}</dd>
+                <dt>runType</dt>
+                <dd>{selectedSpan.runType}</dd>
               </div>
               <div>
                 <dt>source</dt>
@@ -702,7 +697,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
                 title="attrs"
                 payload={{
                   id: "attrs",
-                  spanId: selectedSpan.spanId,
+                  runId: selectedSpan.id,
                   side: "out",
                   ts: selectedSpan.startTs,
                   bytes: 0,

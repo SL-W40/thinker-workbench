@@ -119,8 +119,6 @@ export const zh: MessageTree = {
       scopePar: "par（并行）",
       scopeParShort: "并行",
       ganttTitle: "时间线",
-      callTreeHint: "Agent 调用链 + 时间条（graph / model / tool / Task）。点击行查看入参出参。",
-      sequenceHint: "箭头按 parent → child 落在泳道。并行展开按 Task 分块，时间重叠看上方时间线。",
       parallelHint: "后台且时间重叠的 Task 进入 par；展开按 Task 分块，滑动只看一个。",
       parViewLabel: "并行展示",
       parViewSwipe: "滑动",
@@ -473,6 +471,10 @@ export const zh: MessageTree = {
     thoughtBriefly: "已思考片刻",
     thinkingExpand: "展开思考过程",
     thinkingCollapse: "折叠思考过程",
+    /** 已完成回合：折叠工具 / 思考历史。`{time}` 如 1m 50s。 */
+    workedFor: "已工作 {time}",
+    workedForExpand: "展开工作历史",
+    workedForCollapse: "折叠工作历史",
     stopped: "已停止。",
     /** 进程 / utility 异常退出（与已停止同款行内「继续」）。 */
     abnormalExit: "异常退出。",
@@ -983,39 +985,12 @@ export const zh: MessageTree = {
       },
       browse: "浏览…",
       useDefault: "恢复默认",
-      trace: {
+      observability: {
         title: "会话 Trace",
-        description: "按会话记录调用链与入参出参；可在控制台 Trace 页查看时序图。",
+        description: "在本机记录 Agent span，供控制台 → Trace（调用树 / 时序）查看。",
         enabled: {
-          title: "启用会话 Trace",
-          description: "关闭后不再写入新的 span / 载荷；已有记录仍可查看。",
-        },
-        retention: {
-          title: "保留天数",
-          description: "按会话最后活动时间清理；0 表示不按天删除。",
-        },
-        maxSessions: {
-          title: "最多会话数",
-          description: "超出后删除最旧会话的 Trace；0 表示不限制。",
-        },
-        maxTotalBytes: {
-          title: "磁盘上限",
-          description: "Trace 目录总大小上限；超限时从最旧会话删起。0 表示不限制。",
-        },
-        truncate: {
-          title: "截断大载荷",
-          description: "开启后按字段 / 单侧 payload 上限截断，并标注 truncated 与原始大小。",
-        },
-        presets: {
-          label: "截断档位",
-          strict: "严格",
-          default: "默认",
-          verbose: "详尽",
-        },
-        captureBinary: {
-          title: "二进制载荷",
-          meta: "仅元数据",
-          omit: "不记录",
+          title: "启用 Trace",
+          description: "开启后写入本机，并在控制台 → Trace 中查看。",
         },
       },
     },

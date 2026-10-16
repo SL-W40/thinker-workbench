@@ -3,6 +3,7 @@
  * 桌面端走系统「另存为」，确认写入后才提示已下载。
  */
 import { useEffect, useId, useRef, useState } from "react";
+import { copyText, saveOrDownloadText } from "./textExport";
 
 type Props = {
   /** 代码正文。 */
@@ -10,13 +11,6 @@ type Props = {
   /** 语言 id（用于下载扩展名）。 */
   language: string;
 };
-
-type SaveTextFileFn = (options: {
-  content: string;
-  defaultPath?: string;
-  title?: string;
-  filters?: Array<{ name: string; extensions: string[] }>;
-}) => Promise<string | null>;
 
 function actionLabels(): {
   more: string;
@@ -77,54 +71,6 @@ function extForLanguage(language: string): string {
   return map[key] ?? (key && key !== "code" ? key : "txt");
 }
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* 回退到 execCommand */
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
-/** 浏览器回退：触发下载（无法获知用户是否确认保存，故不提示成功）。 */
-function downloadTextFallback(text: string, filename: string): void {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function getSaveTextFile(): SaveTextFileFn | null {
-  const api = (
-    window as unknown as {
-      thinker?: { settings?: { saveTextFile?: SaveTextFileFn } };
-    }
-  ).thinker?.settings?.saveTextFile;
-  return typeof api === "function" ? api : null;
-}
-
 /** 三点菜单：复制代码、下载为文件。 */
 export function CodeBlockActions({ value, language }: Props) {
   const labels = actionLabels();
@@ -165,22 +111,16 @@ export function CodeBlockActions({ value, language }: Props) {
     setOpen(false);
     const ext = extForLanguage(language);
     const filename = `code.${ext}`;
-    const save = getSaveTextFile();
-    if (save) {
-      // 等用户选定路径并写入成功后再提示
-      const saved = await save({
-        content: value,
-        defaultPath: filename,
-        title: labels.saveTitle,
-        filters: [
-          { name: ext.toUpperCase(), extensions: [ext] },
-          { name: "All Files", extensions: ["*"] },
-        ],
-      });
-      if (saved) setToast("downloaded");
-      return;
-    }
-    downloadTextFallback(value, filename);
+    const result = await saveOrDownloadText({
+      content: value,
+      filename,
+      title: labels.saveTitle,
+      filters: [
+        { name: ext.toUpperCase(), extensions: [ext] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (result === "saved") setToast("downloaded");
   }
 
   return (

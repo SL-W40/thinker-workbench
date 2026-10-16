@@ -21,18 +21,6 @@ import {
   normalizeAiLocale,
   normalizeAppLocale,
 } from "./locale";
-import {
-  DEFAULT_TRACE_MAX_FIELD_BYTES,
-  DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
-  DEFAULT_TRACE_MAX_MESSAGE_CHARS,
-  DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
-  DEFAULT_TRACE_MAX_SESSIONS,
-  DEFAULT_TRACE_MAX_TOTAL_BYTES,
-  DEFAULT_TRACE_REDACT_KEYS,
-  DEFAULT_TRACE_RETENTION_DAYS,
-  type TraceCaptureBinary,
-} from "./trace";
-
 /**
  * 内置 UI 主题 id（写入设置的字面量）。
  * 基础：`light` / `dark` / `system`；创意：`notes` / `eyecare` / `aurora`。
@@ -296,18 +284,8 @@ export type GeneralSettings = {
   contextFilesMaxTotalBytes: number;
   /** read_file 默认 max_chars。 */
   readFileDefaultMaxChars: number;
-  /** 是否采集会话 Trace（span + jsonl）。 */
-  traceEnabled: boolean;
-  traceRetentionDays: number;
-  traceMaxSessions: number;
-  traceMaxTotalBytes: number;
-  traceTruncateEnabled: boolean;
-  traceMaxFieldBytes: number;
-  traceMaxPayloadBytes: number;
-  traceMaxMessageChars: number;
-  traceMaxHistoryMessages: number;
-  traceCaptureBinary: TraceCaptureBinary;
-  traceRedactKeys: string[];
+  /** 是否采集本机 Trace span。 */
+  observabilityEnabled: boolean;
 };
 
 /** 模型 HTTP 兼容模式。 */
@@ -667,17 +645,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   contextFilesMaxFileBytes: DEFAULT_CONTEXT_FILES_MAX_FILE_BYTES,
   contextFilesMaxTotalBytes: DEFAULT_CONTEXT_FILES_MAX_TOTAL_BYTES,
   readFileDefaultMaxChars: DEFAULT_READ_FILE_MAX_CHARS,
-  traceEnabled: true,
-  traceRetentionDays: DEFAULT_TRACE_RETENTION_DAYS,
-  traceMaxSessions: DEFAULT_TRACE_MAX_SESSIONS,
-  traceMaxTotalBytes: DEFAULT_TRACE_MAX_TOTAL_BYTES,
-  traceTruncateEnabled: true,
-  traceMaxFieldBytes: DEFAULT_TRACE_MAX_FIELD_BYTES,
-  traceMaxPayloadBytes: DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
-  traceMaxMessageChars: DEFAULT_TRACE_MAX_MESSAGE_CHARS,
-  traceMaxHistoryMessages: DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
-  traceCaptureBinary: "meta",
-  traceRedactKeys: [...DEFAULT_TRACE_REDACT_KEYS],
+  observabilityEnabled: true,
 };
 
 /** 规范化可选路径字段：仅保留 trim 后的字符串，非法类型视为空。 */
@@ -851,39 +819,16 @@ export function normalizeGeneral(
   if (Object.hasOwn(obj, "readFileDefaultMaxChars")) {
     base.readFileDefaultMaxChars = normalizeReadFileDefaultMaxChars(obj.readFileDefaultMaxChars);
   }
-  if (typeof obj.traceEnabled === "boolean") base.traceEnabled = obj.traceEnabled;
-  if (typeof obj.traceRetentionDays === "number" && Number.isFinite(obj.traceRetentionDays)) {
-    base.traceRetentionDays = Math.max(0, Math.min(3650, Math.floor(obj.traceRetentionDays)));
-  }
-  if (typeof obj.traceMaxSessions === "number" && Number.isFinite(obj.traceMaxSessions)) {
-    base.traceMaxSessions = Math.max(0, Math.floor(obj.traceMaxSessions));
-  }
-  if (typeof obj.traceMaxTotalBytes === "number" && Number.isFinite(obj.traceMaxTotalBytes)) {
-    base.traceMaxTotalBytes = Math.max(0, Math.floor(obj.traceMaxTotalBytes));
-  }
-  if (typeof obj.traceTruncateEnabled === "boolean") {
-    base.traceTruncateEnabled = obj.traceTruncateEnabled;
-  }
-  if (typeof obj.traceMaxFieldBytes === "number" && Number.isFinite(obj.traceMaxFieldBytes)) {
-    base.traceMaxFieldBytes = Math.max(1024, Math.floor(obj.traceMaxFieldBytes));
-  }
-  if (typeof obj.traceMaxPayloadBytes === "number" && Number.isFinite(obj.traceMaxPayloadBytes)) {
-    base.traceMaxPayloadBytes = Math.max(1024, Math.floor(obj.traceMaxPayloadBytes));
-  }
-  if (typeof obj.traceMaxMessageChars === "number" && Number.isFinite(obj.traceMaxMessageChars)) {
-    base.traceMaxMessageChars = Math.max(1000, Math.floor(obj.traceMaxMessageChars));
-  }
-  if (
-    typeof obj.traceMaxHistoryMessages === "number" &&
-    Number.isFinite(obj.traceMaxHistoryMessages)
-  ) {
-    base.traceMaxHistoryMessages = Math.max(1, Math.floor(obj.traceMaxHistoryMessages));
-  }
-  if (obj.traceCaptureBinary === "meta" || obj.traceCaptureBinary === "omit") {
-    base.traceCaptureBinary = obj.traceCaptureBinary;
-  }
-  if (Array.isArray(obj.traceRedactKeys)) {
-    base.traceRedactKeys = obj.traceRedactKeys.filter((k): k is string => typeof k === "string");
+  if (typeof obj.observabilityEnabled === "boolean") {
+    base.observabilityEnabled = obj.observabilityEnabled;
+  } else {
+    // 兼容：旧 langfuseEnabled / observabilityProvider=local 都视为开启自建
+    const legacy = raw as { langfuseEnabled?: unknown; observabilityProvider?: unknown };
+    if (typeof legacy.langfuseEnabled === "boolean") {
+      base.observabilityEnabled = legacy.langfuseEnabled;
+    } else if (legacy.observabilityProvider === "local" || legacy.observabilityProvider == null) {
+      base.observabilityEnabled = true;
+    }
   }
   return base;
 }

@@ -94,12 +94,12 @@ export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
 
   const event: AgentEvent = {
     type: "hitl",
-    phase: "resolved",
-    hitlId: response.hitlId,
-    kind: req?.kind ?? "shell_approval",
     threadId: req?.threadId ?? "",
     runId: req?.runId ?? "",
     ts: Date.now(),
+    phase: "resolved",
+    hitlId: response.hitlId,
+    kind: req?.kind ?? "shell_approval",
     response,
   };
   for (const win of BrowserWindow.getAllWindows()) {
@@ -127,12 +127,12 @@ export function clearHitlForRun(runId: string, _bridge: AgentBridge): void {
   for (const req of toClear) {
     const event: AgentEvent = {
       type: "hitl",
-      phase: "resolved",
-      hitlId: req.hitlId,
-      kind: req.kind,
       threadId: req.threadId,
       runId: req.runId,
       ts: Date.now(),
+      phase: "resolved",
+      hitlId: req.hitlId,
+      kind: req.kind,
       response: { hitlId: req.hitlId, actionId: "deny" },
     };
     for (const win of BrowserWindow.getAllWindows()) {
@@ -200,12 +200,12 @@ export function showHitlNotification(req: HitlRequest, bridge: AgentBridge): voi
       if (!win.isDestroyed()) {
         win.webContents.send(IpcChannels.agentEvent, {
           type: "hitl",
-          phase: "request",
-          hitlId: req.hitlId,
-          kind: req.kind,
           threadId: req.threadId,
           runId: req.runId,
           ts: Date.now(),
+          phase: "request",
+          hitlId: req.hitlId,
+          kind: req.kind,
           request: req,
         } satisfies AgentEvent);
       }

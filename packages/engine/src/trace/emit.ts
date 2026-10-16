@@ -1,13 +1,13 @@
 /**
  * Agent 进程：向主进程上报 Trace span（截断由 Main 统一做）。
- * 面向「追踪树」：parentSpanId 必须反映真实调用链；并行 Task 用 AsyncLocalStorage
+ * 面向「追踪树」：parentId 必须反映真实调用链；并行 Task 用 AsyncLocalStorage
  * 隔离 taskId / 独立栈，避免全局 LIFO 把 A 的工具挂到 B 下。
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createSpanId,
+  type TraceRunType,
   type TraceSource,
-  type TraceSpanKind,
   type TraceSpanStatus,
 } from "@thinker-workbench/shared";
 import { postToParent } from "../host/port";
@@ -97,8 +97,8 @@ function activeSpanStack(): string[] {
 }
 
 /** 是否为 Task 工具启动 span（必须走主栈，避免并行时挂到另一 Task 内部）。 */
-function isTaskToolLaunch(input: { name: string; kind: TraceSpanKind }): boolean {
-  return input.kind === "tool" && /^tool:Task$/i.test(input.name.trim());
+function isTaskToolLaunch(input: { name: string; runType: TraceRunType }): boolean {
+  return input.runType === "tool" && /^tool:Task$/i.test(input.name.trim());
 }
 
 /** 同步本轮 Trace 上下文（UtilityHost / AgentRuntime 调用）。 */
@@ -142,16 +142,16 @@ function post(msg: Parameters<typeof postToParent>[0]): void {
 
 export type AgentStartSpanInput = {
   spanId?: string;
-  parentSpanId?: string;
+  parentId?: string;
   taskId?: string;
   name: string;
-  kind: TraceSpanKind;
+  runType: TraceRunType;
   source?: TraceSource;
   summary?: string;
   attrs?: Record<string, unknown>;
   input?: unknown;
   sessionId?: string;
-  runId?: string;
+  agentRunId?: string;
   traceId?: string;
 };
 
@@ -164,22 +164,23 @@ export function agentStartSpan(input: AgentStartSpanInput): string {
   const taskLaunch = isTaskToolLaunch(input);
   const alsTask = getActiveAgentTaskId();
   // Task 工具本身始终挂主栈；内部工作才进 task 栈（由 ALS taskId 决定）
-  const stack = taskLaunch ? mainSpanStackFor(input.runId ?? ctx.runId) : activeSpanStack();
+  const stack = taskLaunch ? mainSpanStackFor(input.agentRunId ?? ctx.runId) : activeSpanStack();
   const taskId = input.taskId ?? (taskLaunch ? undefined : alsTask);
 
-  let parentSpanId = input.parentSpanId;
-  // 并发后台 Task：兄弟 tool:Task 都挂 graph.tools，禁止互相嵌套
-  if (!parentSpanId && taskLaunch && ctx.nodeSpanId) {
-    parentSpanId = ctx.nodeSpanId;
-  }
-  if (!parentSpanId && stack.length > 0) {
-    parentSpanId = stack[stack.length - 1];
-  }
-  if (!parentSpanId && taskId && !taskLaunch) {
-    parentSpanId = taskRootParent.get(taskId);
-  }
-  if (!parentSpanId) {
-    parentSpanId = ctx.parentSpanId;
+  let parentId = input.parentId;
+  if (taskLaunch) {
+    // 并发 tool:Task 只挂 graph.tools（nodeSpanId），禁止互相嵌套到主栈顶
+    if (!parentId) parentId = ctx.nodeSpanId ?? ctx.parentSpanId;
+  } else {
+    if (!parentId && stack.length > 0) {
+      parentId = stack[stack.length - 1];
+    }
+    if (!parentId && taskId) {
+      parentId = taskRootParent.get(taskId);
+    }
+    if (!parentId) {
+      parentId = ctx.parentSpanId;
+    }
   }
 
   const startTs = Date.now();
@@ -195,14 +196,14 @@ export function agentStartSpan(input: AgentStartSpanInput): string {
     kind: "span",
     phase: "start",
     span: {
-      spanId,
+      id: spanId,
       sessionId,
-      runId: input.runId ?? ctx.runId,
+      agentRunId: input.agentRunId ?? ctx.runId,
       traceId: input.traceId ?? ctx.traceId,
-      parentSpanId,
+      parentId,
       taskId,
       name: input.name,
-      kind: input.kind,
+      runType: input.runType,
       source: input.source ?? "agent",
       status: "running",
       startTs,

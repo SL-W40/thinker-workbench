@@ -1,7 +1,7 @@
 /**
  * 会话 Trace 时序图：全程共用全局 7 泳道坐标；箭头落点对齐表头生命线。 * 并行 par：展开=?Task 分块连排（避免按墙钟交织出现 AAA…BBB…AAA）；滑动=只看当前 Task。 */
 import { ChevronLeftIcon, ChevronRightIcon, IconButton } from "@thinker-workbench/design/react";
-import type { TraceSpanKind, TraceSpanRecord } from "@thinker-workbench/shared";
+import type { TraceSpanRecord } from "@thinker-workbench/shared";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -98,8 +98,12 @@ function laneOf(span: TraceSpanRecord): LaneId {
   if (span.source === "app") return "renderer";
   if (span.source === "desktop") return "desktop";
   const name = (span.name || "").toLowerCase();
-  // other / 杂项：按 name 前缀归泳
+  // 优先按 name 前缀归泳
   if (name.startsWith("mcp.")) return "tool";
+  if (name.startsWith("graph.")) return "graph";
+  if (name.startsWith("model.")) return "model";
+  if (name.startsWith("subagent:")) return "subagent";
+  if (name.startsWith("tool:")) return "tool";
   if (
     name.startsWith("runtime.") ||
     name.startsWith("context.") ||
@@ -107,22 +111,13 @@ function laneOf(span: TraceSpanRecord): LaneId {
   ) {
     return "runtime";
   }
-  switch (span.kind as TraceSpanKind) {
-    case "graph":
-      return "graph";
-    case "model":
+  switch (span.runType) {
+    case "chain":
+      return name.startsWith("subagent") ? "subagent" : "graph";
+    case "llm":
       return "model";
     case "tool":
       return "tool";
-    case "subagent":
-      return "subagent";
-    case "browser":
-    case "pty":
-    case "hitl":
-      return "desktop";
-    case "ipc":
-    case "other":
-      return "runtime";
     default:
       return "runtime";
   }
@@ -142,19 +137,19 @@ function estimateLabelW(label: string): number {
 function scopeOf(span: TraceSpanRecord, all: TraceSpanRecord[]): "main" | string {
   if (span.taskId?.trim()) return span.taskId.trim();
   const callId = typeof span.attrs?.callId === "string" ? span.attrs.callId.trim() : "";
-  if (span.kind === "tool" && /task/i.test(span.name) && callId) {
+  if (span.runType === "tool" && /task/i.test(span.name) && callId) {
     if (all.some((s) => s.taskId === callId)) return callId;
   }
   return "main";
 }
 
 function taskTitle(taskId: string, spans: TraceSpanRecord[]): string {
-  const sub = spans.find((s) => s.taskId === taskId && s.kind === "subagent");
+  const sub = spans.find((s) => s.taskId === taskId && /^subagent:/i.test(s.name || ""));
   if (sub) return callTreeLabel(sub);
   const tool = spans.find(
     (s) =>
       (s.taskId === taskId || s.attrs?.callId === taskId) &&
-      s.kind === "tool" &&
+      s.runType === "tool" &&
       /task/i.test(s.name),
   );
   if (tool) return callTreeLabel(tool);
@@ -184,7 +179,7 @@ function inferFromLane(
       return prevLane;
     }
     if (to === "subagent" && prevLane === "tool") return "tool";
-    if (prev.runId && prev.runId === span.runId) return prevLane;
+    if (prev.agentRunId && prev.agentRunId === span.agentRunId) return prevLane;
     if (prev.traceId && prev.traceId === span.traceId) return prevLane;
   }
   if (to === "desktop") return "renderer";
@@ -197,12 +192,12 @@ function buildMessages(spans: TraceSpanRecord[]): Msg[] {
   // graph 层固定展
   const sorted = [...spans].sort((a, b) => {
     if (a.startTs !== b.startTs) return a.startTs - b.startTs;
-    return a.spanId.localeCompare(b.spanId);
+    return a.id.localeCompare(b.id);
   });
-  const byId = new Map(sorted.map((s) => [s.spanId, s]));
+  const byId = new Map(sorted.map((s) => [s.id, s]));
   return sorted.map((span, idx) => {
     const to = laneOf(span);
-    const parent = span.parentSpanId ? byId.get(span.parentSpanId) : undefined;
+    const parent = span.parentId ? byId.get(span.parentId) : undefined;
     const from = parent ? laneOf(parent) : inferFromLane(span, sorted[idx - 1], to);
     return {
       seq: idx + 1,
@@ -690,7 +685,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
     }
   }
 
-  const selectedMsg = msgs.find((m) => m.span.spanId === selectedSpanId) ?? null;
+  const selectedMsg = msgs.find((m) => m.span.id === selectedSpanId) ?? null;
   const lifeY0 = headH + ganttH;
   const lifeY1 = totalH - 6;
 
@@ -721,16 +716,20 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
     return (
       // biome-ignore lint/a11y/useSemanticElements: SVG <g> 不能换成 HTML <button>
       <g
-        key={m.span.spanId}
+        key={m.span.id}
         className={`trace-seq__msg${selected ? " is-selected" : ""}${onPath && !selected ? " is-related" : ""}${inTask ? " is-in-task" : ""}${inPar ? ` is-in-par is-par-task--${taskColorIdx % 3}` : ""}${statusClass}`}
         role="button"
         tabIndex={0}
         aria-pressed={selected}
-        onClick={() => onSelect(m.span.spanId)}
+        /* 鼠标点选不抢焦点，避免 SVG 默认焦点框 */
+        onMouseDown={(e) => {
+          if (e.button === 0) e.preventDefault();
+        }}
+        onClick={() => onSelect(m.span.id)}
         onKeyDown={(e: ReactKeyboardEvent) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onSelect(m.span.spanId);
+            onSelect(m.span.id);
           }
         }}
       >
@@ -1260,15 +1259,14 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
           }
 
           const m = r.msg;
-          const selected = m.span.spanId === selectedSpanId;
+          const selected = m.span.id === selectedSpanId;
           const inTask = m.scope !== "main";
           const onPath =
             selected ||
             (selectedMsg != null &&
-              (m.span.spanId === selectedMsg.span.parentSpanId ||
-                m.span.parentSpanId === selectedSpanId));
+              (m.span.id === selectedMsg.span.parentId || m.span.parentId === selectedSpanId));
           return (
-            <g key={`${m.span.spanId}-${yi}`}>
+            <g key={`${m.span.id}-${yi}`}>
               {renderArrow({
                 msg: m,
                 x1: laneCenterX(m.from),

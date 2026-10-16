@@ -219,13 +219,13 @@ export const IpcChannels = {
   agentsUpsert: "agents:upsert",
   agentsRemove: "agents:remove",
   agentsCopyToScope: "agents:copyToScope",
+
   traceListSessions: "trace:listSessions",
   traceGetSessionSpans: "trace:getSessionSpans",
   traceGetPayload: "trace:getPayload",
   traceStartSpan: "trace:startSpan",
   traceEndSpan: "trace:endSpan",
   traceDeleteSession: "trace:deleteSession",
-  /** 导出会话 Trace + 聊天排查 ZIP。 */
   traceExportSession: "trace:exportSession",
 
   /** 列出 MCP server 配置与状态。 */

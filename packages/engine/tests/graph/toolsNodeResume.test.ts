@@ -59,6 +59,10 @@ function baseState(over: Partial<GraphState>): GraphState {
   };
 }
 
+function cfg() {
+  return { signal: new AbortController().signal };
+}
+
 describe("tools 节点 resume", () => {
   it("已有 tool 结果 → 不 runTool，pending 缩短", async () => {
     const call = {
@@ -71,11 +75,12 @@ describe("tools 节点 resume", () => {
       pendingToolCalls: [call],
       startedToolCallIds: ["c1"],
     });
-    const patch = await tools(state, new AbortController().signal);
+    const patch = await tools(state, cfg());
     assert.equal(runTool.mock.calls.length, 0);
     assert.equal(markToolCallStarted.mock.calls.length, 0);
     assert.deepEqual(patch.pendingToolCalls, []);
-    assert.equal(patch.messages?.length, state.messages.length);
+    // reuse：不追加 messages（由 Annotation reducer 保留原历史）
+    assert.equal(patch.messages, undefined);
   });
 
   it("已开工无结果 → interrupt，不 runTool，种 Task 孤儿", async () => {
@@ -91,7 +96,7 @@ describe("tools 节点 resume", () => {
       pendingToolCalls: [call],
       startedToolCallIds: ["c2"],
     });
-    const patch = await tools(state, new AbortController().signal);
+    const patch = await tools(state, cfg());
     assert.equal(runTool.mock.calls.length, 0);
     assert.equal(seedFailedBackgroundTask.mock.calls.length, 1);
     assert.equal(patch.pendingToolCalls?.length, 0);
@@ -107,7 +112,7 @@ describe("tools 节点 resume", () => {
       function: { name: "time", arguments: "{}" },
     };
     const state = baseState({ pendingToolCalls: [call] });
-    const patch = await tools(state, new AbortController().signal);
+    const patch = await tools(state, cfg());
     assert.equal(markToolCallStarted.mock.calls.length, 1);
     assert.equal(markToolCallStarted.mock.calls[0]?.[0], "c3");
     assert.equal(runTool.mock.calls.length, 1);

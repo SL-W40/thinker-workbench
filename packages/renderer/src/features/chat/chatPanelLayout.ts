@@ -70,8 +70,8 @@ export function fitChatPanelWidths(input: FitChatPanelWidthsInput): {
   }
 
   const budget = Math.max(0, input.shellWidth - minChat - slack);
-  let leftTaken = input.leftOpen ? left : 0;
-  let rightTaken = input.rightOpen ? right : 0;
+  const leftTaken = input.leftOpen ? left : 0;
+  const rightTaken = input.rightOpen ? right : 0;
 
   if (leftTaken + rightTaken <= budget) {
     return { leftWidth: left, rightWidth: right };

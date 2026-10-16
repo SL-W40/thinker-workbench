@@ -59,7 +59,7 @@ pnpm run dev -- --devtools    # open DevTools on launch             (THINKER_OPE
 | `pnpm test` / `test:report` | Vitest (report → `test-results/report/`) |
 | `pnpm run check` | Biome lint + format check |
 | `pnpm run format` / `lint` | Format write / lint only |
-| `pnpm run dev:logger:web` | Log viewer → http://127.0.0.1:5181 |
+
 | `pnpm run pack:zip` | Zip the repo (respects `.gitignore`) |
 | `pnpm run stage:desktop` | Assemble `.stage/app` + `.stage/payload` (after `pnpm build`) |
 | `pnpm run pack:desktop` | Build → stage → electron-builder for the current OS |
@@ -84,19 +84,19 @@ Desktop (ipcMain) ── SQLite / settings / FS IPC
     │
     └── AgentBridge ── utilityProcess
                           └── engine/artifacts/entry.js
-                                UtilityHost → AgentRuntime → graph
+                                UtilityHost → AgentRuntime → LangGraph StateGraph
 ```
 
 | Layer | Package | Role |
 |---|---|---|
 | UI | `renderer` | Chat, settings, tools pane |
 | Shell | `desktop` | Electron main, preload, IPC, SQLite |
-| Agent | `engine` | Graph, tools, model client |
+| Agent | `engine` | LangGraph graph, tools, model client |
 | Kit | `design` / `markdown` | Shared UI + Markdown |
 | Contracts | `shared` | IPC channels, commands, events |
-| Observability | `logger` (+ `logger-web`) | Structured logs / viewer |
+| Observability | Built-in (Local) | Settings → Data toggle. LangSmith-style run tree / waterfall / IO in Console. No Docker or cloud. |
 
-Default graph: `start → agent ⇄ tools → end` in `packages/engine/src/graph/`. File tools operate on the **workspace root**, not the monorepo cwd. Prefer `@thinker-workbench/design/react` for UI; live catalog at `#/components`.
+Default graph: LangGraph `START → agent ⇄ tools → END` in `packages/engine/src/graph/`. Checkpoint: SqliteSaver under `<dataDir>/checkpoints/langgraph.sqlite`. File tools operate on the **workspace root**, not the monorepo cwd. Prefer `@thinker-workbench/design/react` for UI; live catalog at `#/components`.
 
 Build outputs go to each package’s `artifacts/` (gitignored). Cold start uses `scripts/dev-prepare.mjs` when they are missing.
 

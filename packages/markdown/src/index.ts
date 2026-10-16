@@ -6,6 +6,8 @@
 export { extractToc, type TocItem } from "./extractToc";
 export { type FrontmatterFormat, type FrontmatterResult, parseFrontmatter } from "./frontmatter";
 export { highlightCode, registerLanguage } from "./highlight";
+export { looksRenderable as mermaidLooksRenderable } from "./mermaid/looksRenderable";
+export { ensureSvgXmlns } from "./mermaid/svgExport";
 export { headingId, parseMarkdown, parseMarkdownDocument } from "./parse/blocks";
 export { parseInline } from "./parse/inline";
 export type { ParseOptions } from "./parse/options";
@@ -15,6 +17,14 @@ export {
   parseMarkdownStreaming,
   type StreamingParseResult,
 } from "./stream";
+export {
+  inlineToPlainText,
+  type TableAlign,
+  tableToCsv,
+  tableToMarkdown,
+  tableToMatrix,
+  tableToTsv,
+} from "./table/serialize";
 export {
   auroraTheme,
   createTheme,

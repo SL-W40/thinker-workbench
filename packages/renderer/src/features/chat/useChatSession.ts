@@ -2,7 +2,7 @@
  * 聊天会话状态：多会话 hydrate、流式事件合并、崩溃 Resume、防抖落库。
 
  */
-import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
+
 import {
   type ChatImageRef,
   type ChatMessage,
@@ -55,6 +55,7 @@ import {
   takeLiveRunSlot,
   upsertLiveRunSlot,
 } from "./liveRunRegistry";
+import { PREVIEW_BODY_CHARS, withTextPreview } from "./logPreview";
 import { createMessage, toAgentHistory, visibleAssistantText } from "./messageModel";
 import { classifyRunError, isSoftStopCode, softStopResumeKind } from "./runErrors";
 import { shouldApplySessionReload } from "./sessionReload";
@@ -1149,16 +1150,10 @@ export function useChatSession(visible = true) {
       flushStreamRef.current = null;
       unsub();
     };
-    // scheduleSave 用 ref，勿列入依赖以免重订事件
+    // 只随 threadId（切会话）重订；scheduleSave 等每次渲染都是新引用，列入依赖会在流式
+    // setMessages 时反复 unsub/sub，丢掉中途 token 与终态 done（表现为半截输出 + 转圈不停）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    threadId,
-    withUnbilledUsageEstimate,
-    scheduleSave,
-    reloadCurrentSessionFromDb, // 手动取消：仅时间线可续；进程异常：时间线可续
-    setCanResume,
-    patchTargetUsage,
-  ]);
+  }, [threadId]);
 
   // 终端输出 → 时间线 shell 步骤 liveOutput
   useEffect(() => {

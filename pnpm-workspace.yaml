@@ -1,6 +1,5 @@
 packages:
   - "packages/*"
-  - "packages/logger/web"
 
 allowBuilds:
   '@homebridge/node-pty-prebuilt-multiarch': false
@@ -8,3 +7,4 @@ allowBuilds:
   electron: true
   esbuild: true
   node-pty: true
+  protobufjs: true

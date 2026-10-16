@@ -1,5 +1,5 @@
 /**
- * 追踪树：按 parentSpanId 建行。
+ * 追踪树：按 parentId 建行。
  */
 import assert from "node:assert/strict";
 import type { TraceSpanRecord } from "@thinker-workbench/shared";
@@ -7,11 +7,12 @@ import { describe, it } from "vitest";
 import { buildCallTreeRows } from "../../../src/features/trace/callTreeModel";
 
 function span(
-  partial: Partial<TraceSpanRecord> & Pick<TraceSpanRecord, "spanId" | "name" | "kind">,
+  partial: Partial<TraceSpanRecord> & Pick<TraceSpanRecord, "id" | "name" | "runType">,
 ): TraceSpanRecord {
   return {
     sessionId: "s",
     startTs: 0,
+    source: "agent",
     ...partial,
   };
 }
@@ -20,29 +21,29 @@ describe("buildCallTreeRows", () => {
   it("DFS 中并发 Task 为兄弟，并标 parKey", () => {
     const spans: TraceSpanRecord[] = [
       span({
-        spanId: "gt",
+        id: "gt",
         name: "graph.tools",
-        kind: "graph",
+        runType: "chain",
         startTs: 10,
         endTs: 50,
       }),
       span({
-        spanId: "ta",
+        id: "ta",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "a",
-        parentSpanId: "gt",
+        parentId: "gt",
         startTs: 11,
         endTs: 40,
         summary: "Task · A",
         attrs: { title: "A" },
       }),
       span({
-        spanId: "tb",
+        id: "tb",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "b",
-        parentSpanId: "gt",
+        parentId: "gt",
         startTs: 12,
         endTs: 45,
         summary: "Task · B",
@@ -50,7 +51,7 @@ describe("buildCallTreeRows", () => {
       }),
     ];
     const { rows } = buildCallTreeRows(spans, new Set());
-    const ids = rows.map((r) => r.span.spanId);
+    const ids = rows.map((r) => r.span.id);
     const iGt = ids.indexOf("gt");
     const iA = ids.indexOf("ta");
     const iB = ids.indexOf("tb");
@@ -69,40 +70,40 @@ describe("buildCallTreeRows", () => {
   it("子行无 taskId 时继承祖先 Task 的分色", () => {
     const spans: TraceSpanRecord[] = [
       span({
-        spanId: "ta",
+        id: "ta",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "a",
         startTs: 10,
         endTs: 40,
       }),
       span({
-        spanId: "sa",
+        id: "sa",
         name: "subagent:explorer",
-        kind: "subagent",
-        parentSpanId: "ta",
+        runType: "chain",
+        parentId: "ta",
         startTs: 11,
         endTs: 39,
       }),
       span({
-        spanId: "tb",
+        id: "tb",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "b",
         startTs: 12,
         endTs: 45,
       }),
       span({
-        spanId: "sb",
+        id: "sb",
         name: "subagent:explorer",
-        kind: "subagent",
-        parentSpanId: "tb",
+        runType: "chain",
+        parentId: "tb",
         startTs: 13,
         endTs: 44,
       }),
     ];
     const { rows } = buildCallTreeRows(spans, new Set());
-    const byId = Object.fromEntries(rows.map((r) => [r.span.spanId, r]));
+    const byId = Object.fromEntries(rows.map((r) => [r.span.id, r]));
     assert.equal(byId.sa?.taskColorIdx, 0);
     assert.equal(byId.sb?.taskColorIdx, 1);
     assert.equal(byId.sa?.span.taskId, "a");
@@ -112,33 +113,33 @@ describe("buildCallTreeRows", () => {
   it("other 节点（runtime/context）可建行", () => {
     const spans: TraceSpanRecord[] = [
       span({
-        spanId: "run",
+        id: "run",
         name: "runtime.run",
-        kind: "other",
+        runType: "chain",
         startTs: 1,
         endTs: 100,
       }),
       span({
-        spanId: "ctx",
+        id: "ctx",
         name: "context.assemble",
-        kind: "other",
-        parentSpanId: "run",
+        runType: "chain",
+        parentId: "run",
         startTs: 2,
         endTs: 10,
       }),
       span({
-        spanId: "ga",
+        id: "ga",
         name: "graph.agent",
-        kind: "graph",
-        parentSpanId: "run",
+        runType: "chain",
+        parentId: "run",
         startTs: 11,
         endTs: 90,
       }),
     ];
     const { rows } = buildCallTreeRows(spans, new Set());
     assert.equal(rows.length, 3);
-    assert.equal(rows[0]?.span.spanId, "run");
-    assert.equal(rows[1]?.span.spanId, "ctx");
+    assert.equal(rows[0]?.span.id, "run");
+    assert.equal(rows[1]?.span.id, "ctx");
     assert.equal(rows[1]?.depth, 1);
     assert.equal(rows[2]?.depth, 1);
   });
@@ -146,41 +147,41 @@ describe("buildCallTreeRows", () => {
   it("多个 par 各自从 0 起分色，互不占用", () => {
     const spans: TraceSpanRecord[] = [
       span({
-        spanId: "t1a",
+        id: "t1a",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "p1a",
         startTs: 10,
         endTs: 30,
       }),
       span({
-        spanId: "t1b",
+        id: "t1b",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "p1b",
         startTs: 15,
         endTs: 35,
       }),
       // 第二组并行，时间上不与第一组重叠
       span({
-        spanId: "t2a",
+        id: "t2a",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "p2a",
         startTs: 100,
         endTs: 130,
       }),
       span({
-        spanId: "t2b",
+        id: "t2b",
         name: "tool:Task",
-        kind: "tool",
+        runType: "tool",
         taskId: "p2b",
         startTs: 110,
         endTs: 140,
       }),
     ];
     const { rows } = buildCallTreeRows(spans, new Set());
-    const byId = Object.fromEntries(rows.map((r) => [r.span.spanId, r]));
+    const byId = Object.fromEntries(rows.map((r) => [r.span.id, r]));
     assert.equal(byId.t1a?.taskColorIdx, 0);
     assert.equal(byId.t1b?.taskColorIdx, 1);
     assert.equal(byId.t2a?.taskColorIdx, 0);

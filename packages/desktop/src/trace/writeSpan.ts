@@ -4,8 +4,8 @@
 import {
   createSpanId,
   type TraceEndSpanRequest,
+  type TraceRunType,
   type TraceSource,
-  type TraceSpanKind,
   type TraceSpanRecord,
   type TraceSpanStatus,
   type TraceStartSpanRequest,
@@ -19,12 +19,12 @@ import { limitsFromGeneral, truncateForTrace } from "./truncate";
 export type StartSpanInput = {
   spanId?: string;
   sessionId: string;
-  runId?: string;
+  agentRunId?: string;
   traceId?: string;
-  parentSpanId?: string;
+  parentId?: string;
   taskId?: string;
   name: string;
-  kind: TraceSpanKind;
+  runType: TraceRunType;
   source: TraceSource;
   summary?: string;
   attrs?: Record<string, unknown>;
@@ -36,9 +36,10 @@ export type StartSpanInput = {
   bumpRun?: boolean;
 };
 
+/** 开关关闭时仍返回 id，便于调用方配对 end。 */
 function enabled(): boolean {
   try {
-    return getGeneralSettings().traceEnabled;
+    return getGeneralSettings().observabilityEnabled !== false;
   } catch {
     return true;
   }
@@ -52,7 +53,7 @@ export function startTraceSpan(input: StartSpanInput): string {
   // 聊天已删：忽略迟到写入，避免 Trace 会话「删了又回来」
   if (isSessionArtifactsPurged(input.sessionId)) return spanId;
 
-  const limits = limitsFromGeneral(getGeneralSettings());
+  const limits = limitsFromGeneral();
   const startTs = input.startTs ?? Date.now();
   const attrs = {
     ...(input.attrs ?? {}),
@@ -73,7 +74,7 @@ export function startTraceSpan(input: StartSpanInput): string {
   if (input.input !== undefined) {
     const cut = truncateForTrace(input.input, limits);
     inputRef = appendPayload(input.sessionId, {
-      spanId,
+      runId: spanId,
       side: "in",
       ts: startTs,
       bytes: cut.bytes,
@@ -87,14 +88,14 @@ export function startTraceSpan(input: StartSpanInput): string {
     input.summary?.trim() || (input.name.length > 48 ? `${input.name.slice(0, 46)}…` : input.name);
 
   const record: TraceSpanRecord = {
-    spanId,
+    id: spanId,
     sessionId: input.sessionId,
-    runId: input.runId,
+    agentRunId: input.agentRunId,
     traceId: input.traceId,
-    parentSpanId: input.parentSpanId,
+    parentId: input.parentId,
     taskId: input.taskId,
     name: input.name,
-    kind: input.kind,
+    runType: input.runType,
     source: input.source,
     status: "running",
     startTs,
@@ -126,14 +127,14 @@ export function endTraceSpan(
   if (!sessionId) return;
   if (isSessionArtifactsPurged(sessionId)) return;
 
-  const limits = limitsFromGeneral(getGeneralSettings());
+  const limits = limitsFromGeneral();
   const endTs = patch.endTs ?? Date.now();
   let outputRef: string | undefined;
 
   if (patch.error !== undefined) {
     const cut = truncateForTrace(patch.error, limits);
     outputRef = appendPayload(sessionId, {
-      spanId,
+      runId: spanId,
       side: "err",
       ts: endTs,
       bytes: cut.bytes,
@@ -143,7 +144,7 @@ export function endTraceSpan(
   } else if (patch.output !== undefined) {
     const cut = truncateForTrace(patch.output, limits);
     outputRef = appendPayload(sessionId, {
-      spanId,
+      runId: spanId,
       side: "out",
       ts: endTs,
       bytes: cut.bytes,

@@ -35,5 +35,5 @@
   "[css]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "cSpell.words": ["esbuild", "homebridge", "multiarch"]
+  "cSpell.words": ["esbuild", "homebridge", "langchain", "langgraph", "multiarch"]
 }

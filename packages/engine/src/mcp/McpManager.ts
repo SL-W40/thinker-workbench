@@ -14,7 +14,6 @@ import type {
   McpToolSummary,
 } from "@thinker-workbench/shared";
 import { getMcpCallTimeoutMs, getMcpConnectTimeoutMs } from "../config/runtimeLimits";
-import { agentLog } from "../log/setup";
 import type { ChatToolDefinition } from "../model/types";
 import type { ToolArgs, ToolResult } from "../tools/types";
 import { mcpToolName, parseMcpToolName, sanitizeMcpPart } from "./names";
@@ -145,8 +144,6 @@ export class McpManager {
   private async startOne(cfg: McpServerConfig): Promise<void> {
     const id = sanitizeMcpPart(cfg.id);
     this.emitStatus({ id, state: "starting" });
-    const log = agentLog("mcp");
-    const command = cfg.transport === "stdio" ? resolveCommand(cfg.command) : cfg.url;
     const transport = openTransport(cfg);
     const client = new Client({ name: "thinker-workbench", version: "0.1.0" });
 
@@ -177,9 +174,6 @@ export class McpManager {
         toolCount: tools.length,
         tools: summaries,
       });
-      log.info("connected", {
-        meta: { id, tools: tools.length, command },
-      });
     } catch (err) {
       try {
         await client.close();
@@ -193,7 +187,6 @@ export class McpManager {
       }
       const error = err instanceof Error ? err.message : String(err);
       this.emitStatus({ id, state: "error", error });
-      log.warn("connect failed", { meta: { id, error, command } });
     }
   }
 

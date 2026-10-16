@@ -1,44 +1,4 @@
 /**
- * 图编排核心类型：节点函数、边函数、编译后的图，以及每轮共享的 GraphState。
- *
- * 拓扑（默认）：agent ↔ tools，直到 agent 不再请求工具或触达步数上限。
+ * 图状态类型出口（实现见 annotation）。
  */
-import type { ChatMessage, ChatToolCall } from "../model/types";
-
-/** 节点：读当前 state + AbortSignal，返回要合并的补丁或部分 state。 */
-export type NodeFn<S> = (state: S, signal: AbortSignal) => Promise<Partial<S> | S>;
-
-/** 边：根据 state 返回下一节点 id；null 表示图运行结束。 */
-export type EdgeFn<S> = (state: S) => string | null;
-
-/** 已编译图：入口节点名、节点表、边表（边可为固定字符串或函数）。 */
-export type CompiledGraph<S> = {
-  start: string;
-  nodes: Record<string, NodeFn<S>>;
-  edges: Record<string, EdgeFn<S> | string>;
-};
-
-/** 图在一次 run 中累积的可变状态。 */
-export type GraphState = {
-  /** 本轮用户原始消息。 */
-  message: string;
-  /**
-   * 多轮对话历史（不含 system；system 由模型客户端在请求时拼上）。
-   * 含 user / assistant / tool 消息。
-   */
-  messages: ChatMessage[];
-  /** 已流式推给 UI、并在 done 时返回的助手文本累积。 */
-  reply: string;
-  /** 最近一轮 agent 产出的 tool_calls；tools 节点跑完后清空。 */
-  pendingToolCalls: ChatToolCall[];
-  /**
-   * 已开工但可能尚未写入 tool 结果的 callId。
-   * 开工前落盘，resume 时用于跳过重放（已开工无结果 → 注入中断说明）。
-   * 旧 checkpoint 缺字段时按 []。
-   */
-  startedToolCallIds: string[];
-  /** 本图遍历中 agent 节点已执行次数。 */
-  step: number;
-  /** 用户 `@` 选中的工作区相对路径（注入 context_files）。 */
-  contextPaths?: string[];
-};
+export type { AgentGraphState, AgentGraphUpdate, GraphState } from "./annotation";

@@ -1,6 +1,6 @@
 /**
- * Agent 运行过程事件。
- * utility → main → renderer 推送的时间线条目；与 `RunResult` 互补（流式过程 vs 同步收尾）。
+ * Agent 运行过程事件：utility → main → renderer。
+ * 时间线与 IPC 共用同一套产品事件形状。
  */
 
 import type { ChatTimelineResultPathKind } from "../protocol/message";
@@ -10,12 +10,10 @@ import type { HitlKind, HitlRequest, HitlResponse } from "./hitl";
 export type AgentEventBase = {
   /**
    * 所属聊天会话（端到端寻址）。
-   * 注意：与 `AgentToolEvent.sessionId`（终端会话 id）不同概念；
-   * 工具事件上 chat 会话 id 优先看本字段，终端 id 仍用 tool.sessionId。
-   * Desktop 广播前可按 threadId 补全。
+   * 注意：与工具事件里的终端 `sessionId` 不同概念。
    */
   chatSessionId?: string;
-  /** 所属线程。 */
+  /** 所属线程（checkpointer thread_id）。 */
   threadId: string;
   /** 所属运行。 */
   runId: string;
@@ -23,118 +21,65 @@ export type AgentEventBase = {
   ts: number;
 };
 
-/** 模型流式 token / 文本片段。 */
+/** 模型文本增量。 */
 export type AgentTokenEvent = AgentEventBase & {
   type: "token";
-  /** 本次追加的文本。 */
   text: string;
-  /**
-   * `reply`：助手正文（默认）；`thinking`：推理 / 思考过程（只进时间线，不进最终 reply）。
-   */
+  /** `reply`：助手正文（默认）；`thinking`：推理过程（只进时间线）。 */
   channel?: "reply" | "thinking";
 };
 
-/**
- * 运行阶段状态（供 C 端时间线）。
- * `planning`：已接单、尚未进入模型；`thinking`：模型生成中。
- */
+/** 节点/阶段提示。 */
 export type AgentStatusEvent = AgentEventBase & {
   type: "status";
   status: "planning" | "thinking";
 };
 
-/** 工具调用生命周期（开始或结束）。 */
+/** 工具调用生命周期。 */
 export type AgentToolEvent = AgentEventBase & {
   type: "tool";
-  /** `start` 进入工具；`end` 工具返回。 */
   phase: "start" | "end";
-  /** 工具名。 */
   name: string;
-  /** 与模型 tool_call.id 对齐，便于 UI 合并 start/end。 */
   callId?: string;
-  /** 主要路径类参数（若有）。 */
   path?: string;
-  /** 一行摘要（查询、模式等）。 */
   summary?: string;
-  /** 可选细节（兼容旧字段：ok / error 等）。 */
   detail?: string;
-  /** `end` 时是否业务成功。 */
   ok?: boolean;
-  /** 文件修改时的 unified diff（`edit_file` / `write_file`）。 */
   diff?: string;
-  /** `delete_file` 成功时缓存的正文，供 UI「恢复」。 */
   restoreContent?: string;
-  /** 缓存写入时间（Unix ms）；省略时由 renderer 在收到时打戳。 */
   restoreCachedAt?: number;
-  /** shell 等工具关联的终端会话 id。 */
   sessionId?: string;
-  /** shell 原始命令（便于时间线展示与跳转）。 */
   command?: string;
-  /** shell 退出码（end）。 */
   exitCode?: number | null;
-  /** shell 因 block_until 超时挂起（end）；仅此类保留「打开终端」。 */
   backgrounded?: boolean;
-  /** 工具返回的路径列表（如 search / list）。 */
   resultPaths?: string[];
-  /** 与 resultPaths 对齐的路径类型标签。 */
   resultPathKinds?: ChatTimelineResultPathKind[];
 };
 
-/** HITL 生命周期（请求用户介入或已解决）。 */
+/** HITL。 */
 export type AgentHitlEvent = AgentEventBase & {
   type: "hitl";
   phase: "request" | "resolved";
   hitlId: string;
   kind: HitlKind;
-  /** `request` 时为完整请求；`resolved` 时可省略。 */
   request?: HitlRequest;
-  /** `resolved` 时的用户答复。 */
   response?: HitlResponse;
 };
 
-/** 运行成功结束。 */
-export type AgentDoneEvent = AgentEventBase & {
-  type: "done";
-  /** 最终助手回复文本。 */
-  text: string;
-};
-
-/** 运行失败的类型化终态（主进程按此写会话状态，勿靠文案正则）。 */
-export type AgentErrorCode = "cancelled" | "failed" | "crashed";
-
-/** 运行失败。 */
-export type AgentErrorEvent = AgentEventBase & {
-  type: "error";
-  /** 错误信息。 */
-  error: string;
-  /** 终态分类；缺省时宿主按 failed 处理。 */
-  code: AgentErrorCode;
-};
-
-/**
- * 单次模型调用的 token 用量（OpenAI / 兼容网关字段归一化后）。
- * 数值均为非负整数；缺省字段按 0。
- */
+/** 单次模型调用的 token 用量。 */
 export type ModelUsage = {
-  /** 输入 tokens（含缓存读写）。 */
   inputTokens: number;
-  /** 输出 tokens（含思考）。 */
   outputTokens: number;
-  /** 缓存命中（计入 input）。 */
   cacheReadTokens: number;
-  /** 缓存写入（计入 input）。 */
   cacheWriteTokens: number;
-  /** 思考 / reasoning tokens（计入 output）。 */
   reasoningTokens: number;
 };
 
-/** 一次模型调用结束后的用量推送（一轮 run 内可能多条）。 */
 export type AgentUsageEvent = AgentEventBase & {
   type: "usage";
   usage: ModelUsage;
 };
 
-/** Auto 故障切换：通知 UI 时间线，并携带需持久化的 health。 */
 export type AgentModelSwitchEvent = AgentEventBase & {
   type: "model_switch";
   fromModelId?: string;
@@ -143,13 +88,10 @@ export type AgentModelSwitchEvent = AgentEventBase & {
   toLabel: string;
   reason: "auth" | "not_found" | "rate_limit" | "network" | "server" | "other";
   detail?: string;
-  /** 本轮标记为异常的模型条目 id。 */
   failedModelId?: string;
-  /** 失败摘要（写入 settings.lastError）。 */
   failedError?: string;
 };
 
-/** 模型健康回写（无切换时的最终失败等）。 */
 export type AgentModelHealthEvent = AgentEventBase & {
   type: "model_health";
   modelId: string;
@@ -157,20 +99,35 @@ export type AgentModelHealthEvent = AgentEventBase & {
   error?: string;
 };
 
-/** 子代理 Task 卡片内嵌的精简事件（无 threadId/runId）。 */
+/** 子代理 Task 卡片内嵌的精简事件。 */
 export type SubagentChildEvent =
   | { type: "status"; status: "planning" | "thinking" }
   | { type: "token"; text: string; channel?: "reply" | "thinking" }
-  | (Omit<AgentToolEvent, keyof AgentEventBase> & { type: "tool" });
+  | {
+      type: "tool";
+      phase: "start" | "end";
+      name: string;
+      callId?: string;
+      path?: string;
+      summary?: string;
+      detail?: string;
+      ok?: boolean;
+      diff?: string;
+      command?: string;
+      exitCode?: number | null;
+      backgrounded?: boolean;
+      sessionId?: string;
+      restoreContent?: string;
+      resultPaths?: string[];
+      resultPathKinds?: ChatTimelineResultPathKind[];
+    };
 
-/** 子代理卡片上的结构化日志行（可选）。 */
 export type SubagentTimelineEntry = {
   ts: number;
   kind: string;
   summary: string;
 };
 
-/** Task 子代理生命周期。 */
 export type AgentSubagentEvent = AgentEventBase & {
   type: "subagent";
   phase: "started" | "progress" | "finished" | "failed" | "cancelled";
@@ -185,15 +142,29 @@ export type AgentSubagentEvent = AgentEventBase & {
   timelineEntry?: SubagentTimelineEntry;
 };
 
-/** 推送给 UI 的全部 agent 事件联合类型。 */
+/** 运行成功结束。 */
+export type AgentDoneEvent = AgentEventBase & {
+  type: "done";
+  text: string;
+};
+
+export type AgentErrorCode = "cancelled" | "failed" | "crashed";
+
+export type AgentErrorEvent = AgentEventBase & {
+  type: "error";
+  error: string;
+  code: AgentErrorCode;
+};
+
+/** 推送给 UI 的全部 agent 事件。 */
 export type AgentEvent =
   | AgentTokenEvent
   | AgentStatusEvent
   | AgentToolEvent
   | AgentHitlEvent
-  | AgentDoneEvent
-  | AgentErrorEvent
   | AgentUsageEvent
   | AgentModelSwitchEvent
   | AgentModelHealthEvent
-  | AgentSubagentEvent;
+  | AgentSubagentEvent
+  | AgentDoneEvent
+  | AgentErrorEvent;

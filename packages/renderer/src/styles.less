@@ -2101,9 +2101,9 @@ html[data-tw-theme="dark"] .mention-chip--at {
     color: var(--muted);
   }
 
-  /* 非可点片段：按内容宽，不够再缩并末端 …；勿 flex-grow 以免把右侧状态顶到行尾 */
+  /* 按内容宽，不够再缩并末端 …；勿 flex-grow 以免把右侧状态顶到行尾 */
   &.is-query,
-  &.is-path:not(.is-paths-trigger) {
+  &.is-path {
     flex: 0 1 auto;
   }
 
@@ -2135,35 +2135,10 @@ html[data-tw-theme="dark"] .mention-chip--at {
   &.is-path {
     color: color-mix(in srgb, var(--muted) 88%, var(--ink));
   }
+}
 
-  /* 可点开结果路径列表：不中间折叠、不优先收缩，保证可点区域完整 */
-  &.is-paths-trigger {
-    appearance: none;
-    flex: 0 0 auto;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: transparent;
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-    text-align: left;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: nowrap;
-
-    &:hover,
-    &:focus-visible {
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      outline: none;
-    }
-
-    &.is-open {
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-  }
+.run-timeline-item--tool.has-hover-detail .run-timeline-tool {
+  cursor: default;
 }
 
 .run-timeline-jump-term {
@@ -2745,6 +2720,45 @@ html[data-tw-theme="dark"] .mention-chip--at {
   overflow: hidden;
 }
 
+/* 已完成回合：Worked for … 折叠行（悬停露箭头） */
+.run-timeline-item--worked {
+  margin: 0;
+}
+
+.run-timeline-worked {
+  min-width: 0;
+}
+
+.run-timeline-worked-toggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  text-align: left;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.run-timeline-worked-toggle .run-timeline-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-timeline-worked-toggle:hover .run-timeline-label {
+  color: var(--ink);
+}
+
 /* Explored 汇总：默认折叠，展开后缩进子步骤 */
 .run-timeline-explore {
   min-width: 0;
@@ -2957,6 +2971,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
 .run-timeline-status-toggle.is-expandable:hover .run-timeline-chevron,
 .run-timeline-tool-toggle:hover .run-timeline-chevron,
 .run-timeline-explore-toggle:hover .run-timeline-chevron,
+.run-timeline-worked-toggle:hover .run-timeline-chevron,
 .run-timeline-chevron.tw-icon.is-open {
   opacity: 1;
 }

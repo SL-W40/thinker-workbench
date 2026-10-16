@@ -1,10 +1,12 @@
 /**
- * 右侧 inspector：子代理时间线 tab（头部固定，正文可滚、无横向滚动）。 */
-import { useSyncExternalStore } from "react";
+ * 右侧 inspector：子代理时间线 tab（头部固定，正文可滚、贴底跟随）。
+ */
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getSubagentStep, subscribeSubagentSteps } from "../../bridge/subagent";
 import { useT } from "../../i18n/useI18n";
 import { SubagentSessionView } from "../chat/SubagentSessionView";
 import { subagentDisplayTitle } from "../chat/subagentTitle";
+import { useStickToBottomScroll } from "../chat/useStickToBottomScroll";
 
 type Props = {
   taskId: string;
@@ -15,11 +17,29 @@ type Props = {
 
 export function SubagentInspectorPane({ taskId, subagent, onOpenFile }: Props) {
   const t = useT();
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [stickNonce, setStickNonce] = useState(0);
   const step = useSyncExternalStore(
     subscribeSubagentSteps,
     () => getSubagentStep(taskId),
     () => null,
   );
+
+  // 打开 / 切换 Task tab 时强制贴底
+  useEffect(() => {
+    setStickNonce((n) => n + 1);
+  }, [taskId]);
+
+  const timelineLen = step?.childTimeline?.length ?? 0;
+  const followKey = `${taskId}:${step?.phase ?? ""}:${timelineLen}:${step?.summary ?? ""}:${step?.liveLine ?? ""}`;
+  useStickToBottomScroll({
+    scrollerRef: bodyRef,
+    contentRef,
+    followKey,
+    stickNonce,
+    enabled: Boolean(step),
+  });
 
   const title = step
     ? subagentDisplayTitle(step)
@@ -59,9 +79,11 @@ export function SubagentInspectorPane({ taskId, subagent, onOpenFile }: Props) {
           ) : null}
         </p>
       </header>
-      <div className="agent-subagent-pane__body">
+      <div className="agent-subagent-pane__body" ref={bodyRef}>
         {step ? (
-          <SubagentSessionView step={step} onOpenFile={onOpenFile} />
+          <div ref={contentRef}>
+            <SubagentSessionView step={step} onOpenFile={onOpenFile} />
+          </div>
         ) : (
           <p className="agent-subagent-pane__empty">{t("chat.subagent.timelineEmpty")}</p>
         )}

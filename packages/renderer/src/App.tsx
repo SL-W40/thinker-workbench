@@ -28,7 +28,7 @@ import { type PageId, usePageStack } from "./features/nav/usePageStack";
 import { OnboardingGate } from "./features/onboarding/OnboardingGate";
 import { normalizeSettingsSection, type SettingsSectionId } from "./features/settings/sections";
 import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
-import { ToolsPane, type ToolTabId } from "./features/tools/ToolsPane";
+import { normalizeToolTabId, ToolsPane, type ToolTabId } from "./features/tools/ToolsPane";
 import { TitleBar } from "./features/window/TitleBar";
 import { useT } from "./i18n/useI18n";
 import { bootstrapAppLog } from "./log/sessionLog";
@@ -115,8 +115,10 @@ export function App() {
   const nav = usePageStack(boot.stack);
   const panels = useChatPanels();
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(boot.section);
-  const [toolsTab, setToolsTab] = useState<ToolTabId>(boot.toolsTab);
-  const [toolsVisited, setToolsVisited] = useState<Set<ToolTabId>>(() => new Set([boot.toolsTab]));
+  const [toolsTab, setToolsTab] = useState<ToolTabId>(() => normalizeToolTabId(boot.toolsTab));
+  const [toolsVisited, setToolsVisited] = useState<Set<ToolTabId>>(
+    () => new Set([normalizeToolTabId(boot.toolsTab)]),
+  );
   /** 聊天 diff 点文件名 → 右侧 inspector 打开该路径 */
   const [pendingOpenPath, setPendingOpenPath] = useState<string | null>(null);
   /** 从聊天跳转 Trace 时聚焦的会话 id */
@@ -346,9 +348,7 @@ export function App() {
             </ChatSidePanel>
             <div
               className="chat-main"
-              style={
-                panels.mainWidth > 0 ? { flex: `0 0 ${panels.mainWidth}px` } : undefined
-              }
+              style={panels.mainWidth > 0 ? { flex: `0 0 ${panels.mainWidth}px` } : undefined}
             >
               <ChatStage
                 empty={session.empty}

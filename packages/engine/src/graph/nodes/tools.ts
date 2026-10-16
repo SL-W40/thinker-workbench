@@ -3,8 +3,7 @@
  * Resume：已有结果则跳过；已开工无结果则注入分类中断说明（不重放）。
  */
 
-import { withJsonPreview, withTextPreview } from "@thinker-workbench/logger";
-import { agentLog } from "../../log/setup";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { ChatMessage, ChatToolCall } from "../../model/types";
 import { getRunTurn, markToolCallStarted } from "../../runtime/runContext";
 import { getRunEmitter } from "../../runtime/runEmit";
@@ -14,7 +13,7 @@ import { peekTaskLaunchesInBackground, seedFailedBackgroundTask } from "../../to
 import { deriveTaskTitle } from "../../tools/task/title";
 import type { ToolArgs } from "../../tools/types";
 import { agentEndSpan, agentStartSpan } from "../../trace/emit";
-import type { GraphState } from "../types";
+import type { AgentGraphState, AgentGraphUpdate } from "../annotation";
 import {
   appendStartedToolCallId,
   interruptedToolMessage,
@@ -113,7 +112,6 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
   const parsed = parseToolArgs(call.function.arguments);
   const hints = parsed.ok ? toolUiHints(name, parsed.args) : {};
 
-  const log = agentLog("graph.tools");
   const commandHint =
     parsed.ok && typeof parsed.args.command === "string" ? parsed.args.command : undefined;
   // Task：用 callId 作 taskId，便于 subagent 挂到本 span，且 par 框住 tool:Task 子树
@@ -131,7 +129,7 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
   const turn = getRunTurn();
   const toolSpanId = agentStartSpan({
     name: `tool:${name}`,
-    kind: "tool",
+    runType: "tool",
     taskId,
     summary: isTaskTool && taskTitle ? `Task · ${taskTitle}` : hints.summary || name,
     input: parsed.ok ? parsed.args : { raw: call.function.arguments },
@@ -156,15 +154,6 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
     summary: hints.summary,
     command: commandHint,
   });
-  log.info("tool start", {
-    spanId: call.id,
-    meta: {
-      name,
-      ...(parsed.ok
-        ? withJsonPreview(parsed.args, "args")
-        : withTextPreview(call.function.arguments || "", "rawArgs")),
-    },
-  });
   let content: string;
   if (!parsed.ok) {
     content = `[tool:${name} error]\n${parsed.error}`;
@@ -178,7 +167,6 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
       detail: "error",
       ok: false,
     });
-    log.warn("tool args error", { spanId: call.id, meta: { name, error: parsed.error } });
     agentEndSpan(toolSpanId, { status: "error", error: parsed.error });
   } else {
     try {
@@ -209,10 +197,6 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
         ...(result.ui?.resultPathKinds?.length
           ? { resultPathKinds: result.ui.resultPathKinds }
           : {}),
-      });
-      log.info("tool end", {
-        spanId: call.id,
-        meta: { name, ok: result.ok, ...withTextPreview(result.output, "output") },
       });
       agentEndSpan(toolSpanId, {
         status: result.ok ? "ok" : "error",
@@ -250,7 +234,7 @@ function takeBackgroundTaskBatch(pending: ChatToolCall[]): ChatToolCall[] {
 
 /** 对单个 call 按 resume 策略产出 tool 消息（可能跳过写入）。 */
 async function resolveOne(
-  state: GraphState,
+  state: AgentGraphState,
   call: ChatToolCall,
   signal: AbortSignal,
 ): Promise<{ message: ChatMessage | null; startedIds: string[] }> {
@@ -281,10 +265,6 @@ async function resolveOne(
         subagent: subagent || "unknown",
       });
     }
-    agentLog("graph.tools").warn("tool interrupted on resume", {
-      spanId: call.id,
-      meta: { name: call.function.name },
-    });
     return { message, startedIds };
   }
 
@@ -298,11 +278,15 @@ async function resolveOne(
  * 默认每次只执行一个 pending tool，便于节点结束后落 checkpoint。
  * 例外：连续多个后台 Task 并行启动，避免「先说并行、卡片却一个个冒」。
  */
-export async function tools(state: GraphState, signal: AbortSignal): Promise<Partial<GraphState>> {
+export async function tools(
+  state: AgentGraphState,
+  config: LangGraphRunnableConfig,
+): Promise<AgentGraphUpdate> {
+  const signal = config.signal ?? AbortSignal.timeout(3_600_000);
   const startedToolCallIds = Array.isArray(state.startedToolCallIds)
     ? state.startedToolCallIds
     : [];
-  const base: GraphState = { ...state, startedToolCallIds };
+  const base: AgentGraphState = { ...state, startedToolCallIds };
 
   if (base.pendingToolCalls.length === 0) {
     return { pendingToolCalls: [], startedToolCallIds };
@@ -313,23 +297,21 @@ export async function tools(state: GraphState, signal: AbortSignal): Promise<Par
 
   const batch = takeBackgroundTaskBatch(base.pendingToolCalls);
   if (batch.length >= 2) {
-    const log = agentLog("graph.tools");
-    log.info("parallel background Task batch", {
-      spanId: "tools-batch",
-      meta: { count: batch.length, ids: batch.map((c) => c.id) },
-    });
     // 并行前先逐个 mark（串行落盘），再 Promise.all 执行/中断
     const prepared: Array<{
       call: ChatToolCall;
       action: ReturnType<typeof resolvePendingToolAction>;
     }> = [];
     let started = [...startedToolCallIds];
-    let working: GraphState = { ...base, startedToolCallIds: started };
+    const newlyStarted: string[] = [];
+    let working: AgentGraphState = { ...base, startedToolCallIds: started };
     for (const call of batch) {
       const action = resolvePendingToolAction(working, call);
       if (action === "run") {
         await markToolCallStarted(call.id);
+        const before = started.length;
         started = appendStartedToolCallId(started, call.id);
+        if (started.length > before) newlyStarted.push(call.id);
         working = { ...working, startedToolCallIds: started };
       }
       prepared.push({ call, action });
@@ -376,7 +358,7 @@ export async function tools(state: GraphState, signal: AbortSignal): Promise<Par
     if (signal.aborted) {
       throw new Error("Run cancelled.");
     }
-    // 保持与 batch 顺序一致
+    // 保持与 batch 顺序一致；messages 只返回本轮新增（由 reducer 追加）
     const ordered: ChatMessage[] = [];
     for (const { call, action } of prepared) {
       if (action === "reuse") continue;
@@ -384,24 +366,26 @@ export async function tools(state: GraphState, signal: AbortSignal): Promise<Par
       if (msg) ordered.push(msg);
     }
     return {
-      messages: [...base.messages, ...ordered],
+      ...(ordered.length ? { messages: ordered } : {}),
       pendingToolCalls: base.pendingToolCalls.slice(batch.length),
-      startedToolCallIds: started,
+      ...(newlyStarted.length ? { startedToolCallIds: newlyStarted } : {}),
     };
   }
 
   const [call, ...rest] = base.pendingToolCalls;
   if (!call) {
-    return { pendingToolCalls: [], startedToolCallIds };
+    return { pendingToolCalls: [] };
   }
+  const prevStarted = new Set(startedToolCallIds);
   const { message, startedIds } = await resolveOne(base, call, signal);
   if (signal.aborted) {
     throw new Error("Run cancelled.");
   }
+  const newlyStarted = startedIds.filter((id) => !prevStarted.has(id));
 
   return {
-    messages: message ? [...base.messages, message] : base.messages,
+    ...(message ? { messages: [message] } : {}),
     pendingToolCalls: rest,
-    startedToolCallIds: startedIds,
+    ...(newlyStarted.length ? { startedToolCallIds: newlyStarted } : {}),
   };
 }

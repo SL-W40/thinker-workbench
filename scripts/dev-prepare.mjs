@@ -1,7 +1,6 @@
 /**
  * 开发启动前确保 workspace 库产物存在。
- * 各包 artifacts 被 gitignore；冷启动时 eng/desk esbuild 会抢跑并报
- * Could not resolve "@thinker-workbench/logger"。已存在则跳过，避免拖慢热启动。
+ * 各包 artifacts 被 gitignore；冷启动时 eng/desk esbuild 会抢跑。
  */
 
 import { spawnSync } from "node:child_process";
@@ -16,10 +15,6 @@ const steps = [
   {
     pkg: "@thinker-workbench/shared",
     files: ["packages/shared/artifacts/index.js"],
-  },
-  {
-    pkg: "@thinker-workbench/logger",
-    files: ["packages/logger/artifacts/index.js", "packages/logger/artifacts/node/index.js"],
   },
 ];
 
@@ -43,5 +38,5 @@ for (const step of steps) {
 }
 
 if (built === 0) {
-  console.log("[dev:prepare] shared/logger artifacts ready");
+  console.log("[dev:prepare] shared artifacts ready");
 }

@@ -26,13 +26,7 @@ describe("visiblePillCount", () => {
 
   it("alwaysReserveMore：即便主行全放下也预留 more", () => {
     // 40+8+80 = 128；+8+32 more = 168。宽 160 时只能留 1 颗
-    assert.equal(
-      visiblePillCount([40, 80], 160, 32, 8, { alwaysReserveMore: true }),
-      1,
-    );
-    assert.equal(
-      visiblePillCount([40, 80], 200, 32, 8, { alwaysReserveMore: true }),
-      2,
-    );
+    assert.equal(visiblePillCount([40, 80], 160, 32, 8, { alwaysReserveMore: true }), 1);
+    assert.equal(visiblePillCount([40, 80], 200, 32, 8, { alwaysReserveMore: true }), 2);
   });
 });

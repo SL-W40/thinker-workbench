@@ -8,10 +8,10 @@ import { spanTurn } from "../../src/features/trace/callTreeModel";
 
 function span(attrs?: Record<string, unknown>): TraceSpanRecord {
   return {
-    spanId: "s",
+    id: "s",
     sessionId: "sess",
     name: "model.chat",
-    kind: "model",
+    runType: "llm",
     source: "agent",
     startTs: 1,
     attrs,

@@ -308,9 +308,10 @@ export type {
   TraceListSessionsQuery,
   TracePayloadRecord,
   TracePayloadSide,
+  TraceRunType,
   TraceSessionSummary,
+  TraceSettings,
   TraceSource,
-  TraceSpanKind,
   TraceSpanMessage,
   TraceSpanRecord,
   TraceSpanStartMessage,
@@ -326,6 +327,10 @@ export {
   DEFAULT_TRACE_MAX_TOTAL_BYTES,
   DEFAULT_TRACE_REDACT_KEYS,
   DEFAULT_TRACE_RETENTION_DAYS,
+  DEFAULT_TRACE_SETTINGS,
+  normalizeTraceRunType,
+  normalizeTraceSettings,
+  TRACE_RUN_TYPES,
 } from "./ipc/trace";
 export type {
   BrowserRequestAction,
@@ -446,7 +451,7 @@ export type ThinkerApi = {
    */
   onEvent(cb: (event: AgentEvent) => void): () => void;
   /**
-   * 订阅跨进程 LogRecord（desktop / agent；app 本地日志走 `@thinker-workbench/logger`）。
+   * 订阅跨进程日志（可选）。
    * @returns 取消订阅函数。
    */
   onLog?(cb: (record: LogRecord) => void): () => void;

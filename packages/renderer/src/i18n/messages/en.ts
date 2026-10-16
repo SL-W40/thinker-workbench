@@ -119,10 +119,6 @@ export const en = {
       scopePar: "par (parallel)",
       scopeParShort: "par",
       ganttTitle: "Timeline",
-      callTreeHint:
-        "Agent call tree + time bars (graph / model / tool / Task). Click a row for I/O.",
-      sequenceHint:
-        "Arrows follow parent → child across lanes. Expand stacks Tasks; use the timeline for overlap.",
       parallelHint:
         "Overlapping background Tasks form a par block; expand stacks each Task, swipe shows one.",
       parViewLabel: "Parallel view",
@@ -491,6 +487,10 @@ export const en = {
     thoughtBriefly: "Thought briefly",
     thinkingExpand: "Expand thinking",
     thinkingCollapse: "Collapse thinking",
+    /** 已完成回合：折叠工具 / 思考历史。`{time}` 如 1m 50s。 */
+    workedFor: "Worked for {time}",
+    workedForExpand: "Expand work history",
+    workedForCollapse: "Collapse work history",
     stopped: "Stopped.",
     /** Process / utility exited unexpectedly (same inline Resume as Stopped). */
     abnormalExit: "Exited unexpectedly.",
@@ -1014,43 +1014,12 @@ export const en = {
       },
       browse: "Browse…",
       useDefault: "Use default",
-      trace: {
-        title: "Session Trace",
-        description:
-          "Record per-session call chains and I/O; inspect the sequence diagram in Console → Trace.",
+      observability: {
+        title: "Trace",
+        description: "Record agent spans locally for Console → Trace (call tree and sequence).",
         enabled: {
-          title: "Enable session Trace",
-          description:
-            "When off, no new spans or payloads are written; existing records stay readable.",
-        },
-        retention: {
-          title: "Retention (days)",
-          description: "Prune by session last activity; 0 means no time-based deletion.",
-        },
-        maxSessions: {
-          title: "Max sessions",
-          description: "Delete oldest Trace sessions when over the limit; 0 means unlimited.",
-        },
-        maxTotalBytes: {
-          title: "Disk budget",
-          description:
-            "Max size of the Trace folder; oldest sessions are removed first. 0 means unlimited.",
-        },
-        truncate: {
-          title: "Truncate large payloads",
-          description:
-            "When on, apply field / per-side payload caps and mark truncated with original size.",
-        },
-        presets: {
-          label: "Truncate preset",
-          strict: "Strict",
-          default: "Default",
-          verbose: "Verbose",
-        },
-        captureBinary: {
-          title: "Binary payloads",
-          meta: "Metadata only",
-          omit: "Omit",
+          title: "Enable Trace",
+          description: "When on, spans are stored on this device and shown in Console → Trace.",
         },
       },
     },

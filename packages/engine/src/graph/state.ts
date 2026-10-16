@@ -1,5 +1,5 @@
 /**
- * 构造一次 run 的初始 GraphState：
+ * 构造一次 run 的初始图状态：
  * - messages = 可选历史 + 当前 user
  * - reply / pendingToolCalls 为空
  * - step 从 0 起（进入 agent 后才会 +1）
@@ -54,7 +54,7 @@ export function initialState(
     pendingToolCalls: [],
     startedToolCallIds: [],
     step: 0,
-    ...(contextPaths?.length ? { contextPaths } : {}),
+    contextPaths: contextPaths?.length ? contextPaths : undefined,
   };
 }
 
@@ -70,8 +70,7 @@ export function normalizeGraphState(raw: GraphState | (Partial<GraphState> & obj
     pendingToolCalls: Array.isArray(raw.pendingToolCalls) ? raw.pendingToolCalls : [],
     startedToolCallIds: started,
     step: typeof raw.step === "number" && Number.isFinite(raw.step) ? raw.step : 0,
-    ...(Array.isArray(raw.contextPaths) && raw.contextPaths.length
-      ? { contextPaths: raw.contextPaths }
-      : {}),
+    contextPaths:
+      Array.isArray(raw.contextPaths) && raw.contextPaths.length ? raw.contextPaths : undefined,
   };
 }

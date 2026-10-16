@@ -547,11 +547,12 @@ function parseDiskFile(file: string): {
         ? Math.floor(parsed.themeCatalogVersion)
         : 1;
     const needsThemeMigrate = catalogVersion < THEME_CATALOG_VERSION;
+    const general = normalizeGeneral(parsed.general, catalogVersion);
     return {
       settings: {
         model,
         shortcuts: normalizeShortcuts(parsed.shortcuts),
-        general: normalizeGeneral(parsed.general, catalogVersion),
+        general,
       },
       needsMigrate,
       needsThemeMigrate,

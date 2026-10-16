@@ -8,21 +8,14 @@
 
 import { Button, ChevronRightIcon, useDesignTheme } from "@thinker-workbench/design/react";
 import type { ChatMessage } from "@thinker-workbench/shared";
-import {
-  type KeyboardEvent,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 import { brandGlyphSrc } from "../../brand/logo";
 import { bindSubagentSession } from "../../bridge/subagent";
 import { workspaceTree } from "../../bridge/workspaceFs";
 import { Bubble } from "../../components/Bubble";
 import type { MessageKey } from "../../i18n/translate";
 import { useT } from "../../i18n/useI18n";
-import { isNearBottom, scrollElementToBottom, scrollToBottomIfStuck } from "./chatStickScroll";
+import { useStickToBottomScroll } from "./useStickToBottomScroll";
 
 type Props = {
   empty: boolean;
@@ -133,11 +126,14 @@ export function ChatStage({
   const glyphSrc = brandGlyphSrc(theme.colorScheme);
   /** true = 无文件 / 未选工作空间；探测完成前先按空处理，避免闪一下「了解项目」*/
   const [workspaceEmpty, setWorkspaceEmpty] = useState(true);
-  /** 是否贴底跟随（用户上翻后为 false）*/
-  const stuckRef = useRef(true);
-  const [showJump, setShowJump] = useState(false);
-  const lastStickNonce = useRef(stickNonce);
   const threadRef = useRef<HTMLOListElement | null>(null);
+  const { showJump, jumpToLatest } = useStickToBottomScroll({
+    scrollerRef: scroller,
+    contentRef: threadRef,
+    followKey: messages,
+    stickNonce,
+    enabled: !empty,
+  });
 
   useEffect(() => {
     if (!workspaceId || !window.thinker?.workspaceFs) {
@@ -157,68 +153,6 @@ export function ChatStage({
       cancelled = true;
     };
   }, [workspaceId]);
-
-  /** 用户滚动 → 更新贴底状态。向上滚先松开，避免本帧增高把位置拽回底部。*/
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const onScroll = () => {
-      const near = isNearBottom(el);
-      stuckRef.current = near;
-      setShowJump(!near);
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (event.deltaY < 0) stuckRef.current = false;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("wheel", onWheel, { passive: true });
-    onScroll();
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("wheel", onWheel);
-    };
-  }, [scroller]);
-
-  /**
-   * 强制贴底：stickNonce 递增（发送 / 切会话 / 续跑）。
-   * layout 阶段执行，避免首帧闪在旧位置。
-   */
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el || empty) return;
-    if (lastStickNonce.current !== stickNonce) {
-      lastStickNonce.current = stickNonce;
-      stuckRef.current = true;
-      setShowJump(false);
-      scrollElementToBottom(el, "auto");
-      return;
-    }
-    scrollToBottomIfStuck(el, stuckRef.current, "auto");
-  }, [empty, scroller, stickNonce]);
-
-  /** 气泡内增高（思考展开、markdown）：贴底则跟上，否则显示「回到最新」*/
-  useEffect(() => {
-    const el = scroller.current;
-    const thread = threadRef.current;
-    if (!el || !thread) return;
-    const ro = new ResizeObserver(() => {
-      if (stuckRef.current) {
-        scrollToBottomIfStuck(el, true, "auto");
-      } else {
-        setShowJump(true);
-      }
-    });
-    ro.observe(thread);
-    return () => ro.disconnect();
-  }, [scroller]);
-
-  function jumpToLatest() {
-    const el = scroller.current;
-    if (!el) return;
-    stuckRef.current = true;
-    setShowJump(false);
-    scrollElementToBottom(el, "smooth");
-  }
 
   const leadKey: MessageKey = workspaceEmpty ? "chat.welcomeLeadEmpty" : "chat.welcomeLead";
   const shortcuts = workspaceEmpty ? EMPTY_WORKSPACE_SHORTCUTS : PROJECT_SHORTCUTS;
@@ -252,11 +186,12 @@ export function ChatStage({
           </section>
         ) : (
           <ol className="thread" ref={threadRef}>
-            {messages.map((m) => (
+            {messages.map((m, i) => (
               <Bubble
                 key={m.id}
                 message={m}
                 running={busy}
+                trailing={i === messages.length - 1}
                 onOpenModelSettings={onOpenModelSettings}
                 onOpenTrace={onOpenTrace}
                 onOpenFile={onOpenFile}

@@ -1,46 +1,17 @@
 /**
- * 设置 → 数据：根目录（草稿 / 迁移）、会话 Trace 开关与保留/截断。
+ * 设置 → 数据：根目录（草稿 / 迁移）、本机 Trace。
  */
-import {
-  Button,
-  Field,
-  Input,
-  Modal,
-  Progress,
-  Select,
-  Switch,
-} from "@thinker-workbench/design/react";
-import { type DataDirPaths, LOG_RETENTION_DAY_OPTIONS } from "@thinker-workbench/shared";
-import { useEffect, useId, useMemo, useState } from "react";
+import { Button, Field, Input, Modal, Progress, Switch } from "@thinker-workbench/design/react";
+import type { DataDirPaths } from "@thinker-workbench/shared";
+import { useEffect, useId, useState } from "react";
 import { resolveDataDir } from "../../bridge/thinker";
 import { useI18n } from "../../i18n/useI18n";
-import { formatBytes, retentionLabel } from "./generalLabels";
+import { formatBytes } from "./generalLabels";
 import { useGeneralSettings } from "./useGeneralSettings";
 
 type Props = {
   active?: boolean;
 };
-
-const TRACE_PRESETS = {
-  strict: {
-    traceMaxFieldBytes: 64_000,
-    traceMaxPayloadBytes: 256_000,
-    traceMaxMessageChars: 20_000,
-    traceMaxHistoryMessages: 40,
-  },
-  default: {
-    traceMaxFieldBytes: 262_144,
-    traceMaxPayloadBytes: 1_048_576,
-    traceMaxMessageChars: 100_000,
-    traceMaxHistoryMessages: 200,
-  },
-  verbose: {
-    traceMaxFieldBytes: 1_048_576,
-    traceMaxPayloadBytes: 4_194_304,
-    traceMaxMessageChars: 400_000,
-    traceMaxHistoryMessages: 500,
-  },
-} as const;
 
 export function DataSettingsForm({ active = true }: Props) {
   const { t } = useI18n();
@@ -64,16 +35,6 @@ export function DataSettingsForm({ active = true }: Props) {
     beginSaveDataDir,
     confirmDataDirChange,
   } = useGeneralSettings(active);
-
-  const retentionOptions = useMemo(() => {
-    const days = new Set<number>([...LOG_RETENTION_DAY_OPTIONS, general.traceRetentionDays]);
-    return [...days]
-      .sort((a, b) => a - b)
-      .map((value) => ({
-        value: String(value),
-        label: retentionLabel(value, t),
-      }));
-  }, [general.traceRetentionDays, t]);
 
   /** 当前 / 草稿的数据根与 settings 落点（含固定引导路径） */
   const [activePaths, setActivePaths] = useState<DataDirPaths | null>(null);
@@ -212,138 +173,21 @@ export function DataSettingsForm({ active = true }: Props) {
 
       <section className="settings-storage-block">
         <div className="settings-theme-head">
-          <strong>{t("settings.general.trace.title")}</strong>
-          <span>{t("settings.general.trace.description")}</span>
+          <strong>{t("settings.general.observability.title")}</strong>
+          <span>{t("settings.general.observability.description")}</span>
         </div>
         <ul className="settings-toggle-list">
           <li className="settings-toggle-row">
             <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.enabled.title")}</strong>
-              <span>{t("settings.general.trace.enabled.description")}</span>
+              <strong>{t("settings.general.observability.enabled.title")}</strong>
+              <span>{t("settings.general.observability.enabled.description")}</span>
             </div>
             <Switch
-              checked={general.traceEnabled}
-              aria-label={t("settings.general.trace.enabled.title")}
-              onChange={() => void patchGeneral({ traceEnabled: !general.traceEnabled })}
-            />
-          </li>
-          <li className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.retention.title")}</strong>
-              <span>{t("settings.general.trace.retention.description")}</span>
-            </div>
-            <Select
-              className="settings-locale-select"
-              value={String(general.traceRetentionDays)}
-              options={retentionOptions}
-              disabled={!general.traceEnabled}
-              onChange={(value) => {
-                const days = Number(value);
-                if (!Number.isFinite(days)) return;
-                void patchGeneral({ traceRetentionDays: days });
-              }}
-              aria-label={t("settings.general.trace.retention.title")}
-            />
-          </li>
-          <li className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.maxSessions.title")}</strong>
-              <span>{t("settings.general.trace.maxSessions.description")}</span>
-            </div>
-            <Select
-              className="settings-locale-select"
-              value={String(general.traceMaxSessions)}
-              options={[
-                { value: "0", label: "∞" },
-                { value: "50", label: "50" },
-                { value: "200", label: "200" },
-                { value: "500", label: "500" },
-              ]}
-              disabled={!general.traceEnabled}
-              onChange={(value) => {
-                const n = Number(value);
-                if (!Number.isFinite(n)) return;
-                void patchGeneral({ traceMaxSessions: n });
-              }}
-              aria-label={t("settings.general.trace.maxSessions.title")}
-            />
-          </li>
-          <li className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.maxTotalBytes.title")}</strong>
-              <span>{t("settings.general.trace.maxTotalBytes.description")}</span>
-            </div>
-            <Select
-              className="settings-locale-select"
-              value={String(general.traceMaxTotalBytes)}
-              options={[
-                { value: "0", label: "∞" },
-                { value: String(512 * 1024 * 1024), label: "512 MiB" },
-                { value: String(5_368_709_120), label: "5 GiB" },
-                { value: String(21_474_836_480), label: "20 GiB" },
-              ]}
-              disabled={!general.traceEnabled}
-              onChange={(value) => {
-                const n = Number(value);
-                if (!Number.isFinite(n)) return;
-                void patchGeneral({ traceMaxTotalBytes: n });
-              }}
-              aria-label={t("settings.general.trace.maxTotalBytes.title")}
-            />
-          </li>
-          <li className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.truncate.title")}</strong>
-              <span>{t("settings.general.trace.truncate.description")}</span>
-            </div>
-            <Switch
-              checked={general.traceTruncateEnabled}
-              disabled={!general.traceEnabled}
-              aria-label={t("settings.general.trace.truncate.title")}
+              checked={general.observabilityEnabled}
+              aria-label={t("settings.general.observability.enabled.title")}
               onChange={() =>
-                void patchGeneral({ traceTruncateEnabled: !general.traceTruncateEnabled })
+                void patchGeneral({ observabilityEnabled: !general.observabilityEnabled })
               }
-            />
-          </li>
-          <li className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.presets.label")}</strong>
-            </div>
-            <Select
-              className="settings-locale-select"
-              value="default"
-              options={[
-                { value: "strict", label: t("settings.general.trace.presets.strict") },
-                { value: "default", label: t("settings.general.trace.presets.default") },
-                { value: "verbose", label: t("settings.general.trace.presets.verbose") },
-              ]}
-              disabled={!general.traceEnabled || !general.traceTruncateEnabled}
-              onChange={(value) => {
-                const preset = TRACE_PRESETS[value as keyof typeof TRACE_PRESETS];
-                if (!preset) return;
-                void patchGeneral({ ...preset });
-              }}
-              aria-label={t("settings.general.trace.presets.label")}
-            />
-          </li>
-          <li className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <strong>{t("settings.general.trace.captureBinary.title")}</strong>
-            </div>
-            <Select
-              className="settings-locale-select"
-              value={general.traceCaptureBinary}
-              options={[
-                { value: "meta", label: t("settings.general.trace.captureBinary.meta") },
-                { value: "omit", label: t("settings.general.trace.captureBinary.omit") },
-              ]}
-              disabled={!general.traceEnabled}
-              onChange={(value) => {
-                if (value === "meta" || value === "omit") {
-                  void patchGeneral({ traceCaptureBinary: value });
-                }
-              }}
-              aria-label={t("settings.general.trace.captureBinary.title")}
             />
           </li>
         </ul>

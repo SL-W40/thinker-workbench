@@ -64,10 +64,10 @@ describe("exportBundle", () => {
   it("ZIP 含约定文件且 spans 条数正确、manifest 无密钥字段值", async () => {
     const spans: TraceSpanRecord[] = [
       {
-        spanId: "s1",
+        id: "s1",
         sessionId: "sess_export",
         name: "model.chat",
-        kind: "model",
+        runType: "llm",
         source: "agent",
         status: "ok",
         startTs: 1,
@@ -75,10 +75,10 @@ describe("exportBundle", () => {
         attrs: { turn: 1 },
       },
       {
-        spanId: "s2",
+        id: "s2",
         sessionId: "sess_export",
         name: "tool:list_dir",
-        kind: "tool",
+        runType: "tool",
         source: "agent",
         status: "ok",
         startTs: 3,
@@ -128,7 +128,7 @@ describe("exportBundle", () => {
       },
       workspace: { id: "ws_1", name: "WS", rootPath: "C:/proj" },
       payloadsJsonl:
-        '{"id":"pl1","spanId":"s1","side":"out","ts":1,"bytes":2,"truncated":false,"json":{}}\n',
+        '{"id":"pl1","runId":"s1","side":"out","ts":1,"bytes":2,"truncated":false,"json":{}}\n',
       traceSettings: {
         traceEnabled: true,
         apiKey: "should-not-leak",

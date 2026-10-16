@@ -1,30 +1,25 @@
 /**
- * Agent 运行时：持有图与 checkpoint，并驱动「节点 → 边 → 下一节点」循环。
- * 会话列表以桌面 SQLite 为准，这里不再维护内存线程表。
- *
- * 支持进程崩溃后从 checkpoint resume 续跑；checkpoint 优先 FileCheckpointer。
+ * Agent 运行时：StateGraph + checkpointer，stream / resume / cancel。
+ * 节点事件经 EventBus 出桥；会话列表仍由桌面 SQLite 管理。
  */
-import { PREVIEW_BODY_CHARS, withTextPreview } from "@thinker-workbench/logger";
-import { withLogContextAsync } from "@thinker-workbench/logger/node";
+
+import { type BaseCheckpointSaver, MemorySaver } from "@langchain/langgraph";
 import {
   type AgentEvent,
   type AgentResumeCommand,
   createRunId,
   createThreadId,
-  createTraceId,
+  type TraceSettings,
 } from "@thinker-workbench/shared";
-import { FileCheckpointer } from "../checkpoint/file";
-import { MemoryCheckpointer } from "../checkpoint/memory";
-import type { Checkpointer } from "../checkpoint/types";
-import { buildGraph } from "../graph/buildGraph";
+import { createSqliteCheckpointer } from "../checkpoint/sqlite";
+import { buildGraph, type CompiledAgentGraph } from "../graph/buildGraph";
 import { initialState, normalizeGraphState } from "../graph/state";
-import type { CompiledGraph, GraphState } from "../graph/types";
-import { agentLog } from "../log/setup";
+import type { GraphState } from "../graph/types";
 import {
   cancelBackgroundTasksByRunId,
   seedFailedOrphanTasksFromState,
 } from "../tools/task/execute";
-import { agentEndSpan, agentStartSpan, configureAgentTrace } from "../trace/emit";
+import { configureAgentTrace } from "../trace/emit";
 import { getWorkspaceRootOrNull, setWorkspaceRoot } from "../workspace";
 import { buildRunContext } from "./buildRunContext";
 import { EventBus } from "./EventBus";
@@ -36,50 +31,44 @@ import { classifyTerminalError, shouldKeepCheckpoint } from "./terminalOutcome";
 import type { AgentRuntimeOptions, RunRequest } from "./types";
 
 export class AgentRuntime {
-  /** 对外可订阅的 AgentEvent 总线。 */
   readonly events = new EventBus();
-  private readonly checkpointer: Checkpointer;
-  private readonly graph: CompiledGraph<GraphState>;
-  /** 进行中的 run：runId → 取消控制器。 */
+  private graph: CompiledAgentGraph | null = null;
+  private checkpointer: BaseCheckpointSaver = new MemorySaver();
+  private readonly checkpointDir?: string;
+  private ready: Promise<void>;
   private readonly active = new Map<string, RunController>();
-
   constructor(options: AgentRuntimeOptions = {}) {
+    this.checkpointDir = options.checkpointDir;
     if (options.checkpointer) {
       this.checkpointer = options.checkpointer;
+      this.graph = options.graph ?? buildGraph(this.checkpointer);
+      this.ready = Promise.resolve();
     } else if (options.checkpointDir) {
-      this.checkpointer = new FileCheckpointer(options.checkpointDir);
+      this.ready = createSqliteCheckpointer(options.checkpointDir).then((cp) => {
+        this.checkpointer = cp;
+        this.graph = buildGraph(cp);
+      });
     } else {
-      this.checkpointer = new MemoryCheckpointer();
+      this.graph = options.graph ?? buildGraph(this.checkpointer);
+      this.ready = Promise.resolve();
     }
-    this.graph = options.graph ?? buildGraph();
   }
 
-  /** 取消指定 run（若仍在 active 表中）。 */
+  private async ensureGraph(): Promise<CompiledAgentGraph> {
+    await this.ready;
+    if (!this.graph) this.graph = buildGraph(this.checkpointer);
+    return this.graph;
+  }
+
+  /** 应用 Trace 采集开关（hello / run 时由 UtilityHost 调用）。 */
+  applyTrace(settings: TraceSettings | null): void {
+    configureAgentTrace({ enabled: settings?.enabled !== false });
+  }
+
   cancel(runId: string): void {
     this.active.get(runId)?.cancel();
   }
 
-  /**
-   * 解析 resume 应从哪个节点继续：
-   * - tools 仍有 pending：进程可能死在 tools 执行中，重进 tools
-   * - 否则：上一节点已完整落盘，沿边走到下一节点
-   */
-  private resolveResumeNodeId(checkpoint: { nodeId: string; state: GraphState }): string | null {
-    const state = checkpoint.state;
-    if (checkpoint.nodeId === "tools" && state.pendingToolCalls.length > 0) {
-      return "tools";
-    }
-    const edge = this.graph.edges[checkpoint.nodeId] as
-      | string
-      | ((s: GraphState) => string | null)
-      | undefined;
-    if (edge === undefined) {
-      throw new Error(`Missing edge for node: ${checkpoint.nodeId}`);
-    }
-    return typeof edge === "string" ? edge : edge(state);
-  }
-
-  /** 从 checkpoint 恢复：进程崩溃留下的中途快照沿边续跑。 */
   async resume(
     command: AgentResumeCommand & {
       runId?: string;
@@ -87,38 +76,35 @@ export class AgentRuntime {
       runContext?: RunContext;
     },
   ): Promise<void> {
+    const graph = await this.ensureGraph();
     const threadId = command.threadId.trim();
     const runId = command.runId?.trim() || createRunId();
-    const traceId = command.traceId?.trim() || createTraceId();
-    const log = agentLog("runtime.resume");
-    const ids = { traceId, runId, threadId };
+    const config = { configurable: { thread_id: threadId } };
 
-    const checkpoint = await this.checkpointer.load(threadId);
-    if (!checkpoint) {
+    const snapshot = await graph.getState(config);
+    if (!snapshot || snapshot.values == null) {
       throw new Error("No checkpoint to resume.");
     }
 
-    const state = normalizeGraphState(checkpoint.state as GraphState);
-    const startNodeId = this.resolveResumeNodeId({
-      nodeId: checkpoint.nodeId,
-      state,
-    });
-    if (!startNodeId) {
+    const state = normalizeGraphState(snapshot.values as GraphState);
+    const sessionId = command.sessionId?.trim() || undefined;
+
+    // 无可执行 next → 直接 done
+    if (!snapshot.next?.length) {
       const text = state.reply || state.message;
-      await this.checkpointer.clear?.(threadId);
       this.emit({
         type: "done",
         threadId,
         runId,
         ts: Date.now(),
         text,
+        ...(sessionId ? { chatSessionId: sessionId } : {}),
       });
       return;
     }
 
     const controller = new RunController(runId, threadId);
     this.active.set(runId, controller);
-    const sessionId = command.sessionId?.trim() || undefined;
     const emit = bindRuntimeEmitter((e) => this.emit(e), threadId, runId, sessionId);
     const runCtx =
       command.runContext ??
@@ -144,40 +130,18 @@ export class AgentRuntime {
     }
     runCtx.emit = emit;
     registerRun({ context: runCtx, controller });
-    // 崩溃后 Map 为空：为已开工的 Task callId 种 failed 孤儿，避免 task_await Unknown
     seedFailedOrphanTasksFromState(state, runId);
-    const runSpanId = agentStartSpan({
-      name: "run",
-      kind: "graph",
-      summary: "resume",
-      input: { fromNode: checkpoint.nodeId, startNode: startNodeId },
-    });
 
     try {
-      const text = await withLogContextAsync({ source: "agent", traceId, threadId, runId }, () =>
-        runWithContext(runCtx, async () => {
-          log.info("start", {
-            ...ids,
-            meta: {
-              fromNode: checkpoint.nodeId,
-              startNode: startNodeId,
-            },
-          });
-          return this.runLoop(state, startNodeId, {
-            threadId,
-            runId,
-            controller,
-            log,
-            ids,
-          });
-        }),
-      );
-
-      await this.checkpointer.clear?.(threadId);
-      agentEndSpan(runSpanId, {
-        status: "ok",
-        output: { replyPreview: text.slice(0, 200) },
+      const text = await runWithContext(runCtx, async () => {
+        return this.streamLoop(graph, null, {
+          threadId,
+          runId,
+          controller,
+          resume: true,
+        });
       });
+
       this.emit({
         type: "done",
         threadId,
@@ -188,14 +152,6 @@ export class AgentRuntime {
       });
     } catch (err) {
       const { code, error } = classifyTerminalError(err);
-      log.error("failed", { ...ids, meta: { error, code } });
-      agentEndSpan(runSpanId, {
-        status: code === "cancelled" ? "cancelled" : "error",
-        error,
-      });
-      if (!shouldKeepCheckpoint(code)) {
-        await this.checkpointer.clear?.(threadId);
-      }
       this.emit({
         type: "error",
         threadId,
@@ -212,11 +168,8 @@ export class AgentRuntime {
     }
   }
 
-  /**
-   * 执行一轮用户消息：走完整图直到边返回 null。
-   * 成功发 `done`；失败发 `error`。
-   */
   async run(command: RunRequest): Promise<void> {
+    const graph = await this.ensureGraph();
     const message = command.message.trim();
     const images = Array.isArray(command.images)
       ? command.images.filter((i) => i && typeof i.path === "string" && i.path.trim())
@@ -224,12 +177,8 @@ export class AgentRuntime {
     const hasImages = images.length > 0;
     const threadId = command.threadId?.trim() || createThreadId();
     const runId = command.runId?.trim() || createRunId();
-    const traceId = command.traceId?.trim() || createTraceId();
-    const log = agentLog("runtime.run");
-    const ids = { traceId, runId, threadId };
 
     if (!command.workspaceRoot?.trim()) {
-      log.warn("missing workspaceRoot", ids);
       this.emit({
         type: "error",
         threadId,
@@ -240,7 +189,6 @@ export class AgentRuntime {
       });
       return;
     }
-    // 进程默认根仅作 contextUsage 等无 ALS 路径；本 run 以 RunContext 为准
     try {
       setWorkspaceRoot(command.workspaceRoot, { name: command.workspaceName });
     } catch (err) {
@@ -258,7 +206,6 @@ export class AgentRuntime {
     }
 
     if (!message && !hasImages) {
-      log.warn("empty message", ids);
       this.emit({
         type: "error",
         threadId,
@@ -270,9 +217,6 @@ export class AgentRuntime {
       });
       return;
     }
-
-    // 新 send 前清旧 checkpoint
-    await this.checkpointer.clear?.(threadId);
 
     const historyHasImages = (command.history ?? []).some(
       (m) => m.role === "user" && Array.isArray(m.images) && m.images.length > 0,
@@ -302,49 +246,26 @@ export class AgentRuntime {
     runCtx.emit = emit;
     registerRun({ context: runCtx, controller });
 
-    const runSpanId = agentStartSpan({
-      name: "run",
-      kind: "graph",
-      summary: message.slice(0, 80) || (hasImages ? "image" : "run"),
-      input: { message, historyTurns: command.history?.length ?? 0, imageCount: images.length },
-    });
-
     try {
-      const text = await withLogContextAsync({ source: "agent", traceId, threadId, runId }, () =>
-        runWithContext(runCtx, async () => {
-          const history = (command.history ?? [])
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({
-              role: m.role,
-              content: m.content,
-              ...(m.role === "user" && Array.isArray(m.images) && m.images.length
-                ? { images: m.images }
-                : {}),
-            }));
-          log.info("start", {
-            ...ids,
-            meta: {
-              ...withTextPreview(message || "(image)", "message", PREVIEW_BODY_CHARS),
-              historyTurns: history.length,
-              imageCount: images.length,
-            },
-          });
-          const state = initialState(message, history, command.contextPaths, images);
-          return this.runLoop(state, this.graph.start, {
-            threadId,
-            runId,
-            controller,
-            log,
-            ids,
-          });
-        }),
-      );
-
-      await this.checkpointer.clear?.(threadId);
-      agentEndSpan(runSpanId, {
-        status: "ok",
-        output: { replyPreview: text.slice(0, 200) },
+      const text = await runWithContext(runCtx, async () => {
+        const history = (command.history ?? [])
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({
+            role: m.role,
+            content: m.content,
+            ...(m.role === "user" && Array.isArray(m.images) && m.images.length
+              ? { images: m.images }
+              : {}),
+          }));
+        const state = initialState(message, history, command.contextPaths, images);
+        return this.streamLoop(graph, state, {
+          threadId,
+          runId,
+          controller,
+          resume: false,
+        });
       });
+
       this.emit({
         type: "done",
         threadId,
@@ -355,13 +276,9 @@ export class AgentRuntime {
       });
     } catch (err) {
       const { code, error } = classifyTerminalError(err);
-      log.error("failed", { ...ids, meta: { error, code } });
-      agentEndSpan(runSpanId, {
-        status: code === "cancelled" ? "cancelled" : "error",
-        error,
-      });
       if (!shouldKeepCheckpoint(code)) {
-        await this.checkpointer.clear?.(threadId);
+        // LangGraph：用空 update 无法 clear；留给下次同 thread 覆盖
+        void code;
       }
       this.emit({
         type: "error",
@@ -379,101 +296,74 @@ export class AgentRuntime {
     }
   }
 
-  /** 从图节点循环执行直到结束。 */
-  private async runLoop(
-    initial: GraphState,
-    startNodeId: string | null,
+  /**
+   * 驱动 StateGraph stream：updates 取 reply，custom 转发产品事件到 EventBus。
+   */
+  private async streamLoop(
+    graph: CompiledAgentGraph,
+    input: GraphState | null,
     ctx: {
       threadId: string;
       runId: string;
       controller: RunController;
-      log: ReturnType<typeof agentLog>;
-      ids: { traceId: string; runId: string; threadId: string };
+      resume: boolean;
     },
   ): Promise<string> {
-    let state = normalizeGraphState(initial);
-    let nodeId: string | null = startNodeId;
-    const { threadId, controller, log, ids } = ctx;
+    const { threadId, controller, resume } = ctx;
     const runCtx = getRunContext();
+    const config = {
+      configurable: { thread_id: threadId },
+      signal: controller.signal,
+      streamMode: ["updates", "custom"] as Array<"updates" | "custom">,
+    };
 
-    while (nodeId) {
-      if (controller.aborted) {
-        throw new Error("Run cancelled.");
-      }
-      const node = this.graph.nodes[nodeId];
-      if (!node) {
-        throw new Error(`Unknown node: ${nodeId}`);
-      }
-      const current = nodeId;
-      // 进入节点前挂上开工落盘钩子：合并 startedToolCallIds 并立刻 save
-      if (runCtx) {
-        runCtx.markToolCallStarted = async (callId: string) => {
-          const id = callId.trim();
-          if (!id) return;
-          const started = state.startedToolCallIds.includes(id)
-            ? state.startedToolCallIds
-            : [...state.startedToolCallIds, id];
-          state = { ...state, startedToolCallIds: started };
-          await this.checkpointer.save({
-            threadId,
-            nodeId: current,
-            state,
-            updatedAt: Date.now(),
-          });
-        };
-      }
-      const nodeSpanId = agentStartSpan({
-        name: `graph.${current}`,
-        kind: "graph",
-        summary: `graph.${current}`,
-        attrs: { step: state.step },
-      });
-      configureAgentTrace({ nodeSpanId });
-      log.info("node enter", { ...ids, spanId: current, meta: { step: state.step } });
-      try {
-        const patch = await node(state, controller.signal);
-        state = normalizeGraphState({ ...state, ...patch });
-
-        await this.checkpointer.save({
-          threadId,
-          nodeId: current,
-          state,
-          updatedAt: Date.now(),
-        });
-
-        const edge = this.graph.edges[current] as
-          | string
-          | ((s: GraphState) => string | null)
-          | undefined;
-        if (edge === undefined) {
-          throw new Error(`Missing edge for node: ${current}`);
-        }
-        nodeId = typeof edge === "string" ? edge : edge(state);
-        log.info("node exit", {
-          ...ids,
-          spanId: current,
-          meta: { next: nodeId, pendingTools: state.pendingToolCalls.length },
-        });
-        agentEndSpan(nodeSpanId, {
-          status: "ok",
-          attrs: { next: nodeId, pendingTools: state.pendingToolCalls.length },
-        });
-      } catch (err) {
-        const { code, error } = classifyTerminalError(err);
-        agentEndSpan(nodeSpanId, {
-          status: code === "cancelled" ? "cancelled" : "error",
-          error,
-        });
-        throw err;
-      } finally {
-        if (runCtx) runCtx.markToolCallStarted = undefined;
-        configureAgentTrace({ nodeSpanId: undefined });
-      }
+    // 进入前挂 markToolCallStarted：用 updateState 合并 startedToolCallIds
+    if (runCtx) {
+      runCtx.markToolCallStarted = async (callId: string) => {
+        const id = callId.trim();
+        if (!id) return;
+        const snap = await graph.getState({ configurable: { thread_id: threadId } });
+        const cur = normalizeGraphState((snap?.values ?? {}) as GraphState);
+        if (cur.startedToolCallIds.includes(id)) return;
+        await graph.updateState(
+          { configurable: { thread_id: threadId } },
+          { startedToolCallIds: [id] },
+        );
+      };
     }
 
-    const reply = state.reply || state.message;
-    log.info("complete", { ...ids, meta: withTextPreview(reply, "reply", PREVIEW_BODY_CHARS) });
-    return reply;
+    const stream = resume
+      ? await graph.stream(null, config)
+      : await graph.stream(input as GraphState, config);
+
+    let lastReply = input?.reply ?? "";
+
+    try {
+      for await (const chunk of stream) {
+        if (controller.aborted) throw new Error("Run cancelled.");
+        if (!Array.isArray(chunk) || chunk.length < 2) continue;
+        const [mode, data] = chunk as [string, unknown];
+        if (mode === "custom") {
+          if (data && typeof data === "object" && "type" in data) {
+            this.emit(data as AgentEvent);
+          }
+          continue;
+        }
+        if (mode !== "updates" || !data || typeof data !== "object") continue;
+        const nodes = data as Record<string, Partial<GraphState>>;
+        for (const patch of Object.values(nodes)) {
+          if (patch && typeof patch.reply === "string") lastReply = patch.reply;
+        }
+      }
+    } finally {
+      if (runCtx) runCtx.markToolCallStarted = undefined;
+    }
+
+    const finalSnap = await graph.getState({ configurable: { thread_id: threadId } });
+    const finalState = normalizeGraphState(
+      (finalSnap?.values ?? { reply: lastReply }) as GraphState,
+    );
+    return finalState.reply || finalState.message || lastReply;
   }
 
   private emit(event: AgentEvent): void {
@@ -481,7 +371,6 @@ export class AgentRuntime {
   }
 }
 
-/** 工厂：便于测试注入 options。 */
 export function createAgentRuntime(options?: AgentRuntimeOptions): AgentRuntime {
   return new AgentRuntime(options);
 }

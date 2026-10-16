@@ -40,6 +40,7 @@ export function registerIpc(
   registerAgentHandlers(ipcMain, bridge);
   registerTerminalHandlers(ipcMain);
   registerBrowserHandlers(ipcMain);
+  registerTraceHandlers();
   // Customize：skills / rules / agents
   registerCustomizeHandlers(ipcMain, bridge);
   registerMcpHandlers(ipcMain, bridge);
@@ -49,5 +50,4 @@ export function registerIpc(
   });
   registerSessionHandlers(ipcMain);
   registerToolsHandlers(ipcMain);
-  registerTraceHandlers();
 }

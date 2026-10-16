@@ -13,7 +13,7 @@ import {
   MaximizeIcon,
   MultitaskModeIcon,
 } from "@thinker-workbench/design/react";
-import type { TraceSpanKind, TraceSpanRecord } from "@thinker-workbench/shared";
+import type { TraceRunType, TraceSpanRecord } from "@thinker-workbench/shared";
 import { type ComponentType, Fragment, type ReactNode, useMemo, useState } from "react";
 import { useT } from "../../i18n/useI18n";
 import {
@@ -31,19 +31,38 @@ type Props = {
   onSelect: (spanId: string) => void;
 };
 
-/** ?kind 对应设计系统图标（默认展示；可展开行悬停换成箭头）。*/
-const KIND_ICON: Record<TraceSpanKind, ComponentType<IconProps>> = {
-  // 图节点：泳道式阶段；工具调用：带 ?的步骤条（区别于 pty 终端窗）
-  graph: LanesIcon,
-  model: AskModeIcon,
+/** run_type → 设计系统图标（默认展示；可展开行悬停换成箭头）。*/
+const KIND_ICON: Record<TraceRunType, ComponentType<IconProps>> = {
+  chain: LanesIcon,
+  llm: AskModeIcon,
   tool: LogsIcon,
-  subagent: MultitaskModeIcon,
-  ipc: CodeIcon,
-  browser: MaximizeIcon,
-  pty: ConsoleIcon,
-  hitl: DebugModeIcon,
-  other: InfoIcon,
+  retriever: MaximizeIcon,
+  embedding: CodeIcon,
+  prompt: DebugModeIcon,
+  parser: InfoIcon,
 };
+
+/** 按 name 前缀细调图标（chain 兼有 graph / subagent）。*/
+function kindGlyphFor(span: TraceSpanRecord): ComponentType<IconProps> {
+  const name = (span.name || "").toLowerCase();
+  if (name.startsWith("subagent:")) return MultitaskModeIcon;
+  if (name.startsWith("graph.")) return LanesIcon;
+  if (name.startsWith("model.")) return AskModeIcon;
+  if (name.startsWith("tool:")) return LogsIcon;
+  if (name.startsWith("browser")) return MaximizeIcon;
+  if (name.startsWith("pty") || name.startsWith("shell")) return ConsoleIcon;
+  return KIND_ICON[span.runType] ?? InfoIcon;
+}
+
+/** 时间条配色 class（graph / model / tool / subagent）。 */
+function barKindClass(span: TraceSpanRecord): string {
+  const name = (span.name || "").toLowerCase();
+  if (name.startsWith("subagent:")) return "subagent";
+  if (name.startsWith("graph.") || span.runType === "chain") return "graph";
+  if (name.startsWith("model.") || span.runType === "llm") return "model";
+  if (name.startsWith("tool:") || span.runType === "tool") return "tool";
+  return span.runType;
+}
 
 type ParTaskGroup = {
   taskId: string;
@@ -65,7 +84,7 @@ type RowChunk =
 function groupParTasks(rows: CallTreeRow[]): ParTaskGroup[] {
   const out: ParTaskGroup[] = [];
   for (const row of rows) {
-    const taskId = row.span.taskId || `anon-${row.span.spanId}`;
+    const taskId = row.span.taskId || `anon-${row.span.id}`;
     const last = out[out.length - 1];
     if (last && last.taskId === taskId) {
       last.rows.push(row);
@@ -109,8 +128,8 @@ function chunkByPar(rows: CallTreeRow[]): RowChunk[] {
   return out;
 }
 
-function KindGlyph({ kind }: { kind: TraceSpanKind }) {
-  const Icon = KIND_ICON[kind] ?? InfoIcon;
+function KindGlyph({ span }: { span: TraceSpanRecord }) {
+  const Icon = kindGlyphFor(span);
   return <Icon size="sm" className="trace-calltree__kind-icon" aria-hidden />;
 }
 
@@ -137,7 +156,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
 
   const renderRow = (row: CallTreeRow): ReactNode => {
     const s = row.span;
-    const selected = s.spanId === selectedSpanId;
+    const selected = s.id === selectedSpanId;
     const label = callTreeLabel(s);
     const turn = spanTurn(s);
     const statusClass =
@@ -148,9 +167,9 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
     const pad = 8 + row.depth * 14;
     return (
       <div
-        key={s.spanId}
+        key={s.id}
         className={`trace-calltree__row${selected ? " is-selected" : ""}${row.hasKids ? " is-expandable" : ""}${statusClass}`}
-        onClick={() => onSelect(s.spanId)}
+        onClick={() => onSelect(s.id)}
       >
         <div className="trace-calltree__label" style={{ paddingLeft: pad }}>
           <button
@@ -160,10 +179,10 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
             aria-label={row.hasKids ? (row.collapsed ? "expand" : "collapse") : undefined}
             onClick={(e) => {
               e.stopPropagation();
-              if (row.hasKids) toggle(s.spanId);
+              if (row.hasKids) toggle(s.id);
             }}
           >
-            <KindGlyph kind={s.kind} />
+            <KindGlyph span={s} />
             {row.hasKids ? (
               <ChevronRightIcon
                 open={!row.collapsed}
@@ -173,7 +192,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
               />
             ) : null}
           </button>
-          <span className="trace-calltree__kind">{s.kind}</span>
+          <span className="trace-calltree__kind">{s.runType}</span>
           {turn != null ? (
             <span className="trace-calltree__turn" title={`turn ${turn}`}>
               T{turn}
@@ -186,7 +205,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
         </div>
         <div className="trace-calltree__track">
           <div
-            className={`trace-calltree__bar trace-calltree__bar--${s.kind}${row.parKey ? ` trace-calltree__bar-task--${row.taskColorIdx}` : ""}`}
+            className={`trace-calltree__bar trace-calltree__bar--${barKindClass(s)}${row.parKey ? ` trace-calltree__bar-task--${row.taskColorIdx}` : ""}`}
             style={{ left: `${left}%`, width: `${width}%` }}
             title={`${label} · ${formatDuration(dur)}`}
           />

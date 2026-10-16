@@ -8,8 +8,8 @@ import {
   CHAT_LAYOUT_SLACK_PX,
   effectivePanelMinWidth,
   fitChatPanelWidths,
-  maxSidePanelWidth,
   MIN_CHAT_MAIN_WIDTH,
+  maxSidePanelWidth,
   resizeSidePanel,
 } from "../../../src/features/chat/chatPanelLayout";
 
@@ -203,10 +203,7 @@ describe("resizeSidePanel", () => {
       nextWidth: 600,
     });
     assert.equal(next.leftWidth, 180);
-    assert.equal(
-      next.rightWidth,
-      1000 - 180 - MIN_CHAT_MAIN_WIDTH - CHAT_LAYOUT_SLACK_PX,
-    );
+    assert.equal(next.rightWidth, 1000 - 180 - MIN_CHAT_MAIN_WIDTH - CHAT_LAYOUT_SLACK_PX);
   });
 
   it("对侧关闭时不改对侧宽度状态", () => {

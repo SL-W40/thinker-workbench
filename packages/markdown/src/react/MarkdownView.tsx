@@ -24,6 +24,8 @@ import {
 } from "./LinkClickContext";
 import { MathView } from "./MathView";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { StreamChrome } from "./StreamChrome";
+import { TableBlock } from "./TableBlock";
 import { MarkdownThemeProvider } from "./ThemeContext";
 
 export type MarkdownViewProps = {
@@ -255,7 +257,7 @@ function ListItemView({ item, caret = false }: { item: ListItem; caret?: boolean
   );
 }
 
-/** 尚未凑齐分隔行的管道表：按行软预览成表格。 */
+/** 尚未凑齐分隔行的管道表：按行软预览成表格（无导出，仅流式预览）。 */
 function PendingTable({ value }: { value: string }) {
   const rows = value
     .split("\n")
@@ -277,28 +279,32 @@ function PendingTable({ value }: { value: string }) {
     );
   }
   const colCount = Math.max(...rows.map((r) => r.length), 1);
+  const zh =
+    typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("zh");
   return (
-    <div className="tw-md-table-wrap tw-md-table-wrap--streaming">
-      <table className="tw-md-table--streaming">
-        <tbody>
-          {rows.map((row, rIndex) => {
-            const last = rIndex === rows.length - 1;
-            return (
-              <tr key={rIndex} className={last ? "tw-md-table-row--live" : undefined}>
-                {Array.from({ length: colCount }, (_, cIndex) => (
-                  <td key={cIndex}>
-                    {row[cIndex] ?? ""}
-                    {last && cIndex === colCount - 1 ? (
-                      <span className="tw-md-caret" aria-hidden="true" />
-                    ) : null}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <StreamChrome kind="table" label={zh ? "表格" : "Table"} status="streaming">
+      <div className="tw-md-table-wrap tw-md-table-wrap--streaming">
+        <table className="tw-md-table--streaming">
+          <tbody>
+            {rows.map((row, rIndex) => {
+              const last = rIndex === rows.length - 1;
+              return (
+                <tr key={rIndex} className={last ? "tw-md-table-row--live" : undefined}>
+                  {Array.from({ length: colCount }, (_, cIndex) => (
+                    <td key={cIndex}>
+                      {row[cIndex] ?? ""}
+                      {last && cIndex === colCount - 1 ? (
+                        <span className="tw-md-caret" aria-hidden="true" />
+                      ) : null}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </StreamChrome>
   );
 }
 
@@ -438,40 +444,14 @@ function BlockView({ node, caret = false }: { node: BlockNode; caret?: boolean }
       );
     case "table": {
       return (
-        <div className={`tw-md-table-wrap${node.incomplete ? " tw-md-table-wrap--streaming" : ""}`}>
-          <table className={node.incomplete ? "tw-md-table--streaming" : undefined}>
-            <thead>
-              <tr>
-                {node.headers.map((cell, index) => (
-                  <th key={index} style={{ textAlign: node.aligns[index] ?? undefined }}>
-                    <InlineView nodes={cell} />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {node.rows.map((row, rIndex) => {
-                const last = Boolean(node.incomplete) && rIndex === node.rows.length - 1;
-                return (
-                  <tr key={rIndex} className={last ? "tw-md-table-row--live" : undefined}>
-                    {node.headers.map((_, cIndex) => (
-                      <td key={cIndex} style={{ textAlign: node.aligns[cIndex] ?? undefined }}>
-                        <InlineView nodes={row[cIndex] ?? [{ type: "text", value: "" }]} />
-                        {last && cIndex === node.headers.length - 1 ? (
-                          <span className="tw-md-caret" aria-hidden="true" />
-                        ) : null}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {node.incomplete && node.rows.length === 0 ? (
-            <span className="tw-md-caret tw-md-caret--after-table" aria-hidden="true" />
-          ) : null}
-          {tail}
-        </div>
+        <TableBlock
+          headers={node.headers}
+          aligns={node.aligns}
+          rows={node.rows}
+          incomplete={node.incomplete}
+          renderInline={(nodes) => <InlineView nodes={nodes} />}
+          trailing={tail}
+        />
       );
     }
     case "hr":

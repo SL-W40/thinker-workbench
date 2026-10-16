@@ -12,8 +12,6 @@ import {
 } from "@thinker-workbench/shared";
 
 const THINKING_SUMMARY_MAX = 140;
-/** 无正文且短于此时长的思考步视为噪声，合并/丢弃。 */
-const EPHEMERAL_THINKING_MS = 500;
 
 /** 排队等待文案的时间线 id。出队、失败或取消后整段去掉。 */
 export const QUEUED_WAIT_STEP_ID = "queued-wait";
@@ -88,13 +86,15 @@ export function summarizeThinking(text: string, maxLen = THINKING_SUMMARY_MAX): 
   return truncatePhrase(phrase, maxLen);
 }
 
-/** 无正文的短思考可丢弃，避免连续叠多条「已思考」。 */
+/**
+ * 无正文的已结束思考可丢弃。
+ * 常见于：status=thinking 后立刻调工具，模型未流出 reasoning token，
+ * 却留下不可展开的「Thought 3.5s」空壳。
+ */
 function isEphemeralThought(step: ChatTimelineStep): boolean {
   if (step.kind !== "status" || step.status !== "thinking") return false;
   if (step.active) return false;
-  if (step.text?.trim()) return false;
-  const ms = step.durationMs;
-  return ms == null || ms < EPHEMERAL_THINKING_MS;
+  return !step.text?.trim();
 }
 
 /** planning 从不入库持久展示；一有实质内容就清掉。 */
@@ -103,12 +103,11 @@ function dropPlanning(steps: ChatTimelineStep[]): ChatTimelineStep[] {
   return next.length === steps.length ? steps : next;
 }
 
-/** 去掉末尾连续的空壳思考，并清掉 planning。 */
+/** 去掉全部空壳思考，并清掉 planning（不限末尾，避免夹在工具之间）。 */
 function dropTrailingEphemeralThoughts(steps: ChatTimelineStep[]): ChatTimelineStep[] {
   const base = dropPlanning(steps);
-  let end = base.length;
-  while (end > 0 && isEphemeralThought(base[end - 1]!)) end -= 1;
-  return end === base.length ? base : base.slice(0, end);
+  const next = base.filter((s) => !isEphemeralThought(s));
+  return next.length === base.length ? base : next;
 }
 
 type FinalizeOpts = {

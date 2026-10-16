@@ -1,5 +1,5 @@
 /**
- * 产品控制台内容区：Settings / Logs / Components。
+ * 产品控制台内容区：Settings / Customize / Trace / Components。
  */
 
 import {
@@ -40,6 +40,15 @@ export const TOOL_TAB_IDS: ToolTabId[] = ["settings", "customize", "logs", "comp
 /** 是否为合法控制台 tab。*/
 export function isToolTabId(value: unknown): value is ToolTabId {
   return typeof value === "string" && (TOOL_TAB_IDS as readonly string[]).includes(value);
+}
+
+/** 规范化 tab（历史 observability / langfuse / trace → logs）。 */
+export function normalizeToolTabId(value: unknown): ToolTabId {
+  if (value === "langfuse" || value === "observability" || value === "trace") return "logs";
+  if (typeof value === "string" && (TOOL_TAB_IDS as readonly string[]).includes(value)) {
+    return value as ToolTabId;
+  }
+  return "settings";
 }
 
 type ToolsPaneProps = {

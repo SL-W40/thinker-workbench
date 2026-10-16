@@ -1,12 +1,19 @@
 /**
- * Mermaid 图表渲染：成品渲染、流式软预览与加载骨架。
+ * Mermaid 图表：流式防抖渲染、手势缩放、复制/存图；骨架仅用于错误占位。
  */
-
 import mermaid from "mermaid";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { looksRenderable } from "../mermaid/looksRenderable";
 import { mermaidVariablesFromCss } from "../themes/tokens";
+import { MermaidActions } from "./MermaidActions";
+import { MermaidViewport } from "./MermaidViewport";
 import { StreamChrome } from "./StreamChrome";
 import { useMarkdownTheme } from "./ThemeContext";
+
+/** 流式未闭合时的防抖，避免每个 token 都调 mermaid。 */
+const STREAM_DEBOUNCE_MS = 520;
+/** 闭合后略等一帧，合并同拍更新。 */
+const READY_DEBOUNCE_MS = 60;
 
 let mermaidReadyFor = "";
 
@@ -31,19 +38,6 @@ function ensureMermaid(
   mermaidReadyFor = key;
 }
 
-function looksRenderable(source: string): boolean {
-  const t = source.trim();
-  if (t.length < 12) return false;
-  const lines = t
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return false;
-  return /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/i.test(
-    lines[0],
-  );
-}
-
 function resolveMermaidVariables(
   host: Element | null,
   overrides?: Record<string, string>,
@@ -65,39 +59,10 @@ async function renderMermaid(
   return result.svg;
 }
 
-function MermaidSkeleton() {
-  return (
-    <div className="tw-md-mermaid-skeleton" aria-hidden="true">
-      <div className="tw-md-mermaid-skeleton-row">
-        <span className="tw-md-mermaid-skeleton-node tw-md-mermaid-skeleton-node--pill" />
-      </div>
-      <div className="tw-md-mermaid-skeleton-vedge" />
-      <div className="tw-md-mermaid-skeleton-row tw-md-mermaid-skeleton-row--fork">
-        <span className="tw-md-mermaid-skeleton-node" />
-        <span className="tw-md-mermaid-skeleton-hedge" />
-        <span className="tw-md-mermaid-skeleton-node tw-md-mermaid-skeleton-node--wide" />
-      </div>
-      <div className="tw-md-mermaid-skeleton-vedge tw-md-mermaid-skeleton-vedge--short" />
-      <div className="tw-md-mermaid-skeleton-row">
-        <span className="tw-md-mermaid-skeleton-node tw-md-mermaid-skeleton-node--soft" />
-      </div>
-    </div>
-  );
-}
-
-function MermaidLoading({ children }: { children?: ReactNode }) {
-  return (
-    <div className="tw-md-mermaid-loading" role="status" aria-busy="true">
-      <div className="tw-md-mermaid-loading-stage">{children ?? <MermaidSkeleton />}</div>
-      <div className="tw-md-mermaid-loading-veil" aria-hidden="true" />
-    </div>
-  );
-}
-
 type Props = {
   /** Mermaid 源文本。 */
   value: string;
-  /** 围栏尚未闭合时为 true（软预览）。 */
+  /** 围栏尚未闭合时为 true（流式软渲染）。 */
   incomplete?: boolean;
 };
 
@@ -105,69 +70,24 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
   const theme = useMarkdownTheme();
   const hostRef = useRef<HTMLDivElement>(null);
   const reactId = useId().replace(/:/g, "");
+  /** 最近一次成功渲染的 SVG；失败时保留上一帧。 */
   const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [previewSvg, setPreviewSvg] = useState("");
-  const [busy, setBusy] = useState(true);
-
+  const [zoom, setZoom] = useState(1);
   const look = theme.mermaid.look ?? "classic";
 
   useEffect(() => {
-    if (incomplete) return;
-
     let cancelled = false;
-    const renderId = `twmd-${reactId}-${Math.random().toString(36).slice(2, 8)}`;
-    setBusy(true);
-    setError(null);
+    const delay = incomplete ? STREAM_DEBOUNCE_MS : READY_DEBOUNCE_MS;
 
-    void (async () => {
-      try {
-        const host = hostRef.current?.closest(".tw-md") ?? hostRef.current;
-        const vars = resolveMermaidVariables(host, theme.mermaid.themeVariables);
-        const next = await renderMermaid(
-          renderId,
-          value,
-          theme.id,
-          theme.mermaid.theme,
-          look,
-          vars,
-        );
-        if (!cancelled) {
-          setSvg(next);
-          setPreviewSvg("");
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setSvg("");
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [value, theme, reactId, incomplete, look]);
-
-  useEffect(() => {
-    if (!incomplete) return;
-
-    setSvg("");
-    setError(null);
-
-    if (!looksRenderable(value)) {
-      setPreviewSvg("");
-      setBusy(false);
+    if (incomplete && !looksRenderable(value)) {
+      setError(null);
       return;
     }
 
-    let cancelled = false;
-    setBusy(true);
     const timer = window.setTimeout(() => {
-      const renderId = `twmd-prev-${reactId}-${Math.random().toString(36).slice(2, 8)}`;
+      if (!value.trim()) return;
+      const renderId = `twmd-${reactId}-${Math.random().toString(36).slice(2, 8)}`;
       void (async () => {
         try {
           const host = hostRef.current?.closest(".tw-md") ?? hostRef.current;
@@ -180,15 +100,20 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
             look,
             vars,
           );
-          if (!cancelled) {
-            setPreviewSvg(next);
-            setBusy(false);
+          if (cancelled) return;
+          setSvg(next);
+          setError(null);
+        } catch (err) {
+          if (cancelled) return;
+          // 流式中解析失败是常态：保留上一帧，不进错误/骨架态
+          if (incomplete) {
+            setError(null);
+            return;
           }
-        } catch {
-          if (!cancelled) setBusy(false);
+          setError(err instanceof Error ? err.message : String(err));
         }
       })();
-    }, 320);
+    }, delay);
 
     return () => {
       cancelled = true;
@@ -196,19 +121,27 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
     };
   }, [value, theme, reactId, incomplete, look]);
 
+  // 源码切换较大时重置缩放，避免旧平移错位
+  useEffect(() => {
+    setZoom(1);
+  }, [incomplete]);
+
+  const actions = <MermaidActions source={value} svg={svg} zoom={zoom} onZoomChange={setZoom} />;
+
+  const canvas = svg ? (
+    <MermaidViewport svgHtml={svg} zoom={zoom} onZoomSet={setZoom} />
+  ) : (
+    <div className="tw-md-mermaid-canvas tw-md-mermaid-canvas--empty" aria-hidden="true" />
+  );
+
   if (incomplete) {
-    const hasPreview = Boolean(previewSvg);
-    const status = hasPreview
-      ? "preview"
-      : busy || looksRenderable(value)
-        ? "loading"
-        : "streaming";
     return (
       <div ref={hostRef}>
         <StreamChrome
           kind="mermaid"
           label="Mermaid"
-          status={status}
+          status="streaming"
+          actions={actions}
           footer={
             <pre className="tw-md-stream-source">
               <code>{value || " "}</code>
@@ -216,23 +149,16 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
             </pre>
           }
         >
-          {hasPreview ? (
-            <div
-              className="tw-md-mermaid-canvas tw-md-mermaid-canvas--preview"
-              dangerouslySetInnerHTML={{ __html: previewSvg }}
-            />
-          ) : (
-            <MermaidLoading />
-          )}
+          {canvas}
         </StreamChrome>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !svg) {
     return (
       <div ref={hostRef}>
-        <StreamChrome kind="mermaid" label="Mermaid" status="error">
+        <StreamChrome kind="mermaid" label="Mermaid" status="error" actions={actions}>
           <pre className="tw-md-mermaid-error">{error}</pre>
           <pre className="tw-md-stream-source">
             <code>{value}</code>
@@ -242,29 +168,18 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
     );
   }
 
-  if (busy || !svg) {
-    return (
-      <div ref={hostRef}>
-        <StreamChrome kind="mermaid" label="Mermaid" status="loading">
-          <MermaidLoading>
-            {svg ? (
-              <div
-                className="tw-md-mermaid-canvas tw-md-mermaid-canvas--dim"
-                dangerouslySetInnerHTML={{ __html: svg }}
-              />
-            ) : (
-              <MermaidSkeleton />
-            )}
-          </MermaidLoading>
-        </StreamChrome>
-      </div>
-    );
-  }
-
   return (
     <div ref={hostRef}>
-      <StreamChrome kind="mermaid" label="Mermaid" status="ready">
-        <div className="tw-md-mermaid-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
+      <StreamChrome
+        kind="mermaid"
+        label="Mermaid"
+        status={error ? "error" : "ready"}
+        actions={actions}
+      >
+        {error && svg ? (
+          <pre className="tw-md-mermaid-error tw-md-mermaid-error--banner">{error}</pre>
+        ) : null}
+        {canvas}
       </StreamChrome>
     </div>
   );

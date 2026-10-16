@@ -1,41 +1,63 @@
 /**
- * 会话 Trace：跨进程 Span / Payload 协议与查询 API。
+ * 本机 Trace：会话 run 树、载荷与 preload API。
  */
 
-/** 产生 span 的进程角色。 */
+export {
+  DEFAULT_TRACE_MAX_FIELD_BYTES,
+  DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
+  DEFAULT_TRACE_MAX_MESSAGE_CHARS,
+  DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
+  DEFAULT_TRACE_MAX_SESSIONS,
+  DEFAULT_TRACE_MAX_TOTAL_BYTES,
+  DEFAULT_TRACE_REDACT_KEYS,
+  DEFAULT_TRACE_RETENTION_DAYS,
+} from "./obsLimits";
+
 export type TraceSource = "app" | "desktop" | "agent";
 
-/** Span 语义类别。 */
-export type TraceSpanKind =
-  | "ipc"
-  | "model"
+/** run 节点类型：chain / llm / tool 等。 */
+export type TraceRunType =
+  | "chain"
+  | "llm"
   | "tool"
-  | "graph"
-  | "subagent"
-  | "browser"
-  | "pty"
-  | "hitl"
-  | "other";
+  | "retriever"
+  | "embedding"
+  | "prompt"
+  | "parser";
 
-/** Span 终态。 */
+export const TRACE_RUN_TYPES = [
+  "chain",
+  "llm",
+  "tool",
+  "retriever",
+  "embedding",
+  "prompt",
+  "parser",
+] as const;
+
+export function normalizeTraceRunType(
+  value: unknown,
+  fallback: TraceRunType = "chain",
+): TraceRunType {
+  return typeof value === "string" && (TRACE_RUN_TYPES as readonly string[]).includes(value)
+    ? (value as TraceRunType)
+    : fallback;
+}
+
 export type TraceSpanStatus = "ok" | "error" | "cancelled" | "running";
-
-/** 二进制载荷策略。 */
 export type TraceCaptureBinary = "meta" | "omit";
-
-/** Payload 侧。 */
 export type TracePayloadSide = "in" | "out" | "err";
 
-/** 索引层 Span（不含大 JSON）。 */
+/** 本机 Trace 树上的一条 run。 */
 export type TraceSpanRecord = {
-  spanId: string;
+  id: string;
   sessionId: string;
-  runId?: string;
+  agentRunId?: string;
   traceId?: string;
-  parentSpanId?: string;
+  parentId?: string;
   taskId?: string;
   name: string;
-  kind: TraceSpanKind;
+  runType: TraceRunType;
   source: TraceSource;
   status?: TraceSpanStatus;
   startTs: number;
@@ -46,10 +68,10 @@ export type TraceSpanRecord = {
   attrs?: Record<string, unknown>;
 };
 
-/** JSONL 中的一条载荷。 */
 export type TracePayloadRecord = {
   id: string;
-  spanId: string;
+  /** 所属 Trace run 节点 id（TraceSpanRecord.id）。 */
+  runId: string;
   side: TracePayloadSide;
   ts: number;
   bytes: number;
@@ -57,7 +79,6 @@ export type TracePayloadRecord = {
   json: unknown;
 };
 
-/** 会话列表行。 */
 export type TraceSessionSummary = {
   sessionId: string;
   workspaceId?: string;
@@ -68,7 +89,6 @@ export type TraceSessionSummary = {
   runCount: number;
 };
 
-/** agent → main：开始一个 span。 */
 export type TraceSpanStartMessage = {
   channel: "utility";
   kind: "span";
@@ -79,7 +99,6 @@ export type TraceSpanStartMessage = {
   };
 };
 
-/** agent → main：结束一个 span。 */
 export type TraceSpanEndMessage = {
   channel: "utility";
   kind: "span";
@@ -95,16 +114,15 @@ export type TraceSpanEndMessage = {
 
 export type TraceSpanMessage = TraceSpanStartMessage | TraceSpanEndMessage;
 
-/** renderer → main：开始 span（经 IPC）。 */
 export type TraceStartSpanRequest = {
   spanId?: string;
   sessionId: string;
-  runId?: string;
+  agentRunId?: string;
   traceId?: string;
-  parentSpanId?: string;
+  parentId?: string;
   taskId?: string;
   name: string;
-  kind: TraceSpanKind;
+  runType: TraceRunType;
   source?: TraceSource;
   summary?: string;
   attrs?: Record<string, unknown>;
@@ -112,7 +130,6 @@ export type TraceStartSpanRequest = {
   startTs?: number;
 };
 
-/** renderer → main：结束 span。 */
 export type TraceEndSpanRequest = {
   spanId: string;
   status?: TraceSpanStatus;
@@ -123,45 +140,37 @@ export type TraceEndSpanRequest = {
   endTs?: number;
 };
 
-/** 列出会话。 */
 export type TraceListSessionsQuery = {
   workspaceId?: string;
   q?: string;
   limit?: number;
 };
 
-/** Preload Trace API。 */
+/** 下发给 engine：Trace 采集开关。 */
+export type TraceSettings = {
+  enabled: boolean;
+};
+
+export const DEFAULT_TRACE_SETTINGS: TraceSettings = {
+  enabled: true,
+};
+
+export function normalizeTraceSettings(raw: unknown): TraceSettings {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_TRACE_SETTINGS };
+  const o = raw as { enabled?: unknown };
+  return {
+    enabled: typeof o.enabled === "boolean" ? o.enabled : true,
+  };
+}
+
 export type ThinkerTraceApi = {
   listSessions(query?: TraceListSessionsQuery): Promise<TraceSessionSummary[]>;
   getSessionSpans(sessionId: string): Promise<TraceSpanRecord[]>;
   getPayload(sessionId: string, payloadId: string): Promise<TracePayloadRecord | null>;
   startSpan(req: TraceStartSpanRequest): Promise<{ spanId: string }>;
   endSpan(req: TraceEndSpanRequest): Promise<void>;
-  /** 删除会话 Trace（索引 + jsonl）；不删聊天会话本身。 */
   deleteSession(sessionId: string): Promise<void>;
-  /**
-   * 导出会话排查 ZIP（spans / payloads / chat / manifest）。
-   * 成功返回保存路径；用户取消时 `error` 为 `"cancelled"`。
-   */
   exportSession(
     sessionId: string,
   ): Promise<{ ok: true; path: string } | { ok: false; error: string }>;
 };
-
-/** 默认脱敏 key。 */
-export const DEFAULT_TRACE_REDACT_KEYS = [
-  "authorization",
-  "apiKey",
-  "api_key",
-  "token",
-  "password",
-  "secret",
-] as const;
-
-export const DEFAULT_TRACE_MAX_FIELD_BYTES = 262_144;
-export const DEFAULT_TRACE_MAX_PAYLOAD_BYTES = 1_048_576;
-export const DEFAULT_TRACE_MAX_MESSAGE_CHARS = 100_000;
-export const DEFAULT_TRACE_MAX_HISTORY_MESSAGES = 200;
-export const DEFAULT_TRACE_MAX_SESSIONS = 200;
-export const DEFAULT_TRACE_MAX_TOTAL_BYTES = 5_368_709_120;
-export const DEFAULT_TRACE_RETENTION_DAYS = 30;
