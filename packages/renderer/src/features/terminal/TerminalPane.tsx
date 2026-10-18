@@ -15,7 +15,7 @@ import type { ShellProfile, TerminalSession } from "@thinker-workbench/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   consumePendingOpenTerminal,
   createTerminal,
@@ -39,14 +39,16 @@ function resolveDefaultProfile(
   shellProfileId: string | undefined,
 ): ShellProfile | null {
   if (profiles.length === 0) return null;
+  const fallback = profiles[0];
+  if (!fallback) return null;
   const id = (shellProfileId ?? "default").trim() || "default";
   if (id !== "default") {
-    return profiles.find((p) => p.id === id) ?? profiles[0]!;
+    return profiles.find((p) => p.id === id) ?? fallback;
   }
   return (
     profiles.find((p) => p.id === "powershell") ||
     profiles.find((p) => p.id === "shell") ||
-    profiles[0]!
+    fallback
   );
 }
 
@@ -64,7 +66,7 @@ export function TerminalPane({
   onFocusSessionConsumed,
 }: Props) {
   const t = useT();
-  const { theme, themeId } = useDesignTheme();
+  const { theme } = useDesignTheme();
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -96,35 +98,38 @@ export function TerminalPane({
   }, [sessions]);
 
   /** 丢弃未刷写（切换会话时缓冲已在 buffersRef）。 */
-  function clearPendingWrite() {
+  const clearPendingWrite = useCallback(() => {
     if (writeRafRef.current != null) {
       window.cancelAnimationFrame(writeRafRef.current);
       writeRafRef.current = null;
     }
     pendingWriteRef.current = "";
     pendingWriteSessionRef.current = null;
-  }
+  }, []);
 
   /** 将待写 chunk 在下一帧一次写入 xterm。 */
-  function scheduleTermWrite(sessionId: string, chunk: string) {
-    if (!chunk) return;
-    if (pendingWriteSessionRef.current && pendingWriteSessionRef.current !== sessionId) {
-      clearPendingWrite();
-    }
-    pendingWriteSessionRef.current = sessionId;
-    pendingWriteRef.current += chunk;
-    if (writeRafRef.current != null) return;
-    writeRafRef.current = window.requestAnimationFrame(() => {
-      writeRafRef.current = null;
-      const data = pendingWriteRef.current;
-      const sid = pendingWriteSessionRef.current;
-      pendingWriteRef.current = "";
-      pendingWriteSessionRef.current = null;
-      if (data && sid && activeIdRef.current === sid) {
-        termRef.current?.write(data);
+  const scheduleTermWrite = useCallback(
+    (sessionId: string, chunk: string) => {
+      if (!chunk) return;
+      if (pendingWriteSessionRef.current && pendingWriteSessionRef.current !== sessionId) {
+        clearPendingWrite();
       }
-    });
-  }
+      pendingWriteSessionRef.current = sessionId;
+      pendingWriteRef.current += chunk;
+      if (writeRafRef.current != null) return;
+      writeRafRef.current = window.requestAnimationFrame(() => {
+        writeRafRef.current = null;
+        const data = pendingWriteRef.current;
+        const sid = pendingWriteSessionRef.current;
+        pendingWriteRef.current = "";
+        pendingWriteSessionRef.current = null;
+        if (data && sid && activeIdRef.current === sid) {
+          termRef.current?.write(data);
+        }
+      });
+    },
+    [clearPendingWrite],
+  );
 
   // 初始化 xterm
   useEffect(() => {
@@ -190,8 +195,7 @@ export function TerminalPane({
       fitRef.current = null;
     };
     // 仅挂载一次；主题变更由下方 effect 同步
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme]);
+  }, [theme, clearPendingWrite]);
 
   // 外观变更时同步 xterm + 宿主底色
   useEffect(() => {
@@ -278,8 +282,7 @@ export function TerminalPane({
       clearPendingWrite();
     };
     // scheduleTermWrite / clearPendingWrite 稳定于闭包外的 ref
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clearPendingWrite, scheduleTermWrite]);
 
   // 切换会话：清屏，优先本地缓冲，否则从主进程拉
   useEffect(() => {
@@ -313,66 +316,69 @@ export function TerminalPane({
     } catch {
       /* ignore */
     }
-  }, [activeId]);
+  }, [activeId, clearPendingWrite]);
 
-  function focusSession(detail: OpenTerminalDetail) {
-    const id = detail.sessionId?.trim();
-    if (id) {
-      // 有真实 sessionId 时以主进程缓冲为准，不用时间线截断预览覆盖
-      setSessions((prev) => {
-        if (prev.some((s) => s.sessionId === id)) return prev;
-        return [
+  // 稳定引用：多个订阅 effect 依赖它，避免每渲染重绑
+  const focusSession = useCallback(
+    (detail: OpenTerminalDetail) => {
+      const id = detail.sessionId?.trim();
+      if (id) {
+        // 有真实 sessionId 时以主进程缓冲为准，不用时间线截断预览覆盖
+        setSessions((prev) => {
+          if (prev.some((s) => s.sessionId === id)) return prev;
+          return [
+            ...prev,
+            {
+              sessionId: id,
+              title: detail.title?.trim() || id.slice(0, 8),
+              cwd: "",
+              cols: 120,
+              rows: 30,
+              status: "running",
+              fromAgent: true,
+              createdAt: Date.now(),
+            },
+          ];
+        });
+        setActiveId(id);
+        // 立刻拉全量滚动区，避免只看到时间线里那一小段
+        void getTerminalOutput(id).then((remote) => {
+          if (!remote) return;
+          buffersRef.current.set(id, remote);
+          if (activeIdRef.current === id && termRef.current) {
+            termRef.current.reset();
+            termRef.current.write(remote);
+          }
+        });
+        return;
+      }
+      // ?sessionId：用预览造本地只读会
+      if (detail.previewOutput?.trim()) {
+        const ghostId = `preview:${Date.now()}`;
+        buffersRef.current.set(ghostId, detail.previewOutput);
+        setSessions((prev) => [
           ...prev,
           {
-            sessionId: id,
-            title: detail.title?.trim() || id.slice(0, 8),
+            sessionId: ghostId,
+            title: detail.title?.trim() || t("terminal.fromAgent"),
             cwd: "",
             cols: 120,
             rows: 30,
-            status: "running",
+            status: "exited",
             fromAgent: true,
             createdAt: Date.now(),
           },
-        ];
-      });
-      setActiveId(id);
-      // 立刻拉全量滚动区，避免只看到时间线里那一小段
-      void getTerminalOutput(id).then((remote) => {
-        if (!remote) return;
-        buffersRef.current.set(id, remote);
-        if (activeIdRef.current === id && termRef.current) {
-          termRef.current.reset();
-          termRef.current.write(remote);
-        }
-      });
-      return;
-    }
-    // ?sessionId：用预览造本地只读会
-    if (detail.previewOutput?.trim()) {
-      const ghostId = `preview:${Date.now()}`;
-      buffersRef.current.set(ghostId, detail.previewOutput);
-      setSessions((prev) => [
-        ...prev,
-        {
-          sessionId: ghostId,
-          title: detail.title?.trim() || t("terminal.fromAgent"),
-          cwd: "",
-          cols: 120,
-          rows: 30,
-          status: "exited",
-          fromAgent: true,
-          createdAt: Date.now(),
-        },
-      ]);
-      setActiveId(ghostId);
-    }
-  }
+        ]);
+        setActiveId(ghostId);
+      }
+    },
+    [t],
+  );
 
   // 挂载时消费跳转前暂存的打开请求（面板此前未挂载会漏掉事件）
   useEffect(() => {
     const pending = consumePendingOpenTerminal();
     if (pending) focusSession(pending);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSession]);
 
   // 外部聚焦
@@ -380,7 +386,6 @@ export function TerminalPane({
     if (!focusSessionId) return;
     focusSession({ sessionId: focusSessionId });
     onFocusSessionConsumed?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSessionId, onFocusSessionConsumed, focusSession]);
 
   // 全局「打开终端」事件（面板已挂载时：
@@ -393,7 +398,6 @@ export function TerminalPane({
     }
     window.addEventListener(OPEN_TERMINAL_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_TERMINAL_EVENT, onOpen);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSession]);
 
   async function onNew(profileId?: string) {

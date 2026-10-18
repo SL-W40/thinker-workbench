@@ -79,6 +79,7 @@ export function ChatSidePanel({
         </header>
       ) : null}
       <div className="chat-side__body">{children}</div>
+      {/* biome-ignore lint/a11y/useSemanticElements: 面板拖宽手柄，ARIA separator + 指针拖拽模式，无对应原生控件 */}
       <div
         className={`chat-side__resize chat-side__resize--${side}`}
         role="separator"

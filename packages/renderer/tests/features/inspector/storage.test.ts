@@ -81,4 +81,19 @@ describe("inspector ui", () => {
     localStorage.setItem("thinker.inspector.ui.v1.ws", "{");
     assert.equal(loadInspectorUi("ws").activeKey, "");
   });
+
+  it("浏览器地址可持久化与还原；损坏值回退空串", () => {
+    assert.equal(loadInspectorUi("ws").browserUrl, "");
+    patchInspectorUi("ws", { browserUrl: "https://example.com/docs" });
+    assert.equal(loadInspectorUi("ws").browserUrl, "https://example.com/docs");
+    // 合并写回不清掉其它字段
+    patchInspectorUi("ws", { openDirs: ["src"] });
+    assert.equal(loadInspectorUi("ws").browserUrl, "https://example.com/docs");
+
+    localStorage.setItem(
+      "thinker.inspector.ui.v1.ws",
+      JSON.stringify({ browserUrl: 42, tabs: [] }),
+    );
+    assert.equal(loadInspectorUi("ws").browserUrl, "");
+  });
 });

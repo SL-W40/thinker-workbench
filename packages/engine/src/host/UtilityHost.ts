@@ -11,6 +11,7 @@ import {
   type TraceSettings,
   type UtilityCancel,
   type UtilityCancelTask,
+  type UtilityCheckpointClear,
   type UtilityContextUsage,
   type UtilityHello,
   type UtilityResume,
@@ -20,7 +21,7 @@ import {
 } from "@thinker-workbench/shared";
 import { setChatMode } from "../chatMode";
 import { setDataDir } from "../config/dataDir";
-import { configureRuntimeLimits } from "../config/runtimeLimits";
+import { configureRuntimeLimits, resolveRuntimeLimits } from "../config/runtimeLimits";
 import { assembleContext } from "../context/assembleContext";
 import { rejectHitlByRunId, resolveHitl } from "../hitl/requestHitl";
 import { getMcpManager } from "../mcp/McpManager";
@@ -128,6 +129,8 @@ export class UtilityHost {
         return this.onResume(message);
       case "contextUsage":
         return this.onContextUsage(message);
+      case "checkpointClear":
+        return this.onCheckpointClear(message);
       case "ptyEvent":
         handlePtyEvent(message);
         return;
@@ -209,7 +212,8 @@ export class UtilityHost {
     this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
     applyShellConfig(message);
     configureHttpCompatibilityMode(message.httpCompatibilityMode);
-    configureRuntimeLimits(message);
+    // 限额随本 run 的 RunContext 传递，不写进程全局（并发 run 互踩）
+    const limits = resolveRuntimeLimits(message);
     this.applyDataDir(message.dataDir);
     this.applyTrace(message.trace);
     configureAgentTrace({
@@ -268,6 +272,7 @@ export class UtilityHost {
       sessionId: message.sessionId,
       workspaceRoot,
       workspaceName,
+      dataDir: message.dataDir,
       chatMode: message.chatMode,
       workspaceAccess: message.workspaceAccess,
       allowAiDeleteFiles: message.allowAiDeleteFiles,
@@ -279,6 +284,7 @@ export class UtilityHost {
       shell: message.shell,
       catalog: message.catalog,
       selection: message.selection,
+      limits,
       route: {
         userText: text,
         contextPaths: message.command.contextPaths,
@@ -291,6 +297,7 @@ export class UtilityHost {
       threadId: message.threadId,
       sessionId: message.sessionId,
       traceId,
+      queuedMs: message.queuedMs,
       message: text,
       images: runImages.length > 0 ? runImages : undefined,
       history: message.command.history,
@@ -335,7 +342,8 @@ export class UtilityHost {
       this.applyAllowAiDeleteFiles(message.allowAiDeleteFiles);
       applyShellConfig(message);
       configureHttpCompatibilityMode(message.httpCompatibilityMode);
-      configureRuntimeLimits(message);
+      // 限额随本 run 的 RunContext 传递，不写进程全局（并发 run 互踩）
+      const limits = resolveRuntimeLimits(message);
       this.applyDataDir(message.dataDir);
       this.applyTrace(message.trace);
       configureAgentTrace({
@@ -364,6 +372,7 @@ export class UtilityHost {
             sessionId: message.sessionId,
             workspaceRoot: root,
             workspaceName: message.command.workspaceName,
+            dataDir: message.dataDir,
             chatMode: message.chatMode,
             workspaceAccess: message.workspaceAccess,
             allowAiDeleteFiles: message.allowAiDeleteFiles,
@@ -375,6 +384,7 @@ export class UtilityHost {
             shell: message.shell,
             catalog: message.catalog,
             selection: message.selection,
+            limits,
             emit,
           })
         : undefined;
@@ -399,6 +409,25 @@ export class UtilityHost {
           ...(message.sessionId ? { chatSessionId: message.sessionId } : {}),
         },
       });
+    }
+  }
+
+  /** 主进程请求清理会话线程 checkpoint（删会话等场景）；结果按 requestId 回传。 */
+  private async onCheckpointClear(message: UtilityCheckpointClear): Promise<void> {
+    const finish = (ok: boolean, error?: string) => {
+      postToParent({
+        channel: "utility",
+        kind: "checkpointClearResult",
+        requestId: message.requestId,
+        ok,
+        ...(error ? { error } : {}),
+      });
+    };
+    try {
+      await this.ensureRuntime().clearThreadCheckpoints(message.threadId);
+      finish(true);
+    } catch (err) {
+      finish(false, err instanceof Error ? err.message : String(err));
     }
   }
 

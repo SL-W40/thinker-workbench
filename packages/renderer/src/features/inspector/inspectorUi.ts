@@ -29,6 +29,8 @@ export type StoredInspectorUi = {
   changesListForced: boolean | null;
   changesListWidth: number;
   openDirs: string[];
+  /** 内置浏览器最后地址（重启后还原）。 */
+  browserUrl: string;
 };
 
 const DEFAULTS: StoredInspectorUi = {
@@ -39,6 +41,7 @@ const DEFAULTS: StoredInspectorUi = {
   changesListForced: null,
   changesListWidth: FILE_LIST_WIDTH.default,
   openDirs: [],
+  browserUrl: "",
 };
 
 function storageKey(workspaceId: string): string {
@@ -80,6 +83,7 @@ export function loadInspectorUi(workspaceId: string | null): StoredInspectorUi {
           ? clampFileListWidth(parsed.changesListWidth)
           : FILE_LIST_WIDTH.default,
       openDirs,
+      browserUrl: typeof parsed.browserUrl === "string" ? parsed.browserUrl : "",
     };
   } catch {
     return { ...DEFAULTS, tabs: [], openDirs: [] };

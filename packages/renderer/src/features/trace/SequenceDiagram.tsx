@@ -67,12 +67,14 @@ type Segment =
 type DrawnRow =
   | {
       kind: "banner";
+      /** React list key；按语义身份，不用行下标。 */
+      rowKey: string;
       scope: "main" | "par" | string;
       title: string;
       subtitle?: string;
       collapsed?: boolean;
       taskIds?: string[];
-      /** par ?Task 分块条（矮条 + 色标）。*/
+      /** par 内 Task 分块条（矮条 + 色标）。*/
       parTask?: boolean;
       taskTag?: string;
       taskColorIdx?: number;
@@ -392,7 +394,14 @@ function expandSegments(
   const rows: DrawnRow[] = [];
   for (const seg of segments) {
     if (seg.type === "main") {
-      rows.push({ kind: "banner", scope: "main", title: labels.main });
+      // 多段 main 用首条 span id 区分，避免与其它 main 横幅撞 key
+      const headId = seg.msgs[0]?.span.id ?? "empty";
+      rows.push({
+        kind: "banner",
+        rowKey: `banner-main-${headId}`,
+        scope: "main",
+        title: labels.main,
+      });
       for (const msg of seg.msgs) {
         rows.push({ kind: "msg", msg });
       }
@@ -402,6 +411,7 @@ function expandSegments(
       const tk = seg.task;
       rows.push({
         kind: "banner",
+        rowKey: `banner-task-${tk.id}`,
         scope: tk.id,
         title: `${labels.task}: ${tk.title}`,
         subtitle: tk.id.slice(0, 12),
@@ -422,6 +432,7 @@ function expandSegments(
     if (parView === "expand") {
       rows.push({
         kind: "banner",
+        rowKey: `banner-par-${key}`,
         scope: "par",
         title: `${labels.par} · ${seg.tasks.length}`,
         subtitle: titles.join(" · "),
@@ -437,6 +448,7 @@ function expandSegments(
         const taskCollapsed = seg.collapsed.has(tk.id);
         rows.push({
           kind: "banner",
+          rowKey: `banner-par-task-${tk.id}`,
           scope: tk.id,
           title: `${tk.tag} · ${tk.title}`,
           subtitle: tk.id.slice(0, 12),
@@ -465,6 +477,7 @@ function expandSegments(
     const active = seg.tasks[idx];
     rows.push({
       kind: "banner",
+      rowKey: `banner-par-${key}`,
       scope: "par",
       title: `${labels.par} · ${active.tag}:${active.title}`,
       subtitle: `${idx + 1}/${seg.tasks.length}`,
@@ -663,25 +676,29 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
   const totalH = headH + ganttH + rows.reduce((acc, r) => acc + rowHOf(r), 0) + 16;
 
   /** 并行区整块底色：从 par 横幅到其内部消息底。 */
-  const parBands: { y: number; h: number }[] = [];
+  const parBands: { key: string; y: number; h: number }[] = [];
   {
     let startYi: number | null = null;
+    let bandKey = "";
     for (let yi = 0; yi < rows.length; yi++) {
       const r = rows[yi];
       const inPar =
         (r.kind === "banner" && (r.scope === "par" || Boolean(r.parTask))) ||
         (r.kind === "msg" && Boolean(r.inPar));
       if (inPar) {
-        if (startYi == null) startYi = yi;
+        if (startYi == null) {
+          startYi = yi;
+          bandKey = r.kind === "banner" ? r.rowKey : `par-band-${r.msg.span.id}`;
+        }
       } else if (startYi != null) {
         const y = rowTop(startYi);
-        parBands.push({ y, h: rowTop(yi) - y });
+        parBands.push({ key: bandKey, y, h: rowTop(yi) - y });
         startYi = null;
       }
     }
     if (startYi != null) {
       const y = rowTop(startYi);
-      parBands.push({ y, h: rowTop(rows.length) - y });
+      parBands.push({ key: bandKey, y, h: rowTop(rows.length) - y });
     }
   }
 
@@ -991,9 +1008,9 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
           );
         })}
 
-        {parBands.map((band, i) => (
+        {parBands.map((band) => (
           <rect
-            key={`par-band-${i}`}
+            key={band.key}
             x={chartLeft + 2}
             y={band.y + 1}
             width={Math.max(0, chartW - 4)}
@@ -1097,9 +1114,8 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
             const parKey = isPar && r.taskIds?.length ? [...r.taskIds].sort().join("|") : "";
             const cluster = parKey ? parClusters.find((c) => c.key === parKey) : undefined;
             const hasParControls = Boolean(cluster && cluster.tasks.length >= 2);
-            const idx = cluster
-              ? Math.max(0, Math.min(cluster.tasks.length - 1, parSlide[parKey] ?? 0))
-              : 0;
+            const taskCount = cluster?.tasks.length ?? 0;
+            const idx = cluster ? Math.max(0, Math.min(taskCount - 1, parSlide[parKey] ?? 0)) : 0;
             const onToggleTasks = () => toggleTasks(r.taskIds);
             const onToggleTasksKeyDown = (e: ReactKeyboardEvent) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -1139,7 +1155,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                       }
                       onPointerDown={(e) => onParPointerDown(parKey, e)}
                       onPointerMove={onParPointerMove}
-                      onPointerUp={(e) => onParPointerUp(cluster?.tasks.length, e)}
+                      onPointerUp={(e) => onParPointerUp(taskCount, e)}
                       onPointerCancel={() => {
                         swipeRef.current = null;
                         setSlideOffset(0);
@@ -1163,27 +1179,26 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                             size="sm"
                             aria-label={t("tools.trace.parSwipePrev")}
                             disabled={idx <= 0}
-                            onClick={() => goPar(parKey, cluster?.tasks.length, -1)}
+                            onClick={() => goPar(parKey, taskCount, -1)}
                           >
                             <ChevronLeftIcon />
                           </IconButton>
                           <span>
-                            {idx + 1}/{cluster?.tasks.length}
+                            {idx + 1}/{taskCount}
                           </span>
                           <IconButton
                             variant="ghost"
                             size="sm"
                             aria-label={t("tools.trace.parSwipeNext")}
-                            disabled={idx >= cluster?.tasks.length - 1}
-                            onClick={() => goPar(parKey, cluster?.tasks.length, 1)}
+                            disabled={idx >= taskCount - 1}
+                            onClick={() => goPar(parKey, taskCount, 1)}
                           >
                             <ChevronRightIcon />
                           </IconButton>
                         </span>
                       ) : null}
-                      <span
+                      <fieldset
                         className="trace-seq__par-bar-mode"
-                        role="group"
                         aria-label={t("tools.trace.parViewLabel")}
                       >
                         <button
@@ -1200,7 +1215,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
                         >
                           {t("tools.trace.parViewSwipe")}
                         </button>
-                      </span>
+                      </fieldset>
                     </div>
                   </foreignObject>
                 ) : isPar ? (
@@ -1238,7 +1253,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
               return (
                 // biome-ignore lint/a11y/useSemanticElements: SVG <g> 不能换成 HTML <button>
                 <g
-                  key={`banner-${yi}-${r.scope}`}
+                  key={r.rowKey}
                   className={rowClass}
                   role="button"
                   tabIndex={0}
@@ -1252,7 +1267,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
               );
             }
             return (
-              <g key={`banner-${yi}-${r.scope}`} className={rowClass}>
+              <g key={r.rowKey} className={rowClass}>
                 {bannerBody}
               </g>
             );
@@ -1266,7 +1281,7 @@ export function SequenceDiagram({ spans, selectedSpanId, onSelect }: Props) {
             (selectedMsg != null &&
               (m.span.id === selectedMsg.span.parentId || m.span.parentId === selectedSpanId));
           return (
-            <g key={`${m.span.id}-${yi}`}>
+            <g key={m.span.id}>
               {renderArrow({
                 msg: m,
                 x1: laneCenterX(m.from),

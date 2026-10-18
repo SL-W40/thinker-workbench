@@ -10,6 +10,7 @@ import {
   StateGraph,
 } from "@langchain/langgraph";
 import { formatErrorMessage } from "../model/retry";
+import { getRunTurn } from "../runtime/runContext";
 import { agentEndSpan, agentStartSpan, configureAgentTrace } from "../trace/emit";
 import { type AgentGraphState, AgentStateAnnotation } from "./annotation";
 import { afterAgent, afterTools } from "./edges";
@@ -17,11 +18,8 @@ import { agent } from "./nodes/agent";
 import { tools } from "./nodes/tools";
 
 /** 当前图节点 run：设置 nodeSpanId。 */
-async function withNodeSpan<T>(
-  nodeId: string,
-  step: number | undefined,
-  run: () => Promise<T>,
-): Promise<T> {
+async function withNodeSpan<T>(nodeId: string, run: () => Promise<T>): Promise<T> {
+  const step = getRunTurn();
   const nodeSpanId = agentStartSpan({
     name: `graph.${nodeId}`,
     runType: "chain",
@@ -50,10 +48,10 @@ export type CompiledAgentGraph = ReturnType<typeof buildGraph>;
 export function buildGraph(checkpointer?: BaseCheckpointSaver) {
   const workflow = new StateGraph(AgentStateAnnotation)
     .addNode("agent", async (state: AgentGraphState, config: LangGraphRunnableConfig) => {
-      return withNodeSpan("agent", state.step, () => agent(state, config));
+      return withNodeSpan("agent", () => agent(state, config));
     })
     .addNode("tools", async (state: AgentGraphState, config: LangGraphRunnableConfig) => {
-      return withNodeSpan("tools", state.step, () => tools(state, config));
+      return withNodeSpan("tools", () => tools(state, config));
     })
     .addEdge(START, "agent")
     .addConditionalEdges("agent", afterAgent)

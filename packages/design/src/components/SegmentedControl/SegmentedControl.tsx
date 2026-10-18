@@ -43,6 +43,7 @@ export function SegmentedControl({
         const selected = opt.value === value;
         const itemDisabled = disabled || opt.disabled;
         return (
+          // biome-ignore lint/a11y/useSemanticElements: 分段控件的选项用 button + role="radio" 才能完全控制视觉；原生 input 样式无法满足
           <button
             key={opt.value}
             type="button"

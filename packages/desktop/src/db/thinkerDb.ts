@@ -16,7 +16,6 @@ import {
 function dbLog(message: string, meta?: Record<string, unknown>): void {
   // 避免与 log/setup 循环依赖；启动早期只用 stderr
   try {
-    // eslint-disable-next-line no-console
     console.info(`[db] ${message}`, meta ?? "");
   } catch {
     /* ignore */

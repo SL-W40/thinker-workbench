@@ -14,8 +14,9 @@ import { useEffect, useRef, useState } from "react";
 import { getShortcutsSettings, SHORTCUTS_SETTINGS_CHANGED } from "../../bridge/thinker";
 import { isShortcutRecording } from "./recordingGate";
 
-/** 返回 `false` 表示未处理（勿 preventDefault），便于 Escape 在空闲时放行。 */
-export type ShortcutHandlers = Partial<Record<ShortcutId, () => undefined | boolean>>;
+/** 返回 `false` 表示未处理（勿 preventDefault），便于 Escape 在空闲时放行；`void` 即「已处理 / 走默认」。 */
+// biome-ignore lint/suspicious/noConfusingVoidType: 刻意用 void 表示「无返回值即已处理」；改用 undefined 会拒绝块体箭头处理器
+export type ShortcutHandlers = Partial<Record<ShortcutId, () => boolean | void>>;
 
 /** 是否存在应优先响应 Escape 的对话框（避免抢走 Modal 关闭）。 */
 function hasEscapeDialog(): boolean {

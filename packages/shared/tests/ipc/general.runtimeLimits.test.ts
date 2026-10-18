@@ -22,9 +22,10 @@ describe("runtime limits in GeneralSettings", () => {
     assert.equal(g.defaultShellBlockUntilMs, DEFAULT_SHELL_BLOCK_UNTIL_MS);
   });
 
-  it("clamps agent / subagent steps", () => {
-    assert.equal(normalizeMaxAgentSteps(0), 1);
-    assert.equal(normalizeMaxAgentSteps(999), 200);
+  it("clamps agent / subagent steps（只 clamp，不按旧「轮次」语义放大）", () => {
+    assert.equal(normalizeMaxAgentSteps(0), 5);
+    assert.equal(normalizeMaxAgentSteps(999), 500);
+    assert.equal(normalizeMaxAgentSteps(16), 16);
     assert.equal(normalizeMaxSubagentSteps(32), 32);
     assert.equal(normalizeGeneral({ maxAgentSteps: 48 }).maxAgentSteps, 48);
   });

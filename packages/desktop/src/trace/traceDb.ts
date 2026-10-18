@@ -39,6 +39,12 @@ export function openTraceDb(): Database.Database {
       String(TRACE_SCHEMA_VERSION),
     );
   }
+  // 回填历史数据：早期 run_count 依赖永不触发的 bumpRun，全为 0
+  db.exec(
+    `UPDATE sessions SET run_count = (
+       SELECT COUNT(DISTINCT COALESCE(run_id, '')) FROM spans WHERE session_id = sessions.session_id
+     ) WHERE run_count = 0`,
+  );
   return db;
 }
 
@@ -106,16 +112,17 @@ export function upsertSession(meta: {
   threadId?: string;
   title?: string;
   ts: number;
-  bumpRun?: boolean;
 }): void {
   const d = openTraceDb();
+  // run_count 由 spans 表派生：一次运行 = 一个不同的 agentRunId（与渲染端分组口径一致）。
+  // 不再靠调用方传 bumpRun：引擎顶层 span 名为 graph.*，没有叫 "run" 的 span，旧增量永远不触发。
   const existing = d
-    .prepare("SELECT session_id, first_ts, run_count FROM sessions WHERE session_id = ?")
-    .get(meta.sessionId) as { session_id: string; first_ts: number; run_count: number } | undefined;
+    .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
+    .get(meta.sessionId) as { session_id: string } | undefined;
   if (!existing) {
     d.prepare(
       `INSERT INTO sessions(session_id, workspace_id, thread_id, title, first_ts, last_ts, run_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, (SELECT COUNT(DISTINCT COALESCE(run_id, '')) FROM spans WHERE session_id = ?))`,
     ).run(
       meta.sessionId,
       meta.workspaceId ?? null,
@@ -123,7 +130,7 @@ export function upsertSession(meta: {
       meta.title ?? null,
       meta.ts,
       meta.ts,
-      meta.bumpRun ? 1 : 0,
+      meta.sessionId,
     );
     return;
   }
@@ -133,26 +140,20 @@ export function upsertSession(meta: {
        thread_id = COALESCE(?, thread_id),
        title = COALESCE(?, title),
        last_ts = MAX(last_ts, ?),
-       run_count = run_count + ?
+       run_count = (SELECT COUNT(DISTINCT COALESCE(run_id, '')) FROM spans WHERE session_id = ?)
      WHERE session_id = ?`,
   ).run(
     meta.workspaceId ?? null,
     meta.threadId ?? null,
     meta.title ?? null,
     meta.ts,
-    meta.bumpRun ? 1 : 0,
+    meta.sessionId,
     meta.sessionId,
   );
 }
 
 export function insertSpanStart(span: TraceSpanRecord): void {
   const d = openTraceDb();
-  upsertSession({
-    sessionId: span.sessionId,
-    workspaceId: typeof span.attrs?.workspaceId === "string" ? span.attrs.workspaceId : undefined,
-    threadId: typeof span.attrs?.threadId === "string" ? span.attrs.threadId : undefined,
-    ts: span.startTs,
-  });
   d.prepare(
     `INSERT OR REPLACE INTO spans(
       span_id, session_id, run_id, trace_id, parent_span_id, task_id,
@@ -176,6 +177,13 @@ export function insertSpanStart(span: TraceSpanRecord): void {
     span.outputRef ?? null,
     span.attrs ? JSON.stringify(span.attrs) : null,
   );
+  // span 落库后再刷会话：run_count 派生自此表，顺序反了会漏算本次运行
+  upsertSession({
+    sessionId: span.sessionId,
+    workspaceId: typeof span.attrs?.workspaceId === "string" ? span.attrs.workspaceId : undefined,
+    threadId: typeof span.attrs?.threadId === "string" ? span.attrs.threadId : undefined,
+    ts: span.startTs,
+  });
 }
 
 export function getSpan(spanId: string): TraceSpanRecord | null {

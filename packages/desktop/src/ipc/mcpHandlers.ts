@@ -3,6 +3,8 @@
  */
 import fs from "node:fs";
 import {
+  BUILTIN_COMPUTER_MCP_ID,
+  BUILTIN_COMPUTER_MCP_NAME,
   type CustomizeScope,
   IpcChannels,
   type McpImportConflict,
@@ -79,10 +81,30 @@ function flushMcpReload(bridge: AgentBridge): void {
   }
 }
 
+/**
+ * 内置 Computer MCP 的合成配置（engine 进程内注册，不落盘）。
+ * 列表置顶展示，标记 builtin 后 UI 禁掉编辑 / 删除 / 停用。
+ */
+function builtinComputerServer(): McpServerConfig {
+  return {
+    id: BUILTIN_COMPUTER_MCP_ID,
+    name: BUILTIN_COMPUTER_MCP_NAME,
+    enabled: true,
+    transport: "stdio",
+    command: "(built-in)",
+    args: [],
+    env: {},
+    cwd: null,
+    builtin: true,
+    writable: false,
+    scope: { kind: "user" },
+  };
+}
+
 /** 注册 MCP 通道。 */
 export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void {
   ipcMain.handle(IpcChannels.mcpList, (_evt, workspaceRoot?: string | null) => {
-    const servers = listMcpConfigs(workspaceRoot);
+    const servers = [builtinComputerServer(), ...listMcpConfigs(workspaceRoot)];
     const statuses = servers.map(
       (s) =>
         statusById.get(s.id) ??
@@ -95,12 +117,18 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
   });
 
   ipcMain.handle(IpcChannels.mcpUpsert, (_evt, input: McpServerUpsertInput) => {
+    if (sanitize(input.id) === BUILTIN_COMPUTER_MCP_ID) {
+      throw new Error("The built-in Computer server cannot be modified.");
+    }
     const cfg = upsertMcpConfig(input);
     reloadMcpOnAgent(bridge);
     return cfg;
   });
 
   ipcMain.handle(IpcChannels.mcpRemove, (_evt, id: string, scope?: CustomizeScope) => {
+    if (sanitize(String(id ?? "")) === BUILTIN_COMPUTER_MCP_ID) {
+      throw new Error("The built-in Computer server cannot be removed.");
+    }
     removeMcpConfig(String(id ?? ""), scope);
     statusById.delete(sanitize(id));
     reloadMcpOnAgent(bridge);
@@ -109,6 +137,9 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
   ipcMain.handle(
     IpcChannels.mcpSetEnabled,
     (_evt, id: string, enabled: boolean, scope?: CustomizeScope) => {
+      if (sanitize(String(id ?? "")) === BUILTIN_COMPUTER_MCP_ID) {
+        throw new Error("The built-in Computer server is always enabled.");
+      }
       const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled), scope);
       reloadMcpOnAgent(bridge);
       return cfg;

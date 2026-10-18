@@ -48,18 +48,20 @@ function splitRow(line: string): string[] {
   let cur = "";
   let i = s.startsWith("|") ? 1 : 0;
   while (i < s.length) {
-    if (s[i] === "\\" && i + 1 < s.length) {
-      cur += s[i + 1]!;
+    const c = s[i];
+    if (c === undefined) break;
+    if (c === "\\" && i + 1 < s.length) {
+      cur += s[i + 1] ?? "";
       i += 2;
       continue;
     }
-    if (s[i] === "|") {
+    if (c === "|") {
       cells.push(cur.trim());
       cur = "";
       i += 1;
       continue;
     }
-    cur += s[i]!;
+    cur += c;
     i += 1;
   }
   if (!endsWithUnescapedPipe(s)) {
@@ -78,7 +80,8 @@ function isPipeTableLine(line: string): boolean {
 
 /** 当前行 + 下一行是否构成表头。 */
 function isTableHeaderAt(lines: string[], i: number): boolean {
-  return i + 1 < lines.length && lines[i]?.includes("|") && isTableSep(lines[i + 1]!);
+  const next = lines[i + 1];
+  return Boolean(next && lines[i]?.includes("|") && isTableSep(next));
 }
 
 function parseAligns(sep: string): Array<"left" | "center" | "right" | null> {
@@ -826,8 +829,10 @@ function parseBlocks(lines: string[], options: ParseOptions, rawMd: string): Blo
     // 流式：尚无分隔行的管道表 → pending
     if (streaming && isPipeTableLine(line) && !isTableHeaderAt(lines, i)) {
       const buf: string[] = [];
-      while (i < lines.length && isPipeTableLine(lines[i]!) && !isTableHeaderAt(lines, i)) {
-        buf.push(lines[i]!);
+      while (i < lines.length) {
+        const cur = lines[i];
+        if (!cur || !isPipeTableLine(cur) || isTableHeaderAt(lines, i)) break;
+        buf.push(cur);
         i += 1;
       }
       out.push({ type: "pending", kind: "table", value: buf.join("\n") });

@@ -27,6 +27,7 @@ export function SubagentInspectorPane({ taskId, subagent, onOpenFile }: Props) {
   );
 
   // 打开 / 切换 Task tab 时强制贴底
+  // biome-ignore lint/correctness/useExhaustiveDependencies: taskId 未在函数体读取但刻意保留：打开 / 切换 Task tab 时触发一次贴底
   useEffect(() => {
     setStickNonce((n) => n + 1);
   }, [taskId]);

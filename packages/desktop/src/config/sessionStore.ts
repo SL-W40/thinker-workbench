@@ -27,9 +27,9 @@ export type SessionState = {
   window: SessionWindow;
 };
 
-/** 合法页面 id（`settings` 仍接受以便迁移旧 session，渲染层映射到控制台）。 */
-const PAGE_IDS = new Set(["chat", "settings", "components", "tools"]);
-/** 合法设置分区 id（含旧 general，加载时迁到 appearance）。 */
+/** 合法页面 id。 */
+const PAGE_IDS = new Set(["chat", "components", "tools"]);
+/** 合法设置分区 id。 */
 const SECTION_IDS = new Set([
   "appearance",
   "notifications",
@@ -38,7 +38,6 @@ const SECTION_IDS = new Set([
   "browser",
   "model",
   "shortcuts",
-  "general",
 ]);
 /** 控制台 tab（写入 hash 时保留，避免一律落回 settings）。 */
 const TOOL_TAB_IDS = new Set(["settings", "customize", "logs", "components"]);
@@ -138,15 +137,15 @@ export function normalizeStack(raw: unknown): PageStackSnapshot {
   return { entries: safeEntries, index, visited };
 }
 
-/** 规范化设置分区；旧 general → appearance；非法回退 appearance。 */
+/** 规范化设置分区；非法回退 appearance。 */
 function normalizeSection(raw: unknown): string {
   if (typeof raw !== "string" || !SECTION_IDS.has(raw)) return "appearance";
-  return raw === "general" ? "appearance" : raw;
+  return raw;
 }
 
 /** 由当前页与设置分区推导 location hash（无 tab 信息时的回退）。 */
 function hashFor(page: string, section: string): string {
-  if (page === "settings" || page === "tools") return `#/tools/settings/${section}`;
+  if (page === "tools") return `#/tools/settings/${section}`;
   return page === "chat" ? "#/chat" : `#/${page}`;
 }
 
@@ -158,11 +157,10 @@ function alignHash(hash: string, page: string, section: string): string {
   const normalized = normalizeHash(hash);
   const parts = normalized.replace(/^#\/?/, "").split("/").filter(Boolean);
   const hashPage = parts[0] ?? "chat";
-  const pageNorm = page === "settings" ? "tools" : page;
-  if (hashPage !== page && hashPage !== pageNorm) {
-    return hashFor(pageNorm, section);
+  if (hashPage !== page) {
+    return hashFor(page, section);
   }
-  if (pageNorm === "tools") {
+  if (page === "tools") {
     const tab = parts[1];
     if (tab === "settings") {
       const sec = normalizeSection(parts[2] ?? section);
@@ -171,7 +169,7 @@ function alignHash(hash: string, page: string, section: string): string {
     if (tab && TOOL_TAB_IDS.has(tab)) return `#/tools/${tab}`;
     return hashFor("tools", section);
   }
-  return hashFor(pageNorm, section);
+  return hashFor(page, section);
 }
 
 /**

@@ -23,6 +23,7 @@ const SEGMENT_ORDER: ContextUsageSegmentId[] = [
   "rules",
   "skills",
   "contextFiles",
+  "memory",
   "conversation",
 ];
 
@@ -32,6 +33,7 @@ const SEGMENT_KEYS: Record<ContextUsageSegmentId, MessageKey> = {
   rules: "chat.contextUsage.rules",
   skills: "chat.contextUsage.skills",
   contextFiles: "chat.contextUsage.contextFiles",
+  memory: "chat.contextUsage.memory",
   conversation: "chat.contextUsage.conversation",
 };
 

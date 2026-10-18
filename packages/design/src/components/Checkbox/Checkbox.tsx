@@ -33,6 +33,7 @@ export function Checkbox({
     <label
       className={`tw-checkbox${className ? ` ${className}` : ""}${disabled ? " is-disabled" : ""}`}
     >
+      {/* biome-ignore lint/a11y/useSemanticElements: 自绘复选框，需要 button + role="checkbox" 才能完全控制视觉；原生 input 样式无法满足 */}
       <button
         type="button"
         id={id}

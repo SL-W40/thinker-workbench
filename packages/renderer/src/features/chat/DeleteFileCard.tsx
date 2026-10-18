@@ -106,7 +106,9 @@ export function DeleteFileCard({
           <button
             type="button"
             className="run-diff-name is-link"
-            onClick={() => onOpenFile?.(path!)}
+            onClick={() => {
+              if (path) onOpenFile?.(path);
+            }}
             aria-label={t("inspector.changes.openFile")}
           >
             {name}

@@ -89,6 +89,7 @@ function dispatchAdmitted(bridge: AgentBridge, job: AdmissionDispatchJob): Promi
     threadId: job.threadId,
     traceId: job.traceId,
     sessionId: job.sessionId,
+    queuedMs: job.queuedMs,
     command: {
       ...job.turn.command,
       sessionId: job.sessionId,

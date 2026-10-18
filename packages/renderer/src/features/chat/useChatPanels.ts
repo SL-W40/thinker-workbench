@@ -95,6 +95,7 @@ export function useChatPanels() {
   }, [state]);
 
   // 壳宽或开合变化时，压缩侧栏以保住聊天最小宽
+  // biome-ignore lint/correctness/useExhaustiveDependencies: state.leftOpen / state.rightOpen 未在函数体读取但刻意保留：开合切换后需要重新压缩侧栏宽度
   useLayoutEffect(() => {
     if (shellWidth <= 0) return;
     setState((prev) => {

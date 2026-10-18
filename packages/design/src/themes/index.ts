@@ -14,7 +14,6 @@ export { auroraTheme } from "./aurora";
 export { darkTheme } from "./dark";
 export { eyecareTheme } from "./eyecare";
 export { lightTheme } from "./light";
-export { monoTheme } from "./mono";
 export { notesTheme } from "./notes";
 export {
   type CustomThemeLike,

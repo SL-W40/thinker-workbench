@@ -54,11 +54,6 @@ export function ensureParentDir(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
-/** @deprecated 使用 ensureParentDir(resolveSpillLocation(...).absolutePath) */
-export function ensureShellOutputDir(dataDir: string): void {
-  fs.mkdirSync(shellOutputDir(dataDir), { recursive: true });
-}
-
 /**
  * 追加写入 spill 文件；失败时静默（不打断 PTY）。
  * @returns 是否写入成功

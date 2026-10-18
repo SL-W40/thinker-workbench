@@ -10,10 +10,11 @@ import {
   cacheHitRate,
   cacheMissTokens,
   EMPTY_USAGE,
-  estimatePartialUsage,
   formatCompactTokens,
+  formatDurationOrDash,
   formatElapsed,
   formatHitRate,
+  formatUsageTokens,
   replyTokens,
   totalTokens,
 } from "../../../src/features/chat/usageStats";
@@ -33,16 +34,7 @@ describe("formatRelativeTime", () => {
 });
 
 describe("usage stats", () => {
-  it("粗估、累加、命中率与紧凑文案", () => {
-    const partial = estimatePartialUsage({
-      reply: "abcd",
-      thinking: "中",
-      inputTexts: ["abcd"],
-    });
-    assert.equal(partial.reasoningTokens >= 1, true);
-    assert.equal(partial.outputTokens, partial.reasoningTokens + 1);
-    assert.equal(partial.inputTokens, 1);
-
+  it("累加、命中率与紧凑文案", () => {
     const sum = addUsage(EMPTY_USAGE, {
       inputTokens: 10,
       outputTokens: 6,
@@ -67,6 +59,33 @@ describe("usage stats", () => {
     assert.equal(formatElapsed(8 * 60_000 + 23_000), "8m 23s");
     assert.equal(formatElapsed(3_600_000), "1h");
     assert.equal(formatElapsed(3_600_000 + 120_000), "1h 2m");
+  });
+
+  it("不足 1 秒展示 <1s，避免把 968ms 显示成 0s", () => {
+    assert.equal(formatElapsed(1), "<1s");
+    assert.equal(formatElapsed(968), "<1s");
+    assert.equal(formatElapsed(999), "<1s");
+    assert.equal(formatElapsed(1_000), "1s");
+  });
+
+  it("耗时未知展示「—」，绝不冒充 0s", () => {
+    assert.equal(formatDurationOrDash(undefined), "—");
+    assert.equal(formatDurationOrDash(null), "—");
+    assert.equal(formatDurationOrDash(Number.NaN), "—");
+    assert.equal(formatDurationOrDash(-5), "—");
+    assert.equal(formatDurationOrDash(0), "0s");
+    assert.equal(formatDurationOrDash(968), "<1s");
+    assert.equal(formatDurationOrDash(65_000), "1m 5s");
+  });
+
+  it("Tokens 胶囊：未知显示「—」，估算加 ~ 前缀", () => {
+    assert.equal(formatUsageTokens(undefined), "—");
+    assert.equal(formatUsageTokens(null), "—");
+    assert.equal(formatUsageTokens(Number.NaN), "—");
+    assert.equal(formatUsageTokens(-1), "—");
+    assert.equal(formatUsageTokens(0), "0");
+    assert.equal(formatUsageTokens(1_234), "1,234");
+    assert.equal(formatUsageTokens(1_234, true), "~1,234");
   });
 });
 

@@ -37,6 +37,8 @@ vi.mock("../../src/trace/emit", () => ({
   agentEndSpan: () => {},
 }));
 
+import { DEFAULT_TOOL_CALL_MIN_GAP_MS } from "@thinker-workbench/shared";
+import { configureRuntimeLimits } from "../../src/config/runtimeLimits";
 import { tools } from "../../src/graph/nodes/tools";
 import type { GraphState } from "../../src/graph/types";
 
@@ -54,7 +56,6 @@ function baseState(over: Partial<GraphState>): GraphState {
     reply: "",
     pendingToolCalls: [],
     startedToolCallIds: [],
-    step: 1,
     ...over,
   };
 }
@@ -118,5 +119,77 @@ describe("tools 节点 resume", () => {
     assert.equal(runTool.mock.calls.length, 1);
     assert.deepEqual(patch.startedToolCallIds, ["c3"]);
     assert.match(patch.messages?.[0]?.content ?? "", /\[tool:time ok\]/);
+  });
+});
+
+describe("tools 串行最小间隔", () => {
+  it("上一个调用结束至今不足间隔则补足，且记录结束时间", async () => {
+    let clock = 1000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      configureRuntimeLimits({ toolCallMinGapMs: 50 });
+      runTool.mockResolvedValue({ ok: true, output: "hi" });
+      const callA = {
+        id: "a",
+        type: "function" as const,
+        function: { name: "time", arguments: "{}" },
+      };
+      const callB = {
+        id: "b",
+        type: "function" as const,
+        function: { name: "time", arguments: "{}" },
+      };
+
+      // 首调无 lastToolEndedAt：不等待，直接执行，记录结束时间
+      const p1 = await tools(baseState({ pendingToolCalls: [callA] }), cfg());
+      assert.equal(runTool.mock.calls.length, 1);
+      assert.equal(p1.lastToolEndedAt, 1000);
+
+      // 次调：lastToolEndedAt 与现在相同（都 1000）→ 间隔 50ms 未到，需等待 ~50ms
+      clock = 1000;
+      const start = performance.now();
+      await tools(baseState({ pendingToolCalls: [callB], lastToolEndedAt: 1000 }), cfg());
+      const elapsed = performance.now() - start;
+      assert.equal(runTool.mock.calls.length, 2);
+      assert.ok(elapsed >= 40, `应等待约 50ms，实际 ${elapsed}ms`);
+
+      // 时间已远超过间隔：下一调不等待，立即发
+      clock = 1000 + 10_000;
+      const before = runTool.mock.calls.length;
+      const t0 = performance.now();
+      await tools(baseState({ pendingToolCalls: [callA], lastToolEndedAt: 1000 }), cfg());
+      assert.equal(runTool.mock.calls.length, before + 1);
+      assert.ok(performance.now() - t0 < 20, "超过间隔后不应等待");
+    } finally {
+      nowSpy.mockRestore();
+      configureRuntimeLimits({ toolCallMinGapMs: DEFAULT_TOOL_CALL_MIN_GAP_MS });
+    }
+  });
+
+  it("间隔为 0 时不等待，直接连发", async () => {
+    const clock = 1000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      configureRuntimeLimits({ toolCallMinGapMs: 0 });
+      runTool.mockResolvedValue({ ok: true, output: "hi" });
+      const callA = {
+        id: "a",
+        type: "function" as const,
+        function: { name: "time", arguments: "{}" },
+      };
+      const callB = {
+        id: "b",
+        type: "function" as const,
+        function: { name: "time", arguments: "{}" },
+      };
+      await tools(baseState({ pendingToolCalls: [callA] }), cfg());
+      const t0 = performance.now();
+      await tools(baseState({ pendingToolCalls: [callB], lastToolEndedAt: 1000 }), cfg());
+      assert.equal(runTool.mock.calls.length, 2);
+      assert.ok(performance.now() - t0 < 20, "间隔 0 不应等待");
+    } finally {
+      nowSpy.mockRestore();
+      configureRuntimeLimits({ toolCallMinGapMs: DEFAULT_TOOL_CALL_MIN_GAP_MS });
+    }
   });
 });

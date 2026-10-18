@@ -152,7 +152,8 @@ describe("parseMarkdownDocument", () => {
     const blocks = parseMarkdown("10. first\n    continued");
     assert.equal(blocks[0]?.type, "list");
     if (blocks[0]?.type !== "list") return;
-    const item = blocks[0].items[0]!;
+    const item = blocks[0].items[0];
+    if (!item) return;
     // 10. + 空格 → 内容列宽 4；续行四个空格应剥净
     const blob = JSON.stringify(item.children);
     assert.ok(blob.includes("continued"));

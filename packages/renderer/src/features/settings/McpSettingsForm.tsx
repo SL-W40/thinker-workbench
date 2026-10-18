@@ -22,7 +22,7 @@ import type {
   McpTransport,
   WorkspaceRecord,
 } from "@thinker-workbench/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   mcpExportFile,
   mcpImportFile,
@@ -251,7 +251,8 @@ export function McpSettingsForm({ workspaces }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<McpServerConfig | null>(null);
   const [importConflictOpen, setImportConflictOpen] = useState(false);
 
-  async function refresh() {
+  // useCallback 包一层：effect 依赖里要用稳定引用，避免每次渲染重跑
+  const refresh = useCallback(async () => {
     try {
       const res = await mcpList();
       setServers(res.servers);
@@ -262,7 +263,7 @@ export function McpSettingsForm({ workspaces }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }
+  }, []);
 
   useEffect(() => {
     if (!available) return;
@@ -439,6 +440,7 @@ export function McpSettingsForm({ workspaces }: Props) {
             <ul className="mcp-settings__list">
               {group.rows.map(({ config, status }) => {
                 const scope = config.scope ?? group.scope;
+                const builtin = config.builtin === true;
                 return (
                   <li
                     key={`${customizeScopeKey(scope)}:${config.id}`}
@@ -446,45 +448,53 @@ export function McpSettingsForm({ workspaces }: Props) {
                   >
                     <div className="mcp-settings__top">
                       <div className="mcp-settings__head">
-                        <span className="mcp-settings__name">{config.name}</span>
+                        <span className="mcp-settings__name">
+                          {builtin ? t("settings.mcp.builtinComputer") : config.name}
+                        </span>
                         <span className="mcp-settings__id">{config.id}</span>
-                        <Badge variant="neutral">
-                          {config.transport === "http"
-                            ? t("settings.mcp.transportHttp")
-                            : t("settings.mcp.transportStdio")}
-                        </Badge>
+                        {builtin ? (
+                          <Badge variant="accent">{t("settings.mcp.builtinBadge")}</Badge>
+                        ) : (
+                          <Badge variant="neutral">
+                            {config.transport === "http"
+                              ? t("settings.mcp.transportHttp")
+                              : t("settings.mcp.transportStdio")}
+                          </Badge>
+                        )}
                         <Badge variant={statusVariant(status?.state)}>
                           {status?.state ?? "stopped"}
                           {typeof status?.toolCount === "number" ? ` · ${status.toolCount}` : ""}
                         </Badge>
                       </div>
-                      <div className="mcp-settings__row-actions">
-                        <Switch
-                          checked={config.enabled}
-                          aria-label={t("settings.mcp.enabled")}
-                          disabled={config.writable === false}
-                          onChange={(checked) => {
-                            void mcpSetEnabled(config.id, checked, scope).then(refresh);
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={config.writable === false}
-                          onClick={() => openEdit(config)}
-                        >
-                          {t("settings.mcp.edit")}
-                        </Button>
-                        <IconButton
-                          size="sm"
-                          variant="ghost"
-                          aria-label={t("settings.mcp.remove")}
-                          disabled={config.writable === false}
-                          onClick={() => setDeleteTarget(config)}
-                        >
-                          <CloseIcon />
-                        </IconButton>
-                      </div>
+                      {builtin ? null : (
+                        <div className="mcp-settings__row-actions">
+                          <Switch
+                            checked={config.enabled}
+                            aria-label={t("settings.mcp.enabled")}
+                            disabled={config.writable === false}
+                            onChange={(checked) => {
+                              void mcpSetEnabled(config.id, checked, scope).then(refresh);
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={config.writable === false}
+                            onClick={() => openEdit(config)}
+                          >
+                            {t("settings.mcp.edit")}
+                          </Button>
+                          <IconButton
+                            size="sm"
+                            variant="ghost"
+                            aria-label={t("settings.mcp.remove")}
+                            disabled={config.writable === false}
+                            onClick={() => setDeleteTarget(config)}
+                          >
+                            <CloseIcon />
+                          </IconButton>
+                        </div>
+                      )}
                     </div>
                     {status?.error ? (
                       <span className="mcp-settings__err" title={status.error}>

@@ -3,7 +3,7 @@
  */
 import path from "node:path";
 import { type PtyExecMode, stripAnsi } from "@thinker-workbench/shared";
-import { getDefaultShellBlockUntilMs, getShellOutputCap } from "../../config/runtimeLimits";
+import { getLimit } from "../../config/runtimeLimits";
 import { requestHitl } from "../../hitl/requestHitl";
 import { ptyAwait, ptyExec, ptyWrite } from "../../host/ptyClient";
 import { getWorkspaceAccess, getWorkspaceRoot } from "../../workspace";
@@ -16,7 +16,7 @@ const SPILL_TAIL_CHARS = 2_000;
 
 /** 截断输出：保留头尾。 */
 function truncateOutput(text: string): string {
-  const cap = getShellOutputCap();
+  const cap = getLimit("shellOutputCap");
   if (text.length <= cap) return text;
   const head = Math.floor(cap * 0.4);
   const tail = cap - head - 80;
@@ -103,7 +103,7 @@ export async function shellTool(args: ToolArgs, ctx: ToolContext): Promise<ToolE
   const blockUntilMs =
     typeof args.block_until_ms === "number" && Number.isFinite(args.block_until_ms)
       ? Math.max(0, Math.floor(args.block_until_ms))
-      : getDefaultShellBlockUntilMs();
+      : getLimit("defaultShellBlockUntilMs");
   const execMode = resolveShellExecMode(args.exec_mode, awaitMode);
 
   await ensureShellApproved(command, ctx.signal);
@@ -159,7 +159,7 @@ export async function shellAwaitTool(args: ToolArgs, ctx: ToolContext): Promise<
   const blockUntilMs =
     typeof args.block_until_ms === "number" && Number.isFinite(args.block_until_ms)
       ? Math.max(0, Math.floor(args.block_until_ms))
-      : getDefaultShellBlockUntilMs();
+      : getLimit("defaultShellBlockUntilMs");
   const pattern = typeof args.pattern === "string" ? args.pattern : undefined;
 
   const result = await ptyAwait({ sessionId, blockUntilMs, pattern }, ctx.signal);
@@ -212,8 +212,9 @@ export function normalizeShellWriteData(
     "ctrl+z": "\x1a",
     "ctrl-z": "\x1a",
   };
-  if (Object.hasOwn(controlAliases, key)) {
-    return { payload: controlAliases[key]!, submit: false };
+  const aliased = controlAliases[key];
+  if (aliased !== undefined) {
+    return { payload: aliased, submit: false };
   }
   if (data.length === 1 && data.charCodeAt(0) < 32) {
     return { payload: data, submit: false };

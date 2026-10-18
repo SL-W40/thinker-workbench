@@ -96,7 +96,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
 /** 扁平分区列表（查找 / 默认项）。 */
 export const SETTINGS_SECTIONS: SettingsSection[] = SETTINGS_NAV_GROUPS.flatMap((g) => g.items);
 
-/** 类型守卫：字符串是否为合法设置分区 id（不含已废弃的 general / mcp）。 */
+/** 类型守卫：字符串是否为合法设置分区 id。 */
 export function isSettingsSection(value: string | undefined): value is SettingsSectionId {
   return (
     value === "appearance" ||
@@ -110,12 +110,8 @@ export function isSettingsSection(value: string | undefined): value is SettingsS
   );
 }
 
-/**
- * 规范化分区 id：旧 `general` → `appearance`；旧 `mcp` 与非法值回退默认
- * （MCP 路由重定向见 locationHash）。
- */
+/** 规范化分区 id；非法值回退默认。 */
 export function normalizeSettingsSection(value: string | undefined): SettingsSectionId {
-  if (value === "general") return "appearance";
   if (isSettingsSection(value)) return value;
   return DEFAULT_SETTINGS_SECTION;
 }

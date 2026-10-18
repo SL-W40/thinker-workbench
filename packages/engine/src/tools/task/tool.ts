@@ -35,11 +35,6 @@ export const taskToolSpec = defineTool({
         description:
           "If true, wait for the subagent to finish in this tool call. If false, return taskId immediately and continue in background. When omitted, agents marked background-ok default to not awaiting.",
       },
-      background: {
-        type: "boolean",
-        description:
-          "Deprecated alias: true means await=false (return taskId immediately). Prefer the await parameter.",
-      },
     },
     required: ["subagent", "prompt"],
   },
@@ -49,7 +44,7 @@ export const taskToolSpec = defineTool({
 export const taskAwaitToolSpec = defineTool({
   name: "task_await",
   description:
-    "Wait for a background Task (from Task with await=false / background=true) to finish. Pass the returned taskId. If still running after block_until_ms, returns status=running with ok=true — call again when ready. Use this before summarizing parallel subagent work; do not re-invoke Task to poll.",
+    "Wait for a background Task (from Task with await=false) to finish. Pass the returned taskId. If still running after block_until_ms, returns status=running with ok=true — call again when ready. Use this before summarizing parallel subagent work; do not re-invoke Task to poll.",
   parameters: {
     type: "object",
     properties: {

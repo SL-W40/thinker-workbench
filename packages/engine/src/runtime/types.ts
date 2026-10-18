@@ -23,4 +23,6 @@ export type RunRequest = AgentRunCommand & {
   workspaceRoot?: string;
   workspaceName?: string;
   runContext?: import("./runContext").RunContext;
+  /** 主进程排队等待被调度的时长（毫秒）；并入终态事件的 `durationMs`。 */
+  queuedMs?: number;
 };

@@ -15,7 +15,6 @@ export {
   eyecareTheme,
   lightTheme,
   listDesignThemes,
-  monoTheme,
   notesTheme,
   resolveDesignTheme,
   resolveUiTheme,

@@ -63,6 +63,8 @@ export type AdmissionDispatchJob = {
   workspaceRoot: string;
   workspaceName?: string;
   turn: AdmissionTurn;
+  /** 排队等待被调度的时长（毫秒）；随 UtilityRun 下发，engine 并入终态耗时。 */
+  queuedMs?: number;
 };
 
 type RunPhase = "queued" | "running";
@@ -84,6 +86,10 @@ type OpenRun = {
   phase: RunPhase;
   /** 入队顺序，只增不减。 */
   seq: number;
+  /** 入队时刻；仅排队项有值，用于算排队时长。 */
+  queuedAt?: number;
+  /** 出队时结算的排队时长（毫秒）；随派发下发给 engine。 */
+  queuedMs?: number;
   turn?: AdmissionTurn;
   timer?: ReturnType<typeof setTimeout>;
   /** 已经发起过一次派发，避免 pump 与 handler 各 kick 一次。 */
@@ -510,6 +516,7 @@ class RunLedger {
     this.byRunId.set(runId, entry);
     this.bySessionId.set(sessionId, runId);
     if (phase === "queued") {
+      entry.queuedAt = Date.now();
       this.fifo.push(runId);
       this.armTimer(entry);
     }
@@ -575,6 +582,8 @@ class RunLedger {
     }
 
     entry.phase = "running";
+    // 出队即结算排队时长：并入终态耗时，让用户看到「等了多久 + 跑了多久」
+    entry.queuedMs = entry.queuedAt ? Math.max(0, Date.now() - entry.queuedAt) : 0;
     entry.workspaceRoot = workspaceRoot;
     entry.workspaceName = workspace.name || entry.workspaceName;
     this.removeFromFifo(entry.runId);
@@ -599,6 +608,7 @@ class RunLedger {
       sessionId: entry.sessionId,
       workspaceRoot: entry.workspaceRoot,
       workspaceName: entry.workspaceName,
+      queuedMs: entry.queuedMs,
       turn: entry.turn,
     };
     void this.dispatcher(job).catch((err) => {

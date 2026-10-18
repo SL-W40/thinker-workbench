@@ -46,6 +46,7 @@ function TokenRow({
 }) {
   const colorish = looksLikeColor(value);
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: label 内控件按 token 类型条件渲染（颜色 / 文本 / 选择），规则无法静态关联
     <label className="custom-theme-token">
       <span className="custom-theme-token-key" title={tokenKey}>
         {tokenKey}
@@ -81,6 +82,7 @@ export function CustomThemeEditor({ open, record, customsBaseline, onClose, onSa
   const [varsText, setVarsText] = useState("{}");
 
   // 打开时克隆进草稿并即时预览（仅套色，不写入已保存目录）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 按 open / record.id 初始化；record / customsBaseline / applyAppearance 经闭包读取，不列入依赖
   useEffect(() => {
     if (!open || !record) {
       setDraft(null);
@@ -93,7 +95,6 @@ export function CustomThemeEditor({ open, record, customsBaseline, onClose, onSa
     const merged = [...customsBaseline.filter((c) => c.id !== next.id), next];
     applyAppearance(next.id, merged);
     // 仅在打开 / 切换记录时初始化；customsBaseline 由父级在关闭时回滚
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, record?.id]);
 
   const tabOptions = useMemo(

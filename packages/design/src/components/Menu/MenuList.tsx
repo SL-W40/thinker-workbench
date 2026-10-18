@@ -90,6 +90,9 @@ export function MenuList({
     }
   }
 
+  // 预生成稳定 key（label 可能重复，附加序号保证唯一），避免直接以 index 作 JSX key
+  const rows = items.map((item, index) => ({ item, index, key: `${item.label}-${index}` }));
+
   return (
     <div
       ref={listRef}
@@ -99,9 +102,9 @@ export function MenuList({
       aria-label={ariaLabel}
       onKeyDown={onListKeyDown}
     >
-      {items.map((item, index) => (
+      {rows.map(({ item, index, key }) => (
         <MenuRow
-          key={`${item.label}-${index}`}
+          key={key}
           item={item}
           index={index}
           active={index === active}
@@ -168,6 +171,7 @@ function MenuRow({
           {item.groupLabel}
         </div>
       ) : null}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: ARIA 菜单模式下用 aria-haspopup / aria-expanded 标示子菜单展开状态，属刻意的菜单语义 */}
       <button
         ref={buttonRef}
         type="button"
@@ -226,6 +230,7 @@ function Submenu({
   const panelRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>({ left: 0, top: 0, visibility: "hidden" });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: items 不在 effect 内读取但刻意保留：菜单项变化会改变面板尺寸，需重新摆放子菜单
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
     const panel = panelRef.current;

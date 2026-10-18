@@ -63,7 +63,7 @@ function toAnchorRect(
   anchor: PopoverProps["anchor"],
 ): AnchorRect | null {
   const el = anchorRef?.current;
-  if (el && el.isConnected) {
+  if (el?.isConnected) {
     const rect = el.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   }
@@ -95,6 +95,7 @@ export function Popover({
   const [coords, setCoords] = useState<PlacePopoverResult | null>(null);
   const chrome = role === "dialog";
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: coords 不在 effect 内读取但刻意保留：首次摆放后 maxHeight 生效会改变面板高度，借 coords 变化触发二次摆放收敛位置
   useLayoutEffect(() => {
     if (!open) {
       setCoords(null);
@@ -221,6 +222,7 @@ export function Popover({
     .join(" ");
 
   return createPortal(
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: role 由调用方决定（含缺省），aria-label 始终下发以覆盖 dialog 用法，属组件的刻意通用化
     <div
       ref={panelRef}
       className={cls}

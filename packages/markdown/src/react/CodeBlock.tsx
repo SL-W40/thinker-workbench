@@ -29,6 +29,7 @@ export function CodeBlock({ lang, value, incomplete = false }: Props) {
       <pre className={`tw-md-pre${incomplete ? " tw-md-pre--streaming" : ""}`}>
         <code
           className={`hljs language-${language}`}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: 代码高亮产物来自 hljs 的受控转义输出，非用户可控 HTML
           dangerouslySetInnerHTML={{ __html: html || " " }}
         />
         {incomplete ? <span className="tw-md-caret" aria-hidden="true" /> : null}

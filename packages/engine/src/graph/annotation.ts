@@ -37,10 +37,22 @@ export const AgentStateAnnotation = Annotation.Root({
     reducer: mergeStartedIds,
     default: () => [],
   }),
-  step: Annotation<number>,
+  /** 最近一次工具执行结束的 epoch ms；串行工具最小间隔用（见 tools 节点）。 */
+  lastToolEndedAt: Annotation<number | undefined>({
+    reducer: (left, right) => (typeof right === "number" ? right : left),
+    default: () => undefined,
+  }),
   contextPaths: Annotation<string[] | undefined>({
     reducer: (left, right) => (right === undefined ? left : right),
     default: () => undefined,
+  }),
+  /**
+   * 模型可见的「压缩副本」消息数组。LastValue（右侧为空则保留）。
+   * 压缩后写回此通道以替换追加日志（messages 通道仍是源真实日志）。
+   */
+  messagesOverride: Annotation<ChatMessage[] | undefined>({
+    reducer: (left, right) => (right === undefined ? left : right),
+    default: () => [],
   }),
 });
 

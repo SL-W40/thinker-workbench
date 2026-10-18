@@ -88,8 +88,9 @@ function buildParClusters(
     changed = false;
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
-        const a = clusters[i]!;
-        const b = clusters[j]!;
+        const a = clusters[i];
+        const b = clusters[j];
+        if (!a || !b) continue;
         if (a.some((ta) => b.some((tb) => canPair(ta, tb)))) {
           a.push(...b);
           clusters.splice(j, 1);
@@ -111,7 +112,8 @@ function buildParClusters(
       .sort()
       .join("|");
     for (let i = 0; i < ordered.length; i++) {
-      const t = ordered[i]!;
+      const t = ordered[i];
+      if (!t) continue;
       out.set(t.id, { key, size: ordered.length, colorIdx: i % 3 });
     }
   }
@@ -261,13 +263,8 @@ export function buildCallTreeRows(
   const walk = (node: TraceSpanRecord, depth: number, inherit?: ParMeta) => {
     const kids = children.get(node.id) || [];
     const isCollapsed = collapsed.has(node.id);
-    const own =
-      node.taskId && parByTask.has(node.taskId)
-        ? {
-            ...parByTask.get(node.taskId)!,
-            taskId: node.taskId,
-          }
-        : undefined;
+    const parMeta = node.taskId ? parByTask.get(node.taskId) : undefined;
+    const own = parMeta && node.taskId ? { ...parMeta, taskId: node.taskId } : undefined;
     // 子行缺 taskId 时沿用祖先 Task，保证同一 agent 子树同色
     const par = own ?? inherit;
     const spanForRow = par && !node.taskId ? { ...node, taskId: par.taskId } : node;

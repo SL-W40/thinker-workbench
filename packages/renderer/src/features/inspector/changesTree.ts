@@ -1,5 +1,5 @@
 /** 将扁平 Git 变更列表建成可折叠目录树。 */
-import type { GitChangedFile } from "@thinker-workbench/shared";
+import type { GitChangedFile, WorkspaceNode } from "@thinker-workbench/shared";
 
 export type ChangeTreeDir = {
   kind: "dir";
@@ -59,7 +59,8 @@ export function buildChangeTree(files: GitChangedFile[]): ChangeTreeNode[] {
     if (!parts.length) continue;
     let cur = root;
     for (let i = 0; i < parts.length - 1; i++) {
-      const name = parts[i]!;
+      const name = parts[i];
+      if (!name) continue;
       const dirPath = parts.slice(0, i + 1).join("/");
       let next = cur.map.get(name);
       if (!next) {
@@ -69,7 +70,8 @@ export function buildChangeTree(files: GitChangedFile[]): ChangeTreeNode[] {
       }
       cur = next;
     }
-    const name = parts[parts.length - 1]!;
+    const name = parts[parts.length - 1];
+    if (!name) continue;
     cur.children.push({
       kind: "file",
       name,
@@ -81,6 +83,35 @@ export function buildChangeTree(files: GitChangedFile[]): ChangeTreeNode[] {
   }
 
   return sortTree(root.children);
+}
+
+/**
+ * 由全量工作区树构建侧栏树（Changes 侧栏应为全量文件列表）。
+ * 改动文件带 +/- 统计；未改动文件原样展示（added/removed 为 0）。
+ * 目录顺序沿用 listTree 的自然序（目录在前、按名），不按改动量重排。
+ */
+export function buildFullTree(root: WorkspaceNode, files: GitChangedFile[]): ChangeTreeNode[] {
+  const stats = new Map(files.map((f) => [f.path, f]));
+  function convert(node: WorkspaceNode): ChangeTreeNode {
+    if (node.type === "file") {
+      const f = stats.get(node.path);
+      return {
+        kind: "file",
+        name: node.name,
+        path: node.path,
+        added: f?.added ?? 0,
+        removed: f?.removed ?? 0,
+        status: f?.status ?? "",
+      };
+    }
+    return {
+      kind: "dir",
+      name: node.name,
+      path: node.path,
+      children: (node.children ?? []).map(convert),
+    };
+  }
+  return (root.children ?? []).map(convert);
 }
 
 /** 按查询过滤目录/文件，并为匹配项收集需展开的路径。 */

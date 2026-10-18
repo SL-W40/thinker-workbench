@@ -2,6 +2,7 @@
  * 子代理卡片底栏：活动文案单行上下滚动（swiper），
  * 按 markdown 解析但视觉统一为正文（无标题/代码块样式）。
  */
+// biome-ignore-all lint/suspicious/noArrayIndexKey: 渲染不可变的行内 AST，节点无稳定 id 且不会重排，index 即稳定 key
 import { type InlineNode, parseInline } from "@thinker-workbench/markdown";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 

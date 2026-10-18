@@ -57,7 +57,18 @@ export type RunEmitEvent =
     }
   | Omit<AgentModelSwitchEvent, keyof AgentEventBase>
   | Omit<AgentModelHealthEvent, keyof AgentEventBase>
-  | Omit<AgentSubagentEvent, keyof AgentEventBase>;
+  | Omit<AgentSubagentEvent, keyof AgentEventBase>
+  | {
+      type: "memory";
+      phase: "extracted" | "compacted" | "circuit_broken";
+      memoryKind?: "project" | "session";
+      action?: "init" | "update";
+      layer?: "micro" | "session" | "full";
+      sections?: string[];
+      before?: number;
+      after?: number;
+      truncated?: number;
+    };
 
 export type RunEmitter = (event: RunEmitEvent) => void;
 
@@ -123,6 +134,8 @@ export function toAgentEvent(base: AgentEventBase, event: RunEmitEvent): AgentEv
       return { ...base, ...event, type: "model_health" };
     case "subagent":
       return { ...base, ...event, type: "subagent" };
+    case "memory":
+      return { ...base, ...event, type: "memory" };
   }
 }
 

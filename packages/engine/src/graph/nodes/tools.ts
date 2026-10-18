@@ -4,7 +4,9 @@
  */
 
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import type { ChatMessage, ChatToolCall } from "../../model/types";
+import { getLimit } from "../../config/runtimeLimits";
+import { sleep } from "../../model/retry";
+import type { ChatContentPart, ChatMessage, ChatToolCall } from "../../model/types";
 import { getRunTurn, markToolCallStarted } from "../../runtime/runContext";
 import { getRunEmitter } from "../../runtime/runEmit";
 import { runTool } from "../../tools/runTool";
@@ -154,7 +156,7 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
     summary: hints.summary,
     command: commandHint,
   });
-  let content: string;
+  let content: string | ChatContentPart[];
   if (!parsed.ok) {
     content = `[tool:${name} error]\n${parsed.error}`;
     emit?.({
@@ -172,7 +174,19 @@ async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMess
     try {
       const result = await runTool(name, parsed.args, signal, callId);
       const header = result.ok ? `[tool:${name} ok]` : `[tool:${name} error]`;
-      content = `${header}\n${result.output}`;
+      const modelImages = (result.ui?.modelImages ?? []).filter((p) => p.trim());
+      content =
+        modelImages.length > 0
+          ? ([
+              { type: "text", text: `${header}\n${result.output}` },
+              ...modelImages.map((p, i) => ({
+                type: "image_ref" as const,
+                id: `${name}-${i}`,
+                path: p,
+                mime: "image/png",
+              })),
+            ] satisfies ChatContentPart[])
+          : `${header}\n${result.output}`;
       const diff =
         (result.ui?.diff && result.ui.diff.length > 0 ? result.ui.diff : undefined) ??
         (result.ok ? fallbackDiff(name, parsed.args) : undefined);
@@ -277,6 +291,8 @@ async function resolveOne(
 /**
  * 默认每次只执行一个 pending tool，便于节点结束后落 checkpoint。
  * 例外：连续多个后台 Task 并行启动，避免「先说并行、卡片却一个个冒」。
+ * 串行工具间保证最小间隔（getLimit("toolCallMinGapMs")）：上一个结束到下一个
+ * 开始至少这么久，让时间线尾卡先收组、planning/thinking 抑制释放后再发下一个。
  */
 export async function tools(
   state: AgentGraphState,
@@ -365,10 +381,15 @@ export async function tools(
       const msg = toolMessages.find((m) => m.tool_call_id === call.id);
       if (msg) ordered.push(msg);
     }
+    const usingOverride = (base.messagesOverride?.length ?? 0) > 0;
     return {
       ...(ordered.length ? { messages: ordered } : {}),
+      ...(usingOverride
+        ? { messagesOverride: [...(base.messagesOverride ?? []), ...ordered] }
+        : {}),
       pendingToolCalls: base.pendingToolCalls.slice(batch.length),
       ...(newlyStarted.length ? { startedToolCallIds: newlyStarted } : {}),
+      lastToolEndedAt: Date.now(),
     };
   }
 
@@ -376,6 +397,19 @@ export async function tools(
   if (!call) {
     return { pendingToolCalls: [] };
   }
+
+  // 串行工具最小间隔：上一个工具结束到现在不足阈值则补足，再发起本调用。
+  // 「上一个结束」以 lastToolEndedAt 为准；缺省（首调 / 跨轮）不等待。
+  const minGap = getLimit("toolCallMinGapMs");
+  const lastEnd = base.lastToolEndedAt;
+  if (typeof lastEnd === "number" && minGap > 0) {
+    const wait = minGap - (Date.now() - lastEnd);
+    if (wait > 0) await sleep(wait, signal);
+    if (signal.aborted) {
+      throw new Error("Run cancelled.");
+    }
+  }
+
   const prevStarted = new Set(startedToolCallIds);
   const { message, startedIds } = await resolveOne(base, call, signal);
   if (signal.aborted) {
@@ -383,9 +417,14 @@ export async function tools(
   }
   const newlyStarted = startedIds.filter((id) => !prevStarted.has(id));
 
+  const usingOverride = (base.messagesOverride?.length ?? 0) > 0;
   return {
     ...(message ? { messages: [message] } : {}),
+    ...(usingOverride && message
+      ? { messagesOverride: [...(base.messagesOverride ?? []), message] }
+      : {}),
     pendingToolCalls: rest,
     ...(newlyStarted.length ? { startedToolCallIds: newlyStarted } : {}),
+    lastToolEndedAt: Date.now(),
   };
 }

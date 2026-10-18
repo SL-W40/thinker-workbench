@@ -9,7 +9,9 @@ export function looksRenderable(source: string): boolean {
     .map((l) => l.trim())
     .filter(Boolean);
   if (lines.length < 2) return false;
+  const first = lines[0];
+  if (!first) return false;
   return /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/i.test(
-    lines[0]!,
+    first,
   );
 }

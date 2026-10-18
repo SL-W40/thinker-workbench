@@ -1,6 +1,6 @@
 # Follow-ups
 
-**English** | [简体中文](./TODOS.zh-CN.md)
+**English** | [简体中文](./docs/TODOS.zh-CN.md)
 
 Deferred product backlog from the multi-session parallel architecture. Not committed for the current release — tracked here for prioritization. See also [README](./README.md).
 

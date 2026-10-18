@@ -15,6 +15,7 @@ import { contentToPlainText, countImageRefs, IMAGE_TOKEN_ESTIMATE } from "../mod
 import type { ChatMessage, ChatToolDefinition } from "../model/types";
 import { buildEnvironmentContextMessage } from "../prompts/environment";
 import { emojiInstruction, languageInstruction, SYSTEM_PROMPT } from "../prompts/system";
+import { joinSystemSections, type SystemSection } from "../prompts/systemSections";
 import { loadRules } from "../rules/loadRules";
 import { loadSkills } from "../skills/loadSkills";
 import { getSubagentIndexText } from "../subagents/registry";
@@ -40,10 +41,16 @@ export type AssembleContextInput = {
   allowTask?: boolean;
   /** 本帧 ChatMode（纯入参；不写 ALS / 进程全局）。 */
   chatMode?: ChatMode;
+  /** 注入的静态项目记忆文本（高优先级系统段）。 */
+  projectMemory?: string;
+  /** 注入的会话抽取记忆文本（高优先级系统段）。 */
+  sessionMemory?: string;
 };
 
 export type AssembledContext = {
   system: string;
+  /** 与 system 同序的分块，供 Trace 折叠展示。 */
+  systemSections: SystemSection[];
   tools: ChatToolDefinition[];
   messages: ChatMessage[];
   segments: ContextUsageSegment[];
@@ -60,7 +67,8 @@ export function buildBaseSystemPrompt(locale: AiLocale, allowEmoji = false): str
 
 function latestUserFromMessages(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]!;
+    const m = messages[i];
+    if (!m) continue;
     if (m.role === "user") return contentToPlainText(m.content);
   }
   return "";
@@ -111,12 +119,20 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const conversation = conversationText(input.messages);
 
   const subagentIndex = getSubagentIndexText();
-  const systemParts = [base, environment, buildChatModeAddendum(mode)];
-  if (subagentIndex) systemParts.push(subagentIndex);
-  if (rules.text) systemParts.push(rules.text);
-  if (skills.text) systemParts.push(skills.text);
-  if (contextFiles.text) systemParts.push(contextFiles.text);
-  const system = systemParts.join("\n\n");
+  const memorySection = [input.projectMemory, input.sessionMemory].filter(Boolean).join("\n\n");
+  const systemSections: SystemSection[] = [
+    { id: "base", text: base },
+    { id: "environment", text: environment },
+    { id: "mode", text: buildChatModeAddendum(mode) },
+  ];
+  if (subagentIndex) systemSections.push({ id: "subagents", text: subagentIndex });
+  if (rules.text) systemSections.push({ id: "rules", text: rules.text });
+  if (skills.text) systemSections.push({ id: "skills", text: skills.text });
+  if (contextFiles.text) systemSections.push({ id: "contextFiles", text: contextFiles.text });
+  // 记忆段置于末尾：它是历史会话/项目背景，不能排在 base/mode 前抢锚定，
+  // 否则模型会把旧摘要里的 "Task Overview" 当成当前任务（曾导致答非所问）
+  if (memorySection) systemSections.push({ id: "memory", text: memorySection });
+  const system = joinSystemSections(systemSections);
 
   const segmentDefs: Array<{ id: ContextUsageSegment["id"]; text: string }> = [
     { id: "system", text: `${base}\n\n${environment}\n\n${subagentIndex}` },
@@ -124,6 +140,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     { id: "rules", text: rules.text },
     { id: "skills", text: skills.text },
     { id: "contextFiles", text: contextFiles.plain },
+    { id: "memory", text: memorySection },
     { id: "conversation", text: conversation },
   ];
   const segments: ContextUsageSegment[] = segmentDefs.map((s) => ({
@@ -135,6 +152,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
 
   return {
     system,
+    systemSections,
     tools,
     messages: input.messages,
     segments,

@@ -30,7 +30,8 @@ export async function* walkFiles(root: string, signal: AbortSignal): AsyncGenera
   const stack = [root];
   while (stack.length > 0) {
     throwIfAborted(signal, "Walk");
-    const dir = stack.pop()!;
+    const dir = stack.pop();
+    if (dir === undefined) break;
     // 不用 ReturnType<typeof readdir>：重载最后一项是 buffer 文件名，和字符串 Dirent 对不上。
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
     if (!entries) continue;

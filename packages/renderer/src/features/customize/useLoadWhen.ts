@@ -27,7 +27,7 @@ export function useLoadWhen<T>(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // load 由调用方每次渲染传入；这里刻意只在它变化时重跑
   }, [load]);
 
   return {

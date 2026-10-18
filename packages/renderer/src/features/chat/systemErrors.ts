@@ -5,11 +5,7 @@
 /** 钥匙串未授权（有密文但 decrypt 失败）。 */
 export function isUnlockDeniedError(text: string): boolean {
   const t = text.trim();
-  return (
-    t === "MODEL_API_KEY_UNLOCK_DENIED" ||
-    t.startsWith("MODEL_API_KEY_UNLOCK_DENIED") ||
-    /failed to unlock the saved API key/i.test(t)
-  );
+  return t === "MODEL_API_KEY_UNLOCK_DENIED" || t.startsWith("MODEL_API_KEY_UNLOCK_DENIED");
 }
 
 /**
@@ -19,9 +15,5 @@ export function isUnlockDeniedError(text: string): boolean {
 export function isMissingApiKeyError(text: string): boolean {
   const t = text.trim();
   if (isUnlockDeniedError(t)) return false;
-  return (
-    t === "MODEL_API_KEY_MISSING" ||
-    t.startsWith("MODEL_API_KEY_MISSING") ||
-    /api key is not set/i.test(t)
-  );
+  return t === "MODEL_API_KEY_MISSING" || t.startsWith("MODEL_API_KEY_MISSING");
 }

@@ -25,37 +25,25 @@ function formatBytes(n: number): string {
 
 export function MediaPreview({ path, info }: Props) {
   const t = useT();
-  const canPreview =
-    info.kind !== "binary" &&
-    typeof info.previewDataUrl === "string" &&
-    info.previewDataUrl.length > 0;
+  const previewSrc =
+    typeof info.previewDataUrl === "string" && info.previewDataUrl.length > 0
+      ? info.previewDataUrl
+      : undefined;
+  const canPreview = info.kind !== "binary" && previewSrc != null;
 
   return (
     <div className="editor-wrap media-preview">
       <div className="media-preview__body">
         {canPreview && info.kind === "image" ? (
-          <img
-            className="media-preview__image"
-            src={info.previewDataUrl!}
-            alt={path}
-            draggable={false}
-          />
+          <img className="media-preview__image" src={previewSrc} alt={path} draggable={false} />
         ) : null}
         {canPreview && info.kind === "audio" ? (
-          <audio
-            className="media-preview__audio"
-            src={info.previewDataUrl!}
-            controls
-            preload="metadata"
-          />
+          // biome-ignore lint/a11y/useMediaCaption: 本地会话产物的临时预览播放，无字幕源可挂
+          <audio className="media-preview__audio" src={previewSrc} controls preload="metadata" />
         ) : null}
         {canPreview && info.kind === "video" ? (
-          <video
-            className="media-preview__video"
-            src={info.previewDataUrl!}
-            controls
-            preload="metadata"
-          />
+          // biome-ignore lint/a11y/useMediaCaption: 本地会话产物的临时预览播放，无字幕源可挂
+          <video className="media-preview__video" src={previewSrc} controls preload="metadata" />
         ) : null}
         {!canPreview ? (
           <EmptyState

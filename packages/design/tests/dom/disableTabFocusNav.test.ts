@@ -2,7 +2,7 @@
  * Tab 不再移动焦点：只拦截 Tab，重复安装不加监听。
  */
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, it, vi } from "vitest";
 import { disableTabFocusNav } from "../../src/dom/disableTabFocusNav";
 
 describe("disableTabFocusNav", () => {
@@ -10,17 +10,17 @@ describe("disableTabFocusNav", () => {
 
   afterEach(() => {
     listeners.length = 0;
-    Reflect.deleteProperty(globalThis, "window");
+    vi.unstubAllGlobals();
   });
 
   it("没有 window 时什么都不做；装上后只 preventDefault Tab", () => {
+    // jsdom 域下 window 恒存在，用 stub 伪造「无 window」场景
+    vi.stubGlobal("window", undefined);
     disableTabFocusNav();
 
-    Object.assign(globalThis, {
-      window: {
-        addEventListener: (_type: string, fn: (typeof listeners)[number]) => {
-          listeners.push(fn);
-        },
+    vi.stubGlobal("window", {
+      addEventListener: (_type: string, fn: (typeof listeners)[number]) => {
+        listeners.push(fn);
       },
     });
     disableTabFocusNav();

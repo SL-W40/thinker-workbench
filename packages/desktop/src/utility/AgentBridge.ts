@@ -63,6 +63,12 @@ type PendingContextUsage = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+/** 等待 checkpoint 清理结果。 */
+type PendingCheckpointClear = {
+  resolve: (ok: boolean) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 /** 主进程侧 Agent 通信门面。 */
 export class AgentBridge {
   /** 当前绑定的 utilityProcess；退出后置 null。 */
@@ -79,6 +85,8 @@ export class AgentBridge {
   private readonly logListeners = new Set<(record: LogRecord) => void>();
   /** requestId → contextUsage 等待者。 */
   private readonly pendingContextUsage = new Map<string, PendingContextUsage>();
+  /** requestId → checkpoint 清理等待者。 */
+  private readonly pendingCheckpointClear = new Map<string, PendingCheckpointClear>();
   /** ready 握手成功后的旁路订阅（如重置重启退避）。 */
   private readonly readyListeners = new Set<() => void>();
 
@@ -109,16 +117,20 @@ export class AgentBridge {
         this.onAgentEvent(raw.event);
         return;
       }
-      if (raw.kind === "log") {
-        // 自研日志管道已移除；忽略 agent 旧版 log 信封
-        return;
-      }
       if (raw.kind === "contextUsageResult") {
         const pending = this.pendingContextUsage.get(raw.requestId);
         if (!pending) return;
         clearTimeout(pending.timer);
         this.pendingContextUsage.delete(raw.requestId);
         pending.resolve(raw.usage);
+        return;
+      }
+      if (raw.kind === "checkpointClearResult") {
+        const pending = this.pendingCheckpointClear.get(raw.requestId);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        this.pendingCheckpointClear.delete(raw.requestId);
+        pending.resolve(raw.ok);
         return;
       }
       if (raw.kind === "ptyRequest") {
@@ -179,7 +191,6 @@ export class AgentBridge {
                   : typeof attrs.title === "string"
                     ? attrs.title
                     : undefined,
-              bumpRun: s.name === "run",
             });
           } else {
             endTraceSpan(raw.spanId, {
@@ -442,6 +453,11 @@ export class AgentBridge {
       pending.resolve(emptyContextUsageSnapshot());
       this.pendingContextUsage.delete(id);
     }
+    for (const [id, pending] of this.pendingCheckpointClear) {
+      clearTimeout(pending.timer);
+      pending.resolve(false);
+      this.pendingCheckpointClear.delete(id);
+    }
   }
 
   /**
@@ -497,6 +513,33 @@ export class AgentBridge {
         clearTimeout(timer);
         this.pendingContextUsage.delete(requestId);
         resolve(emptyContextUsageSnapshot());
+      }
+    });
+  }
+
+  /**
+   * 请求子进程清理会话线程的全部 checkpoint（SqliteSaver 真实存储）。
+   * 超时 / 未就绪 / 子进程拒绝均返回 false，由调用方 best-effort 降级。
+   */
+  async clearThreadCheckpoints(threadId: string, timeoutMs = 8_000): Promise<boolean> {
+    try {
+      await this.waitUntilReady(timeoutMs);
+    } catch {
+      return false;
+    }
+    const requestId = createId("ckc");
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingCheckpointClear.delete(requestId);
+        resolve(false);
+      }, timeoutMs);
+      this.pendingCheckpointClear.set(requestId, { resolve, timer });
+      try {
+        this.send({ channel: "utility", kind: "checkpointClear", requestId, threadId });
+      } catch {
+        clearTimeout(timer);
+        this.pendingCheckpointClear.delete(requestId);
+        resolve(false);
       }
     });
   }
@@ -631,6 +674,7 @@ export class AgentBridge {
       maxSubagentSteps: general.maxSubagentSteps,
       modelRetryMaxAttempts: general.modelRetryMaxAttempts,
       modelRetryBaseDelayMs: general.modelRetryBaseDelayMs,
+      toolCallMinGapMs: general.toolCallMinGapMs,
       defaultShellBlockUntilMs: general.defaultShellBlockUntilMs,
       shellOutputCap: general.shellOutputCap,
       mcpConnectTimeoutMs: general.mcpConnectTimeoutMs,
@@ -717,6 +761,8 @@ export class AgentBridge {
     traceId: string;
     sessionId: string;
     command: AgentRunCommand;
+    /** 主进程排队时长（毫秒）；engine 会并入终态 durationMs。 */
+    queuedMs?: number;
   }): Promise<void> {
     await this.waitUntilReady();
     const { runId, threadId, traceId, sessionId } = options;
@@ -751,6 +797,7 @@ export class AgentBridge {
         sessionId,
         workspaceId,
         sessionTitle,
+        queuedMs: options.queuedMs,
         command: {
           sessionId,
           threadId,

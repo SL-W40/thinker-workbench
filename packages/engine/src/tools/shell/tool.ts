@@ -13,7 +13,8 @@ export const shellToolSpec = defineTool({
     properties: {
       command: {
         type: "string",
-        description: "Command line to execute in the configured shell.",
+        description:
+          "Command line to execute in the configured shell. Avoid interactive/pager commands: prefer non-interactive flags (e.g. git -c core.pager=cat diff --stat, or pipe through cat) and forbid pagers/confirmation prompts (less, more, vim, top, watch, git commit, sudo with prompt, etc.). When await=true use short direct commands; reserve login PTY (await=false) for long-running servers, not for paged output.",
       },
       working_directory: {
         type: "string",

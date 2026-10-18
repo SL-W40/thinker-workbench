@@ -19,7 +19,10 @@ import {
   shellAllowlistWithoutBlocked,
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
+import { type RuntimeLimits, resolveRuntimeLimits } from "../config/runtimeLimits";
+import type { MemoryRepository } from "../memory/repository";
 import type { RunContext } from "./runContext";
+import { createUsageLedger } from "./runContext";
 import type { RunEmitter } from "./runEmit";
 
 export type BuildRunContextInput = {
@@ -28,6 +31,10 @@ export type BuildRunContextInput = {
   sessionId?: string;
   workspaceRoot: string;
   workspaceName?: string;
+  /** 本 run 数据目录（记忆等落盘）。 */
+  dataDir?: string;
+  /** 记忆仓库；省略则记忆仅运行时（不持久化）。 */
+  memoryRepository?: MemoryRepository;
   chatMode?: ChatMode;
   workspaceAccess?: WorkspaceAccess;
   allowAiDeleteFiles?: boolean;
@@ -39,6 +46,8 @@ export type BuildRunContextInput = {
   shell?: ShellProfile | null;
   catalog?: ModelCatalog | null;
   selection?: ModelSelection | null;
+  /** 本 run 限额快照（桌面随 UtilityRun 下发；省略时取进程默认）。 */
+  limits?: RuntimeLimits;
   route?: { userText?: string; contextPaths?: string[]; hasImages?: boolean };
   emit: RunEmitter;
 };
@@ -76,6 +85,8 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     sessionId: input.sessionId?.trim() || undefined,
     workspaceRoot: input.workspaceRoot,
     workspaceName: input.workspaceName?.trim() || undefined,
+    dataDir: input.dataDir,
+    memoryRepository: input.memoryRepository,
     chatMode: normalizeChatMode(input.chatMode ?? DEFAULT_CHAT_MODE),
     workspaceAccess: normalizeWorkspaceAccess(input.workspaceAccess, DEFAULT_WORKSPACE_ACCESS),
     allowAiDeleteFiles: input.allowAiDeleteFiles !== false,
@@ -87,6 +98,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     ),
     ...shellListsFromInput(input),
     shellProfile: input.shell ?? null,
+    limits: input.limits ?? resolveRuntimeLimits(),
     emit: input.emit,
     catalog,
     selection,
@@ -95,7 +107,11 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
       contextPaths: input.route?.contextPaths,
       ...(input.route?.hasImages ? { hasImages: true as const } : {}),
     },
+    // 本 run 用量账本；子代理派生帧共享同一引用，故在此一次性创建
+    usage: createUsageLedger(),
     hitlIds: new Set(),
     taskIds: new Set(),
+    // 缺省视为历史延续（resume / 子代理派生）；run() 入口会显式改写为 true
+    freshUserTurn: false,
   };
 }

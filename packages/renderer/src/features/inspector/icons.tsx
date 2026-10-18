@@ -1,6 +1,7 @@
 /**
  * Inspector 本地图标（自 v1 panes/icons 精简）。
  */
+// biome-ignore-all lint/a11y/noSvgWithoutTitle: 本文件是纯装饰性图标集合，svg 全部 aria-hidden，不承载语义，无需 title
 import type { ReactNode } from "react";
 
 function IconFolder({ open }: { open?: boolean }) {
@@ -924,6 +925,17 @@ function IconChevron({ open }: { open?: boolean }) {
   );
 }
 
+/** 竖向三点（更多操作）图标。 */
+function MoreVerticalIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <circle cx="8" cy="3" r="1.4" />
+      <circle cx="8" cy="8" r="1.4" />
+      <circle cx="8" cy="13" r="1.4" />
+    </svg>
+  );
+}
+
 function MenuIcon({ d, extra }: { d: string; extra?: ReactNode }) {
   return (
     <svg
@@ -1060,6 +1072,7 @@ export {
   IconFolder,
   IconPanelHide,
   MI,
+  MoreVerticalIcon,
   SubagentStartIcon,
   TerminalStartIcon,
 };

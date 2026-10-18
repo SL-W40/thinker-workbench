@@ -33,7 +33,6 @@ export type StartSpanInput = {
   workspaceId?: string;
   threadId?: string;
   title?: string;
-  bumpRun?: boolean;
 };
 
 /** 开关关闭时仍返回 id，便于调用方配对 end。 */
@@ -67,7 +66,6 @@ export function startTraceSpan(input: StartSpanInput): string {
     threadId: input.threadId,
     title: input.title,
     ts: startTs,
-    bumpRun: input.bumpRun,
   });
 
   let inputRef: string | undefined;

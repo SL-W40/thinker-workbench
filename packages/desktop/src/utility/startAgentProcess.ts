@@ -10,6 +10,7 @@ import { runLedger } from "../agent/runLedger";
 import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths";
 import { getGeneralSettings, getModelCatalogSnapshot } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
+import { setCheckpointClearTransport } from "../db/checkpointClear";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
 import { onAgentUtilityExited } from "../ipc/agentHandlers";
 import { desktopLog } from "../log/setup";
@@ -49,6 +50,7 @@ export function buildAgentHello(): UtilityHello {
     maxSubagentSteps: general.maxSubagentSteps,
     modelRetryMaxAttempts: general.modelRetryMaxAttempts,
     modelRetryBaseDelayMs: general.modelRetryBaseDelayMs,
+    toolCallMinGapMs: general.toolCallMinGapMs,
     defaultShellBlockUntilMs: general.defaultShellBlockUntilMs,
     shellOutputCap: general.shellOutputCap,
     mcpConnectTimeoutMs: general.mcpConnectTimeoutMs,
@@ -76,6 +78,8 @@ export function pushAgentHello(bridge: AgentBridge): void {
  */
 export function startAgentProcess(): AgentProcessHandle {
   const bridge = new AgentBridge();
+  // 删会话的 checkpoint 清理经 bridge 走 engine 子进程（真实存储在子进程内）
+  setCheckpointClearTransport((threadId) => bridge.clearThreadCheckpoints(threadId));
   const log = desktopLog("agent-process");
 
   let child: Electron.UtilityProcess | null = null;

@@ -2,7 +2,6 @@
  * 模型目录设置类型与脱敏转换。
  * 完整 `apiKey` 仅留在 main / utility；renderer 只见公开视图。
  */
-import { createId } from "../ids";
 import type { ChatMode } from "./chatMode";
 import type { ThinkerGeneralApi } from "./general";
 import type { ShortcutsMap, ThinkerShortcutsApi } from "./shortcuts";
@@ -217,58 +216,6 @@ export function normalizeModelSelection(raw: unknown): ModelSelection {
     return { mode: "manual", modelId: obj.modelId.trim() };
   }
   return { mode: "auto" };
-}
-
-/** 由旧单字段设置迁移为目录。 */
-export function migrateLegacyModelSettings(legacy: {
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  allowEmoji?: boolean;
-  contextWindow?: number;
-}): ModelCatalog {
-  const apiKey = typeof legacy.apiKey === "string" ? legacy.apiKey.trim() : "";
-  const baseUrl = typeof legacy.baseUrl === "string" ? legacy.baseUrl.trim() : "";
-  const modelName = typeof legacy.model === "string" ? legacy.model.trim() : "";
-  const allowEmoji = typeof legacy.allowEmoji === "boolean" ? legacy.allowEmoji : false;
-  const contextWindow =
-    typeof legacy.contextWindow === "number" &&
-    Number.isFinite(legacy.contextWindow) &&
-    legacy.contextWindow > 0
-      ? Math.floor(legacy.contextWindow)
-      : undefined;
-
-  if (!apiKey && !baseUrl && !modelName) {
-    return emptyModelCatalog();
-  }
-
-  const providerId = createId("prov");
-  const modelId = createId("mdl");
-  const entry: ModelEntry = {
-    id: modelId,
-    providerId,
-    model: modelName || "gpt-4o-mini",
-    label: modelName || "Default",
-    tags: ["general"],
-    priority: 0,
-    enabled: true,
-    health: "ok",
-    ...(contextWindow != null ? { contextWindow } : {}),
-  };
-
-  return {
-    providers: [
-      {
-        id: providerId,
-        label: "Default",
-        apiKey,
-        baseUrl,
-      },
-    ],
-    models: [entry],
-    selection: modelName ? { mode: "manual", modelId } : { mode: "auto" },
-    allowEmoji,
-  };
 }
 
 /** 将条目 + 凭证展开为请求凭据。 */

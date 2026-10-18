@@ -20,7 +20,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { getModelSettings, getSessionModelSelection, listSkills } from "../../bridge/thinker";
+import {
+  getModelSettings,
+  getSessionModelSelection,
+  listSkills,
+  MODEL_SETTINGS_CHANGED,
+} from "../../bridge/thinker";
 import { workspaceTree } from "../../bridge/workspaceFs";
 import { useT } from "../../i18n/useI18n";
 import { loadFileRecents } from "../inspector/fileRecents";
@@ -163,6 +168,7 @@ export function Composer({
   const [dragOver, setDragOver] = useState(false);
   /** 当前选用模型未标 vision 时提示（仍发送图片）。 */
   const [visionUntagged, setVisionUntagged] = useState(false);
+  const [modelCatalogTick, setModelCatalogTick] = useState(0);
   const [mention, setMention] = useState<ActiveMention | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number } | null>(null);
@@ -259,6 +265,13 @@ export function Composer({
   const hasReadyImages = draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
 
   useEffect(() => {
+    const onChanged = () => setModelCatalogTick((n) => n + 1);
+    window.addEventListener(MODEL_SETTINGS_CHANGED, onChanged);
+    return () => window.removeEventListener(MODEL_SETTINGS_CHANGED, onChanged);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: modelCatalogTick 未在函数体读取但刻意保留：模型设置变化后需要重新查询健康模型
+  useEffect(() => {
     if (!hasReadyImages) {
       setVisionUntagged(false);
       return;
@@ -286,7 +299,7 @@ export function Composer({
     return () => {
       cancelled = true;
     };
-  }, [hasReadyImages, sessionId]);
+  }, [hasReadyImages, sessionId, modelCatalogTick]);
 
   const recentPaths = useMemo(() => loadFileRecents(workspaceId), [workspaceId]);
 
@@ -444,6 +457,7 @@ export function Composer({
           {gateMessage}
         </Callout>
       ) : null}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 输入区外壳承载拖拽投放，交互核心在内部编辑器 */}
       <div
         className={`composer-shell${busy ? " is-busy" : ""}${dragOver ? " is-dragover" : ""}`}
         onDragOver={onDragOver}
@@ -478,8 +492,8 @@ export function Composer({
         />
         <div className="composer-bar">
           <div className="composer-bar-left">
-            <ModePicker sessionId={sessionId} disabled={busy} />
-            <ModelPicker sessionId={sessionId} disabled={busy} />
+            <ModePicker sessionId={sessionId} />
+            <ModelPicker sessionId={sessionId} />
           </div>
           <div className="composer-bar-right">
             <ContextUsageControl messages={messages} draft={draft} workspaceRoot={workspaceRoot} />
@@ -487,7 +501,6 @@ export function Composer({
               className="composer-attach"
               size="md"
               variant="ghost"
-              disabled={busy}
               aria-label={t("chat.images.attach")}
               title={t("chat.images.attach")}
               onClick={() => fileInputRef.current?.click()}

@@ -22,7 +22,8 @@ export function findToolResultMessage(
   const id = callId?.trim();
   if (!id) return undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]!;
+    const m = messages[i];
+    if (!m) continue;
     if (m.role === "tool" && m.tool_call_id === id) return m;
   }
   return undefined;

@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   CodeIcon,
   ConsoleIcon,
+  DatabaseIcon,
   DebugModeIcon,
   type IconProps,
   InfoIcon,
@@ -25,6 +26,11 @@ import {
   spanTurn,
 } from "./callTreeModel";
 
+/** 非并行 chunk 的 key：分组顺序固定不重排，用序号保证唯一。 */
+function plainChunkKey(index: number): string {
+  return `plain-${index}`;
+}
+
 type Props = {
   spans: TraceSpanRecord[];
   selectedSpanId: string | null;
@@ -40,6 +46,7 @@ const KIND_ICON: Record<TraceRunType, ComponentType<IconProps>> = {
   embedding: CodeIcon,
   prompt: DebugModeIcon,
   parser: InfoIcon,
+  memory: DatabaseIcon,
 };
 
 /** 按 name 前缀细调图标（chain 兼有 graph / subagent）。*/
@@ -166,6 +173,8 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
     const width = Math.max(0.15, (dur / totalMs) * 100);
     const pad = 8 + row.depth * 14;
     return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: 行点击选中 span；行内已有键盘可达的展开按钮，选择操作有全局键盘路径
+      // biome-ignore lint/a11y/useKeyWithClickEvents: 同上，选择操作由全局键盘路径覆盖
       <div
         key={s.id}
         className={`trace-calltree__row${selected ? " is-selected" : ""}${row.hasKids ? " is-expandable" : ""}${statusClass}`}
@@ -251,7 +260,7 @@ export function CallTreeDiagram({ spans, selectedSpanId, onSelect }: Props) {
               </div>
             );
           }
-          return <Fragment key={`plain-${i}`}>{chunk.rows.map(renderRow)}</Fragment>;
+          return <Fragment key={plainChunkKey(i)}>{chunk.rows.map(renderRow)}</Fragment>;
         })}
       </div>
     </div>

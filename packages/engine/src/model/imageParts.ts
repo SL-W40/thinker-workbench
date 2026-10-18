@@ -37,14 +37,21 @@ export function estimateTurnUsage(input: {
   };
 }
 
-/** 路径须在 `{dataDir}/workspaces/<id>/images/` 下。 */
+/** 路径须在 `{dataDir}/workspaces/<id>/images/` 或 `{dataDir}/computer/images/` 下。 */
 export function isAllowedChatImagePath(filePath: string, dataDir?: string | null): boolean {
   const root = (dataDir ?? getDataDir())?.trim();
   if (!root) return false;
   const resolved = path.resolve(filePath);
+  // 会话附图：{dataDir}/workspaces/<id>/images/<file>
   const workspacesRoot = path.resolve(root, "workspaces");
   const rel = path.relative(workspacesRoot, resolved);
-  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
+    // computer MCP 截图：{dataDir}/computer/images/<file>
+    const dataRel = path.relative(path.resolve(root), resolved);
+    if (dataRel.startsWith("..") || path.isAbsolute(dataRel)) return false;
+    const parts = dataRel.split(path.sep);
+    return parts.length >= 3 && parts[0] === "computer" && parts[1] === "images";
+  }
   const parts = rel.split(path.sep);
   return parts.length >= 3 && parts[1] === "images";
 }

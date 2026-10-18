@@ -3,12 +3,8 @@
  * 网络抖动 / 429 / 5xx 可重试；鉴权、取消、业务 4xx 不重试。
  * 次数 / 基础延迟可由 Settings 经 runtimeLimits 覆盖。
  */
-import {
-  DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
-  DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
-  isCancelErrorMessage,
-} from "@thinker-workbench/shared";
-import { getModelRetryBaseDelayMs } from "../config/runtimeLimits";
+import { isCancelErrorMessage } from "@thinker-workbench/shared";
+import { getLimit } from "../config/runtimeLimits";
 
 export { isCancelErrorMessage };
 
@@ -17,11 +13,6 @@ export function isCancelError(err: unknown): boolean {
   if (err instanceof Error && err.name === "AbortError") return true;
   return isCancelErrorMessage(formatErrorMessage(err));
 }
-
-/** @deprecated 使用 getModelRetryMaxAttempts()；保留默认常量供测试。 */
-export const MODEL_RETRY_MAX_ATTEMPTS = DEFAULT_MODEL_RETRY_MAX_ATTEMPTS;
-/** @deprecated 使用 getModelRetryBaseDelayMs()。 */
-export const MODEL_RETRY_BASE_DELAY_MS = DEFAULT_MODEL_RETRY_BASE_DELAY_MS;
 
 /** 从 Error.cause 链拼出可读消息（undici 常把细节放在 cause）。 */
 export function formatErrorMessage(err: unknown): string {
@@ -60,25 +51,32 @@ export function isRetryableError(err: unknown, options?: { emittedTokens?: boole
   );
 }
 
-/** 指数退避等待；abort 时抛出取消错误。 */
-export function sleepBackoff(attempt: number, signal: AbortSignal): Promise<void> {
-  // attempt 从 1 起表示第几次重试
-  const base = getModelRetryBaseDelayMs() * 2 ** Math.max(0, attempt - 1);
-  const jitter = Math.floor(Math.random() * 120);
-  const ms = base + jitter;
+/** 信号可中断的定时等待；abort 时驳回（默认「Run cancelled.」）。 */
+export function sleep(ms: number, signal: AbortSignal, reason = "Run cancelled."): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
-      reject(new Error("Chat completion cancelled."));
+      reject(new Error(reason));
       return;
     }
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
+    const timer = setTimeout(
+      () => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      Math.max(0, ms),
+    );
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new Error("Chat completion cancelled."));
+      reject(new Error(reason));
     };
     signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+/** 指数退避等待；abort 时抛出取消错误。 */
+export function sleepBackoff(attempt: number, signal: AbortSignal): Promise<void> {
+  // attempt 从 1 起表示第几次重试
+  const base = getLimit("modelRetryBaseDelayMs") * 2 ** Math.max(0, attempt - 1);
+  const jitter = Math.floor(Math.random() * 120);
+  return sleep(base + jitter, signal, "Chat completion cancelled.");
 }

@@ -107,6 +107,8 @@ function ModalRoot({
         aria-hidden
         onClick={canDismiss ? () => onClose?.() : undefined}
       />
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 点滚动层空白关闭弹窗的刻意的点击代理，键盘 Escape 关闭已在全局处理 */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: 该点击仅服务鼠标点空白关闭，键盘路径由 Escape 全局监听覆盖 */}
       <div
         className="tw-modal__scroll"
         onClick={

@@ -10,7 +10,7 @@ import {
   SettingsIcon,
   Spinner,
 } from "@thinker-workbench/design/react";
-import { lazy, type ReactNode, Suspense, useEffect } from "react";
+import { lazy, type ReactNode, Suspense } from "react";
 import type { MessageKey } from "../../i18n/translate";
 import { useT } from "../../i18n/useI18n";
 import { SettingsPane } from "../settings/SettingsPane";
@@ -42,9 +42,8 @@ export function isToolTabId(value: unknown): value is ToolTabId {
   return typeof value === "string" && (TOOL_TAB_IDS as readonly string[]).includes(value);
 }
 
-/** 规范化 tab（历史 observability / langfuse / trace → logs）。 */
+/** 规范化 tab；未知值回退 settings。 */
 export function normalizeToolTabId(value: unknown): ToolTabId {
-  if (value === "langfuse" || value === "observability" || value === "trace") return "logs";
   if (typeof value === "string" && (TOOL_TAB_IDS as readonly string[]).includes(value)) {
     return value as ToolTabId;
   }
@@ -71,11 +70,6 @@ export function ToolsPane({
   focusSessionId = null,
 }: ToolsPaneProps) {
   const t = useT();
-
-  useEffect(() => {
-    if (!active) return;
-    window.__TW_EMBED_HOST__ = true;
-  }, [active]);
 
   return (
     <div className="tools-shell" hidden={!active}>

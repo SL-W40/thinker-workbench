@@ -18,6 +18,7 @@ import {
   normalizeModelSelection,
   type ReorderInput,
   type SessionRunStatus,
+  sanitizeUsage,
   type ThreadMeta,
   type WorkspaceCreateInput,
   type WorkspaceRecord,
@@ -26,6 +27,7 @@ import type Database from "better-sqlite3";
 import { getDefaultWorkspaceRoot } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { peekThreadCheckpoint } from "./checkpointClear";
+import { buildOrphanHealPayload } from "./orphanHeal";
 import { planQueuedHeal } from "./queuedHeal";
 import { activityAtFromMessages } from "./sessionActivity";
 import { purgeSessionArtifacts } from "./sessionArtifacts";
@@ -120,7 +122,7 @@ function mapSession(row: SessionRow): ChatSessionRecord {
     title: row.title,
     pinned: row.pinned === 1,
     sortOrder: row.sort_order,
-    runStatus: normalizeRunStatus(row.run_status, row.interrupt_reason),
+    runStatus: normalizeRunStatus(row.run_status),
     activeRunId: row.active_run_id,
     interruptReason: row.interrupt_reason,
     createdAt: row.created_at,
@@ -130,8 +132,8 @@ function mapSession(row: SessionRow): ChatSessionRecord {
 
 export { QUEUE_CLEARED_ON_RESTART } from "./queuedHeal";
 
-/** 读盘时迁移旧 `interrupted` → cancelled / crashed。 */
-function normalizeRunStatus(value: string, interruptReason?: string | null): SessionRunStatus {
+/** 将未知 run_status 规范为 idle（运行期容错，非版本迁移）。 */
+function normalizeRunStatus(value: string): SessionRunStatus {
   if (
     value === "idle" ||
     value === "running" ||
@@ -141,13 +143,6 @@ function normalizeRunStatus(value: string, interruptReason?: string | null): Ses
     value === "failed"
   ) {
     return value;
-  }
-  if (value === "interrupted") {
-    const reason = (interruptReason ?? "").toLowerCase();
-    if (reason.includes("crash") || reason.includes("exit") || reason.includes("utility")) {
-      return "crashed";
-    }
-    return "cancelled";
   }
   return "idle";
 }
@@ -161,7 +156,7 @@ function mapThread(row: SessionRow): ThreadMeta {
     updatedAt: row.updated_at,
     pinned: row.pinned === 1,
     sortOrder: row.sort_order,
-    runStatus: normalizeRunStatus(row.run_status, row.interrupt_reason),
+    runStatus: normalizeRunStatus(row.run_status),
   };
 }
 
@@ -525,7 +520,6 @@ export function getSessionByActiveRunId(runId: string): ChatSessionRecord | null
  * - `queued` 且未要求保留 → `failed`（内存队列已丢，不能 Resume），收束 pending
  * - `running` 且有 checkpoint → `crashed`（可 Resume）
  * - `running` 且无 checkpoint → `failed`，收束 pending 消息
- * - 旧 `interrupted` / `failed` 仍有 checkpoint → `crashed`（修复旧版误标）
  * - 非 running 且无 checkpoint、却仍有 pending 助手消息 → 收束，避免永远 Planning
  * @param options.preserveQueued utility 闪退时队列仍在内存里，不要把 queued 收掉
  */
@@ -537,7 +531,7 @@ export function healRunningSessions(options?: { preserveQueued?: boolean }): num
     const rows = db
       .prepare(
         `SELECT id, thread_id, run_status, interrupt_reason FROM chat_sessions
-         WHERE run_status IN ('running', 'queued', 'interrupted', 'cancelled', 'crashed', 'failed')`,
+         WHERE run_status IN ('running', 'queued', 'cancelled', 'crashed', 'failed')`,
       )
       .all() as Array<{
       id: string;
@@ -570,7 +564,7 @@ export function healRunningSessions(options?: { preserveQueued?: boolean }): num
           row.run_status === "cancelled" &&
           (row.interrupt_reason ?? "").toLowerCase() === "cancelled" &&
           !dirtyReason;
-        // 启动愈合：残留 running / 旧 interrupted → crashed；保留用户 cancelled
+        // 启动愈合：残留 running → crashed；保留用户 cancelled
         if (row.run_status === "cancelled" && !dirtyReason) {
           db.prepare(
             `UPDATE chat_sessions SET active_run_id = NULL WHERE id = ? AND active_run_id IS NOT NULL`,
@@ -617,7 +611,7 @@ export function healRunningSessions(options?: { preserveQueued?: boolean }): num
         continue;
       }
 
-      // cancelled/crashed/interrupted/failed 但无 checkpoint：若仍有 pending 气泡则收束
+      // cancelled/crashed/failed 但无 checkpoint：若仍有 pending 气泡则收束
       const pending = db
         .prepare(
           `SELECT COUNT(*) AS c FROM chat_messages
@@ -626,11 +620,7 @@ export function healRunningSessions(options?: { preserveQueued?: boolean }): num
         .get(row.id) as { c: number };
       if ((pending?.c ?? 0) > 0) {
         finalizeOrphanPendingMessages(ws.id, row.id, "Run interrupted by process restart.");
-        if (
-          row.run_status === "interrupted" ||
-          row.run_status === "cancelled" ||
-          row.run_status === "crashed"
-        ) {
+        if (row.run_status === "cancelled" || row.run_status === "crashed") {
           db.prepare(
             `UPDATE chat_sessions
              SET run_status = 'failed',
@@ -697,34 +687,7 @@ export function finalizeOrphanPendingMessages(
   const upd = db.prepare(`UPDATE chat_messages SET pending = 0, payload_json = ? WHERE id = ?`);
   const tx = db.transaction(() => {
     for (const row of rows) {
-      let timeline: unknown[] = [];
-      if (row.payload_json) {
-        try {
-          const parsed = JSON.parse(row.payload_json) as { timeline?: unknown[] };
-          if (Array.isArray(parsed.timeline)) timeline = parsed.timeline;
-        } catch {
-          /* ignore */
-        }
-      }
-      // 排队等待文案不再保留；关掉活动 thinking，并追加错误步
-      timeline = timeline.filter((step) => {
-        if (!step || typeof step !== "object") return true;
-        return (step as { id?: string }).id !== "queued-wait";
-      });
-      timeline = timeline.map((step) => {
-        if (step && typeof step === "object" && (step as { kind?: string }).kind === "status") {
-          return { ...step, active: false };
-        }
-        return step;
-      });
-      timeline.push({
-        id: `tl_heal_${row.id}`,
-        kind: "error",
-        message: errorText,
-        // 无 checkpoint 的进程中断：按异常退出展示，便于时间线「继续」识别
-        code,
-      });
-      upd.run(JSON.stringify({ timeline, pending: false }), row.id);
+      upd.run(buildOrphanHealPayload(row.payload_json, row.id, errorText, code), row.id);
     }
   });
   tx();
@@ -858,6 +821,7 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
         timeline ||
         m.pending ||
         m.usage ||
+        m.usageEstimated ||
         m.durationMs != null ||
         m.runStartedAt != null ||
         Boolean(m.traceId) ||
@@ -867,6 +831,7 @@ function saveMessagesToDb(workspaceId: string, sessionId: string, messages: Chat
             timeline,
             pending: m.pending,
             usage: m.usage,
+            usageEstimated: m.usageEstimated,
             durationMs: m.durationMs,
             // 已结束消息不持久化 live 计时锚点
             runStartedAt: m.pending ? m.runStartedAt : undefined,
@@ -898,6 +863,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
     let timeline: ChatMessage["timeline"];
     let pending = row.pending === 1;
     let usage: ChatMessage["usage"];
+    let usageEstimated: boolean | undefined;
     let durationMs: number | undefined;
     let runStartedAt: number | undefined;
     let traceId: string | undefined;
@@ -908,6 +874,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
           timeline?: ChatMessage["timeline"];
           pending?: boolean;
           usage?: ChatMessage["usage"];
+          usageEstimated?: boolean;
           durationMs?: number;
           runStartedAt?: number;
           traceId?: string;
@@ -915,7 +882,12 @@ export function loadMessages(sessionId: string): ChatMessage[] {
         };
         timeline = parsed.timeline;
         if (typeof parsed.pending === "boolean") pending = parsed.pending;
-        if (parsed.usage) usage = parsed.usage;
+        // 历史脏数据（非对象 / NaN / 负数）统一清洗，避免污染展示与累加
+        const clean = sanitizeUsage(parsed.usage);
+        if (clean) usage = clean;
+        if (typeof parsed.usageEstimated === "boolean") {
+          usageEstimated = parsed.usageEstimated;
+        }
         if (typeof parsed.durationMs === "number") durationMs = parsed.durationMs;
         if (typeof parsed.runStartedAt === "number") runStartedAt = parsed.runStartedAt;
         if (typeof parsed.traceId === "string" && parsed.traceId.trim()) {
@@ -936,6 +908,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
       pending: pending || undefined,
       timeline,
       usage,
+      usageEstimated,
       durationMs,
       runStartedAt,
       traceId,

@@ -1,7 +1,11 @@
 /**
  * shell 审批闸门：硬拒绝优先，其后才是白名单 / AI 研判 / HITL。
  */
-import { isShellTokenBlocked, type ShellApprovalMode } from "@thinker-workbench/shared";
+import {
+  isShellTokenBlocked,
+  type ShellApprovalMode,
+  shellCommandsToAllowlist,
+} from "@thinker-workbench/shared";
 import { requestHitl } from "../../hitl/requestHitl";
 import {
   addShellAllowlistToken,
@@ -104,8 +108,13 @@ async function applyHitlResponse(response: { actionId: string }, command: string
     throw new Error("Shell command denied by user.");
   }
   if (response.actionId === "allow_and_whitelist") {
-    const token = commandBaseToken(command);
-    if (token) addShellAllowlistToken(token);
+    for (const token of shellCommandsToAllowlist(
+      command,
+      getShellAllowlist(),
+      getShellBlocklist(),
+    )) {
+      addShellAllowlistToken(token);
+    }
     return;
   }
   if (response.actionId === "allow") return;

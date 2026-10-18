@@ -24,9 +24,10 @@ export function detectActiveMention(text: string, caret: number): ActiveMention 
   // 从光标回扫到空白或行首
   let i = end - 1;
   while (i >= 0) {
-    const ch = before[i]!;
+    const ch = before[i];
+    if (ch === undefined) break;
     if (ch === "/" || ch === "@") {
-      const prev = i === 0 ? " " : before[i - 1]!;
+      const prev = i === 0 ? " " : (before[i - 1] ?? " ");
       if (i === 0 || /\s/.test(prev)) {
         const query = before.slice(i + 1);
         // query 内不应再有空白（否则已结束 mention）
@@ -64,8 +65,7 @@ export function applyMentionInsert(
 export function extractContextPaths(text: string): string[] {
   const out: string[] = [];
   const re = /(?:^|[\s])@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
+  for (const m of text.matchAll(re)) {
     const p = (m[1] || m[2] || m[3] || "")
       .trim()
       .replace(/\\/g, "/")
@@ -111,9 +111,8 @@ export function parseMentionSegments(
   const re = /(?:^|[\s])(?:@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))|\/([a-z0-9]+(?:-[a-z0-9]+)*)\b)/gi;
   const out: MentionSegment[] = [];
   let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    const full = m[0]!;
+  for (const m of text.matchAll(re)) {
+    const full = m[0] ?? "";
     // 匹配可能含前导空白；token 从第一个 @ 或 / 起
     const tokenOffset = full.search(/[@/]/);
     if (tokenOffset < 0) continue;

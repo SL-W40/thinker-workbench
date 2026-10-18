@@ -62,7 +62,9 @@ describe("imageParts", () => {
       { id: "img1", path: imagePath, mime: "image/png", width: 1, height: 1 },
     ]);
     assert.equal(state.messages.length, 1);
-    assert.equal(countImageRefs(state.messages[0]!.content), 1);
+    const firstMsg = state.messages[0];
+    assert.ok(firstMsg);
+    assert.equal(countImageRefs(firstMsg.content), 1);
   });
 
   it("历史用户附图进入 messages", () => {
@@ -75,7 +77,9 @@ describe("imageParts", () => {
       { role: "assistant", content: "ok" },
     ]);
     assert.equal(state.messages.length, 3);
-    assert.equal(countImageRefs(state.messages[0]!.content), 1);
+    const historyFirst = state.messages[0];
+    assert.ok(historyFirst);
+    assert.equal(countImageRefs(historyFirst.content), 1);
   });
 
   it("allowed path 与目录外路径", () => {

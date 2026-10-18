@@ -241,7 +241,9 @@ export function matchAccelerator(
     .filter(Boolean);
   if (!parts.length) return false;
 
-  const keyToken = parts[parts.length - 1]!;
+  const lastPart = parts[parts.length - 1];
+  if (!lastPart) return false;
+  const keyToken = lastPart;
   const mods = new Set(parts.slice(0, -1).map((p) => p.toLowerCase()));
   const isMac = platform === "darwin";
 
@@ -313,7 +315,9 @@ export function normalizeAccelerator(accel: string): string {
     .filter(Boolean);
   if (!parts.length) return "";
 
-  const keyToken = parts[parts.length - 1]!;
+  const lastPart = parts[parts.length - 1];
+  if (!lastPart) return "";
+  const keyToken = lastPart;
   const mods = parts.slice(0, -1).map((p) => p.toLowerCase());
   const out: string[] = [];
 

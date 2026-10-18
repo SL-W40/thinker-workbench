@@ -79,7 +79,7 @@ export function hasOpenFence(md: string): boolean {
     const m = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
     if (!m) continue;
     const fence = m[2] ?? "";
-    const ch = fence[0]!;
+    const ch = fence.charAt(0);
     const count = fence.length;
     const rest = m[3] ?? "";
     if (!open) {

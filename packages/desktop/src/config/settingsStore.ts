@@ -5,7 +5,6 @@
  * - 引导镜像：`~/.thinker/settings.json`（dataDir 非默认时同步一份，供下次启动解析 dataDir）
  *
  * 内存中 provider.apiKey 为明文；落盘时仅存 `apiKeyEnc`（safeStorage 密文）。
- * 加载时若发现旧版单字段 model 或明文 apiKey 会迁移。
  *
  * 密文**不会**在 `loadSettings` / `getModelCatalogSnapshot` / contextUsage 时解密；
  * 仅在发消息、resume、探测模型等真正需要密钥时经 `ensureSecretsUnlocked` 解锁。
@@ -26,14 +25,12 @@ import {
   type ModelProvider,
   type ModelSelection,
   type ModelSettings,
-  migrateLegacyModelSettings,
   normalizeGeneral,
   normalizeModelSelection,
   normalizeModelTags,
   normalizeShortcuts,
   resolveModelSettings,
   type ShortcutsMap,
-  THEME_CATALOG_VERSION,
   type UnlockModelSecretsResult,
 } from "@thinker-workbench/shared";
 import { decryptSecret, encryptSecret } from "./secretCrypto";
@@ -53,8 +50,6 @@ type DiskProvider = {
   id?: string;
   label?: string;
   apiKeyEnc?: string;
-  /** @deprecated 旧版明文。 */
-  apiKey?: string;
   baseUrl?: string;
 };
 
@@ -82,20 +77,9 @@ type DiskModelCatalog = {
   allowEmoji?: boolean;
 };
 
-/** 旧版单字段 model 段。 */
-type DiskLegacyModel = {
-  apiKeyEnc?: string;
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  allowEmoji?: boolean;
-  contextWindow?: number;
-};
-
 /** 磁盘 JSON 根形状。 */
 type DiskSettings = {
-  themeCatalogVersion?: number;
-  model?: DiskModelCatalog | DiskLegacyModel;
+  model?: DiskModelCatalog;
   shortcuts?: unknown;
   general?: unknown;
 };
@@ -139,15 +123,7 @@ function hydrateEncFromDisk(): void {
       const rawModel = parsed.model;
       if (!rawModel || typeof rawModel !== "object") continue;
       const providers = (rawModel as DiskModelCatalog).providers;
-      if (!Array.isArray(providers)) {
-        const legacy = rawModel as DiskLegacyModel;
-        if (typeof legacy.apiKeyEnc === "string" && legacy.apiKeyEnc.trim()) {
-          // 旧单字段：挂到当前缓存里第一个 provider（若有）
-          const id = cached?.model.providers[0]?.id;
-          if (id) lastApiKeyEncByProvider.set(id, legacy.apiKeyEnc.trim());
-        }
-        continue;
-      }
+      if (!Array.isArray(providers)) continue;
       for (const p of providers) {
         if (!p || typeof p !== "object") continue;
         const id = typeof p.id === "string" && p.id.trim() ? p.id.trim() : "";
@@ -303,26 +279,7 @@ export function settingsPath(): string {
   return path.join(dataDir, "settings.json");
 }
 
-function isLegacyDiskModel(raw: unknown): raw is DiskLegacyModel {
-  if (!raw || typeof raw !== "object") return false;
-  const obj = raw as DiskModelCatalog & DiskLegacyModel;
-  // 新版有 providers 数组或 version>=2
-  if (Array.isArray(obj.providers) || (typeof obj.version === "number" && obj.version >= 2)) {
-    return false;
-  }
-  // 旧版有顶层 apiKeyEnc / apiKey / model 字符串
-  return (
-    typeof obj.apiKeyEnc === "string" ||
-    typeof obj.apiKey === "string" ||
-    typeof obj.model === "string" ||
-    typeof obj.baseUrl === "string"
-  );
-}
-
-function readProviderFromDisk(raw: DiskProvider): {
-  provider: ModelProvider;
-  needsMigrate: boolean;
-} {
+function readProviderFromDisk(raw: DiskProvider): ModelProvider {
   const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : createId("prov");
   const label = typeof raw.label === "string" ? raw.label : "Provider";
   const baseUrl = typeof raw.baseUrl === "string" ? raw.baseUrl : "";
@@ -330,19 +287,9 @@ function readProviderFromDisk(raw: DiskProvider): {
   if (typeof raw.apiKeyEnc === "string" && raw.apiKeyEnc.trim()) {
     const enc = raw.apiKeyEnc.trim();
     lastApiKeyEncByProvider.set(id, enc);
-    // 延迟解密：启动只登记密文，真正用钥时再 unlock
-    return {
-      provider: { id, label, apiKey: "", baseUrl },
-      needsMigrate: false,
-    };
   }
-  if (typeof raw.apiKey === "string" && raw.apiKey.trim()) {
-    return {
-      provider: { id, label, apiKey: raw.apiKey.trim(), baseUrl },
-      needsMigrate: true,
-    };
-  }
-  return { provider: { id, label, apiKey: "", baseUrl }, needsMigrate: false };
+  // 延迟解密：启动只登记密文，真正用钥时再 unlock
+  return { id, label, apiKey: "", baseUrl };
 }
 
 function readEntryFromDisk(raw: DiskModelEntry, index: number): ModelEntry {
@@ -384,60 +331,21 @@ function readEntryFromDisk(raw: DiskModelEntry, index: number): ModelEntry {
   };
 }
 
-/**
- * 从磁盘 model 段还原内存 ModelCatalog。
- * @returns needsMigrate 为 true 表示存在旧版明文 apiKey 或旧单字段结构，需重写
- */
-function readModelFromDisk(raw: unknown): { model: ModelCatalog; needsMigrate: boolean } {
+/** 从磁盘 model 段还原内存 ModelCatalog。 */
+function readModelFromDisk(raw: unknown): ModelCatalog {
   if (!raw || typeof raw !== "object") {
-    return { model: emptyModelCatalog(), needsMigrate: false };
+    return emptyModelCatalog();
   }
-
-  if (isLegacyDiskModel(raw)) {
-    const obj = raw as DiskLegacyModel;
-    let apiKey = "";
-    const enc =
-      typeof obj.apiKeyEnc === "string" && obj.apiKeyEnc.trim() ? obj.apiKeyEnc.trim() : "";
-    if (enc) {
-      // 旧密文不在此解密；占位非空以便 migrate 建出 provider，再清明文
-      apiKey = ".";
-    } else if (typeof obj.apiKey === "string" && obj.apiKey.trim()) {
-      apiKey = obj.apiKey.trim();
-    }
-    const catalog = migrateLegacyModelSettings({
-      apiKey,
-      baseUrl: typeof obj.baseUrl === "string" ? obj.baseUrl : "",
-      model: typeof obj.model === "string" ? obj.model : "",
-      allowEmoji: typeof obj.allowEmoji === "boolean" ? obj.allowEmoji : false,
-      contextWindow:
-        typeof obj.contextWindow === "number" && Number.isFinite(obj.contextWindow)
-          ? obj.contextWindow
-          : undefined,
-    });
-    if (enc && catalog.providers[0]) {
-      lastApiKeyEncByProvider.set(catalog.providers[0].id, enc);
-      catalog.providers[0].apiKey = "";
-    }
-    return { model: catalog, needsMigrate: true };
-  }
-
   const obj = raw as DiskModelCatalog;
-  let needsMigrate = false;
-  const providers: ModelProvider[] = [];
-  for (const p of obj.providers ?? []) {
-    const { provider, needsMigrate: m } = readProviderFromDisk(p ?? {});
-    if (m) needsMigrate = true;
-    providers.push(provider);
-  }
+  const providers: ModelProvider[] = (obj.providers ?? []).map((p) =>
+    readProviderFromDisk(p ?? {}),
+  );
   const models = (obj.models ?? []).map((e, i) => readEntryFromDisk(e ?? {}, i));
   return {
-    model: {
-      providers,
-      models,
-      selection: normalizeModelSelection(obj.selection),
-      allowEmoji: typeof obj.allowEmoji === "boolean" ? obj.allowEmoji : false,
-    },
-    needsMigrate,
+    providers,
+    models,
+    selection: normalizeModelSelection(obj.selection),
+    allowEmoji: typeof obj.allowEmoji === "boolean" ? obj.allowEmoji : false,
   };
 }
 
@@ -499,7 +407,6 @@ function entryToDisk(entry: ModelEntry): DiskModelEntry {
 /** 将内存 catalog 转为磁盘形态。 */
 function modelToDisk(model: ModelCatalog): DiskModelCatalog {
   return {
-    version: 2,
     providers: model.providers.map(providerToDisk),
     models: model.models.map(entryToDisk),
     selection: model.selection,
@@ -509,7 +416,6 @@ function modelToDisk(model: ModelCatalog): DiskModelCatalog {
 
 function toDiskPayload(next: StoredSettings): DiskSettings {
   return {
-    themeCatalogVersion: THEME_CATALOG_VERSION,
     model: modelToDisk(next.model),
     shortcuts: next.shortcuts,
     general: next.general,
@@ -533,29 +439,14 @@ function persist(next: StoredSettings): void {
   }
 }
 
-function parseDiskFile(file: string): {
-  settings: StoredSettings;
-  needsMigrate: boolean;
-  needsThemeMigrate: boolean;
-} | null {
+function parseDiskFile(file: string): StoredSettings | null {
   try {
     if (!fs.existsSync(file)) return null;
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as DiskSettings;
-    const { model, needsMigrate } = readModelFromDisk(parsed.model);
-    const catalogVersion =
-      typeof parsed.themeCatalogVersion === "number" && Number.isFinite(parsed.themeCatalogVersion)
-        ? Math.floor(parsed.themeCatalogVersion)
-        : 1;
-    const needsThemeMigrate = catalogVersion < THEME_CATALOG_VERSION;
-    const general = normalizeGeneral(parsed.general, catalogVersion);
     return {
-      settings: {
-        model,
-        shortcuts: normalizeShortcuts(parsed.shortcuts),
-        general,
-      },
-      needsMigrate,
-      needsThemeMigrate,
+      model: readModelFromDisk(parsed.model),
+      shortcuts: normalizeShortcuts(parsed.shortcuts),
+      general: normalizeGeneral(parsed.general),
     };
   } catch (err) {
     console.error("[settings] failed to load", file, err);
@@ -580,30 +471,10 @@ export function loadSettings(): StoredSettings {
   const chosen = primaryParsed ?? bootstrapParsed;
 
   if (chosen) {
-    cached = chosen.settings;
-    const hasAnyKey = chosen.settings.model.providers.some((p) => p.apiKey.trim());
-    const needsRewrite =
-      chosen.needsMigrate || chosen.needsThemeMigrate || (!primaryIsBootstrap && !primaryParsed);
-    if (needsRewrite) {
-      if (chosen.needsMigrate && hasAnyKey) {
-        // 确认至少一个 key 能加密，否则不强制重写以免丢钥
-        const encOk = chosen.settings.model.providers.every((p) => {
-          if (!p.apiKey.trim()) return true;
-          return encryptSecret(p.apiKey) !== null;
-        });
-        if (encOk) {
-          persist(cached);
-        } else {
-          console.error(
-            "[settings] plaintext API key present but encryption unavailable; not rewriting",
-          );
-          if (chosen.needsThemeMigrate || (!primaryIsBootstrap && !primaryParsed)) {
-            persist(cached);
-          }
-        }
-      } else {
-        persist(cached);
-      }
+    cached = chosen;
+    // 权威文件缺失（只有引导镜像）时种一份到 dataDir
+    if (!primaryIsBootstrap && !primaryParsed) {
+      persist(cached);
     }
     return cached;
   }

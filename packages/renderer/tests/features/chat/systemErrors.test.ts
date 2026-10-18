@@ -14,9 +14,8 @@ describe("systemErrors", () => {
     assert.equal(isMissingApiKeyError("MODEL_API_KEY_UNLOCK_DENIED"), false);
   });
 
-  it("兼容旧英文文案", () => {
-    assert.equal(isMissingApiKeyError("API key is not set"), true);
-    assert.equal(isUnlockDeniedError("Failed to unlock the saved API key"), true);
-    assert.equal(isMissingApiKeyError("Failed to unlock the saved API key"), false);
+  it("前缀匹配错误码", () => {
+    assert.equal(isMissingApiKeyError("MODEL_API_KEY_MISSING: no key"), true);
+    assert.equal(isUnlockDeniedError("MODEL_API_KEY_UNLOCK_DENIED: denied"), true);
   });
 });

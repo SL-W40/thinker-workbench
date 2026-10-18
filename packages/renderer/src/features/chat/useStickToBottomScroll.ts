@@ -58,6 +58,7 @@ export function useStickToBottomScroll({
     };
   }, [scrollerRef, enabled]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: followKey 未在函数体读取但刻意保留：内容更新后需要重新执行贴底判断
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el || !enabled) return;
@@ -71,6 +72,7 @@ export function useStickToBottomScroll({
     scrollToBottomIfStuck(el, stuckRef.current, "auto");
   }, [enabled, scrollerRef, stickNonce, followKey]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: followKey 未在函数体读取但刻意保留：内容结构变化后需要重建 ResizeObserver 以重新贴底
   useEffect(() => {
     const el = scrollerRef.current;
     const content = contentRef?.current;

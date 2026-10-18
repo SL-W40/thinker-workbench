@@ -2,6 +2,8 @@
  * 内置工具注册表（进程内静态 Map）。
  * 新增工具：实现 tool.ts + execute.ts，并在此登记。
  */
+
+import { askUserToolSpec } from "./ask_user/tool";
 import {
   browserClickToolSpec,
   browserEvaluateToolSpec,
@@ -37,6 +39,7 @@ const tools = new Map<string, ToolSpec>([
   [listDirToolSpec.name, listDirToolSpec],
   [searchFilesToolSpec.name, searchFilesToolSpec],
   [timeToolSpec.name, timeToolSpec],
+  [askUserToolSpec.name, askUserToolSpec],
   [shellToolSpec.name, shellToolSpec],
   [shellAwaitToolSpec.name, shellAwaitToolSpec],
   [shellWriteToolSpec.name, shellWriteToolSpec],

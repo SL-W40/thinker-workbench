@@ -22,7 +22,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "test": "pnpm -w exec vitest run --project dom packages/design/tests"
   },
   "dependencies": {
     "@thinker-workbench/markdown": "workspace:*"

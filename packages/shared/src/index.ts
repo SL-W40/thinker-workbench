@@ -149,15 +149,16 @@ export {
   DEFAULT_SHELL_BLOCK_UNTIL_MS,
   DEFAULT_SHELL_BLOCKLIST,
   DEFAULT_SHELL_OUTPUT_CAP,
+  DEFAULT_TOOL_CALL_MIN_GAP_MS,
   DEFAULT_WORKSPACE_ACCESS,
   DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
   HTTP_COMPATIBILITY_MODES,
   isBuiltinAppTheme,
   isShellTokenBlocked,
   LOG_RETENTION_DAY_OPTIONS,
+  MAX_AGENT_STEPS_RANGE,
   MAX_PARALLEL_RUNS_OPTIONS,
   MAX_QUEUED_RUNS_OPTIONS,
-  migrateAppThemeFromCatalogV1,
   normalizeAppFontScale,
   normalizeAppTheme,
   normalizeContextFilesMaxFileBytes,
@@ -183,6 +184,7 @@ export {
   normalizeShellBlocklist,
   normalizeShellOutputCap,
   normalizeShellProfileId,
+  normalizeToolCallMinGapMs,
   normalizeUiTheme,
   normalizeWorkspaceAccess,
   QUEUE_TIMEOUT_MIN_OPTIONS,
@@ -190,7 +192,9 @@ export {
   SHELL_APPROVAL_MODES,
   shellAllowlistWithoutBlocked,
   shellCommandBaseToken,
-  THEME_CATALOG_VERSION,
+  shellCommandsToAllowlist,
+  shellWhitelistTokens,
+  TOOL_CALL_MIN_GAP_MS_RANGE,
   WORKSPACE_ACCESS_OPTIONS,
 } from "./ipc/general";
 export type { HitlAction, HitlKind, HitlRequest, HitlResponse } from "./ipc/hitl";
@@ -216,6 +220,10 @@ export type {
   McpToolSummary,
   McpTransport,
   ThinkerMcpApi,
+} from "./ipc/mcp";
+export {
+  BUILTIN_COMPUTER_MCP_ID,
+  BUILTIN_COMPUTER_MCP_NAME,
 } from "./ipc/mcp";
 export type {
   RuleListItem,
@@ -252,7 +260,6 @@ export {
   classifyModelSwitchReason,
   emptyModelCatalog,
   MODEL_TAGS,
-  migrateLegacyModelSettings,
   normalizeModelSelection,
   normalizeModelTags,
   resolveModelSettings,
@@ -342,6 +349,8 @@ export type {
   UtilityBrowserRequest,
   UtilityCancel,
   UtilityCancelTask,
+  UtilityCheckpointClear,
+  UtilityCheckpointClearResult,
   UtilityContextUsage,
   UtilityContextUsageResult,
   UtilityCrashNotice,
@@ -394,9 +403,17 @@ export type {
   ChatTimelineSubagentStep,
   ChatTimelineTextStep,
   ChatTimelineToolStep,
+  ChatTimelineTransitionStep,
   Role,
 } from "./protocol/message";
 export type { RunResult } from "./protocol/result";
+export {
+  addUsage,
+  EMPTY_USAGE,
+  hasUsage,
+  sanitizeUsage,
+  totalTokens,
+} from "./protocol/usage";
 export { isCancelErrorMessage } from "./runErrors";
 export { stripAnsi } from "./stripAnsi";
 
@@ -436,7 +453,9 @@ export type ThinkerApi = {
    * 取消运行。
    * 可传 runId 字符串，或 `{ runId?, sessionId? }`（至少一个）；由主进程账本解析。
    */
-  cancel(command?: string | AgentCancelCommand): Promise<{ ok: boolean; error?: string } | void>;
+  cancel(
+    command?: string | AgentCancelCommand,
+  ): Promise<{ ok: boolean; error?: string } | undefined>;
   /** 取消单个后台 Task（不停止父 run）。 */
   cancelTask?(command: AgentCancelTaskCommand): Promise<{ ok: boolean; error?: string }>;
   /** 从 checkpoint 恢复（崩溃后续跑）。 */

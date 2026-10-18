@@ -92,7 +92,12 @@ export function parseYamlObject(raw: string): Record<string, unknown> {
   const stack: Array<{ indent: number; container: Record<string, unknown> | unknown[] }> = [
     { indent: -1, container: root },
   ];
-  const top = () => stack[stack.length - 1]!;
+  // 栈底固定是 root，正常不会取空；防御性兜底
+  const top = () => {
+    const t = stack[stack.length - 1];
+    if (!t) throw new Error("YAML 解析栈为空（不应发生）");
+    return t;
+  };
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";

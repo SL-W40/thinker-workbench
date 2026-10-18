@@ -20,6 +20,11 @@ type DiffRow = {
   code: string;
 };
 
+/** diff 行 key：相邻重复行内容相同，必须带序号才能保证唯一（行序固定不重排）。 */
+function diffRowKey(row: DiffRow, index: number): string {
+  return `${index}:${row.kind}:${row.code.slice(0, 24)}`;
+}
+
 /** 折叠时默认可见行数*/
 const COLLAPSED_LINES = 8;
 
@@ -159,7 +164,9 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
           <button
             type="button"
             className="run-diff-name is-link"
-            onClick={() => onOpenFile?.(path!)}
+            onClick={() => {
+              if (path) onOpenFile?.(path);
+            }}
             aria-label={t("inspector.changes.openFile")}
           >
             {name}
@@ -181,15 +188,13 @@ export function FileDiffView({ path, diff, onOpenFile }: Props) {
           style={{ ["--diff-collapsed-lines" as string]: String(COLLAPSED_LINES) }}
         >
           {visibleRows.map((row, i) => (
-            <span
-              key={`${i}:${row.kind}:${row.code.slice(0, 24)}`}
-              className={`run-diff-line run-diff-line--${row.kind}`}
-            >
+            <span key={diffRowKey(row, i)} className={`run-diff-line run-diff-line--${row.kind}`}>
               <span className={`run-diff-prefix run-diff-prefix--${row.kind}`} aria-hidden="true">
                 {row.prefix}
               </span>
               <code
                 className="run-diff-code hljs"
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: diff 高亮产物来自 hljs 的受控转义输出
                 dangerouslySetInnerHTML={{ __html: highlighted[i] || " " }}
               />
               {"\n"}

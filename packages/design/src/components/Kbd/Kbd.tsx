@@ -36,17 +36,18 @@ function renderLabel(label: string): ReactNode {
   // 单段且无符号时不必包一层（录制提示等）
   if (parts.length === 1 && !hasMacGlyphs) return label;
 
-  return parts.map((part, i) => {
-    const isSym = part.length === 1 && GLYPH_SYM.test(part);
-    return (
-      <span
-        key={`${part}-${i}`}
-        className={isSym ? "tw-kbd__glyph tw-kbd__glyph--sym" : "tw-kbd__glyph"}
-      >
-        {part}
-      </span>
-    );
-  });
+  // 先在渲染前算好 key（键名可能重复，附加序号保证唯一），避免直接以 index 作 JSX key
+  const keyed = parts.map((part, i) => ({
+    part,
+    key: `${part}-${i}`,
+    isSym: part.length === 1 && GLYPH_SYM.test(part),
+  }));
+
+  return keyed.map(({ part, key, isSym }) => (
+    <span key={key} className={isSym ? "tw-kbd__glyph tw-kbd__glyph--sym" : "tw-kbd__glyph"}>
+      {part}
+    </span>
+  ));
 }
 
 /** 键帽外壳；有 `onClick` 时渲染为按钮。 */

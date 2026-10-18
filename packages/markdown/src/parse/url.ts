@@ -6,6 +6,7 @@
 const SAFE_SCHEME = new Set(["http", "https", "mailto", "tel"]);
 
 function hasControls(value: string): boolean {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: 此处目的就是检测控制字符并拒绝，属安全过滤而非误用
   return /[\u0000-\u001F\u007F]/.test(value);
 }
 

@@ -1,6 +1,7 @@
 /**
  * Markdown React 渲染入口：解析 AST 并输出 `.tw-md` 文章树。
  */
+// biome-ignore-all lint/suspicious/noArrayIndexKey: 渲染不可变的 Markdown AST，节点没有稳定 id 且永远不会重排，index 即稳定 key
 import {
   type CSSProperties,
   createContext,

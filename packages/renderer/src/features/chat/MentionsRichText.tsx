@@ -19,17 +19,19 @@ function atLabel(path: string): string {
 
 export function MentionsRichText({ text, onOpenFile, className }: MentionsRichTextProps) {
   const segments = parseMentionSegments(text);
+  // 预生成稳定 key（同段内容可能重复，附加序号保证唯一），避免直接以 index 作 JSX key
+  const keyed = segments.map((seg, i) => ({ seg, key: `${seg.kind}:${i}` }));
   const rootClass = ["mentions-rich", className].filter(Boolean).join(" ");
 
   return (
     <span className={rootClass}>
-      {segments.map((seg, i) => {
+      {keyed.map(({ seg, key }) => {
         if (seg.kind === "text") {
-          return <span key={i}>{seg.text}</span>;
+          return <span key={key}>{seg.text}</span>;
         }
         if (seg.kind === "slash") {
           return (
-            <span key={i} className="mention-chip mention-chip--slash" title={`/${seg.name}`}>
+            <span key={key} className="mention-chip mention-chip--slash" title={`/${seg.name}`}>
               <span className="mention-chip__mark">/</span>
               <span className="mention-chip__label">{seg.name}</span>
             </span>
@@ -37,8 +39,9 @@ export function MentionsRichText({ text, onOpenFile, className }: MentionsRichTe
         }
         const openable = Boolean(onOpenFile);
         return (
+          // biome-ignore lint/a11y/noStaticElementInteractions: @ 路径芯片在可打开时具备 role="link" + tabIndex + 键盘回车处理
           <span
-            key={i}
+            key={key}
             className={`mention-chip mention-chip--at${openable ? " is-action" : ""}`}
             title={seg.path}
             role={openable ? "link" : undefined}

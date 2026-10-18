@@ -16,12 +16,6 @@ type Props = {
 function formatFootLive(t: ReturnType<typeof useT>, raw: string): string {
   const s = raw.trim();
   if (!s || s === "Starting…") return t("chat.subagent.liveStarting");
-  // 引擎稳定英文基座 / 旧版无正文 Thinking…
-  if (s === "Planning next moves" || s === "Thinking…") return t("chat.planning");
-  if (s.startsWith("Thinking…")) {
-    const rest = s.slice("Thinking…".length).trim();
-    return rest ? `${t("chat.subagent.liveThinking")} ${rest}` : t("chat.planning");
-  }
   return s;
 }
 

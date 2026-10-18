@@ -49,6 +49,7 @@ export const Icon = forwardRef<SVGSVGElement, IconRootProps>(function Icon(
   const cls = ["tw-icon", `tw-icon--${size}`, className ?? ""].filter(Boolean).join(" ");
 
   return (
+    // biome-ignore lint/a11y/noSvgWithoutTitle: 装饰性图标刻意以 aria-hidden 隐藏不设 title；有语义时由 title prop 提供
     <svg
       ref={ref}
       className={cls}

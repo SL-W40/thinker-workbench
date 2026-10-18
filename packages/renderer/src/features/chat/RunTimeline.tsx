@@ -6,19 +6,16 @@
 import { Button, ChevronRightIcon, Kbd, useDesignTheme } from "@thinker-workbench/design/react";
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
 import type { ChatTimelineResultPathKind, ChatTimelineStep } from "@thinker-workbench/shared";
-import {
-  type CSSProperties,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+
+/** 工具步（与 ToolStepRow 入参一致）；暂留卡只可能是工具步。 */
+type ChatTimelineToolStep = Extract<ChatTimelineStep, { kind: "tool" }>;
+
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
 import { useT } from "../../i18n/useI18n";
 import { FileGlyph, IconFolder } from "../inspector/icons";
 import { BrowserScreenshotThumb } from "./BrowserScreenshotThumb";
+import { ClarifyCards } from "./ClarifyCards";
 import { DeleteFileCard } from "./DeleteFileCard";
 import { FileDiffView } from "./FileDiffView";
 import { classifyRunError, isSoftStopCode } from "./runErrors";
@@ -28,11 +25,19 @@ import { isMissingApiKeyError } from "./systemErrors";
 import {
   type ExploreGroup,
   groupTimelineForDisplay,
+  hasPendingTailHold,
   isExploreToolName,
   isMutationTool,
+  TAIL_EXIT_ANIM_MS,
+  TAIL_MIN_DISPLAY_MS,
+  tailHoldForTool,
 } from "./timelineExplore";
 import { isLiveStreamingTextStep } from "./timelineLive";
-import { isDeleteRestoreExpired, readDeleteFileRestoreTtlDays } from "./timelineModel";
+import {
+  isDeleteRestoreExpired,
+  isTransitionTextStep,
+  readDeleteFileRestoreTtlDays,
+} from "./timelineModel";
 import {
   filterTimelineExterior,
   formatWorkedForElapsed,
@@ -42,10 +47,37 @@ import {
 
 type ResultPathKind = ChatTimelineResultPathKind;
 
+/**
+ * live 期间按帧刷新 now（100ms）：驱动尾部探索调用「加载中留组外、
+ * 结束满 TAIL_MIN_DISPLAY_MS 后自动收组」。live 结束后再补一次到点结算，
+ * 避免刚跑完的快速工具卡在组外。
+ */
+function useTickingNow(live: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setNow(Date.now());
+    if (live) {
+      const timer = window.setInterval(() => setNow(Date.now()), 100);
+      return () => window.clearInterval(timer);
+    }
+    const timer = window.setTimeout(() => setNow(Date.now()), TAIL_MIN_DISPLAY_MS + 50);
+    return () => window.clearTimeout(timer);
+  }, [live]);
+  return now;
+}
+
+/** 尾部暂留卡收组退出动画时长（ms），与 timelineExplore 的 TAIL_EXIT_ANIM_MS 一致。 */
+const TAIL_EXIT_MS = TAIL_EXIT_ANIM_MS;
+
 /** 路径末段文件名*/
 function pathBasename(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;
+}
+
+/** 探索路径列表 key：路径可能重复，附加序号保证唯一（列表顺序固定不重排）。 */
+function exploreFileKey(path: string, index: number): string {
+  return `${path}-${index}`;
 }
 
 /**
@@ -253,8 +285,56 @@ export function RunTimeline({
   const [workExpanded, setWorkExpanded] = useState(false);
   const showWork = live || !foldable || workExpanded;
   const displaySteps = showWork ? visible : filterTimelineExterior(visible);
-  const items = groupTimelineForDisplay(displaySteps);
-  const showPlanning = shouldShowPlanning(visible, live);
+  const now = useTickingNow(live);
+  const items = groupTimelineForDisplay(displaySteps, now);
+  // 收起动画中的暂留卡（淡出上移，被 Explored 吸收），用于压制 planning
+  const [leavingTails, setLeavingTails] = useState<ChatTimelineToolStep[]>([]);
+  // 尾部探索调用暂留组外（加载中 / 最小时长 / 收起动画中）时不出现 Planning next move：
+  // 那张卡本身就是当前活动，等它完全收起后再让规划行上场
+  const tailHeld = hasPendingTailHold(displaySteps, now) || leavingTails.length > 0;
+  const showPlanning = shouldShowPlanning(visible, live) && !tailHeld;
+
+  /**
+   * 尾部暂留卡收组动画：卡从 items 消失（折进 Explored）时多留 180ms
+   * 淡出上移，避免「一闪就没了」。Explored 行本身不因此变化。
+   */
+  const tailStepsRef = useRef<Map<string, ChatTimelineToolStep>>(new Map());
+  const animTimersRef = useRef<Set<number>>(new Set());
+  useEffect(
+    () => () => {
+      for (const id of animTimersRef.current) window.clearTimeout(id);
+      animTimersRef.current.clear();
+    },
+    [],
+  );
+  useEffect(() => {
+    // 折成 Worked for 时不跟踪：整列表消失不是“收组”
+    if (!showWork) {
+      tailStepsRef.current = new Map();
+      return;
+    }
+    const currentTails = new Map<string, ChatTimelineToolStep>();
+    for (const item of items) {
+      if (item.type === "explore") continue;
+      const s = item.step;
+      if (s.kind === "tool" && isExploreToolName(s.name)) currentTails.set(s.id, s);
+    }
+    const gone: ChatTimelineToolStep[] = [];
+    for (const [id, step] of tailStepsRef.current) {
+      if (!currentTails.has(id)) gone.push(step);
+    }
+    tailStepsRef.current = currentTails;
+
+    if (gone.length > 0) {
+      setLeavingTails((prev) => [...prev, ...gone]);
+      const timer = window.setTimeout(() => {
+        animTimersRef.current.delete(timer);
+        setLeavingTails((prev) => prev.filter((s) => !gone.some((g) => g.id === s.id)));
+      }, TAIL_EXIT_MS);
+      animTimersRef.current.add(timer);
+    }
+  });
+
   if (items.length === 0 && !showPlanning && !foldable) return null;
 
   const workedLabel = t("chat.workedFor", { time: formatWorkedForElapsed(durationMs) });
@@ -296,12 +376,16 @@ export function RunTimeline({
         if (step.kind === "status") {
           return <StatusStepRow key={step.id} step={step} live={live} />;
         }
+        if (step.kind === "transition") {
+          return <TransitionStepRow key={step.id} step={step} />;
+        }
         if (step.kind === "text") {
           return (
             <TextStepRow
               key={step.id}
               step={step}
               live={isLiveStreamingTextStep(visible, step.id, live)}
+              transition={isTransitionTextStep(visible, step.id)}
             />
           );
         }
@@ -326,177 +410,83 @@ export function RunTimeline({
           <ToolStepRow
             key={step.id}
             step={step}
+            pending={
+              step.kind === "tool" && isExploreToolName(step.name) && tailHoldForTool(step, now)
+            }
             onOpenFile={onOpenFile}
             onOpenTerminal={onOpenTerminal}
             onRestoreDeletedFile={onRestoreDeletedFile}
           />
         );
       })}
+      {/* 收组退出动画中的暂留卡：淡出上移，被 Explored 吸收 */}
+      {leavingTails.map((step) => (
+        <ToolStepRow
+          key={`tail-exit:${step.id}`}
+          step={step}
+          ghost
+          onOpenFile={onOpenFile}
+          onOpenTerminal={onOpenTerminal}
+          onRestoreDeletedFile={onRestoreDeletedFile}
+        />
+      ))}
       {showPlanning ? <PlanningRow key="planning-live" /> : null}
     </ol>
   );
 }
 
-const RESULT_PATHS_GAP = 6;
-const RESULT_PATHS_PAD = 8;
-
-type ResultPathsCoords = { top: number; left: number; width: number };
-
-/** 相对工具行放置命中文件列表*/
-function placeResultPathsPanel(
-  trigger: DOMRect,
-  panelW: number,
-  panelH: number,
-): ResultPathsCoords {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const width = Math.min(panelW, vw - RESULT_PATHS_PAD * 2);
-  const spaceBelow = vh - trigger.bottom - RESULT_PATHS_GAP - RESULT_PATHS_PAD;
-  const spaceAbove = trigger.top - RESULT_PATHS_GAP - RESULT_PATHS_PAD;
-  const openBelow = spaceBelow >= Math.min(panelH, 120) || spaceBelow >= spaceAbove;
-
-  let top = openBelow ? trigger.bottom + RESULT_PATHS_GAP : trigger.top - RESULT_PATHS_GAP - panelH;
-  if (top + panelH > vh - RESULT_PATHS_PAD) {
-    top = Math.max(RESULT_PATHS_PAD, vh - RESULT_PATHS_PAD - panelH);
-  }
-  if (top < RESULT_PATHS_PAD) top = RESULT_PATHS_PAD;
-
-  let left = trigger.left;
-  if (left + width > vw - RESULT_PATHS_PAD) left = vw - RESULT_PATHS_PAD - width;
-  if (left < RESULT_PATHS_PAD) left = RESULT_PATHS_PAD;
-
-  return { top, left, width };
-}
-
-/** 已完成探索工具行：悬停整行展开 resultPaths / 截图。*/
-function ToolResultPathsPanel({
+/** 已完成探索工具行：点击后内联展开 resultPaths / 截图。*/
+function ToolResultPathsList({
   paths,
   kinds,
-  anchorRef,
-  open,
-  onOpenChange,
-  onHoverInside,
   onOpenFile,
 }: {
   paths: string[];
   kinds?: ResultPathKind[];
-  anchorRef: RefObject<HTMLElement | null>;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** 指针进入/离开面板（与工具行共用悬停态）。 */
-  onHoverInside?: (inside: boolean) => void;
   onOpenFile?: (path: string) => void;
 }) {
-  const t = useT();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState<ResultPathsCoords | null>(null);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setCoords(null);
-      return;
-    }
-    function update() {
-      const trigger = anchorRef.current;
-      const panel = panelRef.current;
-      if (!trigger || !panel) return;
-      const tr = trigger.getBoundingClientRect();
-      const pr = panel.getBoundingClientRect();
-      const hasImage =
-        (kinds ?? []).some((k) => k === "image") ||
-        paths.some((p) => resolvePathKind(p) === "image");
-      const width = hasImage
-        ? Math.min(480, Math.max(300, tr.width + 96))
-        : Math.min(420, Math.max(260, tr.width + 72));
-      setCoords(placeResultPathsPanel(tr, width, pr.height));
-    }
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, [open, anchorRef, paths, kinds]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onScroll = (e: Event) => {
-      const target = e.target;
-      if (target instanceof Node && panelRef.current?.contains(target)) return;
-      onOpenChange(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
-    };
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, onOpenChange]);
-
-  if (!open || paths.length === 0 || typeof document === "undefined") return null;
-
-  const panelStyle: CSSProperties = coords
-    ? { top: coords.top, left: coords.left, width: coords.width }
-    : { top: 0, left: 0, width: 320, visibility: "hidden" };
-
-  return createPortal(
-    <div
-      ref={panelRef}
-      className="run-timeline-explore-files"
-      role="listbox"
-      aria-label={t("chat.exploreFilesListAria")}
-      style={panelStyle}
-      onMouseEnter={() => onHoverInside?.(true)}
-      onMouseLeave={() => onHoverInside?.(false)}
-    >
-      <ul className="run-timeline-explore-files__list">
-        {paths.map((path, index) => {
-          const kind = resolvePathKind(path, kinds?.[index]);
-          if (kind === "image") {
-            return (
-              <li key={`${path}-${index}`} className="run-timeline-explore-files__shot-item">
-                <BrowserScreenshotThumb absolutePath={path} />
-              </li>
-            );
-          }
-          const name = pathBasename(path.replace(/[/\\]+$/, ""));
-          const icon = kind === "dir" ? <IconFolder /> : <FileGlyph name={name || path} />;
-          const canOpen = Boolean(onOpenFile) && kind !== "dir";
-          const body = (
-            <>
-              <span className="run-timeline-explore-files__ico" aria-hidden>
-                {icon}
-              </span>
-              <PathMidEllipsis path={path} className="run-timeline-explore-files__path" />
-            </>
-          );
+  if (paths.length === 0) return null;
+  return (
+    <ul className="run-timeline-tool-paths">
+      {paths.map((path, index) => {
+        const kind = resolvePathKind(path, kinds?.[index]);
+        if (kind === "image") {
           return (
-            <li key={`${path}-${index}`}>
-              {canOpen ? (
-                <button
-                  type="button"
-                  className="run-timeline-explore-files__item is-path-only"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onOpenFile?.(path);
-                    onOpenChange(false);
-                  }}
-                >
-                  {body}
-                </button>
-              ) : (
-                <span className="run-timeline-explore-files__item is-path-only is-static">
-                  {body}
-                </span>
-              )}
+            <li key={exploreFileKey(path, index)} className="run-timeline-explore-files__shot-item">
+              <BrowserScreenshotThumb absolutePath={path} />
             </li>
           );
-        })}
-      </ul>
-    </div>,
-    document.body,
+        }
+        const name = pathBasename(path.replace(/[/\\]+$/, ""));
+        const icon = kind === "dir" ? <IconFolder /> : <FileGlyph name={name || path} />;
+        const canOpen = Boolean(onOpenFile) && kind !== "dir";
+        const body = (
+          <>
+            <span className="run-timeline-explore-files__ico" aria-hidden>
+              {icon}
+            </span>
+            <PathMidEllipsis path={path} className="run-timeline-explore-files__path" />
+          </>
+        );
+        return (
+          <li key={exploreFileKey(path, index)}>
+            {canOpen ? (
+              <button
+                type="button"
+                className="run-timeline-explore-files__item is-path-only"
+                onClick={() => onOpenFile?.(path)}
+              >
+                {body}
+              </button>
+            ) : (
+              <span className="run-timeline-explore-files__item is-path-only is-static">
+                {body}
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -552,12 +542,16 @@ function ExploreGroupRow({
               if (step.kind === "status") {
                 return <StatusStepRow key={step.id} step={step} live={live && group.active} />;
               }
+              if (step.kind === "transition") {
+                return <TransitionStepRow key={step.id} step={step} />;
+              }
               if (step.kind === "text") {
                 return (
                   <TextStepRow
                     key={step.id}
                     step={step}
                     live={isLiveStreamingTextStep(group.steps, step.id, live && group.active)}
+                    transition={isTransitionTextStep(group.steps, step.id)}
                   />
                 );
               }
@@ -653,16 +647,36 @@ function PlanningRow() {
 }
 
 /** 对用户可见的叙述，按事件顺序插在工具前后*/
+/** 承上启下小结行：模型在调工具前以 `[NEXT]` 标记给出的一句话。 */
+function TransitionStepRow({ step }: { step: Extract<ChatTimelineStep, { kind: "transition" }> }) {
+  if (!step.text.trim()) return null;
+  return (
+    <li className="run-timeline-item run-timeline-item--transition">
+      <div className="run-timeline-transition">{step.text}</div>
+    </li>
+  );
+}
+
 function TextStepRow({
   step,
   live = false,
+  transition = false,
 }: {
   step: Extract<ChatTimelineStep, { kind: "text" }>;
   /** 仍在流式时才显示 caret；已停止则收束未闭合代码块*/
   live?: boolean;
+  /** 承上启下小结行：单行短句、后面还有工具 / 思考步骤时以独立样式呈现。 */
+  transition?: boolean;
 }) {
   const { markdownTheme } = useDesignTheme();
   if (!step.text.trim()) return null;
+  if (transition) {
+    return (
+      <li className="run-timeline-item run-timeline-item--transition">
+        <div className="run-timeline-transition">{step.text}</div>
+      </li>
+    );
+  }
   return (
     <li className="run-timeline-item run-timeline-item--text">
       <div className="run-timeline-reply">
@@ -704,17 +718,22 @@ function formatThoughtLabel(t: Translate, durationMs: number | undefined): strin
 }
 
 /**
- * 思考正文框：最多约 4 行，超出可滚： * 上下用渐隐遮罩标示可继续滚动。 */
+ * 思考正文：最多约 4 行，超出可滚；左侧竖线（同 Explored 子列表），
+ * 上下用渐隐遮罩标示可继续滚动。 */
 function ThinkingBody({ text }: { text: string }) {
   const scrollerRef = useRef<HTMLPreElement>(null);
   const [fadeTop, setFadeTop] = useState(false);
   const [fadeBottom, setFadeBottom] = useState(false);
+  // 跟随底部开关：仅当用户已贴在底部（pinned）时才随流式内容增长自动滚底；
+  // 用户上滚阅读即解除，避免刷新把视角不停拽回底部。
+  const pinnedRef = useRef(true);
 
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
 
-    function updateFades() {
+    // 仅更新上下渐隐遮罩，不改动滚动位置
+    function syncFades() {
       if (!el) return;
       const { scrollTop, scrollHeight, clientHeight } = el;
       const overflow = scrollHeight > clientHeight + 1;
@@ -722,12 +741,29 @@ function ThinkingBody({ text }: { text: string }) {
       setFadeBottom(overflow && scrollTop + clientHeight < scrollHeight - 1);
     }
 
-    updateFades();
-    el.addEventListener("scroll", updateFades, { passive: true });
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateFades) : null;
+    // 用户滚动：判定是否仍在底部附近，并刷新遮罩
+    function onScroll() {
+      if (!el) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      pinnedRef.current = scrollHeight - scrollTop - clientHeight < 6;
+      syncFades();
+    }
+
+    // 内容增长（流式）：仅当钉住底部才滚到底，否则只更新遮罩
+    function onContentGrow() {
+      if (!el) return;
+      syncFades();
+      if (pinnedRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+
+    syncFades();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onContentGrow) : null;
     ro?.observe(el);
     return () => {
-      el.removeEventListener("scroll", updateFades);
+      el.removeEventListener("scroll", onScroll);
       ro?.disconnect();
     };
   }, []);
@@ -752,12 +788,15 @@ function StatusStepRow({
   live?: boolean;
 }) {
   const t = useT();
-  const body = (step.text ?? step.summary)?.trim() ?? "";
+  const body = step.text?.trim() ?? "";
   const hasBody = Boolean(body);
   const [collapsed, setCollapsed] = useState(true);
-  const open = hasBody && !collapsed;
-  // 本轮已不在跑时，即使 step.active 残留也按「已结束」展示，避免已思考秒数跟着墙钟
+  // 流式（thinking 进行中）默认展开；思考结束自动收起
   const active = Boolean(live && step.active);
+  useEffect(() => {
+    if (!active) setCollapsed(true);
+  }, [active]);
+  const open = hasBody && (active || !collapsed);
   // 历史空壳 Thought（无 reasoning）不展示
   if (!active && !hasBody) return null;
   const asPlanning = active && !hasBody;
@@ -799,6 +838,7 @@ function StatusStepRow({
             <TimelineChevron open={open} />
           </button>
         ) : (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 不可折叠的状态行仅作命名展示区，无交互语义
           <div
             className="run-timeline-status-toggle"
             aria-label={asPlanning ? t("chat.planning") : label}
@@ -806,7 +846,7 @@ function StatusStepRow({
             {labelNode}
           </div>
         )}
-        {open ? <ThinkingBody text={step.text || step.summary || ""} /> : null}
+        {open ? <ThinkingBody text={step.text ?? ""} /> : null}
       </div>
     </li>
   );
@@ -932,6 +972,9 @@ function ToolStepRow({
   onOpenFile,
   onOpenTerminal,
   onRestoreDeletedFile,
+  ghost = false,
+  /** 暂留窗口内（加载中 / 最短时间 + 收起动画）：强制显示「进行中」，避免快工具一结束就闪没。 */
+  pending = false,
 }: {
   step: Extract<ChatTimelineStep, { kind: "tool" }>;
   onOpenFile?: (path: string) => void;
@@ -941,11 +984,17 @@ function ToolStepRow({
     title?: string;
   }) => void;
   onRestoreDeletedFile?: (stepId: string) => void | Promise<void>;
+  /** 收组退出动画中的暂留卡（淡出上移，被 Explored 吸收）。 */
+  ghost?: boolean;
+  /** 暂留窗口内（加载中 / 最短时间 + 收起动画）：强制显示「进行中」，避免快工具一结束就闪没。 */
+  pending?: boolean;
 }) {
   const t = useT();
   /** TTL 到期后 bump，立刻藏掉「恢复」按钮。*/
   const [, setRestoreTick] = useState(0);
   const running = step.phase === "start" && step.active;
+  // 暂留窗口内（已结束但还没收组）：继续当作进行中展示，让「进行中」贯穿最短时间+动画时长
+  const effectiveRunning = running || pending;
   const failed = step.phase === "end" && step.ok === false;
   const hasDiff = Boolean(step.diff?.trim());
   const mutation = isMutationTool(step.name);
@@ -974,33 +1023,20 @@ function ToolStepRow({
       : [];
   const resultPathKinds =
     step.phase === "end" && isExploreToolName(step.name) ? step.resultPathKinds : undefined;
-  const canOpenPaths = resultPaths.length > 0;
+  // 暂留窗口内（进行中/已结束未收组）：不展示结果路径，整卡保持「进行中」观感
+  const canOpenPaths = resultPaths.length > 0 && !pending;
+  /**
+   * 单一文件结果：read_file 一定是文件、grep 只命中一个文件时，
+   * 不折叠展开，点击行直接跳转。图片 / 目录 / 链接仍走展开（图片看缩略图）。
+   */
+  const directOpenFile =
+    canOpenPaths &&
+    resultPaths.length === 1 &&
+    resolvePathKind(resultPaths[0] as string, resultPathKinds?.[0]) === "file" &&
+    Boolean(onOpenFile);
+  const expandable = canOpenPaths && !directOpenFile;
   const toolRowRef = useRef<HTMLDivElement>(null);
   const [pathsOpen, setPathsOpen] = useState(false);
-  const pathsCloseTimer = useRef<number | null>(null);
-
-  function clearPathsCloseTimer() {
-    if (pathsCloseTimer.current != null) {
-      window.clearTimeout(pathsCloseTimer.current);
-      pathsCloseTimer.current = null;
-    }
-  }
-
-  function openPathsPanel() {
-    if (!canOpenPaths) return;
-    clearPathsCloseTimer();
-    setPathsOpen(true);
-  }
-
-  function scheduleClosePathsPanel() {
-    clearPathsCloseTimer();
-    pathsCloseTimer.current = window.setTimeout(() => {
-      pathsCloseTimer.current = null;
-      setPathsOpen(false);
-    }, 140);
-  }
-
-  useEffect(() => () => clearPathsCloseTimer(), []);
 
   useEffect(() => {
     if (
@@ -1026,6 +1062,14 @@ function ToolStepRow({
   // Task 启动由 subagent 行展示，避免重复
   if (step.name === "Task") {
     return null;
+  }
+
+  if (step.name === "ask_user" || step.clarify) {
+    return (
+      <li className={`run-timeline-item run-timeline-item--tool${running ? " is-active" : ""}`}>
+        <ClarifyCards step={step} />
+      </li>
+    );
   }
 
   // task_await / shell_await：纯文字行（HITL 审批仍走 Shell 卡片：
@@ -1121,7 +1165,7 @@ function ToolStepRow({
   }
 
   // 成功结束不再标 Done，避免和摘要糊成一行；只标 Running / Failed
-  const badge = running ? (
+  const badge = effectiveRunning ? (
     <span className="run-timeline-badge">{t("chat.toolRunning")}</span>
   ) : failed ? (
     <span className="run-timeline-badge run-timeline-badge--err">{t("chat.toolFailed")}</span>
@@ -1129,29 +1173,29 @@ function ToolStepRow({
 
   return (
     <li
-      className={`run-timeline-item run-timeline-item--tool${running ? " is-active" : ""}${failed ? " is-error" : ""}${canOpenPaths ? " has-hover-detail" : ""}`}
+      className={`run-timeline-item run-timeline-item--tool${effectiveRunning ? " is-active" : ""}${failed ? " is-error" : ""}${canOpenPaths ? " has-hover-detail" : ""}${ghost ? " run-timeline-item--tail-exit" : ""}`}
     >
-      <div
-        className="run-timeline-tool"
-        ref={toolRowRef}
-        onMouseEnter={openPathsPanel}
-        onMouseLeave={scheduleClosePathsPanel}
-      >
-        <div className="run-timeline-tool-head">
-          <ToolLabel step={step} shimmer={running} />
+      <div className="run-timeline-tool" ref={toolRowRef}>
+        <button
+          type="button"
+          className={`run-timeline-tool-head${directOpenFile || expandable ? " is-clickable" : ""}`}
+          aria-expanded={expandable ? pathsOpen : undefined}
+          onClick={
+            directOpenFile
+              ? () => onOpenFile?.(resultPaths[0] as string)
+              : expandable
+                ? () => setPathsOpen((v) => !v)
+                : undefined
+          }
+        >
+          <ToolLabel step={step} shimmer={effectiveRunning} />
           {badge}
-        </div>
-        {canOpenPaths ? (
-          <ToolResultPathsPanel
+          {expandable ? <TimelineChevron open={pathsOpen} /> : null}
+        </button>
+        {expandable && pathsOpen ? (
+          <ToolResultPathsList
             paths={resultPaths}
             kinds={resultPathKinds}
-            anchorRef={toolRowRef}
-            open={pathsOpen}
-            onOpenChange={setPathsOpen}
-            onHoverInside={(inside) => {
-              if (inside) openPathsPanel();
-              else scheduleClosePathsPanel();
-            }}
             onOpenFile={onOpenFile}
           />
         ) : null}

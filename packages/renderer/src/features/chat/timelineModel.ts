@@ -11,8 +11,6 @@ import {
   type HitlRequest,
 } from "@thinker-workbench/shared";
 
-const THINKING_SUMMARY_MAX = 140;
-
 /** 排队等待文案的时间线 id。出队、失败或取消后整段去掉。 */
 export const QUEUED_WAIT_STEP_ID = "queued-wait";
 
@@ -55,35 +53,40 @@ export function applyQueuedSlotEvent(
   slot.busy = true;
 }
 
+/**
+ * 流式 token 可能在句中停住，而 done 的正文更完整。
+ * 仅当完整正文以时间线已有叙述为前缀时，把缺的尾巴补进最后一段 text。
+ */
+export function reconcileTimelineReply(
+  steps: ChatTimelineStep[],
+  fullText: string,
+): ChatTimelineStep[] {
+  const full = fullText.trim();
+  if (!full) return steps;
+  const indexes: number[] = [];
+  const parts: string[] = [];
+  steps.forEach((step, index) => {
+    if (step.kind !== "text") return;
+    indexes.push(index);
+    parts.push(step.text);
+  });
+  if (indexes.length === 0) return steps;
+  const streamed = parts.join("\n\n");
+  if (!full.startsWith(streamed) || full.length === streamed.length) return steps;
+  const last = indexes[indexes.length - 1];
+  if (last === undefined) return steps;
+  const prev = steps[last];
+  if (prev?.kind !== "text") return steps;
+  const copy = [...steps];
+  copy[last] = { ...prev, text: prev.text + full.slice(streamed.length) };
+  return copy;
+}
+
 /** 截断到 max 字符，末尾加省略号。 */
 function truncatePhrase(text: string, max: number): string {
   const t = text.trim();
   if (t.length <= max) return t;
   return `${t.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
-}
-
-/**
- * 从思考正文抽出一行短摘要（偏结论 / 下一步）。
- * 取末尾 1～2 个完整句；无句读时退回末尾片段。
- */
-export function summarizeThinking(text: string, maxLen = THINKING_SUMMARY_MAX): string {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (!cleaned) return "";
-
-  const parts = cleaned
-    .split(/(?<=[。！？.!?])\s+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length === 0) return truncatePhrase(cleaned, maxLen);
-
-  let phrase =
-    parts.length >= 2
-      ? `${parts[parts.length - 2]}${parts[parts.length - 1]}`
-      : parts[parts.length - 1]!;
-  if (phrase.length > maxLen && parts.length >= 2) {
-    phrase = parts[parts.length - 1]!;
-  }
-  return truncatePhrase(phrase, maxLen);
 }
 
 /**
@@ -108,6 +111,27 @@ function dropTrailingEphemeralThoughts(steps: ChatTimelineStep[]): ChatTimelineS
   const base = dropPlanning(steps);
   const next = base.filter((s) => !isEphemeralThought(s));
   return next.length === base.length ? base : next;
+}
+
+/** 单行小结（承上启下）的字符上限；超过按普通回复正文渲染。 */
+export const TRANSITION_TEXT_MAX = 60;
+
+/**
+ * 判断 text 步是否为「承上启下」小结行：
+ * 单行短句（≤60 字、无换行），且其后仍有工具 / 思考步骤（过程叙述而非答复收尾）。
+ * 提示词已约束模型仅在关键结论 / 思维转变 / 用户须知时输出这样一行——
+ * 命中才以小结样式独立呈现，未命中（长叙述 / 最终答复）维持普通正文。
+ */
+export function isTransitionTextStep(steps: ChatTimelineStep[], stepId: string): boolean {
+  const idx = steps.findIndex((s) => s.kind === "text" && s.id === stepId);
+  if (idx < 0) return false;
+  const step = steps[idx];
+  if (step?.kind !== "text") return false;
+  const text = step.text.trim();
+  if (!text || text.includes("\n") || text.length > TRANSITION_TEXT_MAX) return false;
+  return steps
+    .slice(idx + 1)
+    .some((s) => s.kind === "tool" || (s.kind === "status" && s.status === "thinking"));
 }
 
 type FinalizeOpts = {
@@ -186,6 +210,33 @@ export function deactivateAll(steps: ChatTimelineStep[]): ChatTimelineStep[] {
 }
 
 /**
+ * 比较两条时间线，保留工具行与 diff 更完整的一侧。
+ * 本地与 DB 择优、事件流合并 timeline 时共用；平分取本地（左侧）。
+ */
+export function pickRicherTimeline(
+  a: ChatTimelineStep[],
+  b: ChatTimelineStep[] | undefined,
+): ChatTimelineStep[] {
+  const score = (steps: ChatTimelineStep[]) => {
+    let n = steps.length;
+    for (const s of steps) {
+      if (s.kind === "tool") {
+        n += 10;
+        if (s.diff) n += 100;
+        if (s.phase === "end") n += 5;
+      }
+      if (s.kind === "status" && s.text) n += 3;
+      if (s.kind === "text" && s.text) n += 2;
+      if (s.kind === "error") n += 20;
+    }
+    return n;
+  };
+  const left = a ?? [];
+  const right = b ?? [];
+  return deactivateAll(score(left) >= score(right) ? left : right);
+}
+
+/**
  * 读盘 / hydrate：冻结时间线耗时，禁止用墙钟重算。
  * - 已有 durationMs：保留并去掉 startedAt
  * - 无 durationMs：去掉 startedAt（勿 Date.now()-startedAt），可选用 messageDurationMs 回填
@@ -246,7 +297,6 @@ export function applyStatus(
         active: true,
         startedAt: Date.now(),
         durationMs: undefined,
-        summary: undefined,
       },
     ];
   }
@@ -265,24 +315,101 @@ export function applyStatus(
 }
 
 /**
+ * 承上启下小结的标记行前缀：模型按提示词约定在调工具前输出 `[NEXT] 一句话`。
+ */
+export const TRANSITION_MARKER = "[NEXT]";
+
+/** 小结内容字符上限（用户要求 ≤50 字）。 */
+export const TRANSITION_MARKER_MAX = 50;
+
+/** 标记行正则（整行匹配，g 供全文扫描）。 */
+const TRANSITION_LINE_RE = /^[ \t]*\[NEXT\][ \t]*(.*)$/gm;
+
+/**
+ * 从一段回复文本里剥离 `[NEXT]` 标记行。
+ * 流式累积时标记可能被 token 切开：不完整的行不匹配、原样保留，
+ * 待下一片补全后自然被剥离（对同一文本重复调用是安全的）。
+ */
+export function stripTransitionLines(text: string): string {
+  if (!text.includes(TRANSITION_MARKER)) return text;
+  return text
+    .replace(TRANSITION_LINE_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimStart();
+}
+
+/**
+ * 剥离标记行并取首个小结内容（≤50 字）。
+ */
+export function extractTransitionLine(text: string): { cleaned: string; transition?: string } {
+  let transition: string | undefined;
+  const cleaned = text.replace(TRANSITION_LINE_RE, (_match, body: string) => {
+    const trimmed = (body ?? "").trim();
+    if (trimmed && !transition) transition = truncatePhrase(trimmed, TRANSITION_MARKER_MAX);
+    return "";
+  });
+  return { cleaned, transition };
+}
+
+/**
  * 把 reply 叙述追加进时间线：接在末尾 text 步后连写，否则新开一步。
  * 结束当前思考时丢掉空壳短步，避免「已思考 0.1s」连刷。
+ *
+ * `[NEXT]` 标记行（模型按提示词在调工具前写的小结）被解析成独立的
+ * transition 步骤——插在最近一条思考步之后、工具步之前；标记行本身
+ * 从叙述正文里剥离。标记行被 token 切开时按"未完结行"续写。
  */
 export function appendReplyText(steps: ChatTimelineStep[], text: string): ChatTimelineStep[] {
   if (!text) return steps;
-  const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
-  const last = next[next.length - 1];
-  if (last?.kind === "text") {
-    return [...next.slice(0, -1), { ...last, text: `${last.text}${text}` }];
+  const base = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
+  const last = base[base.length - 1];
+
+  // 末尾是未完结的标记行（transition 步）：本片段续写该行，直到出现换行
+  if (last?.kind === "transition") {
+    const nl = text.indexOf("\n");
+    if (nl < 0) {
+      return [
+        ...base.slice(0, -1),
+        { ...last, text: truncatePhrase(`${last.text}${text}`, TRANSITION_MARKER_MAX) },
+      ];
+    }
+    const linePart = text.slice(0, nl);
+    const rest = text.slice(nl + 1).replace(/^\s+/, "");
+    const out: ChatTimelineStep[] = [
+      ...base.slice(0, -1),
+      {
+        ...last,
+        text: truncatePhrase(`${last.text}${linePart}`, TRANSITION_MARKER_MAX),
+      },
+    ];
+    if (rest.trim()) {
+      out.push({ id: createId("tl"), kind: "text", text: rest.trim() });
+    }
+    return out;
   }
-  return [
-    ...next,
-    {
-      id: createId("tl"),
-      kind: "text",
-      text,
-    },
-  ];
+
+  const next =
+    last?.kind === "text"
+      ? [...base.slice(0, -1), { ...last, text: `${last.text}${text}` }]
+      : [...base, { id: createId("tl"), kind: "text", text } as ChatTimelineStep];
+
+  const lastIdx = next.length - 1;
+  const lastStep = next[lastIdx];
+  if (lastStep?.kind !== "text") return next;
+
+  const { cleaned, transition } = extractTransitionLine(lastStep.text);
+  if (!transition) return next;
+
+  // 有标记：把该 text 步转成 transition 步（正文残留则另开 text 步接在后面）
+  const transitionStep: ChatTimelineStep = {
+    id: lastStep.id,
+    kind: "transition",
+    text: transition,
+  };
+  const rest = cleaned.trim()
+    ? [{ id: createId("tl"), kind: "text", text: cleaned.trim() } as ChatTimelineStep]
+    : [];
+  return [...next.slice(0, lastIdx), transitionStep, ...rest];
 }
 
 /**
@@ -302,7 +429,9 @@ export function appendThinkingText(steps: ChatTimelineStep[], text: string): Cha
     }
   }
 
-  // 无活动行时，续写最近一条已结束的思考（迟到的 reasoning）
+  // 无活动行时，仅当最近一条思考行仍是时间线最后一步才续写（迟到的 reasoning）。
+  // 若其后已被工具/正文隔开，说明是新一轮思考（新引擎每轮只发 planning 占位），
+  // 必须开新行——否则整场 run 的思考会不断追加进同一个块。
   if (idx < 0) {
     for (let i = steps.length - 1; i >= 0; i--) {
       const s = steps[i];
@@ -310,6 +439,9 @@ export function appendThinkingText(steps: ChatTimelineStep[], text: string): Cha
         idx = i;
         break;
       }
+    }
+    if (idx >= 0 && idx < steps.length - 1) {
+      idx = -1; // 思考行后已有其他步骤：新一轮，走 applyStatus 新建/重开
     }
   }
 
@@ -328,7 +460,6 @@ export function appendThinkingText(steps: ChatTimelineStep[], text: string): Cha
     ...step,
     active: stillActive,
     text: fullText,
-    summary: summarizeThinking(fullText),
     startedAt: step.startedAt ?? Date.now(),
     // 已结束的行保留耗时；活动中清掉，等 finalize 再算
     durationMs: stillActive ? undefined : step.durationMs,
@@ -367,11 +498,8 @@ export function applyToolEvent(
         s.active,
     );
   }
-  if (matchIndex < 0) {
-    matchIndex = next.findIndex(
-      (s) => s.kind === "tool" && s.name === event.name && s.phase === "start" && s.active,
-    );
-  }
+  // 事件必须按 callId 精确匹配：同名的并行工具调用是两次独立调用，
+  // 同名兜底合并会并掉一张卡并覆盖 callId，导致 end 错乱、思考轮被误判为同一轮。
 
   if (event.phase === "start") {
     if (matchIndex >= 0) {
@@ -389,10 +517,11 @@ export function applyToolEvent(
         resultPaths: event.resultPaths ?? prev.resultPaths,
         resultPathKinds: event.resultPathKinds ?? prev.resultPathKinds,
         ...mergeRestoreCache(prev, event),
-        // 真实 tool start：清掉审批挂载
-        hitl: undefined,
+        // 审批卡片先于真正执行出现。迟到的 tool start 不能把选择按钮抹掉。
+        hitl: prev.hitl,
         phase: "start",
         active: true,
+        startedAt: event.ts ?? prev.startedAt ?? Date.now(),
       };
       return copy;
     }
@@ -411,6 +540,7 @@ export function applyToolEvent(
         ...mergeRestoreCache(undefined, event),
         phase: "start",
         active: true,
+        startedAt: event.ts ?? Date.now(),
       },
     ];
   }
@@ -435,6 +565,7 @@ export function applyToolEvent(
       resultPaths: event.resultPaths ?? prev.resultPaths,
       resultPathKinds: event.resultPathKinds ?? prev.resultPathKinds,
       ...mergeRestoreCache(prev, event),
+      endedAt: event.ts ?? Date.now(),
     };
     return copy;
   }
@@ -508,13 +639,117 @@ export function appendShellLiveOutput(
   return copy;
 }
 
+/** 这些 HITL 挂在时间线卡片上，不进 Modal。 */
+export function isTimelineHitlKind(kind: string): boolean {
+  return kind === "shell_approval" || kind === "shell_write_approval" || kind === "clarify";
+}
+
+function parseClarifyQuestions(
+  payload: Record<string, unknown> | undefined,
+): NonNullable<Extract<ChatTimelineStep, { kind: "tool" }>["clarify"]>["questions"] {
+  const raw = payload?.questions;
+  if (!Array.isArray(raw)) return [];
+  const questions: NonNullable<
+    Extract<ChatTimelineStep, { kind: "tool" }>["clarify"]
+  >["questions"] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { id?: unknown; prompt?: unknown; options?: unknown };
+    const prompt = typeof row.prompt === "string" ? row.prompt.trim() : "";
+    if (!prompt) continue;
+    const id =
+      typeof row.id === "string" && row.id.trim() ? row.id.trim() : `q${questions.length + 1}`;
+    const options: Array<{ id: string; label: string }> = [];
+    if (Array.isArray(row.options)) {
+      for (const opt of row.options) {
+        if (!opt || typeof opt !== "object") continue;
+        const option = opt as { id?: unknown; label?: unknown };
+        const label = typeof option.label === "string" ? option.label.trim() : "";
+        if (!label) continue;
+        const optionId =
+          typeof option.id === "string" && option.id.trim()
+            ? option.id.trim()
+            : `opt_${options.length + 1}`;
+        options.push({ id: optionId, label });
+      }
+    }
+    questions.push({ id, prompt, options });
+  }
+  return questions;
+}
+
+function parseClarifyAnswers(values: Record<string, unknown> | undefined) {
+  const raw = values?.answers;
+  if (!Array.isArray(raw)) return [];
+  const answers: NonNullable<
+    NonNullable<Extract<ChatTimelineStep, { kind: "tool" }>["clarify"]>["answers"]
+  > = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { id?: unknown; optionId?: unknown; text?: unknown };
+    const id = typeof row.id === "string" ? row.id.trim() : "";
+    if (!id) continue;
+    const optionId = typeof row.optionId === "string" ? row.optionId.trim() : "";
+    const text = typeof row.text === "string" ? row.text.trim() : "";
+    answers.push({
+      id,
+      ...(optionId ? { optionId } : {}),
+      ...(text ? { text } : {}),
+    });
+  }
+  return answers;
+}
+
 /**
- * HITL 请求：shell_approval / shell_write_approval 挂时间线卡片；其它 kind 走 Modal。
+ * HITL 请求：shell 审批与 clarify 挂时间线卡片；其它 kind 走 Modal。
  */
 export function applyHitlRequest(
   steps: ChatTimelineStep[],
   request: HitlRequest,
 ): ChatTimelineStep[] {
+  if (request.kind === "clarify") {
+    const questions = parseClarifyQuestions(request.payload);
+    const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
+    const clarify = { hitlId: request.hitlId, questions };
+    const existing = next.findIndex(
+      (s) =>
+        s.kind === "tool" &&
+        (s.hitl?.hitlId === request.hitlId || s.clarify?.hitlId === request.hitlId),
+    );
+    if (existing >= 0) {
+      const prev = next[existing];
+      if (prev.kind !== "tool") return next;
+      const copy = [...next];
+      copy[existing] = { ...prev, name: "ask_user", clarify, phase: "start", active: true };
+      return copy;
+    }
+    for (let i = next.length - 1; i >= 0; i--) {
+      const s = next[i];
+      if (
+        s.kind === "tool" &&
+        s.name === "ask_user" &&
+        s.phase === "start" &&
+        s.active &&
+        !s.clarify
+      ) {
+        const copy = [...next];
+        copy[i] = { ...s, clarify, phase: "start", active: true };
+        return copy;
+      }
+    }
+    return [
+      ...next,
+      {
+        id: createId("tl"),
+        kind: "tool",
+        name: "ask_user",
+        summary: questions[0]?.prompt,
+        clarify,
+        phase: "start",
+        active: true,
+      },
+    ];
+  }
   if (request.kind !== "shell_approval" && request.kind !== "shell_write_approval") {
     return steps;
   }
@@ -536,6 +771,8 @@ export function applyHitlRequest(
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
   // 已有同 hitlId 则刷新
   const existing = next.findIndex((s) => s.kind === "tool" && s.hitl?.hitlId === request.hitlId);
+  const reviewReason =
+    typeof request.payload?.reviewReason === "string" ? request.payload.reviewReason.trim() : "";
   const hitl = {
     hitlId: request.hitlId,
     title: request.title,
@@ -547,6 +784,7 @@ export function applyHitlRequest(
     })),
     parentCommand: parentCommand || undefined,
     dataPreview: dataPreview || undefined,
+    purpose: reviewReason || undefined,
   };
   const sessionId = typeof request.payload?.sessionId === "string" ? request.payload.sessionId : "";
 
@@ -626,13 +864,27 @@ export function applyHitlResolved(
   steps: ChatTimelineStep[],
   hitlId: string,
   actionId?: string,
+  values?: Record<string, unknown>,
 ): ChatTimelineStep[] {
-  const idx = steps.findIndex((s) => s.kind === "tool" && s.hitl?.hitlId === hitlId);
+  const idx = steps.findIndex(
+    (s) => s.kind === "tool" && (s.hitl?.hitlId === hitlId || s.clarify?.hitlId === hitlId),
+  );
   if (idx < 0) return steps;
   const prev = steps[idx];
   if (prev.kind !== "tool") return steps;
   const denied = actionId === "deny";
   const copy = [...steps];
+  if (prev.clarify && !denied) {
+    copy[idx] = {
+      ...prev,
+      hitl: undefined,
+      clarify: { ...prev.clarify, answers: parseClarifyAnswers(values) },
+      phase: "end",
+      active: false,
+      ok: true,
+    };
+    return copy;
+  }
   copy[idx] = {
     ...prev,
     hitl: undefined,

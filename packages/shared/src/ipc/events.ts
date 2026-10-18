@@ -146,6 +146,21 @@ export type AgentSubagentEvent = AgentEventBase & {
 export type AgentDoneEvent = AgentEventBase & {
   type: "done";
   text: string;
+  /**
+   * 本次 run 的墙钟耗时（毫秒，含主进程排队时长）。
+   * 由 engine 在终态统一计算，是耗时的**唯一真相**；消费端不得自行推算。
+   * 缺省表示未知（例如未进入执行阶段），UI 展示「—」而非 0。
+   */
+  durationMs?: number;
+  /**
+   * 本次 run 的累计 token 用量（含子代理）。
+   * 由 engine 在唯一模型调用卡口逐次入账、终态统一结算，是用量的**唯一真相**；
+   * 消费端只做展示，不得自行累加或粗估。
+   * 缺省表示本 run 从未发生模型调用（如准入即失败），UI 展示「—」而非 0。
+   */
+  usage?: ModelUsage;
+  /** true 表示 `usage` 中含粗估成分（网关未回 usage，或中断时按已流出正文补算）。 */
+  usageEstimated?: boolean;
 };
 
 export type AgentErrorCode = "cancelled" | "failed" | "crashed";
@@ -154,6 +169,32 @@ export type AgentErrorEvent = AgentEventBase & {
   type: "error";
   error: string;
   code: AgentErrorCode;
+  /** 同 `AgentDoneEvent.durationMs`；准入即失败等未进入执行阶段的情况缺省。 */
+  durationMs?: number;
+  /** 同 `AgentDoneEvent.usage`：失败 / 取消前已发生的模型调用用量。 */
+  usage?: ModelUsage;
+  /** 同 `AgentDoneEvent.usageEstimated`。 */
+  usageEstimated?: boolean;
+};
+
+/** 记忆子系统事件：抽取 / 压缩 / 熔断。 */
+export type AgentMemoryEvent = AgentEventBase & {
+  type: "memory";
+  phase: "extracted" | "compacted" | "circuit_broken";
+  /** 记忆种类（抽取时）。 */
+  memoryKind?: "project" | "session";
+  /** 抽取动作（extracted 时）。 */
+  action?: "init" | "update";
+  /** 压缩层级（compacted 时）。 */
+  layer?: "micro" | "session" | "full";
+  /** 抽取出的章节名（extracted 时）。 */
+  sections?: string[];
+  /** 压缩前消息数。 */
+  before?: number;
+  /** 压缩后消息数。 */
+  after?: number;
+  /** 被移除/替换的消息数。 */
+  truncated?: number;
 };
 
 /** 推送给 UI 的全部 agent 事件。 */
@@ -166,5 +207,6 @@ export type AgentEvent =
   | AgentModelSwitchEvent
   | AgentModelHealthEvent
   | AgentSubagentEvent
+  | AgentMemoryEvent
   | AgentDoneEvent
   | AgentErrorEvent;

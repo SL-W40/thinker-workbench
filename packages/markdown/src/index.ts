@@ -40,7 +40,6 @@ export {
   type MermaidLook,
   type MermaidThemeName,
   mermaidVariablesFromCss,
-  monoTheme,
   notesTheme,
   resolveTheme,
 } from "./themes";

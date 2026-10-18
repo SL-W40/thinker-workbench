@@ -101,7 +101,7 @@ export function FileEditor({
   onChange,
   onSave,
 }: FileEditorProps) {
-  const { theme, themeId } = useDesignTheme();
+  const { theme } = useDesignTheme();
   const colorScheme = theme.colorScheme === "dark" ? "dark" : "light";
   const lang = language ?? langFromPath(path ?? modelPath);
   const monacoPath = toMonacoModelPath(path || modelPath || "inmemory:///untitled");
@@ -178,9 +178,10 @@ export function FileEditor({
             scrollbar: {
               vertical: "auto",
               horizontal: "auto",
-              // 槽宽 = 滑块 6 + 两侧各 4，与全局 --scrollbar-gap 视觉对齐
-              verticalScrollbarSize: 14,
-              horizontalScrollbarSize: 14,
+              // 与全局细滚动条（--scrollbar-size: 7px）对齐；否则编辑区比
+              // 预览区多占 7px，切换「编辑 / 预览」时内容宽度会跳变
+              verticalScrollbarSize: 7,
+              horizontalScrollbarSize: 7,
               arrowSize: 0,
               useShadows: false,
               verticalHasArrows: false,
@@ -192,7 +193,7 @@ export function FileEditor({
             hideCursorInOverviewRuler: true,
             overviewRulerBorder: false,
           }}
-          onChange={(v) => onChange?.(v ?? "")}
+          onChange={(v: string | undefined) => onChange?.(v ?? "")}
         />
       </div>
     </div>

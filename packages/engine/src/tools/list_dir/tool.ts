@@ -8,7 +8,7 @@ import { listDirTool } from "./execute";
 export const listDirToolSpec = defineTool({
   name: "list_dir",
   description:
-    "Lists files and folders under a directory (default: environment_context.workspace.root; see workspace.access for absolute paths).",
+    "Lists files and folders under a directory (default: environment_context.workspace.root; see workspace.access for absolute paths). Returns at most 400 entries per call (truncated flag set otherwise) — pass the narrowest subdirectory you need.",
   parameters: {
     type: "object",
     properties: {

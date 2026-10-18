@@ -2,14 +2,19 @@
  * 进行中 Run 的内存投影：所有 AgentEvent 写入会话槽；前台/后台共用。
  * 切换会话不取消；DB 不覆盖未结算槽的流式尾部。
  */
-import type {
-  AgentEvent,
-  ChatMessage,
-  ChatTimelineStep,
-  HitlRequest,
+import {
+  type AgentEvent,
+  addUsage,
+  type ChatMessage,
+  type ChatTimelineStep,
+  EMPTY_USAGE,
+  type HitlRequest,
+  type ModelUsage,
 } from "@thinker-workbench/shared";
 import { onAgentEvent } from "../../bridge/thinker";
 import { saveSessionMessages } from "../../bridge/workspaces";
+import { createDebouncedSave } from "./chatPersistence";
+import { mergeSessionMessages } from "./mergeSessionMessages";
 import { classifyRunError, softStopResumeKind } from "./runErrors";
 import {
   appendError,
@@ -23,6 +28,9 @@ import {
   applySubagentEvent,
   applyToolEvent,
   deactivateAll,
+  isTimelineHitlKind,
+  reconcileTimelineReply,
+  stripTransitionLines,
 } from "./timelineModel";
 
 export type LiveRunSlot = {
@@ -40,6 +48,10 @@ export type LiveRunSlot = {
   modalHitl: HitlRequest | null;
   /** 结算后的可恢复种类。 */
   canResume: false | "cancelled" | "crashed";
+  /** 本 run 直播期累计的用量（终态以引擎下发值为准替换）。 */
+  usage?: ModelUsage;
+  /** 本 run 用量是否含粗估成分。 */
+  usageEstimated?: boolean;
 };
 
 type Listener = () => void;
@@ -53,10 +65,6 @@ let unsub: (() => void) | null = null;
 
 function notify(): void {
   for (const l of listeners) l();
-}
-
-function isTimelineHitl(kind: string): boolean {
-  return kind === "shell_approval" || kind === "shell_write_approval";
 }
 
 /** 启动全局事件订阅（幂等）。 */
@@ -109,6 +117,8 @@ export function upsertLiveRunSlot(partial: {
   stopping?: boolean;
   modalHitl?: HitlRequest | null;
   canResume?: false | "cancelled" | "crashed";
+  usage?: ModelUsage;
+  usageEstimated?: boolean;
 }): void {
   const sessionId = partial.sessionId.trim();
   if (!sessionId) return;
@@ -126,6 +136,9 @@ export function upsertLiveRunSlot(partial: {
       partial.targetMsgId !== undefined ? partial.targetMsgId : (prev?.targetMsgId ?? null),
     modalHitl: partial.modalHitl !== undefined ? partial.modalHitl : (prev?.modalHitl ?? null),
     canResume: partial.canResume !== undefined ? partial.canResume : (prev?.canResume ?? false),
+    usage: partial.usage !== undefined ? partial.usage : prev?.usage,
+    usageEstimated:
+      partial.usageEstimated !== undefined ? partial.usageEstimated : prev?.usageEstimated,
   };
   slots.set(sessionId, slot);
   threadToSession.set(partial.threadId, sessionId);
@@ -169,6 +182,7 @@ export function takeLiveRunSlot(sessionId: string): LiveRunSlot | undefined {
 
 /**
  * 进行中重载：槽未结算时用槽尾部覆盖 DB 快照中的同 id 消息。
+ * 合并策略统一走 mergeSessionMessages（本地槽优先、DB 补缺）。
  */
 export function mergeDbWithLiveSlot(
   sessionId: string,
@@ -176,24 +190,14 @@ export function mergeDbWithLiveSlot(
 ): ChatMessage[] | null {
   const slot = slots.get(sessionId);
   if (!slot?.busy || !slot.targetMsgId) return null;
-  const byId = new Map(dbMessages.map((m) => [m.id, m]));
-  for (const m of slot.messages) {
-    byId.set(m.id, m);
-  }
-  // 保持槽内顺序优先：若槽消息是超集则用槽
-  if (slot.messages.length >= dbMessages.length) {
-    return slot.messages.map((m) =>
-      m.id === slot.targetMsgId
-        ? {
-            ...m,
-            text: slot.streamText || m.text,
-            pending: true,
-            timeline: [...slot.timeline],
-          }
-        : m,
-    );
-  }
-  return [...byId.values()];
+  return mergeSessionMessages(dbMessages, slot.messages, {
+    hasLiveTarget: true,
+    live: {
+      targetMsgId: slot.targetMsgId,
+      streamText: slot.streamText,
+      timeline: slot.timeline,
+    },
+  });
 }
 
 function resolveSessionId(event: AgentEvent): string | null {
@@ -255,14 +259,19 @@ async function applyAgentEvent(event: AgentEvent): Promise<void> {
 
   if (event.type === "hitl") {
     if (event.phase === "request" && event.request) {
-      if (isTimelineHitl(event.request.kind)) {
+      if (isTimelineHitlKind(event.request.kind)) {
         slot.timeline = applyHitlRequest(slot.timeline, event.request);
         slot.modalHitl = null;
       } else {
         slot.modalHitl = event.request;
       }
     } else if (event.phase === "resolved") {
-      slot.timeline = applyHitlResolved(slot.timeline, event.hitlId, event.response?.actionId);
+      slot.timeline = applyHitlResolved(
+        slot.timeline,
+        event.hitlId,
+        event.response?.actionId,
+        event.response?.values,
+      );
       if (slot.modalHitl?.hitlId === event.hitlId) slot.modalHitl = null;
     }
     syncTargetMessage(slot);
@@ -275,7 +284,8 @@ async function applyAgentEvent(event: AgentEvent): Promise<void> {
     if (event.channel === "thinking") {
       slot.timeline = appendThinkingText(slot.timeline, event.text);
     } else {
-      slot.streamText += event.text;
+      // 气泡正文剥离 [NEXT] 标记行（小结已进时间线 transition 步）
+      slot.streamText = stripTransitionLines(`${slot.streamText}${event.text}`);
       slot.timeline = appendReplyText(slot.timeline, event.text);
     }
   } else if (event.type === "status") {
@@ -286,6 +296,9 @@ async function applyAgentEvent(event: AgentEvent): Promise<void> {
     slot.timeline = applySubagentEvent(slot.timeline, event);
   } else if (event.type === "model_switch") {
     slot.timeline = appendModelSwitch(slot.timeline, event);
+  } else if (event.type === "usage") {
+    // 后台 / 切走会话也要累计：以前 usage 落到 else 分支直接丢弃，气泡 token 恒为 0
+    accumulateSlotUsage(slot, event.usage);
   } else if (event.type === "done" || event.type === "error") {
     await settleSlot(slot, event);
     notify();
@@ -297,6 +310,28 @@ async function applyAgentEvent(event: AgentEvent): Promise<void> {
   syncTargetMessage(slot);
   scheduleBgSave(sessionId);
   notify();
+}
+
+/**
+ * 直播期累计一条 usage（后台 / 切走会话同样生效）。
+ * 以前 usage 事件在这里被整条丢弃，切走会话跑完的气泡 token 恒为 0。
+ */
+export function accumulateSlotUsage(slot: LiveRunSlot, delta: ModelUsage): void {
+  slot.usage = addUsage(slot.usage ?? EMPTY_USAGE, delta);
+}
+
+/**
+ * 终态用量补丁：以引擎下发的累计值为准（含子代理），引擎没给则退回槽内存量；
+ * 两者都没有时返回空补丁——保持「未知」，绝不补 0。
+ */
+export function terminalUsagePatch(
+  slot: LiveRunSlot,
+  event: { usage?: ModelUsage; usageEstimated?: boolean },
+): Partial<Pick<ChatMessage, "usage" | "usageEstimated">> {
+  const usage = event.usage ?? slot.usage;
+  if (!usage) return {};
+  const estimated = event.usageEstimated ?? slot.usageEstimated;
+  return { usage, ...(estimated ? { usageEstimated: true } : {}) };
 }
 
 function syncTargetMessage(slot: LiveRunSlot): void {
@@ -322,8 +357,13 @@ async function settleSlot(
   slot.modalHitl = null;
   slot.stopping = false;
 
+  // 用量以引擎终态值为准（含子代理）；引擎没给则退回槽内存量，都没有就保持未知
+  const usagePatch = terminalUsagePatch(slot, event);
+
   if (event.type === "done") {
-    const text = event.text || slot.streamText;
+    // 引擎下发的完整正文可能仍带 [NEXT] 标记行，落库前剥离
+    const text = stripTransitionLines(event.text || slot.streamText);
+    slot.timeline = reconcileTimelineReply(slot.timeline, text);
     slot.messages = slot.messages.map((m) =>
       m.id === slot.targetMsgId
         ? {
@@ -331,6 +371,7 @@ async function settleSlot(
             text: text || m.text,
             pending: false,
             timeline: [...slot.timeline],
+            ...usagePatch,
           }
         : m,
     );
@@ -358,6 +399,7 @@ async function settleSlot(
             text: slot.streamText || m.text,
             pending: false,
             timeline: [...slot.timeline],
+            ...usagePatch,
           }
         : m,
     );
@@ -374,16 +416,15 @@ async function settleSlot(
   }
 }
 
-const bgSaveTimers = new Map<string, number>();
+// 后台槽落库防抖：与前台 scheduleSave 共用同一套调度语义与毫秒档
+const bgSaveScheduler = createDebouncedSave();
 
 function scheduleBgSave(sessionId: string): void {
-  const prev = bgSaveTimers.get(sessionId);
-  if (prev != null) window.clearTimeout(prev);
-  const timer = window.setTimeout(() => {
-    bgSaveTimers.delete(sessionId);
-    const slot = slots.get(sessionId);
-    if (!slot) return;
-    void saveSessionMessages(sessionId, slot.messages);
-  }, 400);
-  bgSaveTimers.set(sessionId, timer);
+  bgSaveScheduler.schedule(sessionId, {
+    run: () => {
+      const slot = slots.get(sessionId);
+      if (!slot) return;
+      void saveSessionMessages(sessionId, slot.messages);
+    },
+  });
 }

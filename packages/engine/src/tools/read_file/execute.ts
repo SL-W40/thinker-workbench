@@ -2,9 +2,10 @@
  * read_file 实现：读取工作区内文本文件（整文件或行区间）。
  * 文件不存在时按 basename 扫工作区，把候选路径写进错误文案。
  */
+import type { Stats } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { getReadFileDefaultMaxChars } from "../../config/runtimeLimits";
+import { getLimit } from "../../config/runtimeLimits";
 import {
   formatNumberedSlice,
   parseLineRange,
@@ -61,7 +62,7 @@ export async function readFileTool(args: ToolArgs, ctx: ToolContext): Promise<st
   const target = resolveWorkspacePath(ctx.workspaceRoot, rel, { access: "read" });
   const pathLabel = toWorkspaceRelative(ctx.workspaceRoot, target);
 
-  let st;
+  let st: Stats | undefined;
   try {
     st = await stat(target);
   } catch (err) {
@@ -100,7 +101,7 @@ export async function readFileTool(args: ToolArgs, ctx: ToolContext): Promise<st
     return `${header}\n\n${body}`;
   }
 
-  const maxChars = asPositiveInt(args.max_chars, getReadFileDefaultMaxChars());
+  const maxChars = asPositiveInt(args.max_chars, getLimit("readFileDefaultMaxChars"));
   const shown = text.length > maxChars ? text.slice(0, maxChars) : text;
   const truncated = text.length > maxChars;
 

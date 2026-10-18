@@ -122,6 +122,7 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
   }, [value, theme, reactId, incomplete, look]);
 
   // 源码切换较大时重置缩放，避免旧平移错位
+  // biome-ignore lint/correctness/useExhaustiveDependencies: incomplete 未在函数体读取但刻意保留：仅在流式片段边界重置缩放
   useEffect(() => {
     setZoom(1);
   }, [incomplete]);

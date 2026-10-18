@@ -47,9 +47,6 @@ export type AppThemeCreativeId = (typeof APP_THEME_CREATIVE_IDS)[number];
 /** 可落到内置色板的视觉主题（不含 `system`）。 */
 export type AppVisualThemeId = Exclude<BuiltinAppThemeId, "system">;
 
-/** 主题目录版本：用于把旧 `light`/`dark`/`mono` 一次性迁移到新 id。 */
-export const THEME_CATALOG_VERSION = 2;
-
 /** 默认主题：基础浅色。 */
 export const DEFAULT_APP_THEME: BuiltinAppThemeId = "light";
 
@@ -71,18 +68,12 @@ export function isBuiltinAppTheme(value: unknown): value is BuiltinAppThemeId {
   return typeof value === "string" && (APP_THEME_IDS as readonly string[]).includes(value);
 }
 
-/**
- * 将未知值规范为合法内置主题 id。
- * 已移除的 `mono` 恒映射为 `light`；其余旧 id 由 catalog 版本迁移处理。
- * 自定义 id 不在此函数接受范围内——见 `normalizeUiTheme`。
- */
+/** 将未知值规范为合法内置主题 id。自定义 id 不在此函数接受范围内——见 `normalizeUiTheme`。 */
 export function normalizeAppTheme(
   value: unknown,
   fallback: BuiltinAppThemeId = DEFAULT_APP_THEME,
 ): BuiltinAppThemeId {
   if (typeof value !== "string") return fallback;
-  if (value === "mono") return "light";
-  if (value === "dusk") return "aurora";
   return isBuiltinAppTheme(value) ? value : fallback;
 }
 
@@ -95,23 +86,9 @@ export function normalizeUiTheme(
   fallback: AppThemeId = DEFAULT_APP_THEME,
 ): AppThemeId {
   if (typeof value !== "string") return fallback;
-  if (value === "mono") return "light";
-  if (value === "dusk") return "aurora";
   if (isBuiltinAppTheme(value)) return value;
   if (isCustomThemeId(value) && customThemes.some((t) => t.id === value)) return value;
   return fallback;
-}
-
-/**
- * 主题目录 v1 → v2：旧纸墨 `light`→`notes`，旧夜案 `dark`→`aurora`，旧黑白 `mono`→`light`。
- * 仅在 `themeCatalogVersion < 2` 时调用，避免与新版 `light`/`dark` 字面量冲突。
- */
-export function migrateAppThemeFromCatalogV1(value: unknown): AppThemeId {
-  if (value === "light") return "notes";
-  if (value === "dark") return "aurora";
-  if (value === "mono") return "light";
-  if (value === "dusk") return "aurora";
-  return normalizeAppTheme(value, DEFAULT_APP_THEME);
 }
 
 /** UI 字体大小档位（相对默认约 87.5% / 100% / 112.5%）。 */
@@ -262,14 +239,23 @@ export type GeneralSettings = {
    * 超时后该条失败，不影响其它 run。
    */
   queueTimeoutMin: number;
-  /** 主会话 agent↔tools 最大轮次。 */
+  /**
+   * 主会话最大执行步数（LangGraph superstep）：每轮模型调用与每次工具执行各计 1 步。
+   */
   maxAgentSteps: number;
-  /** Task / 子代理独立模型轮次上限。 */
+  /** Task / 子代理最大执行步数（每次模型调用与每次工具执行各计 1 步）。 */
   maxSubagentSteps: number;
   /** 模型请求最大尝试次数（含首次）。 */
   modelRetryMaxAttempts: number;
   /** 模型重试首次基础延迟（ms）。 */
   modelRetryBaseDelayMs: number;
+  /**
+   * 串行工具调用间最小间隔（ms）：上一个工具结束到下一个工具开始的最小时长。
+   * 与渲染端时间线尾卡「最小时长 + 收起动画」对齐——默认 850+180+缓冲≈1200ms，
+   * 即「最短展示 + 动画时长」，保证上一张卡完全收起、planning/thinking 抑制已释放，再发起下一个调用。
+   * `0` 表示不强制间隔。
+   */
+  toolCallMinGapMs: number;
   /** shell / shell_await 默认 block_until_ms。 */
   defaultShellBlockUntilMs: number;
   /** shell 输出进模型前的字符上限。 */
@@ -429,6 +415,71 @@ export function shellCommandBaseToken(command: string): string {
   return name.replace(/\.(exe|cmd|bat|com|ps1)$/i, "").toLowerCase();
 }
 
+/** 按 && / || / ; 拆开命令链，引号内的分隔符不算。 */
+function splitShellChain(command: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i] ?? "";
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    const two = command.slice(i, i + 2);
+    if (two === "&&" || two === "||") {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      i += 1;
+      continue;
+    }
+    if (ch === ";" || ch === "\n") {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+/**
+ * 一条命令链里会被当作「命令名」加白的 token（去重、保持出现顺序）。
+ * `cd packages/renderer && npx tsc` → `cd`、`npx`。
+ */
+export function shellWhitelistTokens(command: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const segment of splitShellChain(command)) {
+    const token = shellCommandBaseToken(segment);
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+  }
+  return out;
+}
+
+/**
+ * 点「允许并加入白名单」时真正会新写入的命令名。
+ * 已在白名单或落在硬拒绝上的不再列入。
+ */
+export function shellCommandsToAllowlist(
+  command: string,
+  allowlist: readonly string[],
+  blocklist: readonly string[],
+): string[] {
+  return shellWhitelistTokens(command).filter(
+    (token) => !allowlist.includes(token) && !isShellTokenBlocked(token, blocklist),
+  );
+}
+
 /** 设置页可选的日志保留天数（含「永不」= 0）。 */
 export const LOG_RETENTION_DAY_OPTIONS = [0, 7, 14, 30, 90] as const;
 
@@ -456,14 +507,27 @@ export const DEFAULT_QUEUE_TIMEOUT_MIN = 10;
 /** 设置页可选的排队超时（分钟）。 */
 export const QUEUE_TIMEOUT_MIN_OPTIONS = [0, 5, 10, 30, 60] as const;
 
-/** 主会话默认最大轮次。 */
-export const DEFAULT_MAX_AGENT_STEPS = 16;
-/** 子代理默认最大轮次。 */
-export const DEFAULT_MAX_SUBAGENT_STEPS = 24;
+/**
+ * 主会话默认最大执行步数（LangGraph superstep）。
+ * 每轮模型调用与每次工具执行各计 1 步。
+ */
+export const DEFAULT_MAX_AGENT_STEPS = 60;
+/** 子代理默认最大执行步数（每次模型调用与每次工具执行各计 1 步）。 */
+export const DEFAULT_MAX_SUBAGENT_STEPS = 60;
+/** 执行步数允许范围：过低会让任务无法推进，过高会失控烧 token。 */
+export const MAX_AGENT_STEPS_RANGE = { min: 5, max: 500 } as const;
 /** 模型重试默认次数（含首次）。 */
 export const DEFAULT_MODEL_RETRY_MAX_ATTEMPTS = 3;
 /** 模型重试默认基础延迟（ms）。 */
 export const DEFAULT_MODEL_RETRY_BASE_DELAY_MS = 400;
+/**
+ * 串行工具调用最小间隔默认（ms）：时间线尾卡最小时长 850 + 收起动画 180 + 缓冲 ≈ 1200。
+ * 即「最短展示 + 动画时长」，保证上一个调用卡片完全收起后，再发起下一个调用 / 显示 planning。
+ * 见 `toolCallMinGapMs` 字段注释与 renderer 的 `TAIL_MIN_DISPLAY_MS` / `TAIL_EXIT_ANIM_MS`。
+ */
+export const DEFAULT_TOOL_CALL_MIN_GAP_MS = 1200;
+/** 串行工具最小间隔允许范围（ms）；0 表示不强制间隔。 */
+export const TOOL_CALL_MIN_GAP_MS_RANGE = { min: 0, max: 10_000 } as const;
 /** Shell 默认等待（ms）。 */
 export const DEFAULT_SHELL_BLOCK_UNTIL_MS = 30_000;
 /** Shell 输出默认截断上限（字符）。 */
@@ -528,18 +592,23 @@ export function normalizeIntInRange(
   return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
+/**
+ * 归一化「最大执行步数」（superstep）。
+ * 注意：仅做范围 clamp，不按旧「轮次」语义换算——历史值保持原样，由用户自行调整。
+ */
 export function normalizeMaxAgentSteps(
   value: unknown,
   fallback: number = DEFAULT_MAX_AGENT_STEPS,
 ): number {
-  return normalizeIntInRange(value, fallback, 1, 200);
+  return normalizeIntInRange(value, fallback, MAX_AGENT_STEPS_RANGE.min, MAX_AGENT_STEPS_RANGE.max);
 }
 
+/** 归一化子代理「最大执行步数」（superstep）；同样只 clamp、不迁移历史值。 */
 export function normalizeMaxSubagentSteps(
   value: unknown,
   fallback: number = DEFAULT_MAX_SUBAGENT_STEPS,
 ): number {
-  return normalizeIntInRange(value, fallback, 1, 200);
+  return normalizeIntInRange(value, fallback, MAX_AGENT_STEPS_RANGE.min, MAX_AGENT_STEPS_RANGE.max);
 }
 
 export function normalizeModelRetryMaxAttempts(
@@ -554,6 +623,19 @@ export function normalizeModelRetryBaseDelayMs(
   fallback: number = DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
 ): number {
   return normalizeIntInRange(value, fallback, 50, 10_000);
+}
+
+/** 归一化串行工具调用最小间隔（ms）；0 表示不强制间隔。 */
+export function normalizeToolCallMinGapMs(
+  value: unknown,
+  fallback: number = DEFAULT_TOOL_CALL_MIN_GAP_MS,
+): number {
+  return normalizeIntInRange(
+    value,
+    fallback,
+    TOOL_CALL_MIN_GAP_MS_RANGE.min,
+    TOOL_CALL_MIN_GAP_MS_RANGE.max,
+  );
 }
 
 export function normalizeDefaultShellBlockUntilMs(
@@ -638,6 +720,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   maxSubagentSteps: DEFAULT_MAX_SUBAGENT_STEPS,
   modelRetryMaxAttempts: DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
   modelRetryBaseDelayMs: DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
+  toolCallMinGapMs: DEFAULT_TOOL_CALL_MIN_GAP_MS,
   defaultShellBlockUntilMs: DEFAULT_SHELL_BLOCK_UNTIL_MS,
   shellOutputCap: DEFAULT_SHELL_OUTPUT_CAP,
   mcpConnectTimeoutMs: DEFAULT_MCP_CONNECT_TIMEOUT_MS,
@@ -696,17 +779,8 @@ export type ThinkerGeneralApi = {
   onDataDirMigrateProgress?(cb: (progress: DataDirMigrateProgress) => void): () => void;
 };
 
-/**
- * 从磁盘 / IPC 原始值规范为完整 GeneralSettings。
- * 未知字段忽略；缺省用默认值。
- * 旧版 settings.json 无 `onboardingCompleted` 时视为已完成，避免再次弹出引导。
- *
- * @param themeCatalogVersion 磁盘根上的主题目录版本；`< 2` 时按 v1 id 迁移。
- */
-export function normalizeGeneral(
-  raw: unknown,
-  themeCatalogVersion: number = THEME_CATALOG_VERSION,
-): GeneralSettings {
+/** 从磁盘 / IPC 原始值规范为完整 GeneralSettings。未知字段忽略；缺省用默认值。 */
+export function normalizeGeneral(raw: unknown): GeneralSettings {
   const base = { ...DEFAULT_GENERAL_SETTINGS };
   if (!raw || typeof raw !== "object") return base;
   const obj = raw as Partial<Record<keyof GeneralSettings, unknown>>;
@@ -724,17 +798,10 @@ export function normalizeGeneral(
     base.deleteFileRestoreTtlDays = normalizeDeleteFileRestoreTtlDays(obj.deleteFileRestoreTtlDays);
   }
   base.customThemes = normalizeCustomThemes(obj.customThemes);
-  if (themeCatalogVersion < THEME_CATALOG_VERSION) {
-    base.uiTheme = migrateAppThemeFromCatalogV1(obj.uiTheme);
-  } else {
-    base.uiTheme = normalizeUiTheme(obj.uiTheme, base.customThemes, DEFAULT_APP_THEME);
-  }
+  base.uiTheme = normalizeUiTheme(obj.uiTheme, base.customThemes, DEFAULT_APP_THEME);
   base.uiFontScale = normalizeAppFontScale(obj.uiFontScale, DEFAULT_APP_FONT_SCALE);
   if (typeof obj.onboardingCompleted === "boolean") {
     base.onboardingCompleted = obj.onboardingCompleted;
-  } else {
-    // 旧版 settings.json 无此字段 — 视为已完成，避免再次弹出引导
-    base.onboardingCompleted = true;
   }
   base.dataDir = normalizeOptionalPath(obj.dataDir);
   if (typeof obj.logRetentionDays === "number" && Number.isFinite(obj.logRetentionDays)) {
@@ -796,6 +863,9 @@ export function normalizeGeneral(
   if (Object.hasOwn(obj, "modelRetryBaseDelayMs")) {
     base.modelRetryBaseDelayMs = normalizeModelRetryBaseDelayMs(obj.modelRetryBaseDelayMs);
   }
+  if (Object.hasOwn(obj, "toolCallMinGapMs")) {
+    base.toolCallMinGapMs = normalizeToolCallMinGapMs(obj.toolCallMinGapMs);
+  }
   if (Object.hasOwn(obj, "defaultShellBlockUntilMs")) {
     base.defaultShellBlockUntilMs = normalizeDefaultShellBlockUntilMs(obj.defaultShellBlockUntilMs);
   }
@@ -821,14 +891,6 @@ export function normalizeGeneral(
   }
   if (typeof obj.observabilityEnabled === "boolean") {
     base.observabilityEnabled = obj.observabilityEnabled;
-  } else {
-    // 兼容：旧 langfuseEnabled / observabilityProvider=local 都视为开启自建
-    const legacy = raw as { langfuseEnabled?: unknown; observabilityProvider?: unknown };
-    if (typeof legacy.langfuseEnabled === "boolean") {
-      base.observabilityEnabled = legacy.langfuseEnabled;
-    } else if (legacy.observabilityProvider === "local" || legacy.observabilityProvider == null) {
-      base.observabilityEnabled = true;
-    }
   }
   return base;
 }

@@ -38,6 +38,7 @@ export function MathView({ value, display = false }: Props) {
   return (
     <span
       className={`tw-md-math${display ? " tw-md-math--display" : ""}`}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: 数学公式渲染产物来自 KaTeX，库自身负责输出转义
       dangerouslySetInnerHTML={{ __html: result.html }}
     />
   );

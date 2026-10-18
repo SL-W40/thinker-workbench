@@ -44,6 +44,10 @@ export type ChatTimelineToolStep = {
   phase: "start" | "end";
   ok?: boolean;
   diff?: string;
+  /** 工具开始时间（Unix ms；尾部暂留的最小展示时长用）。 */
+  startedAt?: number;
+  /** 工具结束时间（Unix ms）。 */
+  endedAt?: number;
   /** 工具返回的路径列表（如 search / list；供探索行展开）。 */
   resultPaths?: string[];
   /** 与 resultPaths 对齐的路径类型标签。 */
@@ -85,6 +89,25 @@ export type ChatTimelineToolStep = {
     parentCommand?: string;
     /** shell_write：将写入的内容预览。 */
     dataPreview?: string;
+    /** 这条命令要做什么（研判理由等）；没有则卡片用默认说明。 */
+    purpose?: string;
+  };
+  /**
+   * ask_user 澄清题。答复写入 answers 后卡片只读。
+   * 与 hitl 分开存，避免会话收束时把已答内容清掉。
+   */
+  clarify?: {
+    hitlId: string;
+    questions: Array<{
+      id: string;
+      prompt: string;
+      options: Array<{ id: string; label: string }>;
+    }>;
+    answers?: Array<{
+      id: string;
+      optionId?: string;
+      text?: string;
+    }>;
   };
 };
 
@@ -95,6 +118,18 @@ export type ChatTimelineToolStep = {
 export type ChatTimelineTextStep = {
   id: string;
   kind: "text";
+  text: string;
+};
+
+/**
+ * 时间线：承上启下小结行。
+ * 模型在调工具前、确有关键结论 / 思维转变 / 用户须知时，
+ * 以 `[NEXT] 一句话` 标记行主动给出；renderer 解析标记后落为本步骤，
+ * 并把标记行从回复正文里剥离。没有转折时模型不写，本步骤不出现。
+ */
+export type ChatTimelineTransitionStep = {
+  id: string;
+  kind: "transition";
   text: string;
 };
 
@@ -148,6 +183,7 @@ export type ChatTimelineStep =
   | ChatTimelineStatusStep
   | ChatTimelineToolStep
   | ChatTimelineTextStep
+  | ChatTimelineTransitionStep
   | ChatTimelineErrorStep
   | ChatTimelineModelSwitchStep
   | ChatTimelineSubagentStep;
@@ -187,6 +223,8 @@ export type ChatMessage = {
   timeline?: ChatTimelineStep[];
   /** 本轮模型 token 用量（多步 agent 会累加）。 */
   usage?: ModelUsage;
+  /** true 表示 `usage` 中含粗估成分（网关未回 usage，或中断时按已流出正文补算）。 */
+  usageEstimated?: boolean;
   /** 本轮总耗时（ms）；结束后写入。 */
   durationMs?: number;
   /** 本轮开始时间；pending 时用于 live 耗时。 */

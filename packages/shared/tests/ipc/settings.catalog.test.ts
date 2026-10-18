@@ -1,5 +1,5 @@
 /**
- * 模型目录：公开视图、标签、旧设置迁移、路由与失败原因。
+ * 模型目录：公开视图、标签、路由与失败原因。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
@@ -9,7 +9,6 @@ import {
   emptyModelCatalog,
   type ModelCatalog,
   type ModelEntry,
-  migrateLegacyModelSettings,
   normalizeModelSelection,
   normalizeModelTags,
   resolveModelSettings,
@@ -44,21 +43,6 @@ describe("model catalog helpers", () => {
       modelId: "m1",
     });
     assert.deepEqual(normalizeModelTags(["coding", "nope", "coding"]), ["general", "coding"]);
-  });
-
-  it("旧单字段设置迁成一条 provider；空旧值仍是空目录", () => {
-    assert.equal(migrateLegacyModelSettings({}).models.length, 0);
-    const migrated = migrateLegacyModelSettings({
-      apiKey: "sk",
-      baseUrl: "https://api",
-      model: "gpt",
-      allowEmoji: true,
-      contextWindow: 8.9,
-    });
-    assert.equal(migrated.providers[0]?.apiKey, "sk");
-    assert.equal(migrated.selection.mode, "manual");
-    assert.equal(migrated.models[0]?.contextWindow, 8);
-    assert.equal(migrated.allowEmoji, true);
   });
 
   it("展开凭据时缺 provider 或缺 key 返回 null", () => {

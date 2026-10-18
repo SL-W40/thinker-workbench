@@ -218,10 +218,12 @@ export function Select<T extends string = string>({
   const list =
     open && coords && typeof document !== "undefined"
       ? createPortal(
+          // 标准 ARIA listbox 模式：ul + role="listbox" 配合子项 role="option" 与 aria-activedescendant；对应规则已在 biome.json overrides 中按本文件豁免
           <ul
             ref={listRef}
             id={listId}
             className="tw-select__list"
+            role="listbox"
             tabIndex={-1}
             aria-activedescendant={`${listId}-${activeIndex}`}
             style={listStyle}

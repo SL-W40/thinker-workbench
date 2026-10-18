@@ -2,8 +2,8 @@
  * 已完成回合 Worked for 折叠：内外步划分与耗时格式。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
 import type { ChatTimelineStep } from "@thinker-workbench/shared";
+import { describe, it } from "vitest";
 import {
   filterTimelineExterior,
   formatWorkedForElapsed,
@@ -91,11 +91,12 @@ describe("timelineWorkFold", () => {
     assert.equal(timelineHasFoldableWork([planning]), false);
   });
 
-  it("耗时格式与 usage 底栏一致", () => {
+  it("耗时格式与 usage 底栏一致；未知展示「—」而非 0s", () => {
     assert.equal(formatWorkedForElapsed(110_000), "1m 50s");
     assert.equal(formatWorkedForElapsed(45_000), "45s");
+    assert.equal(formatWorkedForElapsed(968), "<1s");
     assert.equal(formatWorkedForElapsed(0), "0s");
-    assert.equal(formatWorkedForElapsed(undefined), "0s");
+    assert.equal(formatWorkedForElapsed(undefined), "—");
   });
 
   it("折叠时机：重开历史折、刚跑完末条不折、跟随后折", () => {

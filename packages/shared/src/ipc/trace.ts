@@ -23,7 +23,8 @@ export type TraceRunType =
   | "retriever"
   | "embedding"
   | "prompt"
-  | "parser";
+  | "parser"
+  | "memory";
 
 export const TRACE_RUN_TYPES = [
   "chain",
@@ -33,6 +34,7 @@ export const TRACE_RUN_TYPES = [
   "embedding",
   "prompt",
   "parser",
+  "memory",
 ] as const;
 
 export function normalizeTraceRunType(

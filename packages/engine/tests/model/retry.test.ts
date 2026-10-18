@@ -9,6 +9,7 @@ import {
   isCancelErrorMessage,
   isRetryableError,
   isRetryableHttpStatus,
+  sleep,
   sleepBackoff,
 } from "../../src/model/retry";
 
@@ -92,6 +93,33 @@ describe("sleepBackoff", () => {
       const waiting = sleepBackoff(2, live.signal);
       live.abort();
       await assert.rejects(waiting, /cancelled/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("sleep", () => {
+  it("到时兑现；负时长立即兑现；已取消或等待中取消则拒绝", async () => {
+    vi.useFakeTimers();
+    try {
+      const done = sleep(-10, new AbortController().signal);
+      await vi.advanceTimersByTimeAsync(0);
+      await done;
+
+      const already = new AbortController();
+      already.abort();
+      await assert.rejects(sleep(100, already.signal), /Run cancelled\./);
+
+      const live = new AbortController();
+      const waiting = sleep(500, live.signal);
+      live.abort();
+      await assert.rejects(waiting, /Run cancelled\./);
+
+      const custom = new AbortController();
+      const waitingCustom = sleep(500, custom.signal, "my reason");
+      custom.abort();
+      await assert.rejects(waitingCustom, /my reason/);
     } finally {
       vi.useRealTimers();
     }

@@ -114,3 +114,12 @@ export function replaceLineRange(lines: string[], range: LineRange, contents: st
     contents.length === 0 ? [] : contents.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   return [...lines.slice(0, range.start - 1), ...replacement, ...lines.slice(range.end)];
 }
+
+/**
+ * 展示层截断超长行：超出 maxChars 的部分折叠为 `…[+N chars]`。
+ * 只截内容不截指针——调用方保留 路径:行号，全文可用 read_file 精确读回。
+ */
+export function clipLine(line: string, maxChars: number): string {
+  if (line.length <= maxChars) return line;
+  return `${line.slice(0, maxChars)}…[+${line.length - maxChars} chars]`;
+}

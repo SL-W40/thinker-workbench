@@ -37,7 +37,6 @@
   border-radius: 7px;
   padding: 4.5px 6px;
   font-size: var(--tk-font-base);
-  font-weight: 600;
   color: var(--muted);
   text-align: left;
   cursor: pointer;
@@ -68,6 +67,8 @@
 }
 
 .tree-name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -242,6 +243,8 @@
   justify-content: center;
   padding: 16px;
   overflow: auto;
+  // 常驻预留滚动条槽位，避免图片随滚动条显隐而左右 / 上下跳变宽度
+  scrollbar-gutter: stable;
   background:
     linear-gradient(45deg, var(--ink-05) 25%, transparent 25%),
     linear-gradient(-45deg, var(--ink-05) 25%, transparent 25%),
@@ -750,9 +753,10 @@
 .agent-files__main {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  /* 树打开时优先压缩树宽，保证 Files 主区可用。 */
-  min-width: min(100%, 280px);
+  /* basis 归零 + min-width:0：主区宽度完全由 flex 分配，
+   * 不被 Monaco / 预览内容撑开，避免挤压左侧文件树宽度随编辑 / 预览切换跳动 */
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -792,8 +796,8 @@
 
 .agent-files__side {
   position: relative;
-  flex: 0 1 auto;
-  width: 260px;
+  /* 不收缩：文件树宽度稳定，不受主区内容（编辑 / 预览）影响 */
+  flex: 0 0 260px;
   max-width: 42%;
   min-width: 160px;
   min-height: 0;
@@ -852,6 +856,121 @@
   overflow: hidden;
   position: relative;
   background: var(--panel);
+}
+
+/* Markdown 文件查看器：头部三点菜单 + 编辑 / 预览切换 */
+.md-fileview {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.md-fileview__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--border, var(--ink-10, #e3e3e3));
+  background: var(--panel);
+}
+
+.md-fileview__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tk-font-sm, 12px);
+  color: var(--muted);
+}
+
+.md-fileview__menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.md-fileview__kebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.md-fileview__kebab:hover {
+  background: var(--ink-06, rgba(127, 127, 127, 0.1));
+  color: var(--text);
+}
+
+.md-fileview__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 132px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border-strong, var(--ink-15, #d0d0d0));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.md-fileview__menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: var(--tk-font-base, 13px);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.md-fileview__menu-item:hover {
+  background: var(--ink-06, rgba(127, 127, 127, 0.1));
+}
+
+.md-fileview__menu-item.is-active {
+  color: var(--accent, #2f6fed);
+  font-weight: 600;
+}
+
+.md-fileview__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.md-fileview__body > .editor-wrap {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.md-fileview__preview {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  // 用原生细滚动条（--scrollbar-size: 7px），占位与编辑器一致；
+  // 不用 overflow-y: overlay —— 新版 Chromium 已废弃该值，会降级成 auto 反而占位
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px 22px 48px;
 }
 
 /* Files 起始页：搜索 + 新建 + 最近 / 搜索结果（无文件树） */

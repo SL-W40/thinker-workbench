@@ -28,9 +28,11 @@ import { visiblePillCount } from "./usageBarOverflow";
 import {
   cacheHitRate,
   cacheMissTokens,
-  formatElapsed,
+  EMPTY_USAGE,
+  formatDurationOrDash,
   formatHitRate,
   formatTokenCount,
+  formatUsageTokens,
   replyTokens,
   totalTokens,
 } from "./usageStats";
@@ -146,9 +148,12 @@ function placeMoreMenu(trigger: DOMRect, menuWidth: number, menuHeight: number):
 }
 
 type Props = {
-  usage: ModelUsage;
-  /** 已累计结束轮次耗时（ms）*/
-  durationMs: number;
+  /** 本轮用量；缺省表示未知（UI 展示「—」，绝不显示 0）*/
+  usage?: ModelUsage | null;
+  /** `usage` 是否含粗估成分（UI 加 ~ 前缀）。 */
+  usageEstimated?: boolean;
+  /** 已累计结束轮次耗时（ms）；缺省表示未知（UI 展示「—」）*/
+  durationMs?: number | null;
   /** 当前轮开始时间；忙碌时叠加 live 段*/
   runStartedAt: number | null;
   busy: boolean;
@@ -199,6 +204,7 @@ function UsageRow({
 
 export function ChatUsageBar({
   usage,
+  usageEstimated = false,
   durationMs,
   runStartedAt,
   busy,
@@ -245,7 +251,8 @@ export function ChatUsageBar({
     const ids: SlotId[] = [];
     if (hasCopy) ids.push("copy");
     for (let i = effectiveVisible; i < mainSlotOrder.length; i++) {
-      ids.push(mainSlotOrder[i]!);
+      const id = mainSlotOrder[i];
+      if (id) ids.push(id);
     }
     return ids;
   }, [hasCopy, effectiveVisible, mainSlotOrder]);
@@ -276,6 +283,7 @@ export function ChatUsageBar({
     }, 120);
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 卸载清理只需执行一次；cancelMoreClose 每次渲染重建，不应进依赖
   useEffect(() => {
     return () => cancelMoreClose();
   }, []);
@@ -289,17 +297,26 @@ export function ChatUsageBar({
   }, [busy, runStartedAt]);
 
   const liveExtra = busy && runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
-  const displayMs = durationMs + liveExtra;
-  const total = totalTokens(usage);
-  const miss = cacheMissTokens(usage);
-  const reply = replyTokens(usage);
-  const hitRate = cacheHitRate(usage);
-  const hitShare = usage.cacheReadTokens;
-  const writeShare = usage.cacheWriteTokens;
+  // 未知（引擎没给）且无 live 段时不编造：保持 undefined，展示层画「—」
+  const displayMs =
+    durationMs == null || !Number.isFinite(durationMs)
+      ? liveExtra > 0
+        ? liveExtra
+        : undefined
+      : durationMs + liveExtra;
+  // 用量未知时 total 为 undefined（胶囊展示「—」）；明细浮层仍按空用量渲染各行为 0
+  const usageView = usage ?? EMPTY_USAGE;
+  const total = usage ? totalTokens(usage) : undefined;
+  const miss = cacheMissTokens(usageView);
+  const reply = replyTokens(usageView);
+  const hitRate = cacheHitRate(usageView);
+  const hitShare = usageView.cacheReadTokens;
+  const writeShare = usageView.cacheWriteTokens;
   const missShare = miss;
   const barDenom = hitShare + writeShare + missShare;
 
   // 按容器宽度决定主行可见个数（测宽条常驻，不因收敛卸载）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: total / displayMs / hasTrace 未在函数体读取但刻意保留：内容变化会改变胶囊宽度，需要重新测量
   useLayoutEffect(() => {
     const row = pillsRef.current;
     const measure = measureRef.current;
@@ -336,6 +353,7 @@ export function ChatUsageBar({
   }, [mainSlotOrder, total, displayMs, hasTrace, hasCopy]);
 
   // 「⋯」菜单：fixed + portal，按触发器上下翻转（坐标未变则不 setState，避免死循环）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: overflowKey / total / displayMs 未在函数体读取但刻意保留：触发器位置随内容变化，需要重新定位
   useLayoutEffect(() => {
     if (!moreMenuOpen) {
       setMoreCoords((prev) => (prev == null ? prev : null));
@@ -496,20 +514,24 @@ export function ChatUsageBar({
             <div className="chat-usage-popover__head">
               <span>{t("chat.usage.detailTitle")}</span>
               <span className="chat-usage-popover__total">
-                {t("chat.usage.total", { n: formatTokenCount(total) })}
+                {t("chat.usage.total", { n: formatUsageTokens(total, usageEstimated) })}
               </span>
             </div>
+            {usageEstimated ? (
+              <div className="chat-usage-popover__note">{t("chat.usage.estimatedHint")}</div>
+            ) : null}
 
             <div className="chat-usage-group">
               <UsageRow
                 label={t("chat.usage.input")}
-                value={formatTokenCount(usage.inputTokens)}
+                value={formatTokenCount(usageView.inputTokens)}
                 swatch="input"
               />
+              {/* biome-ignore lint/a11y/useSemanticElements: 嵌套用量行用 div + role="group" 聚合，无对应原生控件 */}
               <div className="chat-usage-group__children" role="group">
                 <UsageRow
                   label={t("chat.usage.cacheHit")}
-                  value={formatTokenCount(usage.cacheReadTokens)}
+                  value={formatTokenCount(usageView.cacheReadTokens)}
                   swatch="hit"
                   nested
                 />
@@ -521,7 +543,7 @@ export function ChatUsageBar({
                 />
                 <UsageRow
                   label={t("chat.usage.cacheWrite")}
-                  value={formatTokenCount(usage.cacheWriteTokens)}
+                  value={formatTokenCount(usageView.cacheWriteTokens)}
                   swatch="write"
                   nested
                 />
@@ -533,13 +555,14 @@ export function ChatUsageBar({
             <div className="chat-usage-group">
               <UsageRow
                 label={t("chat.usage.output")}
-                value={formatTokenCount(usage.outputTokens)}
+                value={formatTokenCount(usageView.outputTokens)}
                 swatch="output"
               />
+              {/* biome-ignore lint/a11y/useSemanticElements: 嵌套用量行用 div + role="group" 聚合，无对应原生控件 */}
               <div className="chat-usage-group__children" role="group">
                 <UsageRow
                   label={t("chat.usage.reasoning")}
-                  value={formatTokenCount(usage.reasoningTokens)}
+                  value={formatTokenCount(usageView.reasoningTokens)}
                   swatch="reasoning"
                   nested
                 />
@@ -621,7 +644,7 @@ export function ChatUsageBar({
             >
               <DatabaseIcon size="sm" />
               <span>
-                {t("chat.usage.tokens")}: {formatTokenCount(total)}
+                {t("chat.usage.tokens")}: {formatUsageTokens(total, usageEstimated)}
               </span>
               <InfoIcon size="sm" className="chat-usage-pill__info" />
             </button>
@@ -630,10 +653,11 @@ export function ChatUsageBar({
         );
       case "elapsed":
         return (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 静态信息胶囊无交互语义，aria-label 仅用于读屏播报
           <span className="chat-usage-pill is-static" aria-label={t("chat.usage.elapsed")}>
             <ClockIcon size="sm" />
             <span>
-              {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
+              {t("chat.usage.elapsed")}: {formatDurationOrDash(displayMs)}
             </span>
           </span>
         );
@@ -653,6 +677,7 @@ export function ChatUsageBar({
             </span>
           </button>
         ) : (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 静态信息胶囊无交互语义，aria-label 仅用于读屏播报
           <span
             className="chat-usage-pill is-static"
             aria-label={t("chat.usage.traceAria", { id: traceId })}
@@ -698,7 +723,7 @@ export function ChatUsageBar({
             >
               <DatabaseIcon size="sm" />
               <span>
-                {t("chat.usage.tokens")}: {formatTokenCount(total)}
+                {t("chat.usage.tokens")}: {formatUsageTokens(total, usageEstimated)}
               </span>
             </button>
             {popover}
@@ -706,10 +731,11 @@ export function ChatUsageBar({
         );
       case "elapsed":
         return (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 静态信息胶囊无交互语义，aria-label 仅用于读屏播报
           <span className="chat-usage-action is-static" aria-label={t("chat.usage.elapsed")}>
             <ClockIcon size="sm" />
             <span>
-              {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
+              {t("chat.usage.elapsed")}: {formatDurationOrDash(displayMs)}
             </span>
           </span>
         );
@@ -729,6 +755,7 @@ export function ChatUsageBar({
             </span>
           </button>
         ) : (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 静态信息胶囊无交互语义，aria-label 仅用于读屏播报
           <span
             className="chat-usage-action is-static"
             aria-label={t("chat.usage.traceAria", { id: traceId })}
@@ -753,7 +780,7 @@ export function ChatUsageBar({
           <span className="chat-usage-pill">
             <DatabaseIcon size="sm" />
             <span>
-              {t("chat.usage.tokens")}: {formatTokenCount(total)}
+              {t("chat.usage.tokens")}: {formatUsageTokens(total, usageEstimated)}
             </span>
             <InfoIcon size="sm" className="chat-usage-pill__info" />
           </span>
@@ -763,7 +790,7 @@ export function ChatUsageBar({
           <span className="chat-usage-pill is-static">
             <ClockIcon size="sm" />
             <span>
-              {t("chat.usage.elapsed")}: {formatElapsed(displayMs)}
+              {t("chat.usage.elapsed")}: {formatDurationOrDash(displayMs)}
             </span>
           </span>
         );
@@ -809,6 +836,7 @@ export function ChatUsageBar({
           </div>
         ))}
         {showMore ? (
+          // biome-ignore lint/a11y/noStaticElementInteractions: 「⋯」触区的悬停 / 聚焦展开逻辑，交互由内部按钮承担
           <div
             className={`chat-usage-more${moreMenuOpen ? " is-open" : ""}`}
             ref={moreWrapRef}

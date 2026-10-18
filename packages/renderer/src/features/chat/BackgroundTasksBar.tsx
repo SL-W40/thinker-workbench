@@ -64,6 +64,14 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
         setShellTasks(list.filter((s) => isBackgroundTask(s) && matchThread(s)));
       }
     });
+    /** 比较两个 session 是否在展示层面等价，避免无谓的重渲染 */
+    const sessionsEqual = (a: TerminalSession, b: TerminalSession): boolean =>
+      a.sessionId === b.sessionId &&
+      a.status === b.status &&
+      a.command === b.command &&
+      a.title === b.title &&
+      a.backgrounded === b.backgrounded;
+
     const unsub = onTerminalEvent((event) => {
       if (
         event.type === "created" ||
@@ -71,15 +79,35 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
         event.type === "commandBackgrounded"
       ) {
         const session = event.session;
+        const keep = isBackgroundTask(session) && matchThread(session);
         setShellTasks((prev) => {
-          const without = prev.filter((s) => s.sessionId !== session.sessionId);
-          if (!isBackgroundTask(session) || !matchThread(session)) return without;
-          return [...without, session];
+          const idx = prev.findIndex((s) => s.sessionId === session.sessionId);
+          if (!keep) {
+            if (idx === -1) return prev;
+            const next = prev.slice();
+            next.splice(idx, 1);
+            return next;
+          }
+          if (idx !== -1 && sessionsEqual(prev[idx], session)) return prev;
+          if (idx !== -1) {
+            // 就地替换，保持顺序稳定
+            const next = prev.slice();
+            next[idx] = session;
+            return next;
+          }
+          // 新任务追加到末尾
+          return [...prev, session];
         });
         return;
       }
       if (event.type === "exit" || event.type === "commandExited") {
-        setShellTasks((prev) => prev.filter((s) => s.sessionId !== event.sessionId));
+        setShellTasks((prev) => {
+          const idx = prev.findIndex((s) => s.sessionId === event.sessionId);
+          if (idx === -1) return prev;
+          const next = prev.slice();
+          next.splice(idx, 1);
+          return next;
+        });
       }
     });
     return () => {
@@ -102,13 +130,20 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
       if (threadId && event.threadId && event.threadId !== threadId) return;
       if (event.phase === "finished" || event.phase === "failed" || event.phase === "cancelled") {
         settled.add(event.taskId);
-        setSubagents((prev) => prev.filter((t) => t.taskId !== event.taskId));
+        setSubagents((prev) => {
+          const idx = prev.findIndex((t) => t.taskId === event.taskId);
+          if (idx === -1) return prev;
+          const next = prev.slice();
+          next.splice(idx, 1);
+          return next;
+        });
         return;
       }
       if (event.phase === "started" || event.phase === "progress") {
         if (settled.has(event.taskId)) return;
         setSubagents((prev) => {
-          const prior = prev.find((t) => t.taskId === event.taskId);
+          const idx = prev.findIndex((t) => t.taskId === event.taskId);
+          const prior = idx !== -1 ? prev[idx] : undefined;
           const title = event.title?.trim() || prior?.title;
           const summary = event.summary ?? prior?.summary;
           // 后台条只展示静态标题；progress 的 liveLine 不写入，避免刷屏
@@ -120,9 +155,20 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
           ) {
             return prev;
           }
-          const without = prev.filter((t) => t.taskId !== event.taskId);
+          if (idx !== -1) {
+            // 就地替换，保持顺序稳定
+            const next = prev.slice();
+            next[idx] = {
+              taskId: event.taskId,
+              subagent: event.subagent,
+              title,
+              summary,
+            };
+            return next;
+          }
+          // 新任务追加到末尾
           return [
-            ...without,
+            ...prev,
             {
               taskId: event.taskId,
               subagent: event.subagent,
@@ -146,6 +192,7 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
   if (total === 0) return null;
 
   return (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 容器仅作命名区域，交互由内部带 role 的按钮承担
     <div
       className={`bg-tasks${expanded ? " is-expanded" : ""}`}
       aria-label={t("chat.backgroundTasks.label")}

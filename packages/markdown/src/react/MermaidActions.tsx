@@ -139,6 +139,7 @@ export function MermaidActions({ source, svg, zoom, onZoomChange }: Props) {
           {toast === "copied" ? labels.copied : labels.downloaded}
         </span>
       ) : null}
+      {/* biome-ignore lint/a11y/useSemanticElements: 缩放工具条用 div + role="group" 聚合按钮，无可对应原生控件 */}
       <div className="tw-md-mermaid-zoom" role="group" aria-label="Zoom">
         <button
           type="button"

@@ -20,9 +20,6 @@ import {
   getWorkspace,
 } from "../db/workspacesStore";
 
-/** @deprecated 使用 getMaxParallelRuns() / settings.maxParallelRuns；保留别名便于测试引用默认值。 */
-export const MAX_PARALLEL_RUNS = DEFAULT_MAX_PARALLEL_RUNS;
-
 /** 读取当前生效的并行上限。 */
 export function getMaxParallelRuns(): number {
   try {

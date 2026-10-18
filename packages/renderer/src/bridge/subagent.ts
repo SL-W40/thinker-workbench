@@ -193,11 +193,6 @@ export function bindSubagentSession(nextSessionId: string | null): void {
   window.dispatchEvent(new CustomEvent(RESTORE_SUBAGENT_TABS_EVENT, { detail }));
 }
 
-/** @deprecated 使用 bindSubagentSession；保留给旧调用点。 */
-export function clearSubagentTabs(): void {
-  bindSubagentSession(null);
-}
-
 /** 关闭单个子代理 tab 时丢掉缓存。 */
 export function forgetSubagentStep(taskId: string): void {
   if (!steps.delete(taskId) && !openTaskIds.includes(taskId)) return;

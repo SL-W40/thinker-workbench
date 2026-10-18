@@ -12,6 +12,7 @@ import { getAppIconPath } from "./config/paths";
 import { loadSession } from "./config/sessionStore";
 import { getGeneralSettings, loadSettings } from "./config/settingsStore";
 import { ensureBundledCustomize } from "./customize/ensureBundledCustomize";
+import { backfillRunDurations } from "./db/runDurationBackfill";
 import { closeThinkerDb, openCatalogDb } from "./db/thinkerDb";
 import { ensureDefaultWorkspace, healRunningSessions } from "./db/workspacesStore";
 import { registerIpc } from "./ipc/register";
@@ -79,6 +80,12 @@ app.whenReady().then(() => {
   }
   try {
     healRunningSessions();
+  } catch {
+    /* ignore */
+  }
+  // 历史消息缺 durationMs 的按 trace spans 回填一次（幂等，失败不挡启动）
+  try {
+    backfillRunDurations();
   } catch {
     /* ignore */
   }

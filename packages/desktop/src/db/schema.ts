@@ -131,6 +131,19 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session
   ON chat_messages(session_id, seq ASC);
+
+/**
+ * 会话记忆：项目级（规则/知识）与会话级（LLM 抽取要点）。
+ * 归属 chat.db（会话持久状态），而非 trace.db 遥测库。
+ */
+CREATE TABLE IF NOT EXISTS session_memory (
+  session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (session_id, kind)
+);
 `;
 
 /** 日志数据分片 schema（按条数滚动的 `log-YYYY-MM-DD_HHMMSS.db`）。 */

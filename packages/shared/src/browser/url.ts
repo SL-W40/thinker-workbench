@@ -24,8 +24,11 @@ type ParsedBrowserUrl = {
 function parseHttpUrl(raw: string): ParsedBrowserUrl | null {
   const m = raw.match(/^(https?):\/\/([^/?#]+)([^?#]*)(\?[^#]*)?(#.*)?$/i);
   if (!m) return null;
-  const protocol = `${m[1]!.toLowerCase()}:`;
-  let host = m[2]!.toLowerCase();
+  const proto = m[1];
+  const rawHost = m[2];
+  if (!proto || !rawHost) return null;
+  const protocol = `${proto.toLowerCase()}:`;
+  let host = rawHost.toLowerCase();
   // 去掉默认端口
   if (protocol === "https:" && host.endsWith(":443")) host = host.slice(0, -4);
   if (protocol === "http:" && host.endsWith(":80")) host = host.slice(0, -3);

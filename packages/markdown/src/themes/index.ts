@@ -6,7 +6,6 @@ import { auroraTheme } from "./aurora";
 import { darkTheme } from "./dark";
 import { eyecareTheme } from "./eyecare";
 import { lightTheme } from "./light";
-import { monoTheme } from "./mono";
 import { notesTheme } from "./notes";
 import type { MarkdownTheme, MarkdownThemeInput } from "./types";
 
@@ -22,7 +21,7 @@ export type {
   MermaidLook,
   MermaidThemeName,
 } from "./types";
-export { auroraTheme, darkTheme, eyecareTheme, lightTheme, monoTheme, notesTheme };
+export { auroraTheme, darkTheme, eyecareTheme, lightTheme, notesTheme };
 
 const builtins: Record<string, MarkdownTheme> = {
   light: lightTheme,
@@ -30,8 +29,6 @@ const builtins: Record<string, MarkdownTheme> = {
   notes: notesTheme,
   eyecare: eyecareTheme,
   aurora: auroraTheme,
-  mono: monoTheme,
-  dusk: auroraTheme,
 };
 
 /** 解析主题 id 或对象。未知 id 回退到 notes。 */

@@ -16,9 +16,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle:entry",
-    "bundle:entry": "esbuild src/entry.ts --bundle --platform=node --format=cjs --outfile=artifacts/entry.js",
+    "bundle:entry": "esbuild src/entry.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=artifacts/entry.js",
     "dev:tsc": "node ../../scripts/run-quiet.mjs -- tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "dev:esbuild": "esbuild src/entry.ts --bundle --platform=node --format=cjs --outfile=artifacts/entry.js --watch --log-level=warning",
+    "dev:esbuild": "esbuild src/entry.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=artifacts/entry.js --watch --log-level=warning",
     "dev": "npx --yes concurrently -k --kill-signal SIGKILL \"pnpm:dev:tsc\" \"pnpm:dev:esbuild\"",
     "test": "pnpm -w exec vitest run packages/engine/tests"
   },
@@ -29,6 +29,7 @@
     "@langchain/openai": "^1.6.2",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@thinker-workbench/shared": "workspace:*",
+    "better-sqlite3": "12.11.1",
     "gpt-tokenizer": "^4.0.0",
     "undici": "^6.29.0"
   },

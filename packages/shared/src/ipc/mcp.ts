@@ -6,6 +6,12 @@ import type { CustomizeScope } from "./customize";
 /** 传输类型。 */
 export type McpTransport = "stdio" | "http";
 
+/** 内置 Computer MCP 的 id（engine 进程内实现，不落盘、不可编辑）。 */
+export const BUILTIN_COMPUTER_MCP_ID = "computer";
+
+/** 内置 Computer MCP 的展示名。 */
+export const BUILTIN_COMPUTER_MCP_NAME = "Computer";
+
 /** 导入冲突策略。 */
 export type McpImportConflict = "skip" | "overwrite";
 
@@ -17,6 +23,8 @@ type McpServerBase = {
   scope?: CustomizeScope;
   /** 列表项是否可写。 */
   writable?: boolean;
+  /** 内置 server（engine 进程内注册）：不可编辑 / 删除 / 停用。 */
+  builtin?: boolean;
 };
 
 /** 本地进程 MCP。 */

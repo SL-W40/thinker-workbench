@@ -13,7 +13,7 @@ import {
   normalizeAiLocale,
 } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/dataDir";
-import { getModelRetryMaxAttempts } from "../config/runtimeLimits";
+import { getLimit } from "../config/runtimeLimits";
 import { buildSystemPrompt } from "../prompts/system";
 import { modelFetch } from "./httpFetch";
 import { messageToApiContent } from "./imageParts";
@@ -343,7 +343,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
       }
 
       let lastError: unknown;
-      const maxAttempts = getModelRetryMaxAttempts();
+      const maxAttempts = getLimit("modelRetryMaxAttempts");
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         if (signal.aborted) {
           throw new Error("Chat completion cancelled.");

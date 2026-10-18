@@ -22,6 +22,7 @@ import {
   onBrowserEvent,
 } from "../../bridge/browser";
 import { useT } from "../../i18n/useI18n";
+import { patchInspectorUi } from "../inspector/inspectorUi";
 import "./BrowserPane.less";
 
 type Props = {
@@ -30,6 +31,8 @@ type Props = {
   /** 外部请求导航到的 URL（消费后清空）。*/
   pendingUrl?: string | null;
   onPendingUrlConsumed?: () => void;
+  /** 工作空间 id：地址变化写回，供重启后还原。*/
+  workspaceId?: string | null;
 };
 
 const EMPTY_STATE: BrowserState = {
@@ -44,7 +47,12 @@ const EMPTY_STATE: BrowserState = {
   viewportHeight: 0,
 };
 
-export function BrowserPane({ active = true, pendingUrl = null, onPendingUrlConsumed }: Props) {
+export function BrowserPane({
+  active = true,
+  pendingUrl = null,
+  onPendingUrlConsumed,
+  workspaceId = null,
+}: Props) {
   const t = useT();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BrowserState>(EMPTY_STATE);
@@ -67,6 +75,14 @@ export function BrowserPane({ active = true, pendingUrl = null, onPendingUrlCons
       }
     });
   }, [available]);
+
+  // 地址变化即落盘（跳过空白页）：重启后还原用
+  useEffect(() => {
+    if (!available || !workspaceId) return;
+    const url = state.url?.trim() ?? "";
+    if (!url || url === "about:blank") return;
+    patchInspectorUi(workspaceId, { browserUrl: url });
+  }, [available, workspaceId, state.url]);
 
   // 激活时显示 view，并同步 bounds
   useEffect(() => {

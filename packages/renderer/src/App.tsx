@@ -10,7 +10,7 @@
  */
 
 import type { PageStackSnapshot, WindowRole } from "@thinker-workbench/shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OPEN_BROWSER_EVENT, onBrowserEvent } from "./bridge/browser";
 import { OPEN_SUBAGENT_EVENT, RESTORE_SUBAGENT_TABS_EVENT } from "./bridge/subagent";
 import { requestOpenTerminal } from "./bridge/terminal";
@@ -45,11 +45,6 @@ function isDevToolEmbed(): boolean {
   return new URLSearchParams(location.search).get("tool") === "1";
 }
 
-/** 将旧 `settings` 页规范为控制台 `tools`。 */
-function normalizePage(page: PageId): PageId {
-  return page === "settings" ? "tools" : page;
-}
-
 /**
  * 读取启动导航状态：辅助窗固定单页；主窗 session 快照优先，否则用规范化后的 hash。
  */
@@ -60,7 +55,7 @@ function readBoot(role: WindowRole): {
 } {
   const fromHash = ensureHash();
   if (role.kind === "aux") {
-    const page = normalizePage(role.page as PageId);
+    const page = role.page as PageId;
     return {
       stack: {
         entries: [page],
@@ -78,14 +73,10 @@ function readBoot(role: WindowRole): {
     const section = normalizeSettingsSection(
       saved.settingsSection ?? fromSaved.section ?? fromHash.section,
     );
-    const entries = saved.stack.entries.map((p) => normalizePage(p as PageId)) as PageId[];
-    const visited = (saved.stack.visited ?? entries).map((p) =>
-      normalizePage(p as PageId),
-    ) as PageId[];
-    const current = normalizePage(
-      (entries[saved.stack.index] ?? fromSaved.page ?? fromHash.page) as PageId,
-    );
-    const onTools = current === "tools" || current === "settings";
+    const entries = saved.stack.entries as PageId[];
+    const visited = (saved.stack.visited ?? entries) as PageId[];
+    const current = (entries[saved.stack.index] ?? fromSaved.page ?? fromHash.page) as PageId;
+    const onTools = current === "tools";
     return {
       stack: {
         ...saved.stack,
@@ -127,7 +118,7 @@ export function App() {
   const hideChrome = isAux || toolEmbed;
 
   const onComponents = nav.current === "components";
-  const onTools = nav.current === "tools" || nav.current === "settings";
+  const onTools = nav.current === "tools";
   const onChat = nav.current === "chat";
   const session = useChatSession(onChat);
 
@@ -168,10 +159,11 @@ export function App() {
 
   /** 压入新页面（前进栈截断）。 */
   function go(page: PageId) {
-    nav.push(normalizePage(page));
+    nav.push(page);
   }
 
-  function selectToolsTab(tab: ToolTabId) {
+  // 稳定引用：hashchange 等 effect 依赖它，避免每渲染重绑
+  const selectToolsTab = useCallback((tab: ToolTabId) => {
     setToolsTab(tab);
     setToolsVisited((prev) => {
       if (prev.has(tab)) return prev;
@@ -179,13 +171,13 @@ export function App() {
       next.add(tab);
       return next;
     });
-  }
+  }, []);
 
   /** 打开控制台（可选指定 tab / 设置分区）。 */
   function openConsole(tab: ToolTabId = "settings", section?: SettingsSectionId) {
     if (section) setSettingsSection(section);
     selectToolsTab(tab);
-    if (nav.current !== "tools" && nav.current !== "settings") go("tools");
+    if (nav.current !== "tools") go("tools");
   }
 
   /** 打开控制台 Trace，聚焦当前聊天会话（气泡上的 traceId 仅作提示，列表键是 sessionId）。 */
@@ -213,11 +205,13 @@ export function App() {
     writeHash(nav.current, settingsSection, toolsTab);
   }, [nav.current, settingsSection, toolsTab]);
 
-  const _stackKey = JSON.stringify(nav.snapshot);
   // 主窗：将页面栈与设置分区持久化到主进程 session；辅助窗 / 工具嵌入跳过
+  // snapshot 每帧都是新对象（usePageStack 不 memo），用内容键 stackKey 做依赖，避免每渲染重写
+  const stackKey = JSON.stringify(nav.snapshot);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: snapshot 每帧新引用，依赖用 stackKey 做内容级判定
   useEffect(() => {
     if (isAux || toolEmbed) return;
-    const page = normalizePage(nav.current);
+    const page = nav.current;
     window.thinker?.session?.setSnapshot?.({
       hash:
         page === "tools"
@@ -228,15 +222,10 @@ export function App() {
             ? "#/chat"
             : `#/${page}`,
       settingsSection,
-      stack: {
-        ...nav.snapshot,
-        entries: nav.snapshot.entries.map((p) => normalizePage(p as PageId)),
-        visited: nav.snapshot.visited.map((p) => normalizePage(p as PageId)),
-      },
+      stack: { ...nav.snapshot },
     });
     // snapshot 对象每帧都会变；用 stackKey 稳定内容后再写入
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsSection, toolsTab, nav.current, isAux, toolEmbed, nav.snapshot]);
+  }, [settingsSection, toolsTab, nav.current, isAux, toolEmbed, stackKey]);
 
   // 响应浏览器/外部改 hash：替换当前栈顶页，并同步设置分区与控制台 tab
   useEffect(() => {
@@ -250,7 +239,6 @@ export function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
     // replaceCurrent 闭包依赖稳定；勿把 nav 整对象塞进 deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAux, toolEmbed, selectToolsTab, nav.replaceCurrent]);
 
   /** 打开聊天页并聚焦输入框。 */
@@ -295,7 +283,7 @@ export function App() {
   return (
     <div
       className="app"
-      data-view={normalizePage(nav.current)}
+      data-view={nav.current}
       data-window={role.kind}
       data-tool-embed={toolEmbed ? "1" : undefined}
     >
@@ -303,7 +291,7 @@ export function App() {
       {!toolEmbed ? (
         <TitleBar
           role={role}
-          current={normalizePage(nav.current)}
+          current={nav.current}
           leftPanelOpen={panels.leftOpen}
           rightPanelOpen={panels.rightOpen}
           onGoHome={() => nav.reset("chat")}
@@ -375,6 +363,10 @@ export function App() {
                 onEditDraftChange={session.setEditDraft}
                 onEditKeyDown={session.onEditKeyDown}
                 onSendUserEdit={session.sendUserEdit}
+                sendBlocked={session.busy || session.queued}
+                editImages={session.editImages}
+                onAttachEditImages={(files) => void session.attachEditImageFiles(files)}
+                onRemoveEditImage={session.removeEditImage}
                 onCancelUserEdit={session.cancelUserEdit}
               />
               <Composer
@@ -416,6 +408,7 @@ export function App() {
             >
               <RightInspector
                 workspaceId={session.workspaceId}
+                pageActive={onChat}
                 onSendPrompt={(prompt) => void session.send(prompt)}
                 pendingOpenPath={pendingOpenPath}
                 onPendingOpenPathConsumed={() => setPendingOpenPath(null)}
@@ -424,7 +417,7 @@ export function App() {
           </div>
         ) : null}
         {nav.visited.has("components") ? <ComponentsPane active={onComponents} /> : null}
-        {nav.visited.has("tools") || nav.visited.has("settings") ? (
+        {nav.visited.has("tools") ? (
           <ToolsPane
             active={onTools}
             tab={toolsTab}

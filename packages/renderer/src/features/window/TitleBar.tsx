@@ -184,6 +184,7 @@ function WinControls({ closeOnly }: { closeOnly?: boolean }) {
   if (!api) return null;
 
   return (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: OS 窗口控制区属窗口 chrome 例外（见 design-components 规则），仅作命名容器
     <div className="win-controls" aria-label={t("window.controls")}>
       {closeOnly ? null : (
         <>
@@ -233,7 +234,7 @@ export function TitleBar({
   const glyphSrc = brandGlyphSrc(theme.colorScheme);
   const api = windowApi();
   const onChat = current === "chat";
-  const onConsole = current === "tools" || current === "settings";
+  const onConsole = current === "tools";
   const isAux = role.kind === "aux";
   const platform = processPlatform();
   useWindowsCaptionInset();
@@ -302,6 +303,7 @@ export function TitleBar({
           onReturn={onGoHome}
         />
         {onChat ? (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 标题栏导航属窗口 chrome 例外，交互由内部 IconButton 承担
           <div className="titlebar-nav" aria-label={t("nav.toggleLeftPanel")}>
             <IconButton
               className={`titlebar-nav-btn${leftPanelOpen ? " is-active" : ""}`}
@@ -319,6 +321,7 @@ export function TitleBar({
       <div className="titlebar-drag-spacer" aria-hidden />
       <div className="titlebar-actions">
         {onChat ? (
+          // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 标题栏导航属窗口 chrome 例外，交互由内部 IconButton 承担
           <div className="titlebar-nav" aria-label={t("nav.toggleRightPanel")}>
             <IconButton
               className={`titlebar-nav-btn${rightPanelOpen ? " is-active" : ""}`}

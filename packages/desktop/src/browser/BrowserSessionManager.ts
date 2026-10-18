@@ -2,7 +2,10 @@
  * 内置浏览器：主窗口 WebContentsView + AI 锁定蒙层 + 自动化动作。
  *
  * 设计要点（参考 Cursor WebviewBrowserManager，不照搬）：
- * - reveal 只开面板，不带 url 回写导航（避免 pendingUrl → navigate 死循环）
+ * - reveal 只“请求”渲染层开面板；可见性（visible）只由渲染层 setVisible 驱动
+ * - 挂载不变式：attached ⇔ visible 且非空白页（锁定时例外）；
+ *   不可见 / 空白时一律 removeChildView——0×0 或离屏占位都会吞掉该区域输入，
+ *   曾导致切 tab / 切页面后那块区域点击滑动失灵
  * - 同 URL 且已落定则跳过 loadURL
  * - 导航中再次 navigate 则 stop 后换目标；动作前等待加载落定
  * - UI 尚未上报 bounds 时用离屏占位尺寸，保证截图可用
@@ -23,6 +26,7 @@ import {
 import { BrowserWindow, nativeTheme, session, type WebContents, WebContentsView } from "electron";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
+import { desktopLog } from "../log/setup";
 import { getMainWindow } from "../window/createWindow";
 import { maybeOpenLocalLinkExternally } from "./localLinks";
 import { buildOverlayDataUrl, overlayTokensForVisual } from "./overlayHtml";
@@ -97,7 +101,7 @@ class BrowserSessionManager {
     return win;
   }
 
-  /** 确保页面 view 已创建并挂到主窗。 */
+  /** 确保页面 view 已创建；**仅可见时挂载**（不可见时挂载会吞掉该区域的输入）。 */
   private ensureView(): WebContentsView {
     const win = this.requireMainWindow();
     if (!this.view) {
@@ -119,15 +123,24 @@ class BrowserSessionManager {
       });
       wc.on("did-start-loading", () => {
         this.loading = true;
+        // URL 已切换：按新的空白/非空白状态决定挂载
+        this.applyBounds();
         this.emitState();
       });
       wc.on("did-stop-loading", () => {
         this.loading = false;
+        this.applyBounds();
         this.emitState();
       });
       wc.on("page-title-updated", () => this.emitState());
-      wc.on("did-navigate", () => this.emitState());
-      wc.on("did-navigate-in-page", () => this.emitState());
+      wc.on("did-navigate", () => {
+        this.applyBounds();
+        this.emitState();
+      });
+      wc.on("did-navigate-in-page", () => {
+        this.applyBounds();
+        this.emitState();
+      });
       wc.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
         if (!isMainFrame) return;
         this.loading = false;
@@ -138,11 +151,30 @@ class BrowserSessionManager {
         this.emitState();
       });
     }
-    if (!this.attached) {
+    // 挂载严格跟随 visible：agent 的 snapshot / screenshot / navigate(reveal:false)
+    // 在面板关闭时也必须保持摘除，否则会盖住当前 tab 吞掉点击与滚轮
+    if (this.visible && !this.attached) {
       win.contentView.addChildView(this.view);
       this.attached = true;
+      desktopLog("browser").info("view attached");
     }
     return this.view;
+  }
+
+  /**
+   * 不可见时为截图 / 求值准备离屏绘制面：只设 bounds、不挂载。
+   * （挂载的 view 即使离屏/0×0 也可能吞输入；capturePage 对未挂载 view 有效。）
+   */
+  private ensureCaptureSurface(): void {
+    const view = this.view;
+    if (!view) return;
+    if (this.visible) {
+      this.applyBounds();
+      return;
+    }
+    const width = this.bounds.width >= 2 ? this.bounds.width : FALLBACK_VIEWPORT_W;
+    const height = this.bounds.height >= 2 ? this.bounds.height : FALLBACK_VIEWPORT_H;
+    view.setBounds({ x: -10_000, y: -10_000, width, height });
   }
 
   private overlayCopy(): { title: string; takeControl: string } {
@@ -166,6 +198,8 @@ class BrowserSessionManager {
       this.overlay.setBackgroundColor("#00000000");
       this.overlay.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     }
+    // 蒙层同样只跟随 visible 挂载：透明蒙层挂在不可见面板上会成为“隐形点击黑洞”
+    if (!this.visible) return this.overlay;
     if (!this.overlayAttached) {
       win.contentView.addChildView(this.overlay);
       this.overlayAttached = true;
@@ -198,12 +232,25 @@ class BrowserSessionManager {
     `);
   }
 
+  /** 当前是否空白页（无实际内容）：空白时不挂载，占位符区域保持可交互。 */
+  private isBlankPage(): boolean {
+    const wc = this.view?.webContents;
+    if (!wc || wc.isDestroyed()) return true;
+    const url = wc.getURL();
+    return !url || url === BROWSER_ABOUT_BLANK;
+  }
+
   private applyBounds(): void {
+    // 不可见或空白页（未锁定时）= 必须摘除：0×0 / 离屏占位都不能可靠停止吞输入，
+    // 这是“切 tab / 关面板后该区域点击滑动失灵”的根因。
+    // 锁定时空白页也挂载：蒙层“AI 控制中”本就是模态盖层
+    if (!this.visible || (this.isBlankPage() && !this.locked)) {
+      this.detachViews();
+      return;
+    }
     const measured = this.bounds.width >= 2 && this.bounds.height >= 2;
     if (this.view) {
-      if (!this.visible) {
-        this.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-      } else if (measured) {
+      if (measured) {
         this.view.setBounds({ ...this.bounds });
       } else {
         // AI 已 reveal 但洞尚未量到：离屏占位，避免 0×0 截图空白与布局抖动
@@ -244,9 +291,41 @@ class BrowserSessionManager {
   /** 显示 / 隐藏（切 tab 或关右侧栏）。 */
   setVisible(visible: boolean): void {
     this.visible = visible;
-    if (visible) this.ensureView();
+    if (visible) {
+      this.ensureView();
+    } else {
+      // 必须真正摘除子 view：仅置 0×0 bounds 时，已加载内容的 view 仍会
+      // 残留最后一帧绘制，关面板后盖住聊天内容
+      this.detachViews();
+    }
     this.applyBounds();
     this.emitState();
+  }
+
+  /** 摘除浏览器 view 与 AI 控制浮层（WebContents 保留，重新显示时原样恢复）。 */
+  private detachViews(): void {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    let removed = false;
+    if (this.attached && this.view) {
+      try {
+        win.contentView.removeChildView(this.view);
+        removed = true;
+      } catch {
+        /* view 可能已随窗口销毁 */
+      }
+      this.attached = false;
+    }
+    if (this.overlayAttached && this.overlay) {
+      try {
+        win.contentView.removeChildView(this.overlay);
+        removed = true;
+      } catch {
+        /* overlay 可能已随窗口销毁 */
+      }
+      this.overlayAttached = false;
+    }
+    if (removed) desktopLog("browser").info("views detached");
   }
 
   /**
@@ -298,9 +377,11 @@ class BrowserSessionManager {
     const wc = view.webContents;
 
     if (options?.reveal !== false) {
+      // 只“请求”渲染层开面板：可见性由渲染层 setVisible 驱动。
+      // 主进程擅自置 visible=true 会在用户已切走（聊天页卸载）时把 view
+      // 贴回窗口，盖住当前页面吞掉输入
       broadcast({ type: "reveal" });
     }
-    this.visible = true;
     this.applyBounds();
 
     // 已在目标页且不在加载：只 reveal，勿再 load（防 UI pendingUrl / 重复工具调用）
@@ -375,6 +456,7 @@ class BrowserSessionManager {
   async setLocked(locked: boolean): Promise<BrowserState> {
     this.locked = locked;
     if (locked) {
+      // 同 navigate：只请求渲染层开面板，不擅自置 visible
       this.ensureView();
       await this.loadOverlayHtml();
     }
@@ -399,6 +481,8 @@ class BrowserSessionManager {
   private async evalPage<T>(script: string): Promise<T> {
     const view = this.ensureView();
     await this.waitForLoadSettle(view.webContents);
+    // 离屏绘制面：不挂载也能执行 / 捕获，避免盖住当前界面
+    this.ensureCaptureSurface();
     return (await view.webContents.executeJavaScript(script, true)) as T;
   }
 
@@ -410,8 +494,8 @@ class BrowserSessionManager {
   async screenshot(): Promise<string> {
     const view = this.ensureView();
     await this.waitForLoadSettle(view.webContents);
-    // 确保有非零绘制面
-    this.applyBounds();
+    // 确保有非零绘制面（离屏，不挂载）
+    this.ensureCaptureSurface();
     const img = await view.webContents.capturePage();
     const dir = path.join(getDataDir(), "browser-screenshots");
     fs.mkdirSync(dir, { recursive: true });
@@ -427,6 +511,7 @@ class BrowserSessionManager {
     this.viewportHeight = h;
     this.deviceMetricsActive = true;
     const view = this.ensureView();
+    this.ensureCaptureSurface();
     try {
       const dbg = view.webContents.debugger;
       if (!dbg.isAttached()) dbg.attach("1.3");

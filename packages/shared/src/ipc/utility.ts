@@ -54,14 +54,16 @@ export type UtilityHello = {
   shellBlocklist?: string[];
   /** 模型 HTTP 兼容模式。 */
   httpCompatibilityMode?: HttpCompatibilityMode;
-  /** 主会话 agent↔tools 最大轮次。 */
+  /** 主会话最大执行步数（LangGraph superstep）。 */
   maxAgentSteps?: number;
-  /** Task / 子代理最大轮次。 */
+  /** Task / 子代理最大执行步数。 */
   maxSubagentSteps?: number;
   /** 模型重试次数（含首次）。 */
   modelRetryMaxAttempts?: number;
   /** 模型重试基础延迟（ms）。 */
   modelRetryBaseDelayMs?: number;
+  /** 串行工具最小间隔（ms）；0 表示不强制。 */
+  toolCallMinGapMs?: number;
   /** shell 默认 block_until_ms。 */
   defaultShellBlockUntilMs?: number;
   /** shell 输出截断上限。 */
@@ -114,6 +116,11 @@ export type UtilityRun = {
   sessionTitle?: string;
   /** 用户消息等运行命令。 */
   command: AgentRunCommand;
+  /**
+   * 本次 run 在主进程排队等待被调度的时长（毫秒）。
+   * 由主进程账本（commit → promote）计算，engine 会把它并入终态 `durationMs`。
+   */
+  queuedMs?: number;
   /** 完整模型目录（含明文 key）。 */
   catalog?: ModelCatalog;
   /** 本轮生效的选用。 */
@@ -137,6 +144,7 @@ export type UtilityRun = {
   maxSubagentSteps?: number;
   modelRetryMaxAttempts?: number;
   modelRetryBaseDelayMs?: number;
+  toolCallMinGapMs?: number;
   defaultShellBlockUntilMs?: number;
   shellOutputCap?: number;
   mcpConnectTimeoutMs?: number;
@@ -208,6 +216,7 @@ export type UtilityResume = {
   maxSubagentSteps?: number;
   modelRetryMaxAttempts?: number;
   modelRetryBaseDelayMs?: number;
+  toolCallMinGapMs?: number;
   defaultShellBlockUntilMs?: number;
   shellOutputCap?: number;
   mcpConnectTimeoutMs?: number;
@@ -248,6 +257,25 @@ export type UtilityContextUsageResult = {
   kind: "contextUsageResult";
   requestId: string;
   usage: ContextUsageSnapshot;
+};
+
+/** 主进程 → 子进程：清理某会话线程的全部 checkpoint（真实存储在子进程内）。 */
+export type UtilityCheckpointClear = {
+  channel: "utility";
+  kind: "checkpointClear";
+  /** 关联请求 id，响应用同一值回传。 */
+  requestId: string;
+  /** 会话线程 id（按其 run 级线程键前缀清理）。 */
+  threadId: string;
+};
+
+/** 子进程 → 主进程：checkpoint 清理结果（best-effort，失败带原因）。 */
+export type UtilityCheckpointClearResult = {
+  channel: "utility";
+  kind: "checkpointClearResult";
+  requestId: string;
+  ok: boolean;
+  error?: string;
 };
 
 /** 子进程 → 主进程：转发一条 AgentEvent（再由主进程推给 renderer）。 */
@@ -424,6 +452,7 @@ export type UtilityToChild =
   | UtilityCancelTask
   | UtilityResume
   | UtilityContextUsage
+  | UtilityCheckpointClear
   | UtilityPtyEvent
   | UtilityBrowserEvent
   | UtilityHitlResult
@@ -435,6 +464,7 @@ export type UtilityToParent =
   | UtilityEventMessage
   | UtilityLogMessage
   | UtilityContextUsageResult
+  | UtilityCheckpointClearResult
   | UtilityPtyRequest
   | UtilityBrowserRequest
   | UtilityHitlRequestMessage

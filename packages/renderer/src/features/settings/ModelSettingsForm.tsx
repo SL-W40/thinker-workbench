@@ -773,6 +773,7 @@ export function ModelSettingsForm() {
                 aria-label={t("settings.model.vision.title")}
               />
             </div>
+            {/* biome-ignore lint/a11y/noLabelWithoutControl: Switch 组件渲染为 button + role="switch"，原生 label 关联对其不适用 */}
             <label className="settings-model-enabled">
               <Switch
                 checked={modelForm.enabled}

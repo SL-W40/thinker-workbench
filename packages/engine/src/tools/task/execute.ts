@@ -4,13 +4,14 @@
  * 后台 Task 自带 AbortController；cancelOne 真停单路，父 run 可继续。
  */
 import { createId, type SubagentChildEvent } from "@thinker-workbench/shared";
-import { getMaxSubagentSteps } from "../../config/runtimeLimits";
+import { getLimit } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
 import { startedToolCallIdSet } from "../../graph/nodes/toolsResume";
 import type { GraphState } from "../../graph/types";
 import { chatWithFailover, configureModelCatalog, getModelSelection } from "../../model/catalog";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
+import { joinSystemSections } from "../../prompts/systemSections";
 import {
   getRunContext,
   getRunTurn,
@@ -324,11 +325,15 @@ function emitSubagent(
 const LIVE_PLANNING = "Planning next moves";
 const LIVE_THINKING = "Thinking…";
 
+/** 卡片底栏预览最多保留的字符数（思考尾部 / 回复 / 完成摘要）。 */
+const LIVE_LINE_MAX = 40;
+const SETTLED_SUMMARY_MAX = 48;
+
 /** 卡片底栏：思考/回复预览（单行）。 */
 function formatThinkingLiveLine(buf: string): string {
   const compact = buf.replace(/\s+/g, " ").trim();
   if (!compact) return LIVE_PLANNING;
-  const tail = compact.length > 96 ? compact.slice(-96) : compact;
+  const tail = compact.length > LIVE_LINE_MAX ? compact.slice(-LIVE_LINE_MAX) : compact;
   return `${LIVE_THINKING} ${tail}`;
 }
 
@@ -422,7 +427,8 @@ export async function awaitBackgroundTask(
 function synthesizePartialSummary(messages: ChatMessage[]): string {
   const parts: string[] = [];
   for (let i = messages.length - 1; i >= 0 && parts.length < 4; i--) {
-    const m = messages[i]!;
+    const m = messages[i];
+    if (!m) continue;
     if (m.role === "assistant" && typeof m.content === "string" && m.content.trim()) {
       parts.push(m.content.trim());
     }
@@ -455,7 +461,11 @@ export async function runChildAgent(options: {
 
   const childMode = options.readonly ? "ask" : ("agent" as const);
   const parentCtx = getRunContext();
-  /** 派生帧：独立 mode/turn/taskIds，不回写父 ALS。 */
+  /**
+   * 派生帧：独立 mode/turn/taskIds，不回写父 ALS。
+   * 注意 `usage` **不得**重置：`{...parentCtx}` 浅拷贝共享同一个用量账本引用，
+   * 子代理消耗的 token 因此自动并入父 run。误改成新对象会让子代理用量凭空消失。
+   */
   const childCtx: RunContext | undefined = parentCtx
     ? {
         ...parentCtx,
@@ -519,12 +529,19 @@ export async function runChildAgent(options: {
           const messages: ChatMessage[] = [{ role: "user", content: options.prompt }];
           emitProgress("Starting…", { type: "status", status: "planning" });
 
-          for (let step = 0; step < getMaxSubagentSteps(); step++) {
+          // 执行步数预算：每次模型调用与每次工具执行各计 1 步（与主图 superstep 同语义）
+          const maxSteps = getLimit("maxSubagentSteps");
+          let usedSteps = 0;
+          let modelTurn = 0;
+          for (;;) {
             if (options.signal.aborted) {
               return { ok: false, summary: "Subagent cancelled." };
             }
+            if (usedSteps >= maxSteps) break;
+            usedSteps += 1;
+            modelTurn += 1;
             const frame = getRunContext();
-            if (frame) frame.turn = step + 1;
+            if (frame) frame.turn = modelTurn;
             // 尚无 reasoning：planning；有 thinking token 后再升为 Thinking
             emitProgress(LIVE_PLANNING, { type: "status", status: "planning" });
 
@@ -544,7 +561,12 @@ export async function runChildAgent(options: {
               "Always end with a final text report (no tool call).",
               "If you cannot finish, summarize findings so far instead of more exploration.",
             ].join("\n");
-            const system = `${options.systemBody}\n\n${efficiency}\n\n${assembled.system}`;
+            const systemSections = [
+              { id: "subagent", text: options.systemBody },
+              { id: "subagentRules", text: efficiency },
+              ...assembled.systemSections,
+            ];
+            const system = joinSystemSections(systemSections);
 
             let thinkingBuf = "";
             let replyBuf = "";
@@ -554,6 +576,7 @@ export async function runChildAgent(options: {
                 messages: assembled.messages,
                 tools: assembled.tools,
                 system,
+                systemSections,
                 onToken: (text, channel) => {
                   const ch = channel ?? "reply";
                   if (ch === "thinking") {
@@ -566,7 +589,7 @@ export async function runChildAgent(options: {
                   } else {
                     replyBuf += text;
                     const compact = replyBuf.replace(/\s+/g, " ").trim();
-                    emitProgress(compact.slice(-96) || LIVE_PLANNING, {
+                    emitProgress(compact.slice(-LIVE_LINE_MAX) || LIVE_PLANNING, {
                       type: "token",
                       text,
                       channel: "reply",
@@ -586,10 +609,16 @@ export async function runChildAgent(options: {
             const calls = result.toolCalls;
             if (!calls.length) {
               const summary = (result.content || "").trim() || "(empty subagent reply)";
-              emitProgress(summary.slice(0, 120));
+              emitProgress(summary.slice(0, SETTLED_SUMMARY_MAX));
               return { ok: true, summary };
             }
+            let budgetOut = false;
             for (const call of calls) {
+              if (usedSteps >= maxSteps) {
+                budgetOut = true;
+                break;
+              }
+              usedSteps += 1;
               const toolName = call.function?.name ?? "";
               const rawArgs = call.function?.arguments ?? "{}";
               let parsed: ToolArgs = {};
@@ -624,7 +653,7 @@ export async function runChildAgent(options: {
                 input: parsed,
                 attrs: {
                   callId,
-                  turn: getRunTurn() ?? step + 1,
+                  turn: getRunTurn() ?? modelTurn,
                   ...(path ? { path } : {}),
                 },
               });
@@ -638,14 +667,14 @@ export async function runChildAgent(options: {
                     output: tr.output,
                     ...(tr.ui ? { ui: tr.ui } : {}),
                   },
-                  attrs: { callId, turn: getRunTurn() ?? step + 1 },
+                  attrs: { callId, turn: getRunTurn() ?? modelTurn },
                 });
               } catch (toolErr) {
                 const errMsg = toolErr instanceof Error ? toolErr.message : String(toolErr);
                 agentEndSpan(childToolSpanId, {
                   status: /cancel/i.test(errMsg) ? "cancelled" : "error",
                   error: errMsg,
-                  attrs: { callId, turn: getRunTurn() ?? step + 1 },
+                  attrs: { callId, turn: getRunTurn() ?? modelTurn },
                 });
                 throw toolErr;
               }
@@ -675,6 +704,7 @@ export async function runChildAgent(options: {
                 content: output,
               });
             }
+            if (budgetOut) break;
           }
           const summary = synthesizePartialSummary(messages);
           return { ok: true, summary };
@@ -722,11 +752,8 @@ export async function runChildAgent(options: {
 /** 是否后台启动（不阻塞本轮工具返回）。 */
 function resolveUseBackground(args: ToolArgs, defIsBackground: boolean): boolean {
   const awaitOpt = parseBool(args.await);
-  const backgroundOpt = parseBool(args.background);
   if (awaitOpt === true) return false;
   if (awaitOpt === false) return true;
-  if (backgroundOpt === true) return true;
-  if (backgroundOpt === false) return false;
   return Boolean(defIsBackground);
 }
 
@@ -748,12 +775,6 @@ export async function runTaskTool(args: ToolArgs, ctx: ToolContext): Promise<Too
   const prompt = typeof args.prompt === "string" ? args.prompt.trim() : "";
   if (!name || !prompt) {
     return { ok: false, output: "Task requires subagent and prompt." };
-  }
-
-  // 兼容旧轮询约定；新代码应使用 task_await
-  if (name === "status" || prompt.toLowerCase().startsWith("status:")) {
-    const taskId = prompt.replace(/^status:\s*/i, "").trim() || "";
-    return awaitBackgroundTask(taskId, 0, ctx.signal);
   }
 
   const def = getSubagentDefinition(name);

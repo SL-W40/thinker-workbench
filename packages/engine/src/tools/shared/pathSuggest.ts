@@ -34,14 +34,10 @@ export function scorePathSuggestion(requestedRel: string, candidateRel: string):
   if (reqParts.length === 0 || candParts.length === 0) return -1;
 
   let shared = 0;
-  while (
-    shared < reqParts.length &&
-    shared < candParts.length &&
-    basenameEquals(
-      reqParts[reqParts.length - 1 - shared]!,
-      candParts[candParts.length - 1 - shared]!,
-    )
-  ) {
+  while (shared < reqParts.length && shared < candParts.length) {
+    const reqPart = reqParts[reqParts.length - 1 - shared];
+    const candPart = candParts[candParts.length - 1 - shared];
+    if (!reqPart || !candPart || !basenameEquals(reqPart, candPart)) break;
     shared++;
   }
   if (shared === 0) return -1;

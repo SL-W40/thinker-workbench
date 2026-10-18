@@ -8,7 +8,7 @@ import type { PageStackSnapshot } from "@thinker-workbench/shared";
 import { useState } from "react";
 
 /** 可导航的主页面 id（`settings` 为旧 id，渲染层映射到控制台 `tools`）。 */
-export type PageId = "chat" | "settings" | "components" | "tools";
+export type PageId = "chat" | "components" | "tools";
 
 type StackState = {
   entries: PageId[];
@@ -31,7 +31,7 @@ export type PageStack = {
   forward(): void;
 };
 
-const PAGE_IDS: PageId[] = ["chat", "settings", "components", "tools"];
+const PAGE_IDS: PageId[] = ["chat", "components", "tools"];
 
 function isPageId(value: string): value is PageId {
   return PAGE_IDS.includes(value as PageId);

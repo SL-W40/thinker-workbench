@@ -95,11 +95,13 @@ export function selectionJoinFlags(
 ): ReadonlyMap<string, { joinAbove: boolean; joinBelow: boolean }> {
   const flags = new Map<string, { joinAbove: boolean; joinBelow: boolean }>();
   for (let i = 0; i < visible.length; i++) {
-    const path = visible[i]!;
-    if (!selected.has(path)) continue;
+    const path = visible[i];
+    if (!path || !selected.has(path)) continue;
+    const above = visible[i - 1];
+    const below = visible[i + 1];
     flags.set(path, {
-      joinAbove: i > 0 && selected.has(visible[i - 1]!),
-      joinBelow: i < visible.length - 1 && selected.has(visible[i + 1]!),
+      joinAbove: i > 0 && above != null && selected.has(above),
+      joinBelow: i < visible.length - 1 && below != null && selected.has(below),
     });
   }
   return flags;

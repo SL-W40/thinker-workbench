@@ -11,20 +11,52 @@ import {
   type ModelSwitchReason,
   resolveModelSettings,
 } from "@thinker-workbench/shared";
-import { getRunContext, getRunTurn } from "../runtime/runContext";
+import { addRunUsage, getRunContext, getRunTurn } from "../runtime/runContext";
 import { getRunEmitter } from "../runtime/runEmit";
 import { agentEndSpan, agentStartSpan } from "../trace/emit";
+import { estimateTurnUsage } from "./imageParts";
 import { configureChatModel, getChatModelFor, MODEL_API_KEY_MISSING } from "./openai";
 import { formatErrorMessage, isCancelError } from "./retry";
 import type { ChatCompletionResult, ChatRequest } from "./types";
+
+/**
+ * 入账一次模型调用的用量（本 run 账本）。
+ *
+ * 放在 `chatWithFailover` 这个**唯一模型调用卡口**：全仓业务调用点只有主图 agent 节点
+ * 与 Task 子代理，一处入账即全部覆盖，杜绝「新增调用点忘记上报」这类复发。
+ * 官方 usage 优先；缺失时按已流出正文粗估并标记 `estimated = true`。
+ * 既无官方值又无正文（多半是还没吐 token 就被取消）时不入账——没东西可算，保持「未知」。
+ */
+function bookRequestUsage(
+  request: ChatRequest,
+  result: ChatCompletionResult | null,
+  replyBuf: string,
+  thinkingBuf: string,
+): void {
+  // 不在 run 内（hello / contextUsage 探测）时 addRunUsage 自身会跳过
+  const official = result?.usage;
+  if (official) {
+    addRunUsage(official, false);
+    return;
+  }
+  const output = result?.content || replyBuf;
+  const reasoning = result?.reasoning || thinkingBuf;
+  if (!output && !reasoning) return;
+  const estimate = estimateTurnUsage({
+    system: request.system,
+    messages: request.messages,
+    output,
+    reasoning,
+  });
+  // 回写：供调用方直播 emit 与 Trace output 使用（官方值缺失时才有意义）
+  if (result) result.usage = estimate;
+  addRunUsage(estimate, true);
+}
 
 /** model.chat 输入：始终带 messages，由 Main truncateForTrace 裁切。 */
 function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
   const messages = request.messages ?? [];
   const tools = request.tools ?? [];
-  const toolNames = tools
-    .map((t) => t.function?.name)
-    .filter((n): n is string => typeof n === "string" && n.length > 0);
   const last = messages[messages.length - 1];
   const lastRole = last?.role;
   const lastPlain =
@@ -39,11 +71,15 @@ function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
   const lastPreview = lastPlain ? lastPlain.slice(0, 120) : undefined;
   return {
     messageCount: messages.length,
-    toolNames,
+    ...(tools.length > 0 ? { tools } : {}),
     lastRole,
     ...(lastPreview ? { lastContentPreview: lastPreview } : {}),
     messages,
-    ...(request.system ? { system: request.system } : {}),
+    ...(request.systemSections && request.systemSections.length > 0
+      ? { system: request.systemSections }
+      : request.system
+        ? { system: request.system }
+        : {}),
   };
 }
 
@@ -195,6 +231,14 @@ export async function chatWithFailover(
 
   const skippedProviders = new Set<string>();
   let lastError: unknown;
+  // 本次调用累计流出的正文（跨候选保留：故障切换只在尚未吐 token 时发生）
+  let replyBuf = "";
+  let thinkingBuf = "";
+  /** 失败出口统一入账后原样抛出，不改变错误身份（取消判定依赖它）。 */
+  const rethrow = (err: unknown): never => {
+    bookRequestUsage(request, null, replyBuf, thinkingBuf);
+    throw err;
+  };
 
   for (let i = 0; i < candidates.length; i++) {
     const entry = candidates[i];
@@ -224,8 +268,9 @@ export async function chatWithFailover(
 
     // 已向 UI 吐过 token 则不可换模型（避免重复半截回复）
     let emittedTokens = false;
-    let replyBuf = "";
-    let thinkingBuf = "";
+    // 缓冲区跨候选保留：故障切换只在 `emittedTokens === false` 时发生，故实际不清零
+    replyBuf = "";
+    thinkingBuf = "";
     const wrapped: ChatRequest = {
       ...request,
       onToken: (text, channel) => {
@@ -254,6 +299,7 @@ export async function chatWithFailover(
         }),
         attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
       });
+      bookRequestUsage(request, result, replyBuf, thinkingBuf);
       return result;
     } catch (err) {
       lastError = err;
@@ -276,7 +322,7 @@ export async function chatWithFailover(
           }),
           attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
-        throw err;
+        rethrow(err);
       }
       const msg = formatErrorMessage(err);
       if (/MODEL_API_KEY_MISSING|api key is not set/i.test(msg)) {
@@ -293,7 +339,7 @@ export async function chatWithFailover(
           }),
           attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
-        throw err;
+        rethrow(err);
       }
 
       // 半截失败仍标异常，但不切换
@@ -320,7 +366,7 @@ export async function chatWithFailover(
           }),
           attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
         });
-        throw err instanceof Error ? err : new Error(msg);
+        rethrow(err instanceof Error ? err : new Error(msg));
       }
 
       const reason: ModelSwitchReason = classifyModelSwitchReason(err);
@@ -380,10 +426,11 @@ export async function chatWithFailover(
         }),
         attrs: { modelId: entry.id, ...(turn != null ? { turn } : {}) },
       });
-      throw err instanceof Error ? err : new Error(msg);
+      rethrow(err instanceof Error ? err : new Error(msg));
     }
   }
 
+  bookRequestUsage(request, null, replyBuf, thinkingBuf);
   const finalErr =
     lastError instanceof Error
       ? lastError

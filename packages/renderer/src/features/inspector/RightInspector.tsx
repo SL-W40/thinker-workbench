@@ -23,6 +23,8 @@ import {
   useState,
 } from "react";
 import {
+  browserGetState,
+  browserNavigate,
   consumePendingOpenBrowser,
   OPEN_BROWSER_EVENT,
   type OpenBrowserDetail,
@@ -54,9 +56,9 @@ import { BrowserPane } from "../browser/BrowserPane";
 import { subagentDisplayTitle } from "../chat/subagentTitle";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { CHANGES_ACTION_PROMPTS, ChangesPane, type ChangesPromptActionId } from "./ChangesPane";
+import { buildFullTree, type ChangeTreeNode } from "./changesTree";
 import { FileEditor } from "./FileEditor";
 import { FilesHome } from "./FilesHome";
-import { FileTree } from "./FileTree";
 import { loadFileRecents, pushFileRecent } from "./fileRecents";
 import {
   BrowserStartIcon,
@@ -72,13 +74,14 @@ import {
   resolveActiveKey,
   serializeTabs,
 } from "./inspectorUi";
+import { MarkdownFileView } from "./MarkdownFileView";
 import { MediaPreview, type MediaPreviewInfo } from "./MediaPreview";
 import { SubagentInspectorPane } from "./SubagentInspectorPane";
+import { type TreeGesture, TreeView } from "./TreeView";
 import {
   applyTreeSelection,
   filterWorkspaceTree,
   selectionJoinFlags,
-  type TreeSelectGesture,
   visibleTreePaths,
 } from "./treeSelection";
 import {
@@ -98,6 +101,8 @@ import "./inspector.less";
 
 type Props = {
   workspaceId: string | null;
+  /** 聊天页是否为当前页（切到组件 / 设置等页时为 false：隐藏原生浏览器 view）。*/
+  pageActive?: boolean;
   /** Changes CTA：把固定英文 prompt 发给当前会话。*/
   onSendPrompt?: (prompt: string) => void;
   /** 外部请求打开的工作空间相对路径（如聊天 diff 点文件名）；消费后回调清空。*/
@@ -166,11 +171,12 @@ async function loadFileBuffers(
   try {
     const file = await workspaceReadFile(workspaceId, path);
     if (file.missing) return false;
-    if (file.mediaKind) {
+    const mediaKind = file.mediaKind;
+    if (mediaKind) {
       setMediaByKey((d) => ({
         ...d,
         [key]: {
-          kind: file.mediaKind!,
+          kind: mediaKind,
           mimeType: file.mimeType,
           previewDataUrl: file.previewDataUrl,
           size: file.size,
@@ -208,6 +214,7 @@ async function loadFileBuffers(
 
 export function RightInspector({
   workspaceId,
+  pageActive = true,
   onSendPrompt,
   pendingOpenPath,
   onPendingOpenPathConsumed,
@@ -243,6 +250,8 @@ export function RightInspector({
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
   const [anchorPath, setAnchorPath] = useState<string | null>(null);
   const [recents, setRecents] = useState<string[]>([]);
+  /** 重启后待还原的浏览器地址（切到浏览器 tab 且主进程为空白页时消费）。 */
+  const [pendingBrowserRestore, setPendingBrowserRestore] = useState<string>("");
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, string>>({});
@@ -304,12 +313,14 @@ export function RightInspector({
     setGitError(null);
     try {
       setGitStatus(await workspaceGitStatus(workspaceId));
+      // git 刷新时同步树：agent 新建 / 删除的文件及时进侧栏全量列表
+      void refreshTree();
     } catch (err) {
       setGitError(err instanceof Error ? err.message : String(err));
     } finally {
       setGitLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, refreshTree]);
 
   // 切换工作空间：从 localStorage 恢复标签 / 目录展开，并预加载已打开文件
   useEffect(() => {
@@ -358,6 +369,7 @@ export function RightInspector({
     setReadOnlyByPath({});
     setGitStatus(null);
     setRecents(loadFileRecents(workspaceId));
+    setPendingBrowserRestore(restoredUi.browserUrl || "");
     if (!workspaceId) return;
 
     void refreshTree();
@@ -412,6 +424,18 @@ export function RightInspector({
     });
   }, [workspaceId, tabs, activeTab, filesListForced, filesListWidth, openDirs]);
 
+  // 浏览器 tab 激活时：主进程仍是空白页就还原上次地址（消费一次，不覆盖已有页面）
+  useEffect(() => {
+    if (activeTab !== BROWSER_TAB_KEY || !pendingBrowserRestore) return;
+    const url = pendingBrowserRestore;
+    setPendingBrowserRestore("");
+    void (async () => {
+      const s = await browserGetState();
+      if (s?.url && s.url !== "about:blank") return;
+      await browserNavigate(url);
+    })();
+  }, [activeTab, pendingBrowserRestore]);
+
   // Git：聚焦 + 12s 轮询（有 Changes 标签或空起始屏时）
   useEffect(() => {
     if (!workspaceId) return;
@@ -425,6 +449,53 @@ export function RightInspector({
     };
   }, [workspaceId, refreshGit]);
 
+  // 以下三个开面板函数只写 state，提为稳定引用：订阅类 effect 依赖它们，
+  // 每渲染换引用会导致反复解绑 / 重绑。
+  const ensureTab = useCallback((tab: StageTab) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.key === tab.key);
+      if (idx < 0) return [...prev, tab];
+      // 子代理标题可能从 draft 完善：已存在则合并更
+      if (tab.kind === "subagent") {
+        const cur = prev[idx];
+        if (
+          cur?.kind === "subagent" &&
+          (cur.title !== tab.title || cur.subagent !== tab.subagent)
+        ) {
+          const next = [...prev];
+          next[idx] = { ...cur, title: tab.title, subagent: tab.subagent };
+          return next;
+        }
+      }
+      return prev;
+    });
+    setActiveTab(tab.key);
+  }, []);
+
+  const openTerminal = useCallback(
+    (sessionId?: string) => {
+      ensureTab({
+        key: TERMINAL_TAB_KEY,
+        kind: "terminal",
+        title: t("inspector.section.terminal"),
+      });
+      if (sessionId?.trim()) setTerminalFocusId(sessionId.trim());
+    },
+    [ensureTab, t],
+  );
+
+  const openBrowser = useCallback(
+    (url?: string) => {
+      ensureTab({
+        key: BROWSER_TAB_KEY,
+        kind: "browser",
+        title: t("inspector.section.browser"),
+      });
+      if (url?.trim()) setBrowserPendingUrl(url.trim());
+    },
+    [ensureTab, t],
+  );
+
   // 聊天 diff 等外部请求：打开文件并展开文件列表
   useEffect(() => {
     if (!pendingOpenPath) return;
@@ -432,8 +503,8 @@ export function RightInspector({
     onPendingOpenPathConsumed?.();
     setFilesListOpen(true);
     void openFile(path);
-    // openFile 读最新 state；仅在 pending 变化时触发
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // openFile 读最新 state；依赖故意列入以拿新闭包，避免只触发一次后 stale
+    // biome-ignore lint/correctness/useExhaustiveDependencies: openFile 每次渲染新引用；此处依赖故意列入以始终拿到最新闭包
   }, [pendingOpenPath, openFile, setFilesListOpen, onPendingOpenPathConsumed]);
 
   // 外部 / 时间线：打开 Terminal 标签（细节由 TerminalPane 消费：
@@ -444,7 +515,6 @@ export function RightInspector({
     }
     window.addEventListener(OPEN_TERMINAL_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_TERMINAL_EVENT, onOpen);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTerminal]);
 
   // Markdown 链接 / agent / 主进程：打开 Browser 标签
@@ -464,7 +534,6 @@ export function RightInspector({
       window.removeEventListener(OPEN_BROWSER_EVENT, onOpen);
       off();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openBrowser]);
 
   // Task 卡片 / 后台条 / 会话恢复：子代理时间线 tab
@@ -555,7 +624,6 @@ export function RightInspector({
       window.removeEventListener(CLEAR_SUBAGENT_TABS_EVENT, onClear);
       window.removeEventListener(RESTORE_SUBAGENT_TABS_EVENT, onRestore);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ensureTab, t]);
 
   // 激活非 Task 时清掉 activeTaskId，避免刷新后强行抢回 Task
@@ -573,7 +641,6 @@ export function RightInspector({
     const id = pendingOpenTerminalSessionId;
     onPendingOpenTerminalConsumed?.();
     openTerminal(id || undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenTerminalSessionId, openTerminal, onPendingOpenTerminalConsumed]);
 
   // Tab 条：纵向滚轮 →横向滚动
@@ -590,24 +657,6 @@ export function RightInspector({
     return () => strip.removeEventListener("wheel", onWheel);
   }, [inspectorEmpty]);
 
-  function ensureTab(tab: StageTab) {
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.key === tab.key);
-      if (idx < 0) return [...prev, tab];
-      // 子代理标题可能从 draft 完善：已存在则合并更
-      if (tab.kind === "subagent") {
-        const cur = prev[idx]!;
-        if (cur.kind === "subagent" && (cur.title !== tab.title || cur.subagent !== tab.subagent)) {
-          const next = [...prev];
-          next[idx] = { ...cur, title: tab.title, subagent: tab.subagent };
-          return next;
-        }
-      }
-      return prev;
-    });
-    setActiveTab(tab.key);
-  }
-
   function openChanges() {
     ensureTab({
       key: CHANGES_TAB_KEY,
@@ -622,24 +671,6 @@ export function RightInspector({
       kind: "files",
       title: t("inspector.section.files"),
     });
-  }
-
-  function openTerminal(sessionId?: string) {
-    ensureTab({
-      key: TERMINAL_TAB_KEY,
-      kind: "terminal",
-      title: t("inspector.section.terminal"),
-    });
-    if (sessionId?.trim()) setTerminalFocusId(sessionId.trim());
-  }
-
-  function openBrowser(url?: string) {
-    ensureTab({
-      key: BROWSER_TAB_KEY,
-      kind: "browser",
-      title: t("inspector.section.browser"),
-    });
-    if (url?.trim()) setBrowserPendingUrl(url.trim());
   }
 
   async function openFile(path: string) {
@@ -841,6 +872,10 @@ export function RightInspector({
     () => filterWorkspaceTree(tree, treeQuery),
     [tree, treeQuery],
   );
+  // 展示用树根：优先过滤后的树，无过滤时回退全量树
+  const treeRoot = filteredTree ?? tree;
+  // 统一成 ChangeTreeNode[] 交给共享 TreeView（文件面板不展示 +/- 统计）
+  const treeNodes = useMemo(() => (treeRoot ? buildFullTree(treeRoot, []) : []), [treeRoot]);
 
   const effectiveOpenDirs = useMemo(() => {
     if (!treeQuery.trim() || !treeExpandPaths.size) return openDirs;
@@ -850,8 +885,8 @@ export function RightInspector({
   }, [openDirs, treeExpandPaths, treeQuery]);
 
   const visiblePaths = useMemo(
-    () => visibleTreePaths(filteredTree ?? tree, effectiveOpenDirs),
-    [filteredTree, tree, effectiveOpenDirs],
+    () => visibleTreePaths(treeRoot, effectiveOpenDirs),
+    [treeRoot, effectiveOpenDirs],
   );
 
   const selectionJoins = useMemo(
@@ -859,9 +894,10 @@ export function RightInspector({
     [visiblePaths, selectedPaths],
   );
 
-  function onTreeSelect(node: WorkspaceNode, gesture: TreeSelectGesture) {
+  function onTreeActivate(node: ChangeTreeNode, gesture: TreeGesture) {
     if (!tree) return;
-    if (node.type === "dir" && !gesture.shift && !gesture.toggle) {
+    // 目录：无修饰键时仅开关；带 Shift/Ctrl 走多选（不折叠）
+    if (node.kind === "dir" && !gesture.shift && !gesture.toggle) {
       setOpenDirs((prev) => {
         const next = new Set(prev);
         if (next.has(node.path)) next.delete(node.path);
@@ -880,7 +916,8 @@ export function RightInspector({
     });
     setSelectedPaths(new Set(result.selected));
     setAnchorPath(result.anchor);
-    if (node.type === "file" && !gesture.shift && !gesture.toggle) {
+    // 文件：无修饰键时打开；带 Shift/Ctrl 仅选中
+    if (node.kind === "file" && !gesture.shift && !gesture.toggle) {
       void openFile(node.path);
     }
   }
@@ -1019,8 +1056,11 @@ export function RightInspector({
                 <span className="agent-inspector__tab-title">{tab.title}</span>
                 <span className="agent-inspector__tab-trail">
                   {unsaved[tab.key] ? (
+                    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 未保存脏点为纯展示标记，aria-label 仅用于读屏播报
                     <span className="stage-tab-dirty" aria-label={t("inspector.files.dirty")} />
                   ) : null}
+                  {/* biome-ignore lint/a11y/useSemanticElements: 标签页关闭 ×；键盘关闭走标签按钮自身的 Delete 快捷键，故 tabIndex=-1 有意不可聚焦 */}
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: 同上，关闭的键盘路径由标签按钮统一处理 */}
                   <span
                     className="agent-inspector__tab-close"
                     role="button"
@@ -1100,6 +1140,7 @@ export function RightInspector({
                 status={gitStatus}
                 loading={gitLoading}
                 error={gitError}
+                tree={tree}
                 onRefresh={() => void refreshGit()}
                 onInitRepo={() => void initRepo()}
                 onOpenFile={(path) => void openFile(path)}
@@ -1117,9 +1158,10 @@ export function RightInspector({
 
             {currentTab?.kind === "browser" ? (
               <BrowserPane
-                active={activeTab === BROWSER_TAB_KEY}
+                active={pageActive && activeTab === BROWSER_TAB_KEY}
                 pendingUrl={browserPendingUrl}
                 onPendingUrlConsumed={() => setBrowserPendingUrl(null)}
+                workspaceId={workspaceId}
               />
             ) : null}
 
@@ -1149,7 +1191,17 @@ export function RightInspector({
                       {mediaByKey[currentTab.key] ? (
                         <MediaPreview
                           path={currentTab.path || t("inspector.files.untitled")}
-                          info={mediaByKey[currentTab.key]!}
+                          info={mediaByKey[currentTab.key]}
+                        />
+                      ) : /\.(md|markdown|mdx)$/i.test(currentTab.path ?? "") ? (
+                        <MarkdownFileView
+                          path={currentTab.path || null}
+                          modelPath={currentTab.key}
+                          value={drafts[currentTab.key] ?? ""}
+                          readOnly={Boolean(currentTab.path && readOnlyByPath[currentTab.path])}
+                          onChange={onFileDraftChange}
+                          onSave={() => void saveFile()}
+                          onOpenFile={(p) => void openFile(p)}
                         />
                       ) : (
                         <FileEditor
@@ -1167,6 +1219,7 @@ export function RightInspector({
 
                 {!showFilesHome && filesListOpen ? (
                   <aside className="agent-files__side" style={{ width: filesListWidth }}>
+                    {/* biome-ignore lint/a11y/useSemanticElements: 文件列表拖宽手柄，ARIA separator + 指针拖拽模式，无对应原生控件 */}
                     <div
                       className={`filelist-splitter${filesListDragging ? " is-dragging" : ""}`}
                       onPointerDown={onFilesListResize}
@@ -1179,6 +1232,7 @@ export function RightInspector({
                     />
                     <label className="changes-filelist__search">
                       <span className="changes-filelist__search-ico" aria-hidden>
+                        {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性搜索图标，label 内 input 已有语义 */}
                         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                           <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.55" />
                           <path
@@ -1200,22 +1254,22 @@ export function RightInspector({
                       />
                     </label>
                     <div className="agent-files__tree">
-                      {(filteredTree ?? tree) ? (
-                        <FileTree
-                          node={(filteredTree ?? tree)!}
+                      {treeRoot ? (
+                        <TreeView
+                          nodes={treeNodes}
                           openDirs={effectiveOpenDirs}
                           focusPath={currentTab?.kind === "file" ? currentTab.path : null}
                           selectedPaths={selectedPaths}
                           selectionJoins={selectionJoins}
-                          onSelect={onTreeSelect}
-                          onContextMenu={(e, node) => {
+                          onActivate={onTreeActivate}
+                          onContextMenu={(e, path, kind) => {
                             e.preventDefault();
                             e.stopPropagation();
                             setTreeCtxMenu({
                               x: e.clientX,
                               y: e.clientY,
-                              path: node.path,
-                              kind: node.type === "dir" ? "dir" : "file",
+                              path,
+                              kind,
                             });
                           }}
                         />

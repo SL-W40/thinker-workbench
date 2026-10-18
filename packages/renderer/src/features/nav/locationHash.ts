@@ -2,7 +2,6 @@
  * URL hash ↔ 应用路由位置。
  *
  * 约定：`#/chat`、`#/components`、`#/tools`、`#/tools/<tab>`、`#/tools/settings/<section>`。
- * 旧 `#/settings/<section>` 解析为控制台 Settings 分区。
  * 写入使用 `location.replace`，避免堆浏览器历史，并便于 Electron 持久化 session URL。
  */
 
@@ -21,11 +20,10 @@ export type AppLocation = {
   section: SettingsSectionId;
 };
 
-const PAGE_IDS: PageId[] = ["chat", "settings", "components", "tools"];
+const PAGE_IDS: PageId[] = ["chat", "components", "tools"];
 
 /**
  * 解析 hash 字符串为页面、控制台 tab 与设置分区；非法页回退为 chat。
- * `#/settings/...` 映射到 `#/tools` + settings tab（设置已并入控制台）。
  */
 export function parseHash(raw: string = location.hash): AppLocation {
   const path = raw.replace(/^#\/?/, "").trim();
@@ -33,31 +31,13 @@ export function parseHash(raw: string = location.hash): AppLocation {
   const pageRaw = parts[0];
   const page = PAGE_IDS.includes(pageRaw as PageId) ? (pageRaw as PageId) : "chat";
 
-  if (page === "settings") {
-    // 旧 MCP 设置 → Customize
-    if (parts[1] === "mcp") {
-      return { page: "tools", tab: "customize", section: DEFAULT_SETTINGS_SECTION };
-    }
-    const section = normalizeSettingsSection(parts[1]);
-    return { page: "tools", tab: "settings", section };
-  }
-
   if (page === "tools") {
     const tabRaw = parts[1];
     if (tabRaw === "settings") {
-      if (parts[2] === "mcp") {
-        return { page: "tools", tab: "customize", section: DEFAULT_SETTINGS_SECTION };
-      }
       const section = normalizeSettingsSection(parts[2]);
       return { page: "tools", tab: "settings", section };
     }
-    if (
-      tabRaw === "langfuse" ||
-      tabRaw === "observability" ||
-      tabRaw === "logs" ||
-      tabRaw === "trace" ||
-      isToolTabId(tabRaw)
-    ) {
+    if (isToolTabId(tabRaw)) {
       return {
         page: "tools",
         tab: normalizeToolTabId(tabRaw),
@@ -83,7 +63,7 @@ export function writeHash(
   let next: string;
   if (page === "chat") {
     next = "#/chat";
-  } else if (page === "tools" || page === "settings") {
+  } else if (page === "tools") {
     next = tab === "settings" ? `#/tools/settings/${section}` : `#/tools/${tab}`;
   } else {
     next = `#/${page}`;

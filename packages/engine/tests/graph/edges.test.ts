@@ -1,10 +1,10 @@
 /**
- * 默认图的条件边：无工具结束、打满步数先 drain、tools 之后回 agent 或结束。
+ * 默认图的条件边：无工具结束、打满 pending 先 drain。
+ * 步数预算不在这里：超限由 LangGraph recursionLimit 统一收尾。
  */
 import assert from "node:assert/strict";
 import { END } from "@langchain/langgraph";
-import { afterEach, describe, it } from "vitest";
-import { configureRuntimeLimits, getMaxAgentSteps } from "../../src/config/runtimeLimits";
+import { describe, it } from "vitest";
 import type { AgentGraphState } from "../../src/graph/annotation";
 import { buildGraph } from "../../src/graph/buildGraph";
 import { afterAgent, afterTools } from "../../src/graph/edges";
@@ -16,7 +16,6 @@ function state(partial: Partial<AgentGraphState>): AgentGraphState {
     reply: "",
     pendingToolCalls: [],
     startedToolCallIds: [],
-    step: 0,
     ...partial,
   };
 }
@@ -28,23 +27,14 @@ const toolCall = {
 };
 
 describe("graph edges", () => {
-  afterEach(() => {
-    configureRuntimeLimits({ maxAgentSteps: 16 });
-  });
-
-  it("没有待执行工具就结束；有工具则进 tools，即使步数已满也先 drain", () => {
+  it("agent 后：无工具结束；有工具进 tools", () => {
     assert.equal(afterAgent(state({})), END);
-    assert.equal(afterAgent(state({ pendingToolCalls: [toolCall], step: 1 })), "tools");
-    configureRuntimeLimits({ maxAgentSteps: 2 });
-    assert.equal(getMaxAgentSteps(), 2);
-    assert.equal(afterAgent(state({ pendingToolCalls: [toolCall], step: 2 })), "tools");
+    assert.equal(afterAgent(state({ pendingToolCalls: [toolCall] })), "tools");
   });
 
-  it("tools 后还有 pending 继续 tools；步数满则结束；否则回 agent", () => {
-    assert.equal(afterTools(state({ pendingToolCalls: [toolCall], step: 1 })), "tools");
-    assert.equal(afterTools(state({ step: 1 })), "agent");
-    configureRuntimeLimits({ maxAgentSteps: 3 });
-    assert.equal(afterTools(state({ step: 3 })), END);
+  it("tools 后：还有 pending 继续 tools；否则回 agent", () => {
+    assert.equal(afterTools(state({ pendingToolCalls: [toolCall] })), "tools");
+    assert.equal(afterTools(state({})), "agent");
   });
 
   it("buildGraph 可编译", () => {

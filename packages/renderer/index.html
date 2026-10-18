@@ -136,6 +136,7 @@
        * 旧版把 light 画成 notes 米色，导致首屏先闪 notes 再切到真实主题。
        */
       (function paintBootSplash() {
+        // 启动闪屏刻意保持 ES5 风格（抢在模块加载前上屏），var 就地声明是有意的；noInnerDeclarations 已在 biome.json overrides 按本文件豁免
         var SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
         var palettes = {
           light: {

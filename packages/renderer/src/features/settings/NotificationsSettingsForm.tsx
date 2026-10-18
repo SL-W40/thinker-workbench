@@ -61,7 +61,9 @@ export function NotificationsSettingsForm({ active = true }: Props) {
                       size="sm"
                       variant="text"
                       disabled={previewBusy === item.preview}
-                      onClick={() => void tryPreview(item.preview!)}
+                      onClick={() => {
+                        if (item.preview) void tryPreview(item.preview);
+                      }}
                     >
                       {previewBusy === item.preview
                         ? t("settings.general.playing")

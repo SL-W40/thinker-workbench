@@ -10,6 +10,7 @@ export type ContextUsageSegmentId =
   | "rules"
   | "skills"
   | "contextFiles"
+  | "memory"
   | "conversation";
 
 /** 单个分段的估算用量。 */
@@ -60,6 +61,7 @@ export function emptyContextUsageSnapshot(
       { id: "rules", tokens: 0 },
       { id: "skills", tokens: 0 },
       { id: "contextFiles", tokens: 0 },
+      { id: "memory", tokens: 0 },
       { id: "conversation", tokens: 0 },
     ],
   };

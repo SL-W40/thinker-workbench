@@ -6,11 +6,12 @@ import {
   CheckIcon,
   CopyIcon,
   IconButton,
+  PaperclipIcon,
   RestartIcon,
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
-import type { ChatMessage, ChatTimelineStep } from "@thinker-workbench/shared";
+import type { ChatMessage } from "@thinker-workbench/shared";
 import {
   type FocusEvent,
   type KeyboardEvent,
@@ -21,16 +22,17 @@ import {
   useState,
 } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../bridge/browser";
-import { ChatImageStrip } from "../features/chat/ChatImageStrip";
+import { ChatImageStrip, type DraftChatImage } from "../features/chat/ChatImageStrip";
 import { ChatUsageBar } from "../features/chat/ChatUsageBar";
 import { SendGlyph } from "../features/chat/Composer";
 import { ComposerEditor, type ComposerEditorHandle } from "../features/chat/ComposerEditor";
 import { MentionsRichText } from "../features/chat/MentionsRichText";
 import { ModelPicker } from "../features/chat/ModelPicker";
 import { ModePicker } from "../features/chat/ModePicker";
-import { normalizeChatMessage, visibleAssistantText } from "../features/chat/messageModel";
+import { visibleAssistantText } from "../features/chat/messageModel";
 import { RunTimeline } from "../features/chat/RunTimeline";
-import { EMPTY_USAGE, totalTokens } from "../features/chat/usageStats";
+import { reconcileTimelineReply } from "../features/chat/timelineModel";
+
 import { useT } from "../i18n/useI18n";
 
 /** 写入剪贴板；失败时回退 execCommand。 */
@@ -102,17 +104,6 @@ function UserPromptBody({
   );
 }
 
-/** 消息未结算 durationMs 时，用时间线 status 耗时（如思考）兜底。*/
-function durationFromTimeline(steps: ChatTimelineStep[]): number {
-  let sum = 0;
-  for (const s of steps) {
-    if (s.kind === "status" && typeof s.durationMs === "number" && s.durationMs > 0) {
-      sum += s.durationMs;
-    }
-  }
-  return sum;
-}
-
 type BubbleProps = {
   message: ChatMessage;
   /** 当前会话是否正在跑（pending 且 busy 才算 live，避免中断后永远 Planning）。*/
@@ -144,6 +135,11 @@ type BubbleProps = {
   onEditDraftChange?: (value: string) => void;
   onEditKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
   onSendEdit?: () => void;
+  /** 进行中或排队：原位编辑仍可改文字和图片，但不能发送。*/
+  sendBlocked?: boolean;
+  editImages?: DraftChatImage[];
+  onAttachEditImages?: (files: File[]) => void;
+  onRemoveEditImage?: (id: string) => void;
   /** 失焦 / Esc：退出原位编辑，历史不变。*/
   onCancelEdit?: () => void;
   /** 当前会话：编辑态模型选用与底部 Composer 共用。*/
@@ -168,29 +164,35 @@ export function Bubble({
   onEditDraftChange,
   onEditKeyDown,
   onSendEdit,
+  sendBlocked = false,
+  editImages = [],
+  onAttachEditImages,
+  onRemoveEditImage,
   onCancelEdit,
   sessionId = null,
 }: BubbleProps) {
   const t = useT();
-  const view = normalizeChatMessage(message);
+  const view = message;
   const { markdownTheme } = useDesignTheme();
-  const timeline = view.timeline ?? [];
+  const timeline = reconcileTimelineReply(view.timeline ?? [], view.text ?? "");
   const showTimeline = timeline.length > 0 || Boolean(view.pending);
   const hasText = Boolean(view.text?.trim());
   // reply 已按序插入时间线时，不再在底部重复渲染整段正
   const timelineHasReply = timeline.some((s) => s.kind === "text");
   const role = view.role === "user" ? "user" : "assistant";
   const live = Boolean(view.pending && running);
-  const usage = view.usage ?? EMPTY_USAGE;
+  // 用量只认引擎写下的值；缺失就是「未知」（展示「—」），不用 EMPTY_USAGE 假装是 0
+  const usage = view.usage;
+  const usageEstimated = view.usageEstimated === true;
+  // 耗时只认引擎写下的值；缺失就是「未知」，由展示层画「—」，不从时间线反推
   const durationMs =
-    view.durationMs != null && view.durationMs > 0
-      ? view.durationMs
-      : durationFromTimeline(timeline);
+    view.durationMs != null && Number.isFinite(view.durationMs) ? view.durationMs : undefined;
   // 仅在完成 / 停止后展示；流式活跃中不显示 Tokens / 耗时 / Trace
   const showUsage =
-    role === "assistant" &&
-    !live &&
-    (totalTokens(usage) > 0 || durationMs > 0 || Boolean(view.traceId));
+    role === "assistant" && !live && (usage != null || durationMs != null || Boolean(view.traceId));
+  const editFileRef = useRef<HTMLInputElement | null>(null);
+  /** 系统文件框会让编辑区失焦；选图期间不要退出编辑。 */
+  const pickingEditFileRef = useRef(false);
   const copyableText = role === "assistant" ? visibleAssistantText(view) : "";
   // 流式结束后才显示复制；正文可来自 message.text 或时间线 text 步
   const showCopy = role === "assistant" && !live && Boolean(copyableText);
@@ -231,6 +233,7 @@ export function Bubble({
         if (focusInModelPicker(next)) return;
         // 点发送 / 模型菜单时焦点可能先离开；等一帧再判
         window.setTimeout(() => {
+          if (pickingEditFileRef.current) return;
           if (root.contains(document.activeElement)) return;
           if (focusInModelPicker(document.activeElement)) return;
           if (
@@ -243,17 +246,41 @@ export function Bubble({
           onCancelEdit?.();
         }, 0);
       };
-      const editHasImages = Array.isArray(view.images) && view.images.length > 0;
+      const editHasImages = editImages.some((img) => !img.uploading && Boolean(img.path.trim()));
+      const editUploading = editImages.some((img) => img.uploading);
       return (
         <li className="bubble role-user">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: 编辑态容器靠 onBlur 判定点击外部收起，自身不可交互 */}
           <div className="user-prompt user-prompt--editing composer-shell" onBlur={leaveIfOutside}>
-            {editHasImages ? <ChatImageStrip images={view.images!} /> : null}
+            {editImages.length > 0 ? (
+              <ChatImageStrip images={editImages} onRemove={onRemoveEditImage} />
+            ) : null}
             <ComposerEditor
               ref={editInputRef}
               value={editDraft}
               placeholder={t("chat.placeholder")}
               onChange={(v) => onEditDraftChange?.(v)}
               onKeyDown={onEditKeyDown}
+              onPasteImages={(files) => {
+                if (!onAttachEditImages || files.length === 0) return false;
+                void onAttachEditImages(files);
+                return true;
+              }}
+            />
+            <input
+              ref={editFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
+              multiple
+              hidden
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []).filter((f) =>
+                  f.type.startsWith("image/"),
+                );
+                e.target.value = "";
+                pickingEditFileRef.current = false;
+                if (files.length) onAttachEditImages?.(files);
+              }}
             />
             <div className="composer-bar">
               <div className="composer-bar-left">
@@ -262,14 +289,38 @@ export function Bubble({
               </div>
               <div className="composer-bar-right">
                 <IconButton
+                  className="composer-attach"
+                  size="md"
+                  variant="ghost"
+                  aria-label={t("chat.images.attach")}
+                  title={t("chat.images.attach")}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    pickingEditFileRef.current = true;
+                    editFileRef.current?.click();
+                    // 取消文件框时 change 不会触发，焦点回来后再放开
+                    window.addEventListener(
+                      "focus",
+                      () => {
+                        window.setTimeout(() => {
+                          pickingEditFileRef.current = false;
+                        }, 0);
+                      },
+                      { once: true },
+                    );
+                  }}
+                >
+                  <PaperclipIcon />
+                </IconButton>
+                <IconButton
                   className="composer-send"
                   size="lg"
                   variant="secondary"
-                  disabled={!editDraft.trim() && !editHasImages}
+                  disabled={sendBlocked || editUploading || (!editDraft.trim() && !editHasImages)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onSendEdit?.()}
                   aria-label={t("chat.send")}
-                  title={t("chat.sendHint")}
+                  title={sendBlocked ? t("chat.sendBlocked") : t("chat.sendHint")}
                 >
                   <span className="composer-send__ico" aria-hidden="true">
                     <SendGlyph />
@@ -285,6 +336,7 @@ export function Bubble({
     const userImages = Array.isArray(view.images) ? view.images : [];
     return (
       <li className="bubble role-user">
+        {/* biome-ignore lint/a11y/useSemanticElements: 整条用户消息作为可点击块进入编辑，包原生 button 会改变内部排版结构 */}
         <div
           className="user-prompt"
           role="button"
@@ -346,6 +398,7 @@ export function Bubble({
         {showUsage ? (
           <ChatUsageBar
             usage={usage}
+            usageEstimated={usageEstimated}
             durationMs={durationMs}
             runStartedAt={null}
             busy={false}

@@ -17,6 +17,7 @@ export function isUtilityToParent(value: unknown): value is UtilityToParent {
       msg.kind === "event" ||
       msg.kind === "log" ||
       msg.kind === "contextUsageResult" ||
+      msg.kind === "checkpointClearResult" ||
       msg.kind === "ptyRequest" ||
       msg.kind === "browserRequest" ||
       msg.kind === "hitl" ||

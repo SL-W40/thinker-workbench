@@ -13,9 +13,10 @@ import type {
   McpServerRuntimeStatus,
   McpToolSummary,
 } from "@thinker-workbench/shared";
-import { getMcpCallTimeoutMs, getMcpConnectTimeoutMs } from "../config/runtimeLimits";
+import { getLimit } from "../config/runtimeLimits";
 import type { ChatToolDefinition } from "../model/types";
 import type { ToolArgs, ToolResult } from "../tools/types";
+import { COMPUTER_MCP_ID, COMPUTER_MCP_NAME, callComputerTool, computerToolDefs } from "./computer";
 import { mcpToolName, parseMcpToolName, sanitizeMcpPart } from "./names";
 import { normalizeMcpParameters } from "./schemaMap";
 
@@ -24,8 +25,10 @@ const MAX_TOOLS_TOTAL = 128;
 
 type ServerSession = {
   config: McpServerConfig;
-  client: Client;
-  transport: Transport;
+  client?: Client;
+  transport?: Transport;
+  /** 进程内内置 server（computer）：不经传输层，直接调 callComputerTool。 */
+  builtin?: boolean;
   tools: Array<{
     name: string;
     description: string;
@@ -79,6 +82,18 @@ function openTransport(cfg: McpServerConfig): Transport {
   });
 }
 
+/** 内置 computer server 的配置占位（engine 进程内注册，不起子进程）。 */
+const BUILTIN_COMPUTER_CONFIG: McpServerConfig = {
+  id: COMPUTER_MCP_ID,
+  name: COMPUTER_MCP_NAME,
+  enabled: true,
+  transport: "stdio",
+  command: "(built-in)",
+  args: [],
+  env: {},
+  cwd: null,
+};
+
 /** 全局单例 MCP 管理器。 */
 export class McpManager {
   private sessions = new Map<string, ServerSession>();
@@ -93,9 +108,12 @@ export class McpManager {
     this.listener?.(status);
   }
 
-  /** 按快照重载已启用的 stdio / http 服务。 */
+  /** 按快照重载已启用的 stdio / http 服务；内置 computer server 始终在场。 */
   async reload(configs: McpServerConfig[]): Promise<void> {
-    const enabled = configs.filter((c) => c.enabled);
+    const enabled = [
+      BUILTIN_COMPUTER_CONFIG,
+      ...configs.filter((c) => c.enabled && sanitizeMcpPart(c.id) !== COMPUTER_MCP_ID),
+    ];
     const wantIds = new Set(enabled.map((c) => sanitizeMcpPart(c.id)));
 
     for (const id of [...this.sessions.keys()]) {
@@ -129,12 +147,12 @@ export class McpManager {
       return;
     }
     try {
-      await s.client.close();
+      await s.client?.close();
     } catch {
       /* ignore */
     }
     try {
-      await s.transport.close();
+      await s.transport?.close();
     } catch {
       /* ignore */
     }
@@ -144,6 +162,26 @@ export class McpManager {
   private async startOne(cfg: McpServerConfig): Promise<void> {
     const id = sanitizeMcpPart(cfg.id);
     this.emitStatus({ id, state: "starting" });
+
+    // 内置 computer：进程内注册，不起传输层
+    if (id === COMPUTER_MCP_ID) {
+      const tools = computerToolDefs().map((t) => ({
+        name: mcpToolName(id, t.name),
+        description: t.description,
+        parameters: normalizeMcpParameters(t.parameters),
+        remoteName: t.name,
+      }));
+      this.sessions.set(id, { config: { ...cfg, id }, builtin: true, tools });
+      this.lastKeys.set(id, configKey({ ...cfg, id }));
+      this.emitStatus({
+        id,
+        state: "ready",
+        toolCount: tools.length,
+        tools: tools.map((t) => ({ name: t.name, description: t.description })),
+      });
+      return;
+    }
+
     const transport = openTransport(cfg);
     const client = new Client({ name: "thinker-workbench", version: "0.1.0" });
 
@@ -151,7 +189,10 @@ export class McpManager {
       await Promise.race([
         client.connect(transport),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("MCP connect timeout")), getMcpConnectTimeoutMs()),
+          setTimeout(
+            () => reject(new Error("MCP connect timeout")),
+            getLimit("mcpConnectTimeoutMs"),
+          ),
         ),
       ]);
       const listed = await client.listTools();
@@ -222,13 +263,19 @@ export class McpManager {
     if (signal?.aborted) {
       return { ok: false, output: "Cancelled." };
     }
+    // 内置 server：进程内直调
+    if (session.builtin) {
+      return await callComputerTool(remoteName, args, signal);
+    }
     try {
       const result = await Promise.race([
-        session.client.callTool({ name: remoteName, arguments: args }, undefined, { signal }),
+        (session.client as Client).callTool({ name: remoteName, arguments: args }, undefined, {
+          signal,
+        }),
         new Promise<never>((_, reject) => {
           const timer = setTimeout(
             () => reject(new Error("MCP call timeout")),
-            getMcpCallTimeoutMs(),
+            getLimit("mcpCallTimeoutMs"),
           );
           signal?.addEventListener(
             "abort",

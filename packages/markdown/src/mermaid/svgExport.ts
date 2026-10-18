@@ -11,12 +11,12 @@ export function ensureSvgXmlns(svg: string): string {
 function readSvgSize(svg: string): { width: number; height: number } {
   const viewBox = /viewBox\s*=\s*["']([^"']+)["']/i.exec(svg);
   if (viewBox) {
-    const parts = viewBox[1]!
+    const parts = (viewBox[1] ?? "")
       .trim()
       .split(/[\s,]+/)
       .map(Number);
-    if (parts.length >= 4 && parts[2]! > 0 && parts[3]! > 0) {
-      return { width: parts[2]!, height: parts[3]! };
+    if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
+      return { width: parts[2], height: parts[3] };
     }
   }
   const w = /width\s*=\s*["']([0-9.]+)(?:px)?["']/i.exec(svg);

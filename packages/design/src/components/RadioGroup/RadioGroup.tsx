@@ -50,6 +50,7 @@ export function RadioGroup({
             key={opt.value}
             className={`tw-radio${selected ? " is-selected" : ""}${itemDisabled ? " is-disabled" : ""}`}
           >
+            {/* biome-ignore lint/a11y/useSemanticElements: 自绘单选圆点，需要 button + role="radio" 才能完全控制视觉；原生 input 样式无法满足 */}
             <button
               type="button"
               className="tw-radio__dot"

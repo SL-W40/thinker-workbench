@@ -26,7 +26,7 @@ export function visiblePillCount(
 
   let all = 0;
   for (let i = 0; i < n; i++) {
-    all += widths[i]! + (i > 0 ? gap : 0);
+    all += (widths[i] ?? 0) + (i > 0 ? gap : 0);
   }
   if (!alwaysMore && all <= available) return n;
   if (alwaysMore && all + gap + moreWidth <= available) return n;
@@ -35,7 +35,7 @@ export function visiblePillCount(
   for (let k = 1; k <= n; k++) {
     let used = 0;
     for (let i = 0; i < k; i++) {
-      used += widths[i]! + (i > 0 ? gap : 0);
+      used += (widths[i] ?? 0) + (i > 0 ? gap : 0);
     }
     const remaining = n - k;
     const needMore = alwaysMore || remaining > 0;

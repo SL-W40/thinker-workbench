@@ -1,6 +1,6 @@
 # Thinker Workbench
 
-**English** | [简体中文](./README.zh-CN.md)
+**English** | [简体中文](./docs/README.zh-CN.md)
 
 License: [Apache-2.0](./LICENSE) · Deferred work: [TODOS](./TODOS.md)
 
@@ -165,4 +165,4 @@ Disable a server in Settings to drop its tools; quitting should leave no orphan 
 
 ## Contributing
 
-How to branch, review, and land changes: **[CONTRIBUTING.md](./CONTRIBUTING.md)** ([简体中文](./CONTRIBUTING.zh-CN.md)). Deferred backlog: [TODOS.md](./TODOS.md).
+How to branch, review, and land changes: **[CONTRIBUTING.md](./CONTRIBUTING.md)** ([简体中文](./docs/CONTRIBUTING.zh-CN.md)). Deferred backlog: [TODOS.md](./TODOS.md).

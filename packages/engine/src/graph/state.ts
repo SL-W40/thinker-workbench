@@ -2,7 +2,7 @@
  * 构造一次 run 的初始图状态：
  * - messages = 可选历史 + 当前 user
  * - reply / pendingToolCalls 为空
- * - step 从 0 起（进入 agent 后才会 +1）
+ * 步数预算不在图状态里：由 LangGraph recursionLimit 统一承载（见 AgentRuntime）。
  */
 import type { ChatImageRef } from "@thinker-workbench/shared";
 import { buildUserContent, contentToPlainText } from "../model/imageParts";
@@ -53,8 +53,9 @@ export function initialState(
     reply: "",
     pendingToolCalls: [],
     startedToolCallIds: [],
-    step: 0,
     contextPaths: contextPaths?.length ? contextPaths : undefined,
+    messagesOverride: [],
+    lastToolEndedAt: undefined,
   };
 }
 
@@ -69,8 +70,11 @@ export function normalizeGraphState(raw: GraphState | (Partial<GraphState> & obj
     reply: typeof raw.reply === "string" ? raw.reply : "",
     pendingToolCalls: Array.isArray(raw.pendingToolCalls) ? raw.pendingToolCalls : [],
     startedToolCallIds: started,
-    step: typeof raw.step === "number" && Number.isFinite(raw.step) ? raw.step : 0,
     contextPaths:
       Array.isArray(raw.contextPaths) && raw.contextPaths.length ? raw.contextPaths : undefined,
+    messagesOverride: Array.isArray((raw as GraphState).messagesOverride)
+      ? (raw as GraphState).messagesOverride
+      : [],
+    lastToolEndedAt: typeof raw.lastToolEndedAt === "number" ? raw.lastToolEndedAt : undefined,
   };
 }

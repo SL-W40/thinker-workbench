@@ -47,7 +47,7 @@ const SECTION_ICONS: Record<SettingsSectionId, ComponentType<IconProps>> = {
 
 export function SettingsPane({ active, section, onSectionChange }: Props) {
   const t = useT();
-  const current = SETTINGS_SECTIONS.find((item) => item.id === section) ?? SETTINGS_SECTIONS[0]!;
+  const current = SETTINGS_SECTIONS.find((item) => item.id === section) ?? SETTINGS_SECTIONS[0];
 
   return (
     <div className="settings-shell" hidden={!active}>

@@ -4,7 +4,7 @@
 
 import { ContextMenu, EmptyState } from "@thinker-workbench/design/react";
 import { highlightCode } from "@thinker-workbench/markdown";
-import type { GitChangedFile, GitStatus } from "@thinker-workbench/shared";
+import type { GitChangedFile, GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
 import {
   type CSSProperties,
   memo,
@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
   startTransition,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -22,9 +23,15 @@ import {
 import { createPortal } from "react-dom";
 import { workspaceGitFileDiff } from "../../bridge/workspaceFs";
 import { useT } from "../../i18n/useI18n";
-import { buildChangeTree, type ChangeTreeNode, filterChangeTree } from "./changesTree";
+import {
+  buildChangeTree,
+  buildFullTree,
+  type ChangeTreeNode,
+  filterChangeTree,
+} from "./changesTree";
 import { FileGlyph, IconChevron, IconPanelHide, MI } from "./icons";
 import { loadInspectorUi, patchInspectorUi } from "./inspectorUi";
+import { TreeView } from "./TreeView";
 import {
   FILE_LIST_AUTO_PANE_MIN,
   FILE_LIST_WIDTH,
@@ -186,17 +193,17 @@ function pumpHighlightQueue() {
     cancelHighlightPump = null;
     const start = performance.now();
     while (highlightQueue.length && performance.now() - start < 10) {
-      const job = highlightQueue[0]!;
-      if (job.cancelled) {
-        highlightQueue.shift();
+      const head = highlightQueue.shift();
+      if (!head) break;
+      if (head.cancelled) {
         continue;
       }
-      const more = job.tick();
-      if (!more || job.cancelled) {
-        highlightQueue.shift();
+      const more = head.tick();
+      if (!more || head.cancelled) {
+        // 出队后不再回插
       } else {
         // 轮转到队尾，让其它文件也有机会推进
-        highlightQueue.push(highlightQueue.shift()!);
+        highlightQueue.push(head);
         break;
       }
     }
@@ -243,6 +250,8 @@ type Props = {
   status: GitStatus | null;
   loading?: boolean;
   error?: string | null;
+  /** 全量工作区树（侧栏文件列表用；缺省回退仅改动文件）。*/
+  tree?: WorkspaceNode | null;
   onRefresh: () => void;
   onInitRepo: () => void | Promise<void>;
   onOpenFile: (path: string) => void;
@@ -262,6 +271,11 @@ type DiffRow =
   | { kind: "hunk"; text: string }
   | { kind: "add" | "del" | "ctx"; text: string; oldNo: number | null; newNo: number | null }
   | { kind: "gap"; id: string; count: number };
+
+/** diff 代码行 key：行序固定不重排，用序号保证唯一。 */
+function diffLineKey(index: number): string {
+  return `l-${index}`;
+}
 
 function parseUnifiedDiff(patch: string): DiffRow[] {
   const rows: DiffRow[] = [];
@@ -377,6 +391,7 @@ const DiffCodeLine = memo(function DiffCodeLine({
       <span className="changes-diff__mark" aria-hidden>
         {kind === "add" ? "+" : kind === "del" ? "−" : " "}
       </span>
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: diff 高亮产物来自 hljs 的受控转义输出 */}
       <code className="changes-diff__text hljs" dangerouslySetInnerHTML={{ __html: html || " " }} />
     </div>
   );
@@ -434,8 +449,14 @@ const FileDiffBody = memo(function FileDiffBody({
         const next = highlightedRef.current.slice();
         const end = Math.min(index + HIGHLIGHT_CHUNK, rows.length);
         for (let i = index; i < end; i++) {
-          const row = rows[i]!;
-          if (row.kind === "gap" || row.kind === "hunk" || row.kind === "meta" || !row.text) {
+          const row = rows[i];
+          if (
+            !row ||
+            row.kind === "gap" ||
+            row.kind === "hunk" ||
+            row.kind === "meta" ||
+            !row.text
+          ) {
             next[i] = "";
             continue;
           }
@@ -471,6 +492,7 @@ const FileDiffBody = memo(function FileDiffBody({
                 disabled={loadingFull}
               >
                 <span className="changes-diff__gap-ctrl" aria-hidden>
+                  {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性展开箭头，父级 button 已带文本语义 */}
                   <svg width="10" height="14" viewBox="0 0 10 14" fill="none">
                     <path
                       d="M2.2 5.2 5 2.4l2.8 2.8M2.2 8.8 5 11.6l2.8-2.8"
@@ -493,7 +515,7 @@ const FileDiffBody = memo(function FileDiffBody({
           const lineNo = row.kind === "del" ? row.oldNo : row.newNo;
           return (
             <DiffCodeLine
-              key={`l-${i}`}
+              key={diffLineKey(i)}
               kind={row.kind}
               lineNo={lineNo}
               html={highlighted[i] || " "}
@@ -547,31 +569,35 @@ const ChangedFileRow = memo(function ChangedFileRow({
   patchRef.current = patch;
   bulkGenRef.current = bulk.gen;
 
-  async function loadDiff(nextFull: boolean) {
-    if (!nextFull) {
-      if (loadingRef.current || patchRef.current !== null) return;
-      loadingRef.current = true;
-      setLoading(true);
-    } else {
-      setLoadingFull(true);
-    }
-    setErr(null);
-    await acquireDiffFetch();
-    try {
-      if (!nextFull && patchRef.current !== null) return;
-      const res = await workspaceGitFileDiff(workspaceId, path, nextFull);
-      setPatch(res.patch);
-      setBinary(res.binary);
-      setFull(nextFull);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      releaseDiffFetch();
-      if (!nextFull) loadingRef.current = false;
-      setLoading(false);
-      setLoadingFull(false);
-    }
-  }
+  // useCallback 包一层：effect 依赖里要用稳定引用，避免每次渲染重跑
+  const loadDiff = useCallback(
+    async (nextFull: boolean) => {
+      if (!nextFull) {
+        if (loadingRef.current || patchRef.current !== null) return;
+        loadingRef.current = true;
+        setLoading(true);
+      } else {
+        setLoadingFull(true);
+      }
+      setErr(null);
+      await acquireDiffFetch();
+      try {
+        if (!nextFull && patchRef.current !== null) return;
+        const res = await workspaceGitFileDiff(workspaceId, path, nextFull);
+        setPatch(res.patch);
+        setBinary(res.binary);
+        setFull(nextFull);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        releaseDiffFetch();
+        if (!nextFull) loadingRef.current = false;
+        setLoading(false);
+        setLoadingFull(false);
+      }
+    },
+    [workspaceId, path],
+  );
 
   function setOpen(next: boolean) {
     setLocal({ gen: bulk.gen, open: next });
@@ -708,6 +734,7 @@ const ChangedFileRow = memo(function ChangedFileRow({
 
 function ChangesFileList({
   files,
+  tree,
   selectedPath,
   onSelect,
   onOpenFile,
@@ -716,6 +743,8 @@ function ChangesFileList({
   onResizePointerDown,
 }: {
   files: GitChangedFile[];
+  /** 全量工作区树；null 时回退为仅改动文件树。*/
+  tree?: WorkspaceNode | null;
   selectedPath: string | null;
   onSelect: (path: string) => void;
   /** 右键「在编辑器中打开」。*/
@@ -726,8 +755,15 @@ function ChangesFileList({
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
-  const tree = useMemo(() => buildChangeTree(files), [files]);
-  const { nodes, expandPaths } = useMemo(() => filterChangeTree(tree, query), [tree, query]);
+  // 侧栏是全量文件列表：改动文件带 +/- 统计，未改动文件原样可点开
+  const treeNodes = useMemo(
+    () => (tree ? buildFullTree(tree, files) : buildChangeTree(files)),
+    [tree, files],
+  );
+  const { nodes, expandPaths } = useMemo(
+    () => filterChangeTree(treeNodes, query),
+    [treeNodes, query],
+  );
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
   const [ctxMenu, setCtxMenu] = useState<{
     x: number;
@@ -757,12 +793,12 @@ function ChangesFileList({
     setOpenDirs((prev) => {
       if (prev.size) return prev;
       const next = new Set<string>();
-      for (const n of tree) {
+      for (const n of treeNodes) {
         if (n.kind === "dir") next.add(n.path);
       }
       return next;
     });
-  }, [tree, query]);
+  }, [treeNodes, query]);
 
   function toggleDir(path: string) {
     setOpenDirs((prev) => {
@@ -773,54 +809,20 @@ function ChangesFileList({
     });
   }
 
-  function renderNodes(list: ChangeTreeNode[], depth: number) {
-    return list.map((node) => {
-      if (node.kind === "dir") {
-        const open = openDirs.has(node.path) || Boolean(query.trim() && expandPaths.has(node.path));
-        return (
-          <div key={`d:${node.path}`} className="changes-filelist__dir">
-            <button
-              type="button"
-              className="changes-filelist__dir-row"
-              style={{ paddingLeft: 6 + depth * 12 }}
-              onClick={() => toggleDir(node.path)}
-              onContextMenu={(e) => openCtxMenu(e, node.path, "dir")}
-              aria-expanded={open}
-            >
-              <span className="changes-filelist__chev" aria-hidden>
-                <IconChevron open={open} />
-              </span>
-              <span className="changes-filelist__dir-name">{node.name}</span>
-            </button>
-            {open ? renderNodes(node.children, depth + 1) : null}
-          </div>
-        );
-      }
-      const selected = node.path === selectedPath;
-      return (
-        <button
-          key={node.path}
-          type="button"
-          className={`changes-filelist__file${selected ? " is-selected" : ""}`}
-          style={{ paddingLeft: 6 + depth * 12 }}
-          onClick={() => onSelect(node.path)}
-          onContextMenu={(e) => openCtxMenu(e, node.path, "file")}
-        >
-          <span className="changes-filelist__file-ico" aria-hidden>
-            <FileGlyph name={node.name} />
-          </span>
-          <span className="changes-filelist__file-name">{node.name}</span>
-          <span className="changes-filelist__stats">
-            {node.added > 0 ? <span className="changes-pane__add">+{node.added}</span> : null}
-            {node.removed > 0 ? <span className="changes-pane__del">−{node.removed}</span> : null}
-          </span>
-        </button>
-      );
-    });
+  // 目录开关、文件聚焦由各自 onActivate 决定；统计由 TreeView 渲染。
+  function handleActivate(node: ChangeTreeNode) {
+    if (node.kind === "dir") toggleDir(node.path);
+    else onSelect(node.path);
   }
+
+  const selectedPaths = useMemo(
+    () => (selectedPath ? new Set([selectedPath]) : new Set<string>()),
+    [selectedPath],
+  );
 
   return (
     <aside className="changes-filelist" style={{ width }}>
+      {/* biome-ignore lint/a11y/useSemanticElements: 文件列表拖宽手柄，ARIA separator + 指针拖拽模式，无对应原生控件 */}
       <div
         className={`filelist-splitter${dragging ? " is-dragging" : ""}`}
         onPointerDown={onResizePointerDown}
@@ -834,6 +836,7 @@ function ChangesFileList({
       />
       <label className="changes-filelist__search">
         <span className="changes-filelist__search-ico" aria-hidden>
+          {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性搜索图标，label 内 input 已有语义 */}
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
             <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.55" />
             <path
@@ -854,7 +857,16 @@ function ChangesFileList({
           spellCheck={false}
         />
       </label>
-      <div className="changes-filelist__tree">{renderNodes(nodes, 0)}</div>
+      <div className="changes-filelist__tree">
+        <TreeView
+          nodes={nodes}
+          openDirs={openDirs}
+          showStats
+          onActivate={handleActivate}
+          onContextMenu={openCtxMenu}
+          selectedPaths={selectedPaths}
+        />
+      </div>
       <ContextMenu
         open={Boolean(ctxMenu)}
         anchor={ctxMenu ? { x: ctxMenu.x, y: ctxMenu.y } : null}
@@ -916,6 +928,7 @@ export function ChangesPane({
   status,
   loading,
   error,
+  tree,
   onRefresh,
   onInitRepo,
   onOpenFile,
@@ -968,10 +981,16 @@ export function ChangesPane({
   const files = useMemo(() => sortChangedFiles(status?.files ?? []), [status?.files]);
   const noChanges = !status?.isRepo || files.length === 0;
   const totals = status?.totals ?? { added: 0, removed: 0 };
+  const changedPaths = useMemo(() => new Set(files.map((f) => f.path)), [files]);
 
   function focusFromSidebar(path: string) {
-    setFocusPath(path);
-    setExpandTick((n) => n + 1);
+    // 改动文件：聚焦主区 diff；未改动文件：直接在编辑器打开
+    if (changedPaths.has(path)) {
+      setFocusPath(path);
+      setExpandTick((n) => n + 1);
+    } else {
+      onOpenFile(path);
+    }
   }
 
   function sendAction(id: ChangesPromptActionId) {
@@ -1112,6 +1131,7 @@ export function ChangesPane({
         <div className="changes-pane__toolbar">
           <div className="changes-pane__meta">
             <span className="changes-pane__stack-ico" aria-hidden>
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性图标，aria-hidden */}
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M3.2 5.2h9.6v7.2H3.2zM4.6 3.6h9.6v1.2M6 2h7.2v1.2"
@@ -1318,6 +1338,7 @@ export function ChangesPane({
           {listOpen ? (
             <ChangesFileList
               files={files}
+              tree={tree}
               selectedPath={focusPath}
               onSelect={focusFromSidebar}
               onOpenFile={onOpenFile}

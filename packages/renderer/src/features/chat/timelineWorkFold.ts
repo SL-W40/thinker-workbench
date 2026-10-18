@@ -4,7 +4,7 @@
  * 仅末尾正式答复与错误外露。
  */
 import type { ChatTimelineStep } from "@thinker-workbench/shared";
-import { formatElapsed } from "./usageStats";
+import { formatDurationOrDash } from "./usageStats";
 
 /**
  * 末尾正式答复：时间线中最后一段连续 `text` 步的起始下标。
@@ -28,7 +28,8 @@ export function terminalReplyStartIndex(steps: ChatTimelineStep[]): number {
 export function isWorkFoldExteriorStep(steps: ChatTimelineStep[], stepId: string): boolean {
   const replyStart = terminalReplyStartIndex(steps);
   for (let i = 0; i < steps.length; i++) {
-    const s = steps[i]!;
+    const s = steps[i];
+    if (!s) continue;
     if (s.id !== stepId) continue;
     if (s.kind === "error") return true;
     if (s.kind === "text" && replyStart >= 0 && i >= replyStart) return true;
@@ -60,11 +61,10 @@ export function filterTimelineExterior(steps: ChatTimelineStep[]): ChatTimelineS
 
 /**
  * 「Worked for 1m 50s」耗时片段；与 usage 底栏同一套 formatElapsed。
- * @returns 如 `1m 50s`；无效时 `0s`
+ * @returns 如 `1m 50s`；未知（引擎没给）时 `—`
  */
 export function formatWorkedForElapsed(durationMs: number | undefined): string {
-  const ms = durationMs != null && Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 0;
-  return formatElapsed(ms);
+  return formatDurationOrDash(durationMs);
 }
 
 /**

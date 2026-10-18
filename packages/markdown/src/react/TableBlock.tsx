@@ -1,6 +1,7 @@
 /**
  * GFM 表格块：StreamChrome 顶栏 + 横向滚动 + 复制/导出。
  */
+// biome-ignore-all lint/suspicious/noArrayIndexKey: 表格行 / 列按位置渲染，数据不会中途重排，index 即稳定 key
 import type { ReactNode } from "react";
 import type { TableAlign } from "../table/serialize";
 import type { InlineNode } from "../types";

@@ -57,10 +57,11 @@ export function tableToMarkdown(
   rows: InlineNode[][][],
 ): string {
   const matrix = tableToMatrix(headers, rows);
-  if (matrix.length === 0) return "";
-  const colCount = matrix[0]!.length;
+  const firstRow = matrix[0];
+  if (!firstRow) return "";
+  const colCount = firstRow.length;
   const lines: string[] = [];
-  const head = matrix[0]!.map(escapeMdCell);
+  const head = firstRow.map(escapeMdCell);
   lines.push(`| ${head.join(" | ")} |`);
   lines.push(
     `| ${Array.from({ length: colCount }, (_, i) => alignSep(aligns[i] ?? null)).join(" | ")} |`,

@@ -1,5 +1,5 @@
 /**
- * 聊天消息工厂与规范化（历史转 agent、兼容旧 System 气泡）。
+ * 聊天消息工厂与历史转 agent。
  */
 import {
   type AgentHistoryMessage,
@@ -9,8 +9,36 @@ import {
   createId,
   type Role,
 } from "@thinker-workbench/shared";
+import { finishMessageClock } from "./messageClock";
 import { classifyRunError } from "./runErrors";
-import { isMissingApiKeyError } from "./systemErrors";
+import { appendError } from "./timelineModel";
+
+/**
+ * 保留已流式的正文；错误只出现在 timeline。失败时一并写入耗时。
+ * `durationMs` 缺省表示未知（UI 展示「—」）。
+ */
+export function failAssistantMessage(
+  message: ChatMessage,
+  errorText: string,
+  timeline: ChatTimelineStep[],
+  /** 显式错误码；省略时从文案推断*/
+  code?: string,
+  durationMs?: number,
+): ChatMessage {
+  const resolved = code ?? classifyRunError(errorText);
+  const nextTimeline = appendError(timeline, errorText, resolved);
+  return finishMessageClock(
+    {
+      ...message,
+      pending: false,
+      role: "assistant",
+      // 错误不进气泡正文，避免与时间线重复；保留已生成的部分回复
+      text: message.text,
+      timeline: nextTimeline,
+    },
+    durationMs,
+  );
+}
 
 /** 取助手气泡对模型可见的正文：优先 `text`，否则拼 timeline 里的 text 步。 */
 export function visibleAssistantText(message: ChatMessage): string {
@@ -70,33 +98,5 @@ export function createMessage(
     pending,
     ...(timeline ? { timeline } : {}),
     ...(images?.length ? { images } : {}),
-  };
-}
-
-/**
- * 把历史 System 气泡收成助手 + 错误时间线，避免再渲染 Sys 头像。
- * 新路径不再产生 system 角色；此函数仅兼容旧会话快照。
- */
-export function normalizeChatMessage(message: ChatMessage): ChatMessage {
-  if (message.role !== "system") return message;
-  const text = message.text?.trim() ?? "";
-  const timeline = [...(message.timeline ?? [])];
-  const hasError = timeline.some((s) => s.kind === "error");
-  if (text && !hasError) {
-    timeline.push({
-      id: createId("tl"),
-      kind: "error",
-      message: text,
-      code:
-        classifyRunError(text) ??
-        (isMissingApiKeyError(text) ? "MODEL_API_KEY_MISSING" : undefined),
-    });
-  }
-  return {
-    ...message,
-    role: "assistant",
-    text: "",
-    pending: false,
-    timeline,
   };
 }

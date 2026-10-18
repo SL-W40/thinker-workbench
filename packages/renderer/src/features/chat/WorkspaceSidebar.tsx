@@ -16,7 +16,7 @@ import {
   SideNavItem,
 } from "@thinker-workbench/design/react";
 import type { ThreadMeta, WorkspaceRecord } from "@thinker-workbench/shared";
-import { type DragEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { pickDirectory } from "../../bridge/thinker";
 import {
   clearWorkspace,
@@ -104,7 +104,8 @@ export function WorkspaceSidebar({
     workspaceId: string;
   } | null>(null);
 
-  async function refresh() {
+  // 稳定引用：只读 import 与稳定 setState，挂载订阅 effect 依赖它
+  const refresh = useCallback(async () => {
     const [ws, th, collapsedIds] = await Promise.all([
       listWorkspaces(),
       listThreads(),
@@ -113,7 +114,7 @@ export function WorkspaceSidebar({
     setWorkspaces(ws);
     setThreads(th);
     setCollapsed(new Set(collapsedIds));
-  }
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -124,7 +125,6 @@ export function WorkspaceSidebar({
       u2();
     };
     // 挂载时订阅变更；refresh 闭包读取最新 setState
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh]);
 
   useEffect(() => {
@@ -362,6 +362,7 @@ export function WorkspaceSidebar({
 
             return (
               <div key={w.id} className="ws-workspace">
+                {/* biome-ignore lint/a11y/useSemanticElements: 工作区行承担折叠 / 拖拽 / 右键菜单多职责，包原生 button 会破坏内部布局 */}
                 <div
                   className={`ws-workspace__row${menu?.id === w.id ? " is-menu-open" : ""}`}
                   role="button"
@@ -430,6 +431,7 @@ export function WorkspaceSidebar({
                       <p className="ws-hint">{t("workspaces.noSessions")}</p>
                     ) : (
                       visible.map((th) => (
+                        // biome-ignore lint/a11y/useSemanticElements: 会话行承担选中 / 拖拽 / 右键菜单多职责，包原生 button 会破坏内部布局
                         <div
                           key={th.sessionId}
                           className={`ws-session${

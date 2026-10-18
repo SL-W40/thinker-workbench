@@ -9,18 +9,15 @@ describe("deactivateAll HITL", () => {
   it("工具行去掉 hitl，active=false", () => {
     const next = deactivateAll([
       {
+        id: "t1",
         kind: "tool",
         name: "shell",
         phase: "start",
         active: true,
         hitl: {
           hitlId: "h1",
-          kind: "shell_approval",
           title: "Allow?",
-          payload: {},
           actions: [{ id: "allow", label: "Allow" }],
-          threadId: "t",
-          runId: "r",
         },
       },
     ]);

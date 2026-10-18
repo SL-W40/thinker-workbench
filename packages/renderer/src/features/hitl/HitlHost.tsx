@@ -1,17 +1,13 @@
 /**
- * HITL 宿主：非 shell_approval 类介入弹 Modal（含密钥密码框）。
+ * HITL 宿主：shell 审批与 clarify 走时间线；其余 kind 弹 Modal（含密钥密码框）。
  */
 import { Button, Input, Modal } from "@thinker-workbench/design/react";
 import type { HitlRequest } from "@thinker-workbench/shared";
 import { useEffect, useId, useState } from "react";
 import { onAgentEvent, respondHitl } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
+import { isTimelineHitlKind } from "../chat/timelineModel";
 import "./HitlHost.less";
-
-/** 走时间线卡片的 HITL，不进 Modal。 */
-function isTimelineHitl(kind: string): boolean {
-  return kind === "shell_approval" || kind === "shell_write_approval";
-}
 
 export function HitlHost() {
   const t = useT();
@@ -37,7 +33,7 @@ export function HitlHost() {
         return;
       }
       if (event.phase === "request" && event.request) {
-        if (isTimelineHitl(event.request.kind)) {
+        if (isTimelineHitlKind(event.request.kind)) {
           setPending((cur) => (cur?.hitlId === event.request?.hitlId ? null : cur));
           return;
         }

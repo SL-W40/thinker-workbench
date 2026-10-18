@@ -143,19 +143,22 @@ export function MermaidViewport({
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 2) {
+    const a = e.touches[0];
+    const b = e.touches[1];
+    if (!a || !b || e.touches.length !== 2) {
       pinchRef.current = null;
       return;
     }
-    const [a, b] = [e.touches[0]!, e.touches[1]!];
     const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     pinchRef.current = { distance, zoom };
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length !== 2 || !pinchRef.current) return;
+    const a = e.touches[0];
+    const b = e.touches[1];
+    if (!a || !b) return;
     e.preventDefault();
-    const [a, b] = [e.touches[0]!, e.touches[1]!];
     const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     const ratio = distance / Math.max(1, pinchRef.current.distance);
     setZoom(pinchRef.current.zoom * ratio);
@@ -171,6 +174,7 @@ export function MermaidViewport({
   };
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 画布视口：双击复位 + 双指捏合缩放属手势交互，图表本身非交互控件
     <div
       ref={rootRef}
       className={["tw-md-mermaid-viewport", className].filter(Boolean).join(" ")}
@@ -190,6 +194,7 @@ export function MermaidViewport({
         <div
           ref={canvasRef}
           className="tw-md-mermaid-canvas"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid 渲染产出的 SVG，本身只能以 HTML 注入展示
           dangerouslySetInnerHTML={{ __html: svgHtml }}
         />
       </div>

@@ -4,14 +4,7 @@
 import type { MarkdownTheme, MarkdownThemeVars } from "@thinker-workbench/markdown";
 import type { UiThemeVars } from "../tokens/keys";
 
-export type DesignThemeId =
-  | "light"
-  | "dark"
-  | "notes"
-  | "eyecare"
-  | "aurora"
-  | "mono"
-  | (string & {});
+export type DesignThemeId = "light" | "dark" | "notes" | "eyecare" | "aurora" | (string & {});
 
 /**
  * 一份主题同时驱动 UI 外壳与 markdown（`--md-*`）。

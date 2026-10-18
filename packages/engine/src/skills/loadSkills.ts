@@ -106,7 +106,8 @@ function parseSkillFile(absPath: string, source: string): SkillDefinition | null
   };
 }
 
-const GLOB_SPECIAL = ".+^${}()|\\";
+/** glob 语义下需要转义的正则元字符。 */
+const GLOB_SPECIAL = new Set([".", "+", "^", "$", "{", "}", "(", ")", "|", "\\"]);
 
 /** 路径 glob：`*`、`**`、`?`、`[]`。 */
 export function globMatch(pattern: string, text: string): boolean {
@@ -114,7 +115,7 @@ export function globMatch(pattern: string, text: string): boolean {
   const target = text.replace(/\\/g, "/").replace(/^\.\//, "");
   let re = "^";
   for (let i = 0; i < norm.length; i += 1) {
-    const c = norm[i]!;
+    const c = norm[i];
     if (c === "*" && norm[i + 1] === "*") {
       re += ".*";
       i += 1;
@@ -137,7 +138,7 @@ export function globMatch(pattern: string, text: string): boolean {
         continue;
       }
     }
-    re += GLOB_SPECIAL.includes(c) ? `\\${c}` : c;
+    re += GLOB_SPECIAL.has(c) ? `\\${c}` : c;
   }
   re += "$";
   try {
@@ -164,9 +165,9 @@ function pathsFromText(text: string): string[] {
 export function extractSlashSkillNames(userText: string): string[] {
   const names: string[] = [];
   const re = /(?:^|[\s`])\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(userText))) {
-    names.push(m[1]?.toLowerCase());
+  for (const m of userText.matchAll(re)) {
+    const name = m[1];
+    if (name) names.push(name.toLowerCase());
   }
   return [...new Set(names)];
 }

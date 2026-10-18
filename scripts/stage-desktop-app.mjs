@@ -160,6 +160,11 @@ function main() {
   fs.mkdirSync(engineDestDir, { recursive: true });
   fs.copyFileSync(engineEntry, path.join(engineDestDir, "entry.js"));
 
+  // engine entry 外置 better-sqlite3（esbuild --external），payload 内须自带可解析副本
+  const payloadNm = path.join(payloadDir, "node_modules");
+  fs.mkdirSync(payloadNm, { recursive: true });
+  copyPackageTree("better-sqlite3", payloadNm, { required: true, seen: new Set() });
+
   const bundledRoot = path.join(payloadDir, LAYOUT_V1.bundledRoot);
   fs.mkdirSync(bundledRoot, { recursive: true });
 
@@ -189,6 +194,7 @@ function main() {
   requireFile(path.join(payloadDir, LAYOUT_V1.rendererIndex), "payload renderer index");
   requireFile(path.join(payloadDir, LAYOUT_V1.engineEntry), "payload engine entry");
   requireFile(layoutPath, "payload layout.json");
+  requireFile(path.join(payloadNm, "better-sqlite3", "package.json"), "payload better-sqlite3");
   requireFile(path.join(appDir, "main.js"), "stage app main.js");
   requireFile(path.join(nm, "better-sqlite3", "package.json"), "staged better-sqlite3");
   requireFile(path.join(nm, "node-pty", "package.json"), "staged node-pty");

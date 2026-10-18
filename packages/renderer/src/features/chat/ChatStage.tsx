@@ -56,6 +56,11 @@ type Props = {
   onEditDraftChange?: (value: string) => void;
   onEditKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
   onSendUserEdit?: () => void;
+  /** 进行中或排队时原位编辑不能发送。 */
+  sendBlocked?: boolean;
+  editImages?: import("./ChatImageStrip").DraftChatImage[];
+  onAttachEditImages?: (files: File[]) => void;
+  onRemoveEditImage?: (id: string) => void;
   onCancelUserEdit?: () => void;
   /** 当前会话 id（绑定子代理 Task tab）*/
   sessionId?: string | null;
@@ -118,6 +123,10 @@ export function ChatStage({
   onEditDraftChange,
   onEditKeyDown,
   onSendUserEdit,
+  sendBlocked = false,
+  editImages = [],
+  onAttachEditImages,
+  onRemoveEditImage,
   onCancelUserEdit,
   sessionId = null,
 }: Props) {
@@ -208,6 +217,10 @@ export function ChatStage({
                 onEditDraftChange={onEditDraftChange}
                 onEditKeyDown={onEditKeyDown}
                 onSendEdit={onSendUserEdit}
+                sendBlocked={sendBlocked}
+                editImages={editImages}
+                onAttachEditImages={onAttachEditImages}
+                onRemoveEditImage={onRemoveEditImage}
                 onCancelEdit={onCancelUserEdit}
                 sessionId={sessionId}
               />

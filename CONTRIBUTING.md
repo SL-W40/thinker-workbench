@@ -1,6 +1,6 @@
 # Contributing to Thinker Workbench
 
-**English** | [简体中文](./CONTRIBUTING.zh-CN.md)
+**English** | [简体中文](./docs/CONTRIBUTING.zh-CN.md)
 
 Thanks for contributing. Product overview, setup, scripts, and architecture are in [README.md](./README.md). Deferred backlog: [TODOS.md](./TODOS.md).
 

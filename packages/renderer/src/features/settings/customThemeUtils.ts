@@ -59,7 +59,7 @@ export function toColorInputValue(value: string): string {
   const v = value.trim();
   const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
   if (hex) {
-    const h = hex[1]!;
+    const h = hex[1] ?? "";
     if (h.length === 3) {
       return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
     }

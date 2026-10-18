@@ -118,9 +118,9 @@ function parseHtmlInline(
 ): { node: InlineNode; next: number } | null {
   if (s[i] !== "<") return null;
 
-  if (/^<br\s*\/?>/i.test(s.slice(i))) {
-    const m = /^<br\s*\/?>/i.exec(s.slice(i))!;
-    return { node: { type: "break" }, next: i + m[0].length };
+  const br = /^<br\s*\/?>/i.exec(s.slice(i));
+  if (br) {
+    return { node: { type: "break" }, next: i + br[0].length };
   }
 
   const paired = /^<(u|mark|sub|sup|kbd)(\s[^>]*)?>([\s\S]*?)<\/\1\s*>/i.exec(s.slice(i));
@@ -297,7 +297,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
   while (i < s.length) {
     // 1. 转义
     if (s[i] === "\\" && i + 1 < s.length) {
-      const next = s[i + 1]!;
+      const next = s[i + 1] ?? "";
       if (ESCAPABLE.has(next) || next === "\n") {
         if (next === "\n") {
           nodes.push({ type: "break" });
@@ -344,7 +344,7 @@ export function parseInline(text: string, options: ParseOptions = {}): InlineNod
       if (streaming && s[i] === "$") {
         // 可能未闭合的行内数学：若像数学开头则整段文本
         const rest = s.slice(i + 1);
-        if (rest && !/\s/.test(rest[0]!) && !rest.includes("$") && !rest.includes("\n")) {
+        if (rest && !/\s/.test(rest.charAt(0)) && !rest.includes("$") && !rest.includes("\n")) {
           pushText(nodes, s.slice(i));
           break;
         }

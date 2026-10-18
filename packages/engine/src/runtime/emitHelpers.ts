@@ -1,7 +1,6 @@
 /**
  * 向当前 run 的 emitter 推送产品事件的便捷封装。
  */
-import type { ModelUsage } from "@thinker-workbench/shared";
 import type { RunEmitter } from "./runEmit";
 
 export function emitToken(
@@ -17,8 +16,4 @@ export function emitStatus(
   status: "planning" | "thinking",
 ): void {
   emit?.({ type: "status", status });
-}
-
-export function emitUsage(emit: RunEmitter | undefined | null, usage: ModelUsage): void {
-  emit?.({ type: "usage", usage });
 }

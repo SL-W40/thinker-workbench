@@ -70,6 +70,7 @@ export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile 
       <div className="files-home__toolbar">
         <div className="files-home__search">
           <span className="files-home__search-ico" aria-hidden>
+            {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性搜索图标，input 自带 aria-label */}
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
               <path
@@ -100,6 +101,7 @@ export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile 
         {onNewFile ? (
           <button type="button" className="files-home__new" onClick={onNewFile}>
             <span className="files-home__new-ico" aria-hidden>
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性新建图标，父级 button 已带文本语义 */}
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M4.5 2.5h5L12.5 5.5V13.5H4.5zM9.5 2.5V5.5h3"
