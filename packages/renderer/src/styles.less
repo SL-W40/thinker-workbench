@@ -2775,7 +2775,8 @@ html[data-tw-theme="dark"] .mention-chip--at {
 .run-shell-card__body.is-collapsed .run-shell-card__output {
   max-height: calc(1.4em * var(--shell-collapsed-lines, 4));
   overflow: hidden;
-  padding-bottom: 0;
+  /* 保留下内边距，避免短输出文字顶到卡片底边；渐隐浮层始终覆盖底部 */
+  padding-bottom: 8px;
 }
 
 .run-shell-card__body.is-expanded .run-shell-card__output {

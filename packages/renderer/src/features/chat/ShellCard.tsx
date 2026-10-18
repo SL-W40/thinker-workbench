@@ -1,6 +1,6 @@
 /**
  * shell / shell_await 时间线卡片：命令、轻量状态、去 ANSI 输出、HITL、「打开终端」。
- * 输出默认折叠，超出时底部渐隐 + 居中箭头展开。
+ * 输出默认折叠，底部恒有渐隐 + 居中箭头展开/收起（短输出也不例外，观感一致）。
  */
 import { Badge, Button } from "@thinker-workbench/design/react";
 import {
@@ -9,11 +9,11 @@ import {
   shellCommandsToAllowlist,
   stripAnsi,
 } from "@thinker-workbench/shared";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GENERAL_SETTINGS_CHANGED, getGeneralSettings, respondHitl } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
 import { formatShellPurpose } from "./explainShellCommand";
-import { SHELL_COLLAPSED_LINES, shellOutputLikelyOverflows } from "./shellOutputOverflow";
+import { SHELL_COLLAPSED_LINES } from "./shellOutputOverflow";
 
 type Props = {
   step: ChatTimelineToolStep;
@@ -37,8 +37,6 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState(false);
-  const outputRef = useRef<HTMLPreElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const hitl = step.hitl;
@@ -68,26 +66,8 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
           ? hitlBody
           : "");
 
-  // 流式输出会变长：必须随 displayOut 重测。空依赖会导致首帧无输出时 overflows=false，之后永远不出现展开。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: expanded 未在函数体读取但刻意保留：展开态切换后需要重测溢出
-  useLayoutEffect(() => {
-    const el = outputRef.current;
-    if (!el || !displayOut) {
-      setOverflows(false);
-      return;
-    }
-    const measure = () => {
-      setOverflows(el.scrollHeight > el.clientHeight + 2);
-    };
-    measure();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
-    ro?.observe(el);
-    return () => ro?.disconnect();
-  }, [displayOut, expanded]);
-
-  const showMore =
-    Boolean(displayOut) &&
-    (expanded || overflows || shellOutputLikelyOverflows(displayOut, SHELL_COLLAPSED_LINES));
+  // 折叠态恒显渐隐与展开箭头（含未达折叠上限的短输出）；展开态同一按钮用于收起
+  const showMore = Boolean(displayOut);
 
   // 审批卡出现时滚进视野，避免停在气泡上方、用户只看到「执行中」。
   // biome-ignore lint/correctness/useExhaustiveDependencies: hitl?.hitlId 未在函数体读取但刻意保留：新的审批卡出现时需要重新滚动
@@ -210,7 +190,6 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
       {displayOut ? (
         <div className={`run-shell-card__body${expanded ? " is-expanded" : " is-collapsed"}`}>
           <pre
-            ref={outputRef}
             className="run-shell-card__output"
             style={{ ["--shell-collapsed-lines" as string]: String(SHELL_COLLAPSED_LINES) }}
           >
