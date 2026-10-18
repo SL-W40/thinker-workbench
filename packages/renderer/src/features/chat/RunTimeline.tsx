@@ -10,7 +10,7 @@ import type { ChatTimelineResultPathKind, ChatTimelineStep } from "@thinker-work
 /** 工具步（与 ToolStepRow 入参一致）；暂留卡只可能是工具步。 */
 type ChatTimelineToolStep = Extract<ChatTimelineStep, { kind: "tool" }>;
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
 import { useT } from "../../i18n/useI18n";
 import { FileGlyph, IconFolder } from "../inspector/icons";
@@ -728,18 +728,29 @@ function ThinkingBody({ text }: { text: string }) {
   // 用户上滚阅读即解除，避免刷新把视角不停拽回底部。
   const pinnedRef = useRef(true);
 
+  // 仅更新上下渐隐遮罩，不改动滚动位置
+  const syncFades = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const overflow = scrollHeight > clientHeight + 1;
+    setFadeTop(overflow && scrollTop > 1);
+    setFadeBottom(overflow && scrollTop + clientHeight < scrollHeight - 1);
+  }, []);
+
+  // 内容增长（流式）：仅当钉住底部才滚到底，否则只更新遮罩
+  const followIfPinned = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    syncFades();
+    if (pinnedRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [syncFades]);
+
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
-
-    // 仅更新上下渐隐遮罩，不改动滚动位置
-    function syncFades() {
-      if (!el) return;
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const overflow = scrollHeight > clientHeight + 1;
-      setFadeTop(overflow && scrollTop > 1);
-      setFadeBottom(overflow && scrollTop + clientHeight < scrollHeight - 1);
-    }
 
     // 用户滚动：判定是否仍在底部附近，并刷新遮罩
     function onScroll() {
@@ -749,24 +760,22 @@ function ThinkingBody({ text }: { text: string }) {
       syncFades();
     }
 
-    // 内容增长（流式）：仅当钉住底部才滚到底，否则只更新遮罩
-    function onContentGrow() {
-      if (!el) return;
-      syncFades();
-      if (pinnedRef.current) {
-        el.scrollTop = el.scrollHeight;
-      }
-    }
-
     syncFades();
     el.addEventListener("scroll", onScroll, { passive: true });
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onContentGrow) : null;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(followIfPinned) : null;
     ro?.observe(el);
     return () => {
       el.removeEventListener("scroll", onScroll);
       ro?.disconnect();
     };
-  }, []);
+  }, [followIfPinned, syncFades]);
+
+  // 正文增长跟随：pre 被 max-height 夹住后自身盒子尺寸不再变化，
+  // ResizeObserver 不会触发，必须随 text 变化主动跟随。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: text 未在函数体读取但刻意保留：流式正文增长后需要重新执行贴底跟随
+  useLayoutEffect(() => {
+    followIfPinned();
+  }, [followIfPinned, text]);
 
   return (
     <div
