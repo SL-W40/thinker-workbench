@@ -51,7 +51,7 @@ function refLookupPreamble(): string {
   return `const map = window.__twBrowserRefs; if (!(map instanceof Map)) throw new Error('No snapshot refs. Call browser_snapshot first.'); const el = map.get(ref); if (!(el instanceof Element)) throw new Error('Unknown ref: ' + ref);`;
 }
 
-/** click by ref */
+/** 按 ref 点击元素（可选双击）。 */
 export function clickScript(options: {
   ref: string;
   doubleClick?: boolean;
@@ -72,7 +72,7 @@ export function clickScript(options: {
   })()`;
 }
 
-/** type into focused / ref element */
+/** 向聚焦元素或 ref 元素输入文本。 */
 export function typeScript(options: { ref: string; text: string }): string {
   const ref = JSON.stringify(options.ref);
   const text = JSON.stringify(options.text);
@@ -190,7 +190,7 @@ export function scrollScript(options: {
   })()`;
 }
 
-/** getComputedStyle by ref or selector */
+/** 按 ref 或选择器读取 getComputedStyle。 */
 export function getStylesScript(options: {
   ref?: string;
   selector?: string;

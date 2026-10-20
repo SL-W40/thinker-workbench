@@ -8,6 +8,7 @@ export {
   browserUrlsEqual,
   normalizeBrowserUrl,
 } from "./browser/url";
+export { escapeHtml } from "./escapeHtml";
 export { estimateTokens } from "./estimateTokens";
 export { parseYamlFrontmatter, parseYamlObject, type YamlFrontmatter } from "./frontmatter";
 export {
@@ -345,6 +346,7 @@ export type {
   PtyRequestAction,
   PtyShellOutcome,
   PtyWakeReason,
+  RuntimeSettingsSnapshot,
   UtilityBrowserEvent,
   UtilityBrowserRequest,
   UtilityCancel,
@@ -366,9 +368,11 @@ export type {
   UtilityReady,
   UtilityResume,
   UtilityRun,
+  UtilityRuntimeSettings,
   UtilityToChild,
   UtilityToParent,
 } from "./ipc/utility";
+export { buildRuntimeSettings } from "./ipc/utilityPayload";
 export type { AuxPageId, ThinkerWindowApi, WindowRole } from "./ipc/window";
 export { AUX_PAGE_IDS, isAuxPageId } from "./ipc/window";
 export type {
@@ -414,8 +418,26 @@ export {
   sanitizeUsage,
   totalTokens,
 } from "./protocol/usage";
-export { isCancelErrorMessage } from "./runErrors";
+export {
+  isCancelErrorMessage,
+  isRetryableHttpStatus,
+  isTransientNetworkError,
+  NETWORK_ERROR_PATTERN,
+  OPENAI_AUTH_HTTP_PATTERN,
+  OPENAI_TRANSIENT_HTTP_PATTERN,
+  RETRYABLE_HTTP_STATUSES,
+} from "./runErrors";
 export { stripAnsi } from "./stripAnsi";
+export {
+  asArray,
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  asStringArray,
+  isRecord,
+  parseJsonObject,
+} from "./validate";
 
 import type { ThinkerAgentsApi } from "./ipc/agents";
 import type { ThinkerBrowserApi } from "./ipc/browser";

@@ -14,14 +14,7 @@ import {
   type TraceSettings,
 } from "@thinker-workbench/shared";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite";
-import {
-  clearRunKey,
-  clearThreadKeys,
-  lookupRunKey,
-  registerRunKey,
-  runKeyFor,
-} from "../checkpoint/threadsIndex";
-import { getLimit } from "../config/runtimeLimits";
+import { lookupRunKey, registerRunKey, runKeyFor } from "../checkpoint/threadsIndex";
 import { buildGraph, type CompiledAgentGraph } from "../graph/buildGraph";
 import { initialState, normalizeGraphState } from "../graph/state";
 import type { GraphState } from "../graph/types";
@@ -32,36 +25,18 @@ import {
 import { configureAgentTrace } from "../trace/emit";
 import { getWorkspaceRootOrNull, setWorkspaceRoot } from "../workspace";
 import { buildRunContext } from "./buildRunContext";
+import { clearThreadCheckpoints, releaseCheckpoint } from "./checkpoints";
 import { EventBus } from "./EventBus";
 import { RunController } from "./RunController";
-import { getRunContext, type RunContext, runWithContext } from "./runContext";
+import { createRunClock, type RunClock } from "./runClock";
+import { type RunContext, runWithContext } from "./runContext";
 import { bindRuntimeEmitter } from "./runEmit";
 import { registerRun, unregisterRun } from "./runRegistry";
-import {
-  classifyTerminalError,
-  isRecursionLimitError,
-  shouldKeepCheckpoint,
-} from "./terminalOutcome";
+import { streamLoop } from "./streamLoop";
+import { emitTerminal } from "./terminal";
+import { classifyTerminalError, shouldKeepCheckpoint } from "./terminalOutcome";
 import type { AgentRuntimeOptions, RunRequest } from "./types";
-import { type RunUsageLedger, settleUsage } from "./usageLedger";
-
-/**
- * 一次 run 的计时锚点：engine 是 run 生命周期的权威方，墙钟只在这里起算。
- * 终态时换算成 `durationMs` 随事件下发，消费端不再自行推算。
- */
-type RunClock = {
-  /** 进入执行阶段的时间戳（不含主进程排队）。 */
-  startedAt: number;
-  /** 主进程排队时长，原样并入终态耗时。 */
-  queuedMs: number;
-};
-
-function createRunClock(queuedMs?: number): RunClock {
-  return {
-    startedAt: Date.now(),
-    queuedMs: Number.isFinite(queuedMs) ? Math.max(0, queuedMs as number) : 0,
-  };
-}
+import type { RunUsageLedger } from "./usageLedger";
 
 export class AgentRuntime {
   readonly events = new EventBus();
@@ -237,19 +212,7 @@ export class AgentRuntime {
    * best-effort：任何失败只记日志，不影响 run 终态。
    */
   private releaseCheckpoint(threadKey: string, threadId: string): void {
-    try {
-      void this.checkpointer.deleteThread?.(threadKey);
-    } catch (err) {
-      console.warn(
-        "[engine] checkpoint deleteThread failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-    try {
-      clearRunKey(this.checkpointDir, threadId, threadKey);
-    } catch {
-      /* 登记清理失败不影响 run */
-    }
+    releaseCheckpoint(this.checkpointer, this.checkpointDir, threadKey, threadId);
   }
 
   /**
@@ -257,30 +220,7 @@ export class AgentRuntime {
    * 覆盖登记表中的 runKey；best-effort。
    */
   async clearThreadCheckpoints(threadId: string): Promise<void> {
-    const tid = threadId.trim();
-    if (!tid) return;
-    const keys = new Set<string>();
-    try {
-      const mapped = lookupRunKey(this.checkpointDir, tid);
-      if (mapped) keys.add(mapped);
-    } catch {
-      /* 登记读取失败仍尝试清理已知键 */
-    }
-    for (const key of keys) {
-      try {
-        await this.checkpointer.deleteThread?.(key);
-      } catch (err) {
-        console.warn(
-          "[engine] checkpoint deleteThread failed:",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-    try {
-      clearThreadKeys(this.checkpointDir, tid);
-    } catch {
-      /* 登记清理失败不影响删除主流程 */
-    }
+    await clearThreadCheckpoints(this.checkpointer, this.checkpointDir, threadId);
   }
 
   async run(command: RunRequest): Promise<void> {
@@ -446,7 +386,7 @@ export class AgentRuntime {
    * 驱动 StateGraph stream：updates 取 reply，custom 转发产品事件到 EventBus。
    * 执行步数预算 = 本 run 的 limits.maxAgentSteps，1:1 映射 LangGraph recursionLimit。
    */
-  private async streamLoop(
+  private streamLoop(
     graph: CompiledAgentGraph,
     input: GraphState | null,
     ctx: {
@@ -458,77 +398,11 @@ export class AgentRuntime {
       resume: boolean;
     },
   ): Promise<string> {
-    const { runKey, controller, resume } = ctx;
-    const runCtx = getRunContext();
-    const config = {
-      configurable: { thread_id: runKey },
-      signal: controller.signal,
-      // 步数预算：设置里的「最大执行步数」= LangGraph superstep，直接 1:1 下发
-      recursionLimit: getLimit("maxAgentSteps"),
-      streamMode: ["updates", "custom"] as Array<"updates" | "custom">,
-    };
-
-    // 进入前挂 markToolCallStarted：用 updateState 合并 startedToolCallIds
-    if (runCtx) {
-      runCtx.markToolCallStarted = async (callId: string) => {
-        const id = callId.trim();
-        if (!id) return;
-        const snap = await graph.getState({ configurable: { thread_id: runKey } });
-        const cur = normalizeGraphState((snap?.values ?? {}) as GraphState);
-        if (cur.startedToolCallIds.includes(id)) return;
-        await graph.updateState(
-          { configurable: { thread_id: runKey } },
-          { startedToolCallIds: [id] },
-        );
-      };
-    }
-
-    const stream = resume
-      ? await graph.stream(null, config)
-      : await graph.stream(input as GraphState, config);
-
-    let lastReply = input?.reply ?? "";
-    const readFinalReply = async (): Promise<string> => {
-      const finalSnap = await graph.getState({ configurable: { thread_id: runKey } });
-      const finalState = normalizeGraphState(
-        (finalSnap?.values ?? { reply: lastReply }) as GraphState,
-      );
-      return finalState.reply || finalState.message || lastReply;
-    };
-
-    try {
-      for await (const chunk of stream) {
-        if (controller.aborted) throw new Error("Run cancelled.");
-        if (!Array.isArray(chunk) || chunk.length < 2) continue;
-        const [mode, data] = chunk as [string, unknown];
-        if (mode === "custom") {
-          if (data && typeof data === "object" && "type" in data) {
-            this.emit(data as AgentEvent);
-          }
-          continue;
-        }
-        if (mode !== "updates" || !data || typeof data !== "object") continue;
-        const nodes = data as Record<string, Partial<GraphState>>;
-        for (const patch of Object.values(nodes)) {
-          if (patch && typeof patch.reply === "string") lastReply = patch.reply;
-        }
-      }
-    } catch (err) {
-      // 步数预算用尽：LangGraph 兜底终止，按已有部分回复优雅收尾
-      if (isRecursionLimitError(err)) return readFinalReply();
-      throw err;
-    } finally {
-      if (runCtx) runCtx.markToolCallStarted = undefined;
-    }
-
-    return readFinalReply();
+    return streamLoop((e) => this.emit(e), graph, input, ctx);
   }
 
   /**
    * 终态事件（done / error）的唯一出口：耗时与用量在此统一结算并下发。
-   * - `clock` 为 null 表示 run 未进入执行阶段，耗时未知 → 不带 `durationMs`（UI 展示「—」）；
-   * - `ledger` 缺省或一次模型调用都没发生时，用量同样未知 → 不带 `usage`。
-   * 两者都遵循同一原则：缺省 = 未知，绝不回填 0 造假。
    */
   private emitTerminal(
     event: Omit<AgentDoneEvent, "durationMs" | "usage" | "usageEstimated">,
@@ -545,17 +419,12 @@ export class AgentRuntime {
     clock: RunClock | null,
     ledger?: RunUsageLedger,
   ): void {
-    const settled = ledger ? settleUsage(ledger) : undefined;
-    const extras: Record<string, unknown> = {};
-    if (clock) {
-      extras.durationMs = Math.max(0, Date.now() - clock.startedAt) + clock.queuedMs;
-    }
-    if (settled) {
-      extras.usage = settled.usage;
-      // 只在含粗估时下发：缺省（undefined）即「全部来自网关官方值」
-      if (settled.estimated) extras.usageEstimated = true;
-    }
-    this.emit({ ...event, ...extras } as AgentEvent);
+    emitTerminal(
+      (e) => this.emit(e),
+      event as Omit<AgentDoneEvent, "durationMs" | "usage" | "usageEstimated">,
+      clock,
+      ledger,
+    );
   }
 
   private emit(event: AgentEvent): void {

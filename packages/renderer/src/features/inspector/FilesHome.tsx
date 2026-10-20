@@ -1,6 +1,7 @@
 /**
  * Files 首页：搜索 + 新建文件 + 最近 / 搜索结果。
  */
+import { Button, Input } from "@thinker-workbench/design/react";
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/useI18n";
 
@@ -69,19 +70,7 @@ export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile 
     <div className="files-home">
       <div className="files-home__toolbar">
         <div className="files-home__search">
-          <span className="files-home__search-ico" aria-hidden>
-            {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性搜索图标，input 自带 aria-label */}
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
-              <path
-                d="M10.5 10.5 13.5 13.5"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          <input
+          <Input
             className="files-home__input"
             value={query}
             placeholder={t("inspector.files.searchPlaceholder")}
@@ -96,13 +85,40 @@ export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile 
                 setQuery("");
               }
             }}
+            startAdornment={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden
+                focusable="false"
+              >
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+                <path
+                  d="M10.5 10.5 13.5 13.5"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
           />
         </div>
         {onNewFile ? (
-          <button type="button" className="files-home__new" onClick={onNewFile}>
-            <span className="files-home__new-ico" aria-hidden>
-              {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性新建图标，父级 button 已带文本语义 */}
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <Button
+            className="files-home__new"
+            variant="secondary"
+            onClick={onNewFile}
+            startIcon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden
+                focusable="false"
+              >
                 <path
                   d="M4.5 2.5h5L12.5 5.5V13.5H4.5zM9.5 2.5V5.5h3"
                   stroke="currentColor"
@@ -116,9 +132,10 @@ export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile 
                   strokeLinecap="round"
                 />
               </svg>
-            </span>
+            }
+          >
             {t("inspector.files.newFile")}
-          </button>
+          </Button>
         ) : null}
       </div>
 

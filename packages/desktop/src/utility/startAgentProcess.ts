@@ -4,7 +4,7 @@
  * fork `packages/engine` 入口；spawn 后发送 hello（checkpoint、model、aiLocale、日志策略）；
  * 异常退出时按 run 回收主进程 PTY，再带退避自动重启并重发 hello。
  */
-import type { UtilityHello } from "@thinker-workbench/shared";
+import { buildRuntimeSettings, type UtilityHello } from "@thinker-workbench/shared";
 import { utilityProcess } from "electron";
 import { runLedger } from "../agent/runLedger";
 import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths";
@@ -19,7 +19,6 @@ import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { AgentBridge } from "./AgentBridge";
 import { nextAgentRestartDelayMs, shouldScheduleAgentRestart } from "./agentProcessRestart";
 import { attachLifecycle } from "./processLifecycle";
-import { shellSettingsPayload } from "./shellSettingsPayload";
 
 /** 已启动的 Agent 进程句柄：桥接对象 + 手动重启 / 停机。 */
 export type AgentProcessHandle = {
@@ -35,35 +34,19 @@ export function buildAgentHello(): UtilityHello {
   const general = getGeneralSettings();
   // 启动 hello 不解锁钥匙串；首次 run / probe 再经 getModelCatalog 解密
   const catalog = getModelCatalogSnapshot();
+  const activeRoot = getActiveWorkspaceRoot();
   return {
     channel: "utility",
     kind: "hello",
     checkpointDir: getCheckpointDir(),
     catalog,
     selection: catalog.selection,
-    aiLocale: general.aiLocale,
-    workspaceAccess: general.workspaceAccess,
-    allowAiDeleteFiles: general.allowAiDeleteFiles,
-    ...shellSettingsPayload(general, shellFactsForAgent(general.shellProfileId)),
-    httpCompatibilityMode: general.httpCompatibilityMode,
-    maxAgentSteps: general.maxAgentSteps,
-    maxSubagentSteps: general.maxSubagentSteps,
-    modelRetryMaxAttempts: general.modelRetryMaxAttempts,
-    modelRetryBaseDelayMs: general.modelRetryBaseDelayMs,
-    toolCallMinGapMs: general.toolCallMinGapMs,
-    defaultShellBlockUntilMs: general.defaultShellBlockUntilMs,
-    shellOutputCap: general.shellOutputCap,
-    mcpConnectTimeoutMs: general.mcpConnectTimeoutMs,
-    mcpCallTimeoutMs: general.mcpCallTimeoutMs,
-    contextFilesMaxFileBytes: general.contextFilesMaxFileBytes,
-    contextFilesMaxTotalBytes: general.contextFilesMaxTotalBytes,
-    readFileDefaultMaxChars: general.readFileDefaultMaxChars,
-    loggingEnabled: general.loggingEnabled,
-    trace: { enabled: general.observabilityEnabled !== false },
-    workspaceRoot: getActiveWorkspaceRoot() ?? undefined,
+    workspaceRoot: activeRoot ?? undefined,
     dataDir: getDataDir(),
     mcpServers: listEnabledMcpConfigs(),
-    subagents: listAgents(getActiveWorkspaceRoot()).agents,
+    subagents: listAgents(activeRoot).agents,
+    // 运行时设置（限额 / shell / 访问 / 日志 / trace）统一由 shared builder 组装
+    ...buildRuntimeSettings(general, shellFactsForAgent(general.shellProfileId)),
   };
 }
 

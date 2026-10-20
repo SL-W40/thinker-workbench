@@ -15,20 +15,27 @@ import path from "node:path";
 import {
   BROWSER_ABOUT_BLANK,
   type BrowserBounds,
-  type BrowserEvent,
   type BrowserState,
   browserUrlsEqual,
-  IpcChannels,
   normalizeBrowserUrl,
   resolveVisualThemeId,
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";
-import { BrowserWindow, nativeTheme, session, type WebContents, WebContentsView } from "electron";
+import { nativeTheme, session, type WebContents, WebContentsView } from "electron";
 import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { desktopLog } from "../log/setup";
 import { getMainWindow } from "../window/createWindow";
+import {
+  FALLBACK_VIEWPORT_H,
+  FALLBACK_VIEWPORT_W,
+  LOAD_SETTLE_TIMEOUT_MS,
+  PARTITION,
+} from "./browserConstants";
+import { broadcast } from "./browserEvents";
+import { waitForLoadSettle } from "./loadSettle";
 import { maybeOpenLocalLinkExternally } from "./localLinks";
+import { overlayCopyFor } from "./overlayCopy";
 import { buildOverlayDataUrl, overlayTokensForVisual } from "./overlayHtml";
 import {
   clickScript,
@@ -39,21 +46,7 @@ import {
   scrollScript,
   typeScript,
 } from "./pageScripts";
-
-const PARTITION = "persist:thinker-browser";
-/** UI 未量洞前的离屏占位（CSS px）。 */
-const FALLBACK_VIEWPORT_W = 1280;
-const FALLBACK_VIEWPORT_H = 720;
-/** 等待主文档加载落定的上限。 */
-const LOAD_SETTLE_TIMEOUT_MS = 30_000;
-
-function broadcast(event: BrowserEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IpcChannels.browserEvent, event);
-    }
-  }
-}
+import { applyViewBounds, captureBounds, viewBoundsFor } from "./viewGeometry";
 
 class BrowserSessionManager {
   private view: WebContentsView | null = null;
@@ -172,17 +165,11 @@ class BrowserSessionManager {
       this.applyBounds();
       return;
     }
-    const width = this.bounds.width >= 2 ? this.bounds.width : FALLBACK_VIEWPORT_W;
-    const height = this.bounds.height >= 2 ? this.bounds.height : FALLBACK_VIEWPORT_H;
-    view.setBounds({ x: -10_000, y: -10_000, width, height });
+    view.setBounds(captureBounds(this.bounds));
   }
 
   private overlayCopy(): { title: string; takeControl: string } {
-    const locale = getGeneralSettings().uiLocale;
-    if (locale === "zh") {
-      return { title: "AI 控制中", takeControl: "接管" };
-    }
-    return { title: "AI is controlling", takeControl: "Take control" };
+    return overlayCopyFor(getGeneralSettings().uiLocale);
   }
 
   private ensureOverlay(): WebContentsView {
@@ -244,31 +231,18 @@ class BrowserSessionManager {
     // 不可见或空白页（未锁定时）= 必须摘除：0×0 / 离屏占位都不能可靠停止吞输入，
     // 这是“切 tab / 关面板后该区域点击滑动失灵”的根因。
     // 锁定时空白页也挂载：蒙层“AI 控制中”本就是模态盖层
-    if (!this.visible || (this.isBlankPage() && !this.locked)) {
+    const next = viewBoundsFor({
+      visible: this.visible,
+      blank: this.isBlankPage(),
+      locked: this.locked,
+      measured: this.bounds.width >= 2 && this.bounds.height >= 2,
+      bounds: this.bounds,
+    });
+    if (!next.view) {
       this.detachViews();
       return;
     }
-    const measured = this.bounds.width >= 2 && this.bounds.height >= 2;
-    if (this.view) {
-      if (measured) {
-        this.view.setBounds({ ...this.bounds });
-      } else {
-        // AI 已 reveal 但洞尚未量到：离屏占位，避免 0×0 截图空白与布局抖动
-        this.view.setBounds({
-          x: -10_000,
-          y: -10_000,
-          width: FALLBACK_VIEWPORT_W,
-          height: FALLBACK_VIEWPORT_H,
-        });
-      }
-    }
-    if (this.overlay) {
-      if (this.locked && this.visible && measured) {
-        this.overlay.setBounds({ ...this.bounds });
-      } else {
-        this.overlay.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-      }
-    }
+    applyViewBounds(this.view, this.overlay, next);
   }
 
   /** 同步视口洞 bounds（DIP）。 */
@@ -333,31 +307,7 @@ class BrowserSessionManager {
    * 已不在 loading 则立即返回。
    */
   private waitForLoadSettle(wc: WebContents, timeoutMs = LOAD_SETTLE_TIMEOUT_MS): Promise<void> {
-    if (wc.isDestroyed() || !wc.isLoading()) return Promise.resolve();
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        wc.removeListener("did-stop-loading", onStop);
-        wc.removeListener("did-fail-load", onFail);
-        resolve();
-      };
-      const onStop = () => finish();
-      const onFail = (
-        _e: Electron.Event,
-        _code: number,
-        _desc: string,
-        _url: string,
-        isMainFrame: boolean,
-      ) => {
-        if (isMainFrame) finish();
-      };
-      const timer = setTimeout(finish, timeoutMs);
-      wc.once("did-stop-loading", onStop);
-      wc.once("did-fail-load", onFail);
-    });
+    return waitForLoadSettle(wc, timeoutMs);
   }
 
   /**

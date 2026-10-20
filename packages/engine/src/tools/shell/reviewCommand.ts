@@ -1,6 +1,8 @@
 /**
  * AI 研判：用当前聊天模型对命令做短分类（allow / ask）。
  */
+
+import { isRecord } from "@thinker-workbench/shared";
 import { getChatModel } from "../../model/openai";
 
 export type ReviewDecision = "allow" | "ask";
@@ -45,7 +47,7 @@ export async function reviewCommand(
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { decision: "ask", reason: "Unparseable review." };
     const parsed = JSON.parse(jsonMatch[0]) as { decision?: string; reason?: string };
-    if (parsed.decision === "allow") {
+    if (isRecord(parsed) && parsed.decision === "allow") {
       return { decision: "allow", reason: parsed.reason || "Allowed by review." };
     }
     return { decision: "ask", reason: parsed.reason || "Needs confirmation." };

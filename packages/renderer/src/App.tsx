@@ -1,5 +1,5 @@
 /**
- * 应用根组件：标题栏 + 页面栈（聊天 / 组件 / 控制台）+ 首次引导闸门。
+ * 应用根组件（编排壳）：标题栏 + 页面栈（聊天 / 组件 / 控制台）+ 首次引导闸门。
  *
  * - 启动时优先恢复 Electron session 快照中的页面栈与设置分区；否则从 URL hash 引导
  * - 辅助窗口（`getRoleSync().kind === "aux"`）固定单页、精简标题栏、不写主 session、不弹引导
@@ -7,26 +7,24 @@
  * - `?tool=1` 嵌入时隐藏产品 chrome
  * - 产品控制台 `#/tools`：Settings / Customize / Trace / Components（旧 `#/settings` 映射至此）
  * - hash 与 session 双向同步，便于重启后回到上次视图
+ *
+ * 启动导航见 ./app/boot，聊天页三栏见 ./app/ChatShell。
  */
 
-import type { PageStackSnapshot, WindowRole } from "@thinker-workbench/shared";
 import { useCallback, useEffect, useState } from "react";
+import { isDevToolEmbed, readBoot, readWindowRole } from "./app/boot";
+import { ChatShell } from "./app/ChatShell";
 import { OPEN_BROWSER_EVENT, onBrowserEvent } from "./bridge/browser";
 import { OPEN_SUBAGENT_EVENT, RESTORE_SUBAGENT_TABS_EVENT } from "./bridge/subagent";
 import { requestOpenTerminal } from "./bridge/terminal";
-import { ChatSidePanel } from "./features/chat/ChatSidePanel";
-import { ChatStage } from "./features/chat/ChatStage";
-import { Composer } from "./features/chat/Composer";
 import { useChatPanels } from "./features/chat/useChatPanels";
 import { useChatSession } from "./features/chat/useChatSession";
-import { WorkspaceSidebar } from "./features/chat/WorkspaceSidebar";
 import { ComponentsPane } from "./features/components/ComponentsPane";
 import { HitlHost } from "./features/hitl/HitlHost";
-import { RightInspector } from "./features/inspector/RightInspector";
-import { ensureHash, parseHash, writeHash } from "./features/nav/locationHash";
+import { parseHash, writeHash } from "./features/nav/locationHash";
 import { type PageId, usePageStack } from "./features/nav/usePageStack";
 import { OnboardingGate } from "./features/onboarding/OnboardingGate";
-import { normalizeSettingsSection, type SettingsSectionId } from "./features/settings/sections";
+import type { SettingsSectionId } from "./features/settings/sections";
 import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
 import { normalizeToolTabId, ToolsPane, type ToolTabId } from "./features/tools/ToolsPane";
 import { TitleBar } from "./features/window/TitleBar";
@@ -34,69 +32,6 @@ import { useT } from "./i18n/useI18n";
 import { bootstrapAppLog } from "./log/sessionLog";
 
 bootstrapAppLog();
-
-/** 同步读取本窗口角色；浏览器预览视为主窗。 */
-function readWindowRole(): WindowRole {
-  return window.thinker?.window?.getRoleSync?.() ?? { kind: "main" };
-}
-
-/** 工具嵌入（`?tool=1`）隐藏产品标题栏，避免双层 chrome。 */
-function isDevToolEmbed(): boolean {
-  return new URLSearchParams(location.search).get("tool") === "1";
-}
-
-/**
- * 读取启动导航状态：辅助窗固定单页；主窗 session 快照优先，否则用规范化后的 hash。
- */
-function readBoot(role: WindowRole): {
-  stack: PageStackSnapshot;
-  section: SettingsSectionId;
-  toolsTab: ToolTabId;
-} {
-  const fromHash = ensureHash();
-  if (role.kind === "aux") {
-    const page = role.page as PageId;
-    return {
-      stack: {
-        entries: [page],
-        index: 0,
-        visited: [page],
-      },
-      section: fromHash.section,
-      toolsTab: fromHash.tab,
-    };
-  }
-  const saved = window.thinker?.session?.getSnapshot?.() ?? null;
-  if (saved?.stack?.entries?.length) {
-    // 优先用 session 里的 hash 恢复控制台 tab / 设置分区（勿只用 location，HMR 时可能不准）
-    const fromSaved = saved.hash ? parseHash(saved.hash) : fromHash;
-    const section = normalizeSettingsSection(
-      saved.settingsSection ?? fromSaved.section ?? fromHash.section,
-    );
-    const entries = saved.stack.entries as PageId[];
-    const visited = (saved.stack.visited ?? entries) as PageId[];
-    const current = (entries[saved.stack.index] ?? fromSaved.page ?? fromHash.page) as PageId;
-    const onTools = current === "tools";
-    return {
-      stack: {
-        ...saved.stack,
-        entries,
-        visited,
-      },
-      section,
-      toolsTab: onTools ? fromSaved.tab : "settings",
-    };
-  }
-  return {
-    stack: {
-      entries: [fromHash.page],
-      index: 0,
-      visited: [fromHash.page],
-    },
-    section: fromHash.section,
-    toolsTab: fromHash.tab,
-  };
-}
 
 export function App() {
   const t = useT();
@@ -303,118 +238,18 @@ export function App() {
       ) : null}
       <main className="app-body">
         {!hideChrome ? (
-          <div
-            className="chat-shell"
-            ref={panels.shellRef}
-            hidden={!onChat}
-            inert={!onChat || undefined}
-          >
-            <ChatSidePanel
-              side="left"
-              open={panels.leftOpen}
-              width={panels.leftWidth}
-              minWidth={panels.minWidth}
-              maxWidth={panels.maxLeftWidth}
-              title={t("chat.leftPanel")}
-              showHead={false}
-              onWidthChange={panels.setLeftWidth}
-            >
-              <WorkspaceSidebar
-                activeSessionId={session.sessionId}
-                busy={session.busy}
-                onSelectSession={(sessionId, threadId) => {
-                  void session.selectSession(sessionId, threadId);
-                }}
-                onSelectWorkspace={(workspaceId) => {
-                  void session.selectWorkspace(workspaceId);
-                }}
-                onSessionCreated={(sessionId, threadId) => {
-                  void session.activateNewSession(sessionId, threadId);
-                }}
-                onOpenTrace={openTraceForSession}
-              />
-            </ChatSidePanel>
-            <div
-              className="chat-main"
-              style={panels.mainWidth > 0 ? { flex: `0 0 ${panels.mainWidth}px` } : undefined}
-            >
-              <ChatStage
-                empty={session.empty}
-                messages={session.messages}
-                scroller={session.scroller}
-                stickNonce={session.stickNonce}
-                busy={session.busy}
-                sessionId={session.sessionId}
-                workspaceId={session.workspaceId}
-                onShortcut={(prompt) => void session.send(prompt)}
-                onOpenModelSettings={() => openConsole("settings", "model")}
-                onOpenTrace={openTrace}
-                onOpenFile={openWorkspaceFile}
-                onOpenTerminal={openTerminal}
-                onRestoreDeletedFile={(messageId, stepId) =>
-                  void session.restoreDeletedFile(messageId, stepId)
-                }
-                onResume={() => void session.resume()}
-                canResume={session.canResume && !session.busy}
-                editingUserId={session.editingUserId}
-                editDraft={session.editDraft}
-                editInputRef={session.editInputRef}
-                onBeginEditUserMessage={session.beginEditUserMessage}
-                onEditDraftChange={session.setEditDraft}
-                onEditKeyDown={session.onEditKeyDown}
-                onSendUserEdit={session.sendUserEdit}
-                sendBlocked={session.busy || session.queued}
-                editImages={session.editImages}
-                onAttachEditImages={(files) => void session.attachEditImageFiles(files)}
-                onRemoveEditImage={session.removeEditImage}
-                onCancelUserEdit={session.cancelUserEdit}
-              />
-              <Composer
-                draft={session.draft}
-                draftImages={session.draftImages}
-                onAttachImages={(files) => void session.attachImageFiles(files)}
-                onRemoveImage={session.removeDraftImage}
-                busy={session.busy}
-                queued={session.queued}
-                inputRef={session.inputRef}
-                onDraftChange={session.setDraft}
-                onKeyDown={session.onKeyDown}
-                onSend={() => void session.send()}
-                onCancel={() => session.cancel()}
-                workspaceName={session.workspaceName}
-                workspaceRoot={session.workspaceRoot}
-                workspaceId={session.workspaceId}
-                sessionId={session.sessionId}
-                threadId={session.threadId}
-                messages={session.messages}
-                gateMessage={session.workspaceGate?.message ?? null}
-                onOpenWorkspace={
-                  session.workspaceGate?.kind === "no-workspace"
-                    ? () => void session.openWorkspaceFromGate()
-                    : undefined
-                }
-                onOpenTerminal={openTerminal}
-              />
-            </div>
-            <ChatSidePanel
-              side="right"
-              open={panels.rightOpen}
-              width={panels.rightWidth}
-              minWidth={panels.minRightWidth}
-              maxWidth={panels.maxRightWidth}
-              title={t("chat.rightPanel")}
-              showHead={false}
-              onWidthChange={panels.setRightWidth}
-            >
-              <RightInspector
-                workspaceId={session.workspaceId}
-                pageActive={onChat}
-                onSendPrompt={(prompt) => void session.send(prompt)}
-                pendingOpenPath={pendingOpenPath}
-                onPendingOpenPathConsumed={() => setPendingOpenPath(null)}
-              />
-            </ChatSidePanel>
-          </div>
+          <ChatShell
+            panels={panels}
+            session={session}
+            pageActive={onChat}
+            pendingOpenPath={pendingOpenPath}
+            onPendingOpenPathConsumed={() => setPendingOpenPath(null)}
+            onOpenFile={openWorkspaceFile}
+            onOpenTerminal={openTerminal}
+            onOpenConsole={openConsole}
+            onOpenTrace={openTrace}
+            onOpenTraceForSession={openTraceForSession}
+          />
         ) : null}
         {nav.visited.has("components") ? <ComponentsPane active={onComponents} /> : null}
         {nav.visited.has("tools") ? (

@@ -19,7 +19,7 @@ export default defineConfig({
     extensions: [".mjs", ".ts", ".tsx", ".js", ".jsx", ".json"],
     alias: {
       "@thinker-workbench/shared": path.resolve(__dirname, "../shared/src/index.ts"),
-      // CJS artifacts break Vite named imports — resolve log from source like shared.
+      // CJS 产物会破坏 Vite 的命名导入——像 shared 一样改为从源码解析 log。
       "@thinker-workbench/logger/node": path.resolve(logSrc, "node/index.ts"),
       "@thinker-workbench/logger": path.resolve(logSrc, "index.ts"),
       "@thinker-workbench/logger-web": logWebSrc,

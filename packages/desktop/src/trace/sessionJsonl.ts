@@ -3,7 +3,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { createId, type TracePayloadRecord } from "@thinker-workbench/shared";
+import { createId, isRecord, type TracePayloadRecord } from "@thinker-workbench/shared";
 import { getTraceDir } from "../config/paths";
 import { deletePayloadIndex, findPayloadIndex, notePayloadIndex } from "./traceDb";
 
@@ -64,7 +64,8 @@ function readPayloadSlice(
     const n = fs.readSync(fd, buf, 0, length, offset);
     const text = buf.subarray(0, n).toString("utf8").trim();
     if (!text) return null;
-    return JSON.parse(text) as TracePayloadRecord;
+    const payload = JSON.parse(text) as TracePayloadRecord;
+    return isRecord(payload) ? payload : null;
   } catch {
     return null;
   } finally {
@@ -94,7 +95,7 @@ function rebuildPayloadIndex(sessionId: string): void {
     if (text) {
       try {
         const row = JSON.parse(text) as TracePayloadRecord;
-        if (row.id) notePayloadIndex(sessionId, row.id, offset, end - offset);
+        if (isRecord(row) && row.id) notePayloadIndex(sessionId, row.id, offset, end - offset);
       } catch {
         /* 跳过坏行 */
       }

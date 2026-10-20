@@ -22,20 +22,12 @@ import type { ModelCatalog, ModelSelection } from "./settings";
 import type { ShellProfile } from "./terminal";
 import type { TraceSettings, TraceSpanMessage } from "./trace";
 
-/** 主进程 → 子进程：握手，下发检查点目录与初始模型 / 语言。 */
-export type UtilityHello = {
-  channel: "utility";
-  kind: "hello";
-  /** 检查点落盘目录；省略则由子进程使用默认策略。 */
-  checkpointDir?: string;
-  /** 是否产出 agent 控制台日志。 */
-  loggingEnabled?: boolean;
-  /** 本机 Trace 采集。 */
-  trace?: TraceSettings;
-  /** 完整模型目录（含明文 key）。 */
-  catalog?: ModelCatalog;
-  /** 本轮生效的选用（会话覆盖或全局）。 */
-  selection?: ModelSelection;
+/**
+ * hello / run / resume 共用的「运行时设置」字段块（单一可信源）。
+ * 三处消息用交集引入；字段保持 optional，匹配「主进程可省略、engine 侧有默认」的现状。
+ * 新增运行时字段时：同时加到此类型与 `RuntimeSettingsSnapshot`，并在 `buildRuntimeSettings` 补齐。
+ */
+export type UtilityRuntimeSettings = {
   /** AI 回复偏好语言。 */
   aiLocale?: AiLocale;
   /** 文件工具工作区外访问档位。 */
@@ -52,6 +44,8 @@ export type UtilityHello = {
   shellAllowlist?: string[];
   /** 命令首 token 硬拒绝名单。 */
   shellBlocklist?: string[];
+  /** 解析后的当前 shell（供 environment_context）。 */
+  shell?: ShellProfile;
   /** 模型 HTTP 兼容模式。 */
   httpCompatibilityMode?: HttpCompatibilityMode;
   /** 主会话最大执行步数（LangGraph superstep）。 */
@@ -78,10 +72,28 @@ export type UtilityHello = {
   contextFilesMaxTotalBytes?: number;
   /** read_file 默认 max_chars。 */
   readFileDefaultMaxChars?: number;
-  /** 是否采集 Trace。 */
-  traceEnabled?: boolean;
-  /** 解析后的当前 shell（供 environment_context）。 */
-  shell?: ShellProfile;
+  /** 是否产出 agent 控制台日志。 */
+  loggingEnabled?: boolean;
+  /** 本机 Trace 采集。 */
+  trace?: TraceSettings;
+};
+
+/**
+ * 运行时设置全必填快照：`buildRuntimeSettings` 的返回类型。
+ * 与 `UtilityRuntimeSettings` 同字段但全部 required——新增字段时若 builder 漏填，编译器即报错。
+ */
+export type RuntimeSettingsSnapshot = Required<UtilityRuntimeSettings>;
+
+/** 主进程 → 子进程：握手，下发检查点目录与初始模型 / 语言。 */
+export type UtilityHello = {
+  channel: "utility";
+  kind: "hello";
+  /** 检查点落盘目录；省略则由子进程使用默认策略。 */
+  checkpointDir?: string;
+  /** 完整模型目录（含明文 key）。 */
+  catalog?: ModelCatalog;
+  /** 本轮生效的选用（会话覆盖或全局）。 */
+  selection?: ModelSelection;
   /** 默认工作区根（无 active workspace 时回退）。 */
   workspaceRoot?: string;
   /** 应用数据根（rules / skills 全局目录）。 */
@@ -90,7 +102,7 @@ export type UtilityHello = {
   mcpServers?: McpServerConfig[];
   /** 可见子代理定义（Customize / Task 工具）。 */
   subagents?: SubagentDefinition[];
-};
+} & UtilityRuntimeSettings;
 
 /** 子进程 → 主进程：已就绪，可接受 run / cancel / resume。 */
 export type UtilityReady = {
@@ -127,36 +139,6 @@ export type UtilityRun = {
   selection?: ModelSelection;
   /** 本轮 ChatMode。 */
   chatMode?: ChatMode;
-  /** 本轮回复偏好语言。 */
-  aiLocale?: AiLocale;
-  /** 本轮文件工具工作区外访问档位。 */
-  workspaceAccess?: WorkspaceAccess;
-  /** 本轮是否允许 AI 删除文件。 */
-  allowAiDeleteFiles?: boolean;
-  allowAiShell?: boolean;
-  allowAiBrowser?: boolean;
-  shellApprovalMode?: ShellApprovalMode;
-  shellAllowlist?: string[];
-  /** 本轮命令首 token 硬拒绝名单。 */
-  shellBlocklist?: string[];
-  httpCompatibilityMode?: HttpCompatibilityMode;
-  maxAgentSteps?: number;
-  maxSubagentSteps?: number;
-  modelRetryMaxAttempts?: number;
-  modelRetryBaseDelayMs?: number;
-  toolCallMinGapMs?: number;
-  defaultShellBlockUntilMs?: number;
-  shellOutputCap?: number;
-  mcpConnectTimeoutMs?: number;
-  mcpCallTimeoutMs?: number;
-  contextFilesMaxFileBytes?: number;
-  contextFilesMaxTotalBytes?: number;
-  readFileDefaultMaxChars?: number;
-  shell?: ShellProfile;
-  /** 本轮起是否产出控制台日志。 */
-  loggingEnabled?: boolean;
-  /** Trace 采集。 */
-  trace?: TraceSettings;
   /** 本轮工作区根。 */
   workspaceRoot?: string;
   /** 本轮数据根（rules / skills）。 */
@@ -165,7 +147,7 @@ export type UtilityRun = {
   mcpServers?: McpServerConfig[];
   /** 本轮子代理定义快照（可选；省略则沿用 hello）。 */
   subagents?: SubagentDefinition[];
-};
+} & UtilityRuntimeSettings;
 
 /** 主进程 → 子进程：取消运行。 */
 export type UtilityCancel = {
@@ -200,40 +182,11 @@ export type UtilityResume = {
   selection?: ModelSelection;
   /** 本轮 ChatMode。 */
   chatMode?: ChatMode;
-  aiLocale?: AiLocale;
-  /** 本轮文件工具工作区外访问档位。 */
-  workspaceAccess?: WorkspaceAccess;
-  /** 本轮是否允许 AI 删除文件。 */
-  allowAiDeleteFiles?: boolean;
-  allowAiShell?: boolean;
-  allowAiBrowser?: boolean;
-  shellApprovalMode?: ShellApprovalMode;
-  shellAllowlist?: string[];
-  /** 本轮命令首 token 硬拒绝名单。 */
-  shellBlocklist?: string[];
-  httpCompatibilityMode?: HttpCompatibilityMode;
-  maxAgentSteps?: number;
-  maxSubagentSteps?: number;
-  modelRetryMaxAttempts?: number;
-  modelRetryBaseDelayMs?: number;
-  toolCallMinGapMs?: number;
-  defaultShellBlockUntilMs?: number;
-  shellOutputCap?: number;
-  mcpConnectTimeoutMs?: number;
-  mcpCallTimeoutMs?: number;
-  contextFilesMaxFileBytes?: number;
-  contextFilesMaxTotalBytes?: number;
-  readFileDefaultMaxChars?: number;
-  shell?: ShellProfile;
-  /** 本轮起是否产出控制台日志。 */
-  loggingEnabled?: boolean;
-  /** Trace 采集。 */
-  trace?: TraceSettings;
   /** 本轮数据根（rules / skills）。 */
   dataDir?: string;
   /** 本轮子代理定义快照（可选；省略则沿用 hello）。 */
   subagents?: SubagentDefinition[];
-};
+} & UtilityRuntimeSettings;
 
 /** 主进程 → 子进程：估算上下文占用（与 assembleContext 同源）。 */
 export type UtilityContextUsage = {

@@ -7,6 +7,9 @@
   "productName": "Thinker Workbench",
   "main": "packages/desktop/artifacts/main.js",
   "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "pnpm --filter @thinker-workbench/shared build && pnpm --filter @thinker-workbench/markdown build && pnpm --filter @thinker-workbench/design build && pnpm --filter @thinker-workbench/engine build && pnpm --filter @thinker-workbench/desktop build && pnpm --filter @thinker-workbench/renderer build",
     "build:node": "pnpm --filter @thinker-workbench/shared build && pnpm --filter @thinker-workbench/markdown build && pnpm --filter @thinker-workbench/design build && pnpm --filter @thinker-workbench/engine build && pnpm --filter @thinker-workbench/desktop build",

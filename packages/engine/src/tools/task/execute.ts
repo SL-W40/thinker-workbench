@@ -3,7 +3,7 @@
  * 子代理不改全局 ChatMode（避免并行互踩）；只读靠 childReadonly 收紧工具。
  * 后台 Task 自带 AbortController；cancelOne 真停单路，父 run 可继续。
  */
-import { createId, type SubagentChildEvent } from "@thinker-workbench/shared";
+import { createId, isRecord, type SubagentChildEvent } from "@thinker-workbench/shared";
 import { getLimit } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
 import { startedToolCallIdSet } from "../../graph/nodes/toolsResume";
@@ -210,7 +210,7 @@ export function seedFailedOrphanTasksFromState(state: GraphState, parentRunId: s
     let subagent = "unknown";
     try {
       const args = JSON.parse(call.function.arguments || "{}") as { subagent?: unknown };
-      if (typeof args.subagent === "string" && args.subagent.trim()) {
+      if (isRecord(args) && typeof args.subagent === "string" && args.subagent.trim()) {
         subagent = args.subagent.trim();
       }
     } catch {
@@ -624,6 +624,7 @@ export async function runChildAgent(options: {
               let parsed: ToolArgs = {};
               try {
                 parsed = JSON.parse(rawArgs) as ToolArgs;
+                if (!isRecord(parsed)) parsed = {};
               } catch {
                 parsed = {};
               }

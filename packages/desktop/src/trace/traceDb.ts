@@ -11,6 +11,7 @@ import type {
   TraceSpanRecord,
   TraceSpanStatus,
 } from "@thinker-workbench/shared";
+import { isRecord } from "@thinker-workbench/shared";
 import Database from "better-sqlite3";
 import { getTraceDir } from "../config/paths";
 import { TRACE_SCHEMA_SQL, TRACE_SCHEMA_VERSION } from "../db/schema";
@@ -82,6 +83,7 @@ function rowToSpan(r: SpanRow): TraceSpanRecord {
   if (r.attrs_json) {
     try {
       attrs = JSON.parse(r.attrs_json) as Record<string, unknown>;
+      if (!isRecord(attrs)) attrs = undefined;
     } catch {
       attrs = undefined;
     }
@@ -213,6 +215,7 @@ export function updateSpanEnd(
     let base: Record<string, unknown> = {};
     try {
       base = prev.attrs_json ? (JSON.parse(prev.attrs_json) as Record<string, unknown>) : {};
+      if (!isRecord(base)) base = {};
     } catch {
       base = {};
     }

@@ -3,10 +3,14 @@
  * 网络抖动 / 429 / 5xx 可重试；鉴权、取消、业务 4xx 不重试。
  * 次数 / 基础延迟可由 Settings 经 runtimeLimits 覆盖。
  */
-import { isCancelErrorMessage } from "@thinker-workbench/shared";
+import {
+  isCancelErrorMessage,
+  isRetryableHttpStatus,
+  isTransientNetworkError,
+} from "@thinker-workbench/shared";
 import { getLimit } from "../config/runtimeLimits";
 
-export { isCancelErrorMessage };
+export { isCancelErrorMessage, isRetryableHttpStatus };
 
 /** Error / DOMException 等是否表示用户取消。 */
 export function isCancelError(err: unknown): boolean {
@@ -29,11 +33,6 @@ export function formatErrorMessage(err: unknown): string {
   return parts.join(": ") || "Unknown error";
 }
 
-/** HTTP 状态是否值得退避重试。 */
-export function isRetryableHttpStatus(status: number): boolean {
-  return status === 429 || status === 502 || status === 503 || status === 504;
-}
-
 /**
  * 网络 / 瞬时错误是否可重试。
  * 已取消或已向 UI 推送过 token 时不应再重试整请求。
@@ -46,9 +45,7 @@ export function isRetryableError(err: unknown, options?: { emittedTokens?: boole
   if (/OpenAI HTTP (401|403|400|404)\b/.test(msg)) return false;
   // undici：TypeError "terminated" / fetch failed + socket
   if (err instanceof TypeError) return true;
-  return /terminated|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|socket|other side closed|network|UND_ERR_/i.test(
-    msg,
-  );
+  return isTransientNetworkError(msg);
 }
 
 /** 信号可中断的定时等待；abort 时驳回（默认「Run cancelled.」）。 */

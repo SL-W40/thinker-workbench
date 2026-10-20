@@ -9,6 +9,7 @@ import {
   type AgentEvent,
   type AgentResumeCommand,
   type AgentRunCommand,
+  buildRuntimeSettings,
   type ChatMode,
   type ContextUsageRequest,
   type ContextUsageSnapshot,
@@ -25,6 +26,7 @@ import {
 } from "@thinker-workbench/shared";
 import type { UtilityProcess } from "electron";
 import { releaseBrowserLease, tryAcquireBrowserLease } from "../agent/resourceGovernor";
+import { runLedger } from "../agent/runLedger";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
 import { getDataDir } from "../config/paths";
 import {
@@ -46,7 +48,6 @@ import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
 import { PREVIEW_BODY_CHARS, withTextPreview } from "../util/preview";
-import { shellSettingsPayload } from "./shellSettingsPayload";
 import { isUtilityToParent } from "./transfer";
 
 /** 已派发、供 cancel 附带 sessionId 的轻量记录（终态由 RunLedger 收口）。 */
@@ -445,8 +446,6 @@ export class AgentBridge {
       });
     }
     this.dispatched.clear();
-    // 延迟 require：避免与 runLedger → AgentBridge 类型环在初始化期打架
-    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
     runLedger.settleAllOnExit(error);
     for (const [id, pending] of this.pendingContextUsage) {
       clearTimeout(pending.timer);
@@ -629,7 +628,6 @@ export class AgentBridge {
   cancelRunsForSession(sessionId: string): void {
     const id = sessionId.trim();
     if (!id) return;
-    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
     runLedger.requestCancel({ sessionId: id });
   }
 
@@ -658,31 +656,6 @@ export class AgentBridge {
   /** 按 runId 查已派发元数据（供 governor 等）。 */
   getPendingRun(runId: string): DispatchedRun | undefined {
     return this.dispatched.get(runId.trim());
-  }
-
-  /** run / resume 的 shell 字段（含硬拒绝名单）；hello 使用同一组装函数。 */
-  private shellPayload() {
-    const general = getGeneralSettings();
-    return shellSettingsPayload(general, shellFactsForAgent(general.shellProfileId));
-  }
-
-  /** hello / run / resume 共用的运行时限额字段。 */
-  private runtimeLimitsPayload() {
-    const general = getGeneralSettings();
-    return {
-      maxAgentSteps: general.maxAgentSteps,
-      maxSubagentSteps: general.maxSubagentSteps,
-      modelRetryMaxAttempts: general.modelRetryMaxAttempts,
-      modelRetryBaseDelayMs: general.modelRetryBaseDelayMs,
-      toolCallMinGapMs: general.toolCallMinGapMs,
-      defaultShellBlockUntilMs: general.defaultShellBlockUntilMs,
-      shellOutputCap: general.shellOutputCap,
-      mcpConnectTimeoutMs: general.mcpConnectTimeoutMs,
-      mcpCallTimeoutMs: general.mcpCallTimeoutMs,
-      contextFilesMaxFileBytes: general.contextFilesMaxFileBytes,
-      contextFilesMaxTotalBytes: general.contextFilesMaxTotalBytes,
-      readFileDefaultMaxChars: general.readFileDefaultMaxChars,
-    };
   }
 
   /**
@@ -773,7 +746,6 @@ export class AgentBridge {
     const sessionTitle = session?.title;
     const general = getGeneralSettings();
 
-    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
     // waitUntilReady 期间可能已取消：勿再派发
     if (!runLedger.getOpen(runId)) return;
 
@@ -812,14 +784,8 @@ export class AgentBridge {
         ...this.modelPayload(threadId),
         ...this.chatModePayload(threadId),
         ...this.subagentsPayload(options.command.workspaceRoot),
-        aiLocale: general.aiLocale,
-        workspaceAccess: general.workspaceAccess,
-        allowAiDeleteFiles: general.allowAiDeleteFiles,
-        ...this.shellPayload(),
-        httpCompatibilityMode: general.httpCompatibilityMode,
-        ...this.runtimeLimitsPayload(),
-        loggingEnabled: general.loggingEnabled,
-        trace: { enabled: general.observabilityEnabled !== false },
+        // 运行时设置（限额 / shell / 访问 / 日志 / trace）统一由 shared builder 组装
+        ...buildRuntimeSettings(general, shellFactsForAgent(general.shellProfileId)),
         workspaceRoot: options.command.workspaceRoot,
         dataDir: getDataDir(),
       });
@@ -857,7 +823,6 @@ export class AgentBridge {
     const workspaceId = session?.workspaceId;
     const sessionTitle = session?.title;
 
-    const { runLedger } = require("../agent/runLedger") as typeof import("../agent/runLedger");
     if (!runLedger.getOpen(runId)) return;
 
     this.dispatched.set(runId, { sessionId, threadId, runId, traceId });
@@ -880,14 +845,8 @@ export class AgentBridge {
         ...this.modelPayload(threadId),
         ...this.chatModePayload(threadId),
         ...this.subagentsPayload(options.command.workspaceRoot),
-        aiLocale: general.aiLocale,
-        workspaceAccess: general.workspaceAccess,
-        allowAiDeleteFiles: general.allowAiDeleteFiles,
-        ...this.shellPayload(),
-        httpCompatibilityMode: general.httpCompatibilityMode,
-        ...this.runtimeLimitsPayload(),
-        loggingEnabled: general.loggingEnabled,
-        trace: { enabled: general.observabilityEnabled !== false },
+        // 运行时设置（限额 / shell / 访问 / 日志 / trace）统一由 shared builder 组装
+        ...buildRuntimeSettings(general, shellFactsForAgent(general.shellProfileId)),
         dataDir: getDataDir(),
       });
       runLedger.markDispatched(runId);

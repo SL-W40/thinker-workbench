@@ -51,13 +51,17 @@
       "correctness": {
         "useExhaustiveDependencies": "error",
         "noInnerDeclarations": "error",
-        "noUnusedVariables": "error"
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error"
       },
       "suspicious": {
         "noArrayIndexKey": "error",
         "noControlCharactersInRegex": "error",
         "noAssignInExpressions": "error",
-        "noImplicitAnyLet": "error"
+        "noImplicitAnyLet": "error",
+        "noExplicitAny": "error",
+        "noEvolvingTypes": "error",
+        "noFallthroughSwitchClause": "error"
       },
       "a11y": {
         "useSemanticElements": "error",

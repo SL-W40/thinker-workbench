@@ -2,22 +2,16 @@
  * 主进程 PTY / direct 会话管理：AgentShellRun 状态机 + 增量输出 + spill。
  * 完成永远是会话上的 finalize；block_until_ms 只决定本次 waiter 等多久。
  */
-import path from "node:path";
-import {
-  createId,
-  IpcChannels,
-  type TerminalEvent,
-  type TerminalSession,
-} from "@thinker-workbench/shared";
-import { BrowserWindow } from "electron";
+import { createId, type TerminalSession } from "@thinker-workbench/shared";
 import type { IPty } from "node-pty";
-import { getDataDir } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { getActiveWorkspaceRoot } from "../db/workspacesStore";
 import { createDataBroadcastBatcher } from "./dataBroadcastBatcher";
 import { resolveShellProfile } from "./detectShellProfiles";
 import { buildDirectExecArgs } from "./directExecArgs";
 import { loadNodePty } from "./loadNodePty";
+import { appendOutputWithSpill } from "./outputSpill";
+import { completeResult, createRun, stillRunningResult } from "./sessionRun";
 import { buildPtyEnv } from "./shellEnv";
 import {
   hasDoneMarker,
@@ -27,108 +21,29 @@ import {
   submitLine,
   wrapWithDoneMarker,
 } from "./shellMarkers";
-import {
-  appendShellSpill,
-  pruneShellSpillDir,
-  resolveSpillLocation,
-  SHELL_MEMORY_TAIL,
-  trimMemoryTail,
-} from "./shellSpill";
+import { broadcast } from "./terminalEvents";
+import type {
+  AgentShellRun,
+  ExecOptions,
+  PtyWaitResult,
+  SessionRecord,
+  SessionWaiter,
+  ShellExecMode,
+  ShellOutcome,
+  ShellWakeReason,
+  StartAgentCommandOptions,
+  WaitAgentCommandOptions,
+} from "./terminalSessionTypes";
 
-/** 工具侧 outcome（对齐 Cursor Await complete | still_running）。 */
-export type ShellOutcome = "complete" | "still_running";
-export type ShellWakeReason = "exit" | "timeout" | "pattern" | "background";
-export type ShellExecMode = "login" | "direct";
-
-export type PtyWaitResult = {
-  sessionId: string;
-  output: string;
-  exitCode: number | null;
-  /** 兼容旧字段：outcome === still_running。 */
-  backgrounded: boolean;
-  outcome: ShellOutcome;
-  wakeReason?: ShellWakeReason;
-  outputPath?: string;
-  outputBytes?: number;
-  outputTruncated?: boolean;
-  execMode?: ShellExecMode;
+export type {
+  ExecOptions,
+  PtyWaitResult,
+  ShellExecMode,
+  ShellOutcome,
+  ShellWakeReason,
+  StartAgentCommandOptions,
+  WaitAgentCommandOptions,
 };
-
-export type StartAgentCommandOptions = {
-  command: string;
-  cwd?: string;
-  cols?: number;
-  rows?: number;
-  runId?: string;
-  threadId?: string;
-  /** 已解析的执行模式（login | direct）。 */
-  execMode?: ShellExecMode;
-  onSession?: (sessionId: string) => void;
-  onData?: (chunk: string) => void;
-};
-
-export type WaitAgentCommandOptions = {
-  budgetMs: number;
-  pattern?: string;
-  onData?: (chunk: string) => void;
-  requestId?: string;
-};
-
-export type ExecOptions = StartAgentCommandOptions & {
-  /** 兼容旧 API：启动后立刻 wait。 */
-  blockUntilMs?: number;
-};
-
-/** 一次 Agent 命令的会话级状态（Source of Truth）。 */
-type AgentShellRun = {
-  execMode: ShellExecMode;
-  status: "running" | "exited";
-  exitCode: number | null;
-  finalized: boolean;
-  settled: Promise<void>;
-  resolveSettled: () => void;
-  /** 已向工具返回过的输出游标（相对内存 buffer）。 */
-  outputCursor: number;
-  /** 绝对路径（主进程 append）。 */
-  outputFilePath: string | null;
-  /** 回传模型的路径（优先工作区相对，供 read_file）。 */
-  outputReportPath: string | null;
-  outputBytes: number;
-  spilled: boolean;
-};
-
-type SessionWaiter = {
-  requestId: string;
-  resolve: (result: PtyWaitResult) => void;
-  startedAt: number;
-  budgetMs: number;
-  pattern?: RegExp;
-  timer?: ReturnType<typeof setTimeout>;
-  onData?: (chunk: string) => void;
-};
-
-type SessionRecord = {
-  meta: TerminalSession;
-  /** spawn 失败的幽灵会话 / 已退出 direct 无 proc。 */
-  proc: IPty | null;
-  output: string;
-  waiters: SessionWaiter[];
-  /** Agent 命令运行态；交互式用户会话为 null。 */
-  run: AgentShellRun | null;
-};
-
-function broadcast(event: TerminalEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IpcChannels.terminalEvent, event);
-    }
-  }
-}
-
-function spillThresholdChars(): number {
-  const cap = getGeneralSettings().shellOutputCap;
-  return Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 200_000;
-}
 
 class TerminalSessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
@@ -570,23 +485,7 @@ class TerminalSessionManager {
   }
 
   private createRun(execMode: ShellExecMode): AgentShellRun {
-    let resolveSettled: () => void = () => {};
-    const settled = new Promise<void>((resolve) => {
-      resolveSettled = resolve;
-    });
-    return {
-      execMode,
-      status: "running",
-      exitCode: null,
-      finalized: false,
-      settled,
-      resolveSettled,
-      outputCursor: 0,
-      outputFilePath: null,
-      outputReportPath: null,
-      outputBytes: 0,
-      spilled: false,
-    };
+    return createRun(execMode);
   }
 
   // ─── 内部：finalize / 输出 ─────────────────────────────────
@@ -661,83 +560,15 @@ class TerminalSessionManager {
   private appendOutputWithSpill(sessionId: string, data: string): void {
     const rec = this.sessions.get(sessionId);
     if (!rec) return;
-
-    const run = rec.run;
-    if (run?.spilled && run.outputFilePath) {
-      appendShellSpill(run.outputFilePath, data);
-    }
-
-    rec.output += data;
-    if (run) {
-      run.outputBytes += Buffer.byteLength(data, "utf8");
-      const threshold = spillThresholdChars();
-      if (!run.spilled && rec.output.length > threshold) {
-        const loc = resolveSpillLocation({
-          workspaceRoot: getActiveWorkspaceRoot(),
-          dataDir: getDataDir(),
-          sessionId: rec.meta.sessionId,
-        });
-        pruneShellSpillDir(path.dirname(loc.absolutePath), {
-          excludeAbsolute: loc.absolutePath,
-        });
-        run.outputFilePath = loc.absolutePath;
-        run.outputReportPath = loc.reportPath;
-        run.spilled = true;
-        appendShellSpill(loc.absolutePath, rec.output);
-      }
-      if (run.spilled || rec.output.length > SHELL_MEMORY_TAIL) {
-        const beforeLen = rec.output.length;
-        const trimmed = trimMemoryTail(rec.output, SHELL_MEMORY_TAIL);
-        rec.output = trimmed.output;
-        run.outputCursor = Math.max(0, run.outputCursor - (beforeLen - rec.output.length));
-      }
-    } else if (rec.output.length > SHELL_MEMORY_TAIL) {
-      rec.output = trimMemoryTail(rec.output).output;
-    }
-
-    this.dataBatcher.enqueue(sessionId, data);
-  }
-
-  private takeIncrementalOutput(rec: SessionRecord): string {
-    const run = rec.run;
-    if (!run) return stripDoneMarkers(rec.output);
-    const raw = rec.output.slice(run.outputCursor);
-    run.outputCursor = rec.output.length;
-    return stripDoneMarkers(raw);
+    appendOutputWithSpill(rec, data, (sid, chunk) => this.dataBatcher.enqueue(sid, chunk));
   }
 
   private completeResult(rec: SessionRecord, wakeReason: ShellWakeReason): PtyWaitResult {
-    const exitCode =
-      rec.run?.exitCode ?? parseDoneExitCode(rec.output) ?? rec.meta.exitCode ?? null;
-    const output = this.takeIncrementalOutput(rec);
-    return {
-      sessionId: rec.meta.sessionId,
-      output,
-      exitCode,
-      backgrounded: false,
-      outcome: "complete",
-      wakeReason,
-      outputPath: rec.run?.outputReportPath ?? rec.run?.outputFilePath ?? undefined,
-      outputBytes: rec.run?.outputBytes,
-      outputTruncated: Boolean(rec.run?.spilled),
-      execMode: rec.run?.execMode,
-    };
+    return completeResult(rec, wakeReason);
   }
 
   private stillRunningResult(rec: SessionRecord, wakeReason: ShellWakeReason): PtyWaitResult {
-    const output = this.takeIncrementalOutput(rec);
-    return {
-      sessionId: rec.meta.sessionId,
-      output,
-      exitCode: null,
-      backgrounded: true,
-      outcome: "still_running",
-      wakeReason,
-      outputPath: rec.run?.outputReportPath ?? rec.run?.outputFilePath ?? undefined,
-      outputBytes: rec.run?.outputBytes,
-      outputTruncated: Boolean(rec.run?.spilled),
-      execMode: rec.run?.execMode,
-    };
+    return stillRunningResult(rec, wakeReason);
   }
 
   /** 等到壳有输出或超时，再注入 agent 命令。 */

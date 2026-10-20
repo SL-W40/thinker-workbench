@@ -2,7 +2,7 @@
  * AI 锁定蒙层 HTML（独立 WebContentsView）。
  * 使用与产品一致的 --tw-* token，随主题同步。
  */
-import { type CustomThemeRecord, isCustomThemeId } from "@thinker-workbench/shared";
+import { type CustomThemeRecord, escapeHtml, isCustomThemeId } from "@thinker-workbench/shared";
 
 export type OverlayThemeTokens = {
   bg: string;
@@ -228,12 +228,4 @@ export function buildOverlayDataUrl(options: {
 </body>
 </html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

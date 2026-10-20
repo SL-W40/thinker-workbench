@@ -4,17 +4,11 @@
  * 并行槽满时进入全局 FIFO；出队才写成 running 并派发。轮次内容只留在内存。
  */
 import {
-  type AgentErrorCode,
   type AgentEvent,
-  type AgentResumeCommand,
-  type AgentRunCommand,
   createRunId,
   createTraceId,
-  IpcChannels,
   type RunResult,
-  type SessionRunStatus,
 } from "@thinker-workbench/shared";
-import { BrowserWindow } from "electron";
 import {
   assertWorkspaceRoot,
   countRunningSessions,
@@ -32,102 +26,41 @@ import type { AgentBridge } from "../utility/AgentBridge";
 import { reclaimRunResources } from "../utility/reclaimRunResources";
 import { releaseBrowserLease } from "./resourceGovernor";
 import {
-  type AdmitRunRequest,
   admitRun,
   getMaxParallelRuns,
   getMaxQueuedRuns,
-  getQueueTimeoutMin,
   NO_SESSION,
   NO_WORKSPACE,
   parallelCapError,
   queueFullError,
-  queueTimeoutError,
   resolveSession,
   THREAD_BUSY,
 } from "./runCoordinator";
+import { broadcastTerminalEvent, outcomeToSessionStatus } from "./runLedger/settle";
+import { armTimer, clearTimer } from "./runLedger/timers";
+import type {
+  AdmissionDispatchJob,
+  AdmissionGate,
+  BeginRunOk,
+  BeginRunRequest,
+  BeginRunResult,
+  Dispatcher,
+  OpenRun,
+  RunOutcome,
+  RunPhase,
+  SettleDetail,
+} from "./runLedger/types";
 
-/** settle 终态（与引擎 AgentErrorCode / done 对齐）。 */
-export type RunOutcome = "done" | AgentErrorCode;
-
-/** 入队时冻结的轮次内容。模型 / 权限在派发时再读，不写进这里。 */
-export type AdmissionTurn =
-  | { kind: "run"; command: AgentRunCommand }
-  | { kind: "resume"; command: AgentResumeCommand };
-
-/** 出队后交给运输层的一次派发。 */
-export type AdmissionDispatchJob = {
-  runId: string;
-  threadId: string;
-  traceId: string;
-  sessionId: string;
-  workspaceRoot: string;
-  workspaceName?: string;
-  turn: AdmissionTurn;
-  /** 排队等待被调度的时长（毫秒）；随 UtilityRun 下发，engine 并入终态耗时。 */
-  queuedMs?: number;
-};
-
-type RunPhase = "queued" | "running";
-
-/** 进行中的账本条目。 */
-type OpenRun = {
-  runId: string;
-  sessionId: string;
-  threadId: string;
-  traceId: string;
-  titleHint?: string;
-  workspaceId: string;
-  workspaceRoot: string;
-  workspaceName?: string;
-  settled: boolean;
-  cancelRequested: boolean;
-  /** 是否已成功 postMessage 到 utility。 */
-  dispatched: boolean;
-  phase: RunPhase;
-  /** 入队顺序，只增不减。 */
-  seq: number;
-  /** 入队时刻；仅排队项有值，用于算排队时长。 */
-  queuedAt?: number;
-  /** 出队时结算的排队时长（毫秒）；随派发下发给 engine。 */
-  queuedMs?: number;
-  turn?: AdmissionTurn;
-  timer?: ReturnType<typeof setTimeout>;
-  /** 已经发起过一次派发，避免 pump 与 handler 各 kick 一次。 */
-  kickStarted?: boolean;
-};
-
-export type BeginRunRequest = AdmitRunRequest & {
-  titleHint?: string;
-  traceId?: string;
-  turn?: AdmissionTurn;
-};
-
-export type BeginRunOk = {
-  ok: true;
-  runId: string;
-  threadId: string;
-  sessionId: string;
-  traceId: string;
-  workspaceRoot: string;
-  workspaceName?: string;
-  /** 为 true 时尚未占并行槽。 */
-  queued?: boolean;
-  /** FIFO 名次，从 1 起。 */
-  queuePosition?: number;
-};
-
-export type BeginRunErr = { ok: false; error: string };
-export type BeginRunResult = BeginRunOk | BeginRunErr;
-
-export type SettleDetail = {
-  error?: string;
-  text?: string;
-  /** 结算后是否向渲染进程广播合成终态事件（无引擎事件时）。 */
-  emitEvent?: boolean;
-};
-
-type Dispatcher = (job: AdmissionDispatchJob) => Promise<void>;
-type AdmissionGate = () => string | null;
+export type {
+  AdmissionDispatchJob,
+  AdmissionTurn,
+  BeginRunErr,
+  BeginRunOk,
+  BeginRunRequest,
+  BeginRunResult,
+  RunOutcome,
+  SettleDetail,
+} from "./runLedger/types";
 
 /**
  * 主进程 run 账本（单例）。
@@ -619,27 +552,17 @@ class RunLedger {
   }
 
   private armTimer(entry: OpenRun): void {
-    this.clearTimer(entry);
-    const mins = getQueueTimeoutMin();
-    if (mins <= 0) return;
-    const seq = entry.seq;
-    const timer = setTimeout(() => {
-      const cur = this.byRunId.get(entry.runId);
-      if (!cur || cur.settled || cur.phase !== "queued" || cur.seq !== seq) return;
-      this.settle(cur.runId, "failed", {
-        error: queueTimeoutError(mins),
-        emitEvent: true,
-      });
-    }, mins * 60_000);
-    const unref = (timer as { unref?: () => void }).unref;
-    if (typeof unref === "function") unref.call(timer);
-    entry.timer = timer;
+    armTimer(
+      entry,
+      (runId) => this.byRunId.get(runId),
+      (error) => {
+        this.settle(entry.runId, "failed", { error, emitEvent: true });
+      },
+    );
   }
 
   private clearTimer(entry: OpenRun): void {
-    if (!entry.timer) return;
-    clearTimeout(entry.timer);
-    entry.timer = undefined;
+    clearTimer(entry);
   }
 
   private removeFromFifo(runId: string): void {
@@ -721,49 +644,6 @@ class RunLedger {
     }
     this.pump();
     return true;
-  }
-}
-
-function outcomeToSessionStatus(outcome: RunOutcome): SessionRunStatus {
-  switch (outcome) {
-    case "done":
-      return "idle";
-    case "cancelled":
-      return "cancelled";
-    case "crashed":
-      return "crashed";
-    case "failed":
-      return "failed";
-  }
-}
-
-function broadcastTerminalEvent(entry: OpenRun, outcome: RunOutcome, detail: SettleDetail): void {
-  const base = {
-    chatSessionId: entry.sessionId,
-    threadId: entry.threadId,
-    runId: entry.runId,
-    ts: Date.now(),
-  };
-  const event: AgentEvent =
-    outcome === "done"
-      ? { type: "done", ...base, text: detail.text ?? "" }
-      : {
-          type: "error",
-          ...base,
-          error: detail.error ?? outcome,
-          code:
-            outcome === "cancelled" || outcome === "crashed" || outcome === "failed"
-              ? outcome
-              : "failed",
-        };
-  try {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(IpcChannels.agentEvent, event);
-      }
-    }
-  } catch {
-    /* 测试环境无 Electron 时忽略 */
   }
 }
 

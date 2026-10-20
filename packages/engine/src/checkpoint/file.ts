@@ -3,6 +3,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { asString, isRecord } from "@thinker-workbench/shared";
 import type { Checkpoint, Checkpointer } from "./types";
 
 export class FileCheckpointer implements Checkpointer {
@@ -17,9 +18,10 @@ export class FileCheckpointer implements Checkpointer {
     const file = this.fileFor(threadId);
     try {
       const raw = await fs.readFile(file, "utf8");
-      const parsed = JSON.parse(raw) as Checkpoint;
-      if (!parsed || parsed.threadId !== threadId) return null;
-      return parsed;
+      const parsed: unknown = JSON.parse(raw);
+      // 标量 / 数组 / threadId 不匹配一律视为无有效检查点，避免下游按 Checkpoint 形状崩溃
+      if (!isRecord(parsed) || asString(parsed.threadId) !== threadId) return null;
+      return parsed as Checkpoint;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException)?.code;
       if (code === "ENOENT") return null;
