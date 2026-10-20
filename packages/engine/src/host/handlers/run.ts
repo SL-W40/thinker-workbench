@@ -127,6 +127,7 @@ export async function onRun(ctx: HostContext, message: UtilityRun): Promise<void
     images: runImages.length > 0 ? runImages : undefined,
     history: message.command.history,
     contextPaths: message.command.contextPaths,
+    attachments: message.command.attachments,
     workspaceRoot,
     workspaceName,
     runContext,

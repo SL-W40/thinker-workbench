@@ -10,6 +10,11 @@ import {
 } from "@thinker-workbench/shared";
 import { BrowserWindow, type IpcMain, shell } from "electron";
 import { readChatImagePreview, saveChatImage } from "../chat/chatImages";
+import {
+  parseWorkspaceFileText,
+  readAttachment,
+  saveAttachment,
+} from "../chat/attachments";
 import { openCatalogDb } from "../db/thinkerDb";
 import {
   clearWorkspace,
@@ -212,6 +217,39 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
 
   ipcMain.handle(IpcChannels.chatImagesReadPreview, async (_e, imagePath: string) =>
     readChatImagePreview(typeof imagePath === "string" ? imagePath : ""),
+  );
+
+  ipcMain.handle(
+    IpcChannels.chatAttachmentsSave,
+    async (
+      _e,
+      payload: { workspaceId: string; bytes: Uint8Array | ArrayBuffer; mime: string; name: string },
+    ) => {
+      const raw = payload.bytes;
+      const bytes =
+        raw instanceof Uint8Array
+          ? raw
+          : raw instanceof ArrayBuffer
+            ? new Uint8Array(raw)
+            : new Uint8Array(0);
+      return saveAttachment(payload.workspaceId, {
+        bytes,
+        mime: payload.mime,
+        name: payload.name,
+      });
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.chatAttachmentsRead,
+    async (_e, payload: { workspaceId: string; id: string }) =>
+      readAttachment(payload.workspaceId, payload.id),
+  );
+
+  ipcMain.handle(
+    IpcChannels.workspaceFsParseText,
+    async (_e, payload: { workspaceId: string; path: string }) =>
+      parseWorkspaceFileText(payload.workspaceId, payload.path),
   );
 
   ipcMain.handle(IpcChannels.chatSessionsSetActive, async (_e, sessionId: string | null) => {

@@ -13,6 +13,8 @@ type Props = {
   svg: string;
   zoom: number;
   onZoomChange: (zoom: number) => void;
+  /** 点百分比「重置缩放」时调用；不传则回落到 100%。 */
+  onReset?: () => void;
 };
 
 function actionLabels(): {
@@ -59,7 +61,7 @@ function actionLabels(): {
       };
 }
 
-export function MermaidActions({ source, svg, zoom, onZoomChange }: Props) {
+export function MermaidActions({ source, svg, zoom, onZoomChange, onReset }: Props) {
   const labels = actionLabels();
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -154,7 +156,7 @@ export function MermaidActions({ source, svg, zoom, onZoomChange }: Props) {
           className="tw-md-mermaid-zoom__pct"
           aria-label={labels.zoomReset}
           title={labels.zoomReset}
-          onClick={() => onZoomChange(clampMermaidZoom(1))}
+          onClick={() => (onReset ? onReset() : onZoomChange(clampMermaidZoom(1)))}
         >
           {pct}
         </button>

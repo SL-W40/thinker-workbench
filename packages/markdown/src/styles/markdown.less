@@ -653,12 +653,43 @@
   &:active {
     cursor: grabbing;
   }
+
+  /* 高度占位：换帧时高度平滑过渡，避免下方文字被顶动 */
+  transition: height 180ms ease;
+}
+
+/* 换帧叠放：新帧淡入、旧帧淡出（旧帧不参与手势与无障碍树） */
+.tw-md-mermaid-layer {
+  animation: tw-md-mermaid-in 180ms ease-out;
+}
+
+.tw-md-mermaid-layer--out {
+  position: absolute;
+  inset: 0;
+  padding: 22px 20px 24px;
+  text-align: center;
+  pointer-events: none;
+  animation: tw-md-mermaid-out 180ms ease-out forwards;
+}
+
+/* 首帧骨架：低对比圆角块 + 极缓呼吸，不做扫光，避免抢注意力 */
+.tw-md-mermaid-skeleton {
+  min-height: 160px;
+  margin: 10px;
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--md-fg) 5%, var(--md-mermaid-paper));
+  animation: tw-md-mermaid-breathe 2.4s ease-in-out infinite;
 }
 
 .tw-md-mermaid-viewport__stage {
   /* 仅平移；缩放改 SVG 宽高，避免 scale 栅格化发糊 */
   transform-origin: 0 0;
   display: inline-block;
+}
+
+/* 流式期间图一帧比一帧大：尺寸变化做短过渡，避免每帧「跳一下」 */
+.tw-md-stream--live .tw-md-mermaid-canvas svg {
+  transition: width 180ms ease, height 180ms ease;
 }
 
 .tw-md-mermaid-canvas {
@@ -957,6 +988,37 @@
   }
 }
 
+@keyframes tw-md-mermaid-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tw-md-mermaid-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes tw-md-mermaid-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
 @keyframes tw-md-stream-breathe {
   0%,
   100% {
@@ -986,7 +1048,16 @@
   .tw-md-stream--live,
   .tw-md-stream-pulse,
   .tw-md-caret,
-  .tw-md--streaming > :last-child {
+  .tw-md--streaming > :last-child,
+  .tw-md-mermaid-layer,
+  .tw-md-mermaid-layer--out,
+  .tw-md-mermaid-skeleton {
     animation: none;
+  }
+
+  /* 换帧直接替换，高度与尺寸也不做过渡 */
+  .tw-md-mermaid-viewport,
+  .tw-md-stream--live .tw-md-mermaid-canvas svg {
+    transition: none;
   }
 }

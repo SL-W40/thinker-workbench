@@ -328,7 +328,7 @@ export class AgentRuntime {
               ? { images: m.images }
               : {}),
           }));
-        const state = initialState(message, history, command.contextPaths, images);
+        const state = initialState(message, history, command.contextPaths, images, command.attachments);
         // 线程键为 run 级：历史以本 run 的 initialState（chat.db history）为单一来源，
         // append reducer 不再跨 run 累积；开工先登记，覆盖崩溃后 resume 定位
         const runKey = runKeyFor(threadId, runId);

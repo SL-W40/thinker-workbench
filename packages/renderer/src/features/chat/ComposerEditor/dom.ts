@@ -12,6 +12,7 @@ function serializeNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!(node instanceof HTMLElement)) return "";
   if (node.dataset.mention === "slash") return `/${node.dataset.name ?? ""}`;
+  if (node.dataset.mention === "link") return node.dataset.url ?? "";
   if (node.dataset.mention === "at") {
     const path = node.dataset.path ?? "";
     return /\s/.test(path) ? `@\`${path}\`` : `@${path}`;
@@ -57,10 +58,16 @@ export function serializeComposerEditor(root: HTMLElement): string {
 }
 
 /** 文本中应固化的芯片键（顺序拼接）。 */
-export function chipKey(text: string, mode: ParseMentionMode): string {
-  return parseMentionSegments(text, mode)
+export function chipKey(
+  text: string,
+  mode: ParseMentionMode,
+  pinned?: ReadonlySet<string>,
+): string {
+  return parseMentionSegments(text, mode, pinned)
     .filter((seg) => seg.kind !== "text")
-    .map((seg) => (seg.kind === "slash" ? `/${seg.name}` : `@${seg.path}`))
+    .map((seg) =>
+      seg.kind === "slash" ? `/${seg.name}` : seg.kind === "link" ? seg.url : `@${seg.path}`,
+    )
     .join("\n");
 }
 
@@ -71,6 +78,10 @@ export function domChipKey(root: HTMLElement): string {
     if (!(node instanceof HTMLElement) || node.dataset.pad === "1") return;
     if (node.dataset.mention === "slash") {
       keys.push(`/${node.dataset.name ?? ""}`);
+      return;
+    }
+    if (node.dataset.mention === "link") {
+      keys.push(node.dataset.url ?? "");
       return;
     }
     if (node.dataset.mention === "at") {
@@ -111,9 +122,11 @@ export function setPlainCaret(root: HTMLElement, offset: number): void {
       const token =
         node.dataset.mention === "slash"
           ? `/${node.dataset.name ?? ""}`
-          : /\s/.test(node.dataset.path ?? "")
-            ? `@\`${node.dataset.path}\``
-            : `@${node.dataset.path ?? ""}`;
+          : node.dataset.mention === "link"
+            ? (node.dataset.url ?? "")
+            : /\s/.test(node.dataset.path ?? "")
+              ? `@\`${node.dataset.path}\``
+              : `@${node.dataset.path ?? ""}`;
       if (remaining <= token.length) {
         // 落在芯片上：放在芯片后
         const range = document.createRange();

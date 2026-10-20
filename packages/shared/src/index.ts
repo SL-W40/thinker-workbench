@@ -397,6 +397,8 @@ export type {
   WorkspaceRecord,
 } from "./ipc/workspaces";
 export type {
+  AttachmentKind,
+  ChatAttachmentRef,
   ChatImageRef,
   ChatMessage,
   ChatTimelineErrorStep,

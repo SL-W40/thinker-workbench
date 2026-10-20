@@ -149,12 +149,13 @@ export async function agent(
     }
   }
 
-  const context = assembleContext({
+  const context = await assembleContext({
     messages: modelMessages,
     aiLocale: getAiLocale(),
     allowEmoji: getAllowEmoji(),
     contextWindow: getContextWindow(),
     contextPaths: state.contextPaths,
+    attachments: state.attachments,
     projectMemory: projectMemoryText || undefined,
     sessionMemory: sessionMemoryText || undefined,
   });

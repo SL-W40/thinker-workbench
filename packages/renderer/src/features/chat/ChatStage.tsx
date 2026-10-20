@@ -7,7 +7,7 @@
  */
 
 import { Button, ChevronRightIcon, useDesignTheme } from "@thinker-workbench/design/react";
-import type { ChatMessage } from "@thinker-workbench/shared";
+import type { ChatAttachmentRef, ChatMessage } from "@thinker-workbench/shared";
 import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 import { brandGlyphSrc } from "../../brand/logo";
 import { bindSubagentSession } from "../../bridge/subagent";
@@ -58,9 +58,9 @@ type Props = {
   onSendUserEdit?: () => void;
   /** 进行中或排队时原位编辑不能发送。 */
   sendBlocked?: boolean;
-  editImages?: import("./ChatImageStrip").DraftChatImage[];
-  onAttachEditImages?: (files: File[]) => void;
-  onRemoveEditImage?: (id: string) => void;
+  /** 原位编辑中的统一资产（图片即附件，@file: 芯片展示）。 */
+  editAttachments?: ChatAttachmentRef[];
+  onAttachEditFiles?: (files: File[]) => void;
   onCancelUserEdit?: () => void;
   /** 当前会话 id（绑定子代理 Task tab）*/
   sessionId?: string | null;
@@ -124,9 +124,8 @@ export function ChatStage({
   onEditKeyDown,
   onSendUserEdit,
   sendBlocked = false,
-  editImages = [],
-  onAttachEditImages,
-  onRemoveEditImage,
+  editAttachments = [],
+  onAttachEditFiles,
   onCancelUserEdit,
   sessionId = null,
 }: Props) {
@@ -218,9 +217,8 @@ export function ChatStage({
                 onEditKeyDown={onEditKeyDown}
                 onSendEdit={onSendUserEdit}
                 sendBlocked={sendBlocked}
-                editImages={editImages}
-                onAttachEditImages={onAttachEditImages}
-                onRemoveEditImage={onRemoveEditImage}
+                editAttachments={editAttachments}
+                onAttachEditFiles={onAttachEditFiles}
                 onCancelEdit={onCancelUserEdit}
                 sessionId={sessionId}
               />

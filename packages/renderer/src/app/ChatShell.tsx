@@ -5,6 +5,7 @@
 import { ChatSidePanel } from "../features/chat/ChatSidePanel";
 import { ChatStage } from "../features/chat/ChatStage";
 import { Composer } from "../features/chat/Composer";
+import { MentionChipPreview } from "../features/chat/MentionChipPreview";
 import type { useChatPanels } from "../features/chat/useChatPanels";
 import type { useChatSession } from "../features/chat/useChatSession";
 import { WorkspaceSidebar } from "../features/chat/WorkspaceSidebar";
@@ -102,16 +103,14 @@ export function ChatShell({
           onEditKeyDown={session.onEditKeyDown}
           onSendUserEdit={session.sendUserEdit}
           sendBlocked={session.busy || session.queued}
-          editImages={session.editImages}
-          onAttachEditImages={(files) => void session.attachEditImageFiles(files)}
-          onRemoveEditImage={session.removeEditImage}
+          editAttachments={session.editAttachments}
+          onAttachEditFiles={(files) => void session.attachEditFiles(files)}
           onCancelUserEdit={session.cancelUserEdit}
         />
         <Composer
           draft={session.draft}
-          draftImages={session.draftImages}
-          onAttachImages={(files) => void session.attachImageFiles(files)}
-          onRemoveImage={session.removeDraftImage}
+          onAttachFiles={(files) => void session.attachFiles(files)}
+          attachments={session.draftAttachments}
           busy={session.busy}
           queued={session.queued}
           inputRef={session.inputRef}
@@ -133,6 +132,7 @@ export function ChatShell({
           }
           onOpenTerminal={onOpenTerminal}
         />
+        <MentionChipPreview workspaceId={session.workspaceId} onOpenFile={onOpenFile} />
       </div>
       <ChatSidePanel
         side="right"

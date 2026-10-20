@@ -37,12 +37,12 @@ export function estimateTurnUsage(input: {
   };
 }
 
-/** 路径须在 `{dataDir}/workspaces/<id>/images/` 或 `{dataDir}/computer/images/` 下。 */
+/** 路径须在 `{dataDir}/workspaces/<id>/images|attachments/` 或 `{dataDir}/computer/images/` 下。 */
 export function isAllowedChatImagePath(filePath: string, dataDir?: string | null): boolean {
   const root = (dataDir ?? getDataDir())?.trim();
   if (!root) return false;
   const resolved = path.resolve(filePath);
-  // 会话附图：{dataDir}/workspaces/<id>/images/<file>
+  // 会话附图 / 外部图片附件：{dataDir}/workspaces/<id>/{images,attachments}/<file>
   const workspacesRoot = path.resolve(root, "workspaces");
   const rel = path.relative(workspacesRoot, resolved);
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
@@ -53,7 +53,7 @@ export function isAllowedChatImagePath(filePath: string, dataDir?: string | null
     return parts.length >= 3 && parts[0] === "computer" && parts[1] === "images";
   }
   const parts = rel.split(path.sep);
-  return parts.length >= 3 && parts[1] === "images";
+  return parts.length >= 3 && (parts[1] === "images" || parts[1] === "attachments");
 }
 
 /** 从 ChatImageRef 构造图状态 content part。 */

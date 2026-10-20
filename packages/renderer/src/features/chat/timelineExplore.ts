@@ -282,10 +282,12 @@ export function groupTimelineForDisplay(
     }
 
     if (step.kind === "transition") {
-      // 承上启下小结：跟随当前段渲染，保证与工具行同列对齐
+      // 承上启下小结：探索段之后也作为可见独立行出现在后续工具前，
+      // 不再折进默认收起的 Explored 组（否则几乎总被隐藏，违背“小结可见”初衷）；
+      // 与工具行同列对齐由 RunTimeline 统一布局保证
       if (seenExploreTool) {
-        flushTailIfPending();
-        exploreBuf.push(step);
+        flushTailBoundary();
+        items.push({ type: "step", step });
       } else {
         preTool.push(step);
       }

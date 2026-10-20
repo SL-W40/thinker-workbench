@@ -456,6 +456,12 @@ export const en = {
       typeToSearch: "Keep typing to search · Esc / Space for plain @",
       searching: "Search “{q}”",
       noRecent: "No recent files — type a name · Esc / Space for plain @",
+      preview: {
+        open: "Open in inspector",
+        missing: "File not found",
+        external: "External attachment",
+        parseFailed: "Unable to parse content",
+      },
     },
     send: "Send",
     sendHint: "Send  ·  ⏎   New line  ·  ⇧⏎",
@@ -468,6 +474,9 @@ export const en = {
       attach: "Attach image",
       remove: "Remove image",
       visionUntagged: "Vision is off for the selected model. Images are still sent.",
+    },
+    attachments: {
+      attach: "Attach files",
     },
     mode: {
       label: "Chat mode",

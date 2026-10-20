@@ -9,7 +9,7 @@ import {
   IconButton,
   PaperclipIcon,
 } from "@thinker-workbench/design/react";
-import type { ChatMessage, SkillListItem } from "@thinker-workbench/shared";
+import type { ChatAttachmentRef, ChatMessage, SkillListItem } from "@thinker-workbench/shared";
 import {
   type DragEvent,
   type KeyboardEvent,
@@ -30,9 +30,8 @@ import { workspaceTree } from "../../../bridge/workspaceFs";
 import { useT } from "../../../i18n/useI18n";
 import { loadFileRecents } from "../../inspector/fileRecents";
 import { BackgroundTasksBar } from "../BackgroundTasksBar";
-import { ChatImageStrip, type DraftChatImage } from "../ChatImageStrip";
 import { ComposerEditor, type ComposerEditorHandle } from "../ComposerEditor";
-import { ComposerMentionPopup, type MentionItem } from "../ComposerMentionPopup";
+import { ComposerMentionPanel, type MentionItem } from "../ComposerMentionPanel";
 import { ContextUsageControl } from "../ContextUsageControl";
 import {
   type ActiveMention,
@@ -49,9 +48,8 @@ import { collectMentionPaths, SKILLS_PAGE } from "./mentionPaths";
 
 type Props = {
   draft: string;
-  draftImages?: DraftChatImage[];
-  onAttachImages?: (files: File[]) => void;
-  onRemoveImage?: (id: string) => void;
+  onAttachFiles?: (files: File[]) => void;
+  attachments?: ChatAttachmentRef[];
   busy: boolean;
   /** 本会话在 FIFO 中等待：可取消，但模型 / 模式仍可改。 */
   queued?: boolean;
@@ -77,9 +75,8 @@ type Props = {
 
 export function Composer({
   draft,
-  draftImages = [],
-  onAttachImages,
-  onRemoveImage,
+  onAttachFiles,
+  attachments,
   busy,
   queued = false,
   inputRef,
@@ -105,7 +102,6 @@ export function Composer({
   const [modelCatalogTick, setModelCatalogTick] = useState(0);
   const [mention, setMention] = useState<ActiveMention | null>(null);
   const [highlight, setHighlight] = useState(0);
-  const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number } | null>(null);
   const [skills, setSkills] = useState<SkillListItem[]>([]);
   const [mentionPaths, setMentionPaths] = useState<{ path: string; isDir: boolean }[]>([]);
   const [skillsExpanded, setSkillsExpanded] = useState(false);
@@ -117,7 +113,6 @@ export function Composer({
       dismissedMentionRef.current = { kind: active.kind, start: active.start };
     }
     setMention(null);
-    setAnchor(null);
   }, []);
 
   // 预加载 skills / 文件树（含目录，供 @ 检索）
@@ -188,15 +183,14 @@ export function Composer({
       }
       return next;
     });
-    if (next) setAnchor(editor.getCaretAnchor());
-    else setAnchor(null);
   }, [inputRef]);
 
   useEffect(() => {
     refreshMention();
   }, [refreshMention]);
 
-  const hasReadyImages = draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
+  /** 草稿中含图片类附件芯片时提示视觉标签（仍发送）。 */
+  const hasImageAttachments = (attachments ?? []).some((a) => a.mime.startsWith("image/"));
 
   useEffect(() => {
     const onChanged = () => setModelCatalogTick((n) => n + 1);
@@ -206,7 +200,7 @@ export function Composer({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: modelCatalogTick 未在函数体读取但刻意保留：模型设置变化后需要重新查询健康模型
   useEffect(() => {
-    if (!hasReadyImages) {
+    if (!hasImageAttachments) {
       setVisionUntagged(false);
       return;
     }
@@ -233,7 +227,7 @@ export function Composer({
     return () => {
       cancelled = true;
     };
-  }, [hasReadyImages, sessionId, modelCatalogTick]);
+  }, [hasImageAttachments, sessionId, modelCatalogTick]);
 
   const recentPaths = useMemo(() => loadFileRecents(workspaceId), [workspaceId]);
 
@@ -340,13 +334,7 @@ export function Composer({
     onKeyDown(e);
   }
 
-  const canSend =
-    Boolean(draft.trim()) || draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
-
-  function takeImageFiles(list: FileList | File[] | null | undefined): File[] {
-    if (!list) return [];
-    return Array.from(list).filter((f) => f.type.startsWith("image/"));
-  }
+  const canSend = Boolean(draft.trim());
 
   function onDragOver(e: DragEvent<HTMLDivElement>) {
     if (!e.dataTransfer.types.includes("Files")) return;
@@ -362,16 +350,36 @@ export function Composer({
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
     setDragOver(false);
-    const files = takeImageFiles(e.dataTransfer.files);
+    const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length === 0) return;
     e.preventDefault();
-    onAttachImages?.(files);
+    // 统一附件流：图片与非图片都落盘为 @file:<id> 芯片
+    onAttachFiles?.(files);
   }
 
   return (
     <footer className="composer-dock">
+      {/* `/` Skills 与 `@` 文件候选：composer 最顶端的背景面板（内联，非浮层弹窗） */}
+      <ComposerMentionPanel
+        open={Boolean(mention) && items.length > 0}
+        kind={mention?.kind ?? "slash"}
+        items={items}
+        highlight={highlight}
+        onHighlight={setHighlight}
+        onSelect={selectItem}
+        skillsCollapsed={!skillsExpanded}
+        onExpandSkills={() => setSkillsExpanded(true)}
+        skillsHiddenCount={skillsHiddenCount}
+        emptyHint={
+          mention?.kind === "at" && !workspaceId
+            ? t("chat.mention.needWorkspace")
+            : mention?.kind === "at" && !mention.query
+              ? t("chat.mention.noRecent")
+              : t("chat.mention.empty")
+        }
+      />
       <BackgroundTasksBar threadId={threadId ?? undefined} onOpenTerminal={onOpenTerminal} />
-      {visionUntagged && hasReadyImages ? (
+      {visionUntagged && hasImageAttachments ? (
         <Callout tone="warning" className="composer-gate">
           {t("chat.images.visionUntagged")}
         </Callout>
@@ -398,7 +406,6 @@ export function Composer({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <ChatImageStrip images={draftImages} onRemove={onRemoveImage} />
         <ComposerEditor
           ref={inputRef}
           value={draft}
@@ -406,22 +413,23 @@ export function Composer({
           onChange={onDraftChange}
           onKeyDown={handleKeyDown}
           onCaretChange={refreshMention}
-          onPasteImages={(files) => {
-            if (!onAttachImages || files.length === 0) return false;
-            void onAttachImages(files);
+          attachments={attachments}
+          onPasteFiles={(files) => {
+            if (!onAttachFiles || files.length === 0) return false;
+            void onAttachFiles(files);
             return true;
           }}
         />
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
+          accept="*/*"
           multiple
           hidden
           onChange={(e) => {
-            const files = takeImageFiles(e.target.files);
+            const files = Array.from(e.target.files ?? []);
             e.target.value = "";
-            if (files.length) onAttachImages?.(files);
+            if (files.length) onAttachFiles?.(files);
           }}
         />
         <div className="composer-bar">
@@ -435,8 +443,8 @@ export function Composer({
               className="composer-attach"
               size="md"
               variant="ghost"
-              aria-label={t("chat.images.attach")}
-              title={t("chat.images.attach")}
+              aria-label={t("chat.attachments.attach")}
+              title={t("chat.attachments.attach")}
               onClick={() => fileInputRef.current?.click()}
             >
               <PaperclipIcon />
@@ -461,26 +469,6 @@ export function Composer({
           </div>
         </div>
       </div>
-      <ComposerMentionPopup
-        open={Boolean(mention)}
-        kind={mention?.kind ?? "slash"}
-        items={items}
-        highlight={highlight}
-        anchor={anchor}
-        onHighlight={setHighlight}
-        onSelect={selectItem}
-        onClose={() => dismissMention(mention)}
-        skillsCollapsed={!skillsExpanded}
-        onExpandSkills={() => setSkillsExpanded(true)}
-        skillsHiddenCount={skillsHiddenCount}
-        emptyHint={
-          mention?.kind === "at" && !workspaceId
-            ? t("chat.mention.needWorkspace")
-            : mention?.kind === "at" && !mention.query
-              ? t("chat.mention.noRecent")
-              : t("chat.mention.empty")
-        }
-      />
       {workspaceName ? (
         <span className="composer-workspace" title={workspaceName}>
           <FolderIcon size="sm" />

@@ -1730,6 +1730,18 @@ kbd {
   margin-right: 0.05em;
 }
 
+/* 文件类型图标替代 `@` 前缀：保持原色不降透明度，与标签留出间距 */
+.mention-chip__mark--glyph {
+  display: inline-flex;
+  align-items: center;
+  opacity: 1;
+  margin-right: 0.22em;
+}
+
+.mention-chip__mark--glyph svg {
+  display: block;
+}
+
 .mention-chip__label {
   min-width: 0;
   overflow: hidden;
@@ -1741,6 +1753,19 @@ kbd {
   color: color-mix(in srgb, var(--tw-accent, var(--accent)) 88%, var(--ink));
   background: color-mix(in srgb, var(--tw-accent-soft, var(--accent-soft)) 85%, transparent);
   border-color: color-mix(in srgb, var(--tw-accent, var(--accent)) 22%, transparent);
+}
+
+.mention-chip--link {
+  color: color-mix(in srgb, #6d5bd0 60%, var(--ink));
+  background: color-mix(in srgb, #6d5bd0 12%, var(--bg-elev, var(--bg)));
+  border-color: color-mix(in srgb, #6d5bd0 22%, transparent);
+}
+
+html[data-tw-theme="aurora"] .mention-chip--link,
+html[data-tw-theme="dark"] .mention-chip--link {
+  color: color-mix(in srgb, #b3a4f7 72%, var(--ink));
+  background: color-mix(in srgb, #b3a4f7 14%, transparent);
+  border-color: color-mix(in srgb, #b3a4f7 28%, transparent);
 }
 
 .mention-chip--at {

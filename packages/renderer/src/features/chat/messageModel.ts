@@ -3,6 +3,7 @@
  */
 import {
   type AgentHistoryMessage,
+  type ChatAttachmentRef,
   type ChatImageRef,
   type ChatMessage,
   type ChatTimelineStep,
@@ -89,6 +90,7 @@ export function createMessage(
   pending = false,
   timeline?: ChatTimelineStep[],
   images?: ChatImageRef[],
+  attachments?: ChatAttachmentRef[],
 ): ChatMessage {
   return {
     id: createId("msg"),
@@ -98,5 +100,6 @@ export function createMessage(
     pending,
     ...(timeline ? { timeline } : {}),
     ...(images?.length ? { images } : {}),
+    ...(attachments?.length ? { attachments } : {}),
   };
 }

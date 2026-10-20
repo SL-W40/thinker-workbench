@@ -4,7 +4,7 @@
  * - reply / pendingToolCalls 为空
  * 步数预算不在图状态里：由 LangGraph recursionLimit 统一承载（见 AgentRuntime）。
  */
-import type { ChatImageRef } from "@thinker-workbench/shared";
+import type { ChatAttachmentRef, ChatImageRef } from "@thinker-workbench/shared";
 import { buildUserContent, contentToPlainText } from "../model/imageParts";
 import type { ChatMessage } from "../model/types";
 import type { GraphState } from "./types";
@@ -45,6 +45,7 @@ export function initialState(
   history?: Array<{ role: string; content: string; images?: ChatImageRef[] }> | ChatMessage[],
   contextPaths?: string[],
   images?: ChatImageRef[],
+  attachments?: ChatAttachmentRef[],
 ): GraphState {
   const userContent = buildUserContent(message, images);
   return {
@@ -54,6 +55,7 @@ export function initialState(
     pendingToolCalls: [],
     startedToolCallIds: [],
     contextPaths: contextPaths?.length ? contextPaths : undefined,
+    attachments: attachments?.length ? attachments : undefined,
     messagesOverride: [],
     lastToolEndedAt: undefined,
   };
@@ -72,6 +74,10 @@ export function normalizeGraphState(raw: GraphState | (Partial<GraphState> & obj
     startedToolCallIds: started,
     contextPaths:
       Array.isArray(raw.contextPaths) && raw.contextPaths.length ? raw.contextPaths : undefined,
+    attachments:
+      Array.isArray((raw as GraphState).attachments) && (raw as GraphState).attachments!.length
+        ? (raw as GraphState).attachments
+        : undefined,
     messagesOverride: Array.isArray((raw as GraphState).messagesOverride)
       ? (raw as GraphState).messagesOverride
       : [],

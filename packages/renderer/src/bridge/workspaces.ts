@@ -2,6 +2,7 @@
  * 工作空间 / 会话 / listThreads 的 renderer 桥接封装。
  */
 import type {
+  ChatAttachmentRef,
   ChatMessage,
   ChatSessionRecord,
   MoveSessionInput,
@@ -132,6 +133,32 @@ export async function saveChatImage(
 /** 读取已落盘附图预览 data URL。 */
 export async function readChatImagePreview(imagePath: string): Promise<{ dataUrl: string } | null> {
   return api()?.workspaces?.readChatImagePreview(imagePath) ?? null;
+}
+
+/** 落盘外部附件（dataDir/attachments）。 */
+export async function saveAttachment(
+  workspaceId: string,
+  input: { bytes: Uint8Array; mime: string; name: string },
+): Promise<ChatAttachmentRef> {
+  const ws = api()?.workspaces;
+  if (!ws?.saveAttachment) throw new Error("Attachments API unavailable.");
+  return ws.saveAttachment(workspaceId, input);
+}
+
+/** 读取外部附件预览（图片 dataUrl / 文档解析文本）。 */
+export async function readAttachment(
+  workspaceId: string,
+  id: string,
+): Promise<{ name: string; size: number; mime: string; dataUrl?: string | null; text?: string | null } | null> {
+  return api()?.workspaces?.readAttachment(workspaceId, id) ?? null;
+}
+
+/** 读取工作空间内文件经解析层抽取的纯文本。 */
+export async function parseWorkspaceFileText(
+  workspaceId: string,
+  path: string,
+): Promise<{ text: string } | null> {
+  return api()?.workspaces?.parseWorkspaceFileText(workspaceId, path) ?? null;
 }
 
 export async function setActiveSession(sessionId: string | null): Promise<void> {

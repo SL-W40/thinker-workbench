@@ -11,7 +11,7 @@ import {
   useDesignTheme,
 } from "@thinker-workbench/design/react";
 import { StreamingMarkdownView } from "@thinker-workbench/markdown/react";
-import type { ChatMessage } from "@thinker-workbench/shared";
+import type { ChatAttachmentRef, ChatMessage } from "@thinker-workbench/shared";
 import {
   type FocusEvent,
   type KeyboardEvent,
@@ -22,10 +22,11 @@ import {
   useState,
 } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../bridge/browser";
-import { ChatImageStrip, type DraftChatImage } from "../features/chat/ChatImageStrip";
+import { ChatImageStrip } from "../features/chat/ChatImageStrip";
 import { ChatUsageBar } from "../features/chat/ChatUsageBar";
 import { SendGlyph } from "../features/chat/Composer";
 import { ComposerEditor, type ComposerEditorHandle } from "../features/chat/ComposerEditor";
+import { extractAttachmentIds } from "../features/chat/composerMentions";
 import { MentionsRichText } from "../features/chat/MentionsRichText";
 import { ModelPicker } from "../features/chat/ModelPicker";
 import { ModePicker } from "../features/chat/ModePicker";
@@ -75,9 +76,11 @@ function focusInModelPicker(node: Node | null): boolean {
 function UserPromptBody({
   text,
   onOpenFile,
+  attachments,
 }: {
   text: string;
   onOpenFile?: (path: string) => void;
+  attachments?: ChatAttachmentRef[];
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [overflows, setOverflows] = useState(false);
@@ -98,7 +101,7 @@ function UserPromptBody({
   return (
     <div className={`user-prompt__body${overflows ? " has-fade" : ""}`}>
       <div ref={bodyRef} className="user-prompt__text">
-        <MentionsRichText text={text} onOpenFile={onOpenFile} />
+        <MentionsRichText text={text} onOpenFile={onOpenFile} attachments={attachments} />
       </div>
     </div>
   );
@@ -137,9 +140,9 @@ type BubbleProps = {
   onSendEdit?: () => void;
   /** 进行中或排队：原位编辑仍可改文字和图片，但不能发送。*/
   sendBlocked?: boolean;
-  editImages?: DraftChatImage[];
-  onAttachEditImages?: (files: File[]) => void;
-  onRemoveEditImage?: (id: string) => void;
+  /** 原位编辑中的统一资产（图片即附件，@file: 芯片展示）。 */
+  editAttachments?: ChatAttachmentRef[];
+  onAttachEditFiles?: (files: File[]) => void;
   /** 失焦 / Esc：退出原位编辑，历史不变。*/
   onCancelEdit?: () => void;
   /** 当前会话：编辑态模型选用与底部 Composer 共用。*/
@@ -165,9 +168,8 @@ export function Bubble({
   onEditKeyDown,
   onSendEdit,
   sendBlocked = false,
-  editImages = [],
-  onAttachEditImages,
-  onRemoveEditImage,
+  editAttachments = [],
+  onAttachEditFiles,
   onCancelEdit,
   sessionId = null,
 }: BubbleProps) {
@@ -246,40 +248,35 @@ export function Bubble({
           onCancelEdit?.();
         }, 0);
       };
-      const editHasImages = editImages.some((img) => !img.uploading && Boolean(img.path.trim()));
-      const editUploading = editImages.some((img) => img.uploading);
+      const editHasAssets = editAttachments.length > 0;
       return (
         <li className="bubble role-user">
           {/* biome-ignore lint/a11y/noStaticElementInteractions: 编辑态容器靠 onBlur 判定点击外部收起，自身不可交互 */}
           <div className="user-prompt user-prompt--editing composer-shell" onBlur={leaveIfOutside}>
-            {editImages.length > 0 ? (
-              <ChatImageStrip images={editImages} onRemove={onRemoveEditImage} />
-            ) : null}
             <ComposerEditor
               ref={editInputRef}
               value={editDraft}
               placeholder={t("chat.placeholder")}
               onChange={(v) => onEditDraftChange?.(v)}
               onKeyDown={onEditKeyDown}
-              onPasteImages={(files) => {
-                if (!onAttachEditImages || files.length === 0) return false;
-                void onAttachEditImages(files);
+              attachments={editAttachments}
+              onPasteFiles={(files) => {
+                if (!onAttachEditFiles || files.length === 0) return false;
+                void onAttachEditFiles(files);
                 return true;
               }}
             />
             <input
               ref={editFileRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
+              accept="*/*,image/jpeg,image/gif,image/webp,image/heic,image/heif"
               multiple
               hidden
               onChange={(e) => {
-                const files = Array.from(e.target.files ?? []).filter((f) =>
-                  f.type.startsWith("image/"),
-                );
+                const files = Array.from(e.target.files ?? []);
                 e.target.value = "";
                 pickingEditFileRef.current = false;
-                if (files.length) onAttachEditImages?.(files);
+                if (files.length) onAttachEditFiles?.(files);
               }}
             />
             <div className="composer-bar">
@@ -292,8 +289,8 @@ export function Bubble({
                   className="composer-attach"
                   size="md"
                   variant="ghost"
-                  aria-label={t("chat.images.attach")}
-                  title={t("chat.images.attach")}
+                  aria-label={t("chat.attachments.attach")}
+                  title={t("chat.attachments.attach")}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     pickingEditFileRef.current = true;
@@ -316,7 +313,7 @@ export function Bubble({
                   className="composer-send"
                   size="lg"
                   variant="secondary"
-                  disabled={sendBlocked || editUploading || (!editDraft.trim() && !editHasImages)}
+                  disabled={sendBlocked || (!editDraft.trim() && !editHasAssets)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onSendEdit?.()}
                   aria-label={t("chat.send")}
@@ -333,7 +330,10 @@ export function Bubble({
       );
     }
 
-    const userImages = Array.isArray(view.images) ? view.images : [];
+    const allUserImages = Array.isArray(view.images) ? view.images : [];
+    // 已被正文 @file:<id> 芯片引用的图片不再进缩略图条（避免同一张图重复展示）
+    const chipIds = new Set(extractAttachmentIds(view.text ?? ""));
+    const userImages = allUserImages.filter((img) => !chipIds.has(img.id));
     return (
       <li className="bubble role-user">
         {/* biome-ignore lint/a11y/useSemanticElements: 整条用户消息作为可点击块进入编辑，包原生 button 会改变内部排版结构 */}
@@ -351,11 +351,13 @@ export function Bubble({
           aria-label={t("chat.editUserMessage")}
         >
           {userImages.length > 0 ? <ChatImageStrip images={userImages} /> : null}
-          {view.text?.trim() ? (
-            <UserPromptBody text={view.text} onOpenFile={onOpenFile} />
-          ) : userImages.length > 0 ? null : (
-            <UserPromptBody text={view.text} onOpenFile={onOpenFile} />
-          )}
+          {view.text?.trim() || allUserImages.length > 0 ? (
+            <UserPromptBody
+              text={view.text}
+              onOpenFile={onOpenFile}
+              attachments={view.attachments}
+            />
+          ) : null}
           <span className="user-prompt__retry" aria-hidden="true">
             <RestartIcon size="sm" />
           </span>

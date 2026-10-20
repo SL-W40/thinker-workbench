@@ -545,7 +545,7 @@ export async function runChildAgent(options: {
             // 尚无 reasoning：planning；有 thinking token 后再升为 Thinking
             emitProgress(LIVE_PLANNING, { type: "status", status: "planning" });
 
-            const assembled = assembleContext({
+            const assembled = await assembleContext({
               messages,
               aiLocale: getAiLocale(),
               allowEmoji: getAllowEmoji(),

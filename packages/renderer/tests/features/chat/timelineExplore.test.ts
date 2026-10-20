@@ -247,7 +247,7 @@ describe("timeline explore grouping", () => {
     );
   });
 
-  it("小结行跟随所在探索段收进组内，与工具行同列", () => {
+  it("探索段之后的小结作为可见独立行，不收进 Explored 组", () => {
     const steps: ChatTimelineStep[] = [
       tool("g1", "grep"),
       tool("r1", "read_file"),
@@ -257,7 +257,38 @@ describe("timeline explore grouping", () => {
       thought("th", "确认了"),
     ];
     const items = groupTimelineForDisplay(steps, T0);
-    assert.deepEqual(shape(items), ["explore:g1", "th"]);
-    assert.deepEqual(groupSteps(items, 0), ["g1", "r1", "tr", "g2", "r2"]);
+    // 小结 tr 在两组探索之间作为可见独立行出现，而非被折进任一 Explored 组
+    assert.deepEqual(shape(items), ["explore:g1", "tr", "explore:g2", "th"]);
+    assert.deepEqual(groupSteps(items, 0), ["g1", "r1"]);
+    assert.deepEqual(groupSteps(items, 2), ["g2", "r2"]);
+  });
+
+  it("读文件后出现 [NEXT] 小结再改文件：小结可见、不在折叠组内（复现“几乎不出现”回归）", () => {
+    const steps: ChatTimelineStep[] = [
+      thought("th0", "先看看实现"),
+      tool("r1", "read_file"),
+      tool("r2", "read_file"),
+      { id: "tr", kind: "transition", text: "定位到问题：入口在 agent.ts" },
+      { id: "e1", kind: "tool", name: "edit_file", phase: "end", active: false },
+    ];
+    const items = groupTimelineForDisplay(steps, T0);
+    // 用户可见序列：思考 → 探索组 → 小结 → 改文件
+    assert.deepEqual(shape(items), ["th0", "explore:r1", "tr", "e1"]);
+    assert.deepEqual(groupSteps(items, 1), ["r1", "r2"]);
+    // 小结必须是顶层可见步骤，而非被收进 explore 组的内部步骤
+    const visibleTr = items.find(
+      (item) => item.type === "step" && item.step.id === "tr",
+    );
+    assert.ok(visibleTr, "小结 transition 应作为可见独立行出现");
+  });
+
+  it("无探索时小结仍作为可见独立行（回归保护）", () => {
+    const steps: ChatTimelineStep[] = [
+      thought("th0", "想想"),
+      { id: "tr", kind: "transition", text: "直接改入口" },
+      { id: "e1", kind: "tool", name: "edit_file", phase: "end", active: false },
+    ];
+    const items = groupTimelineForDisplay(steps, T0);
+    assert.deepEqual(shape(items), ["th0", "tr", "e1"]);
   });
 });

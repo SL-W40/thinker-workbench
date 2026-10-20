@@ -80,6 +80,64 @@ describe("chipKey / domChipKey", () => {
   });
 });
 
+describe("芯片粘性：删掉尾随空格不溶解回纯文本", () => {
+  it("已固化的芯片在 edit 模式下免检", () => {
+    const el = editor();
+    fillEditor(el, "/review @src/a.ts ", "display");
+    assert.equal(domChipKey(el), "/review\n@src/a.ts");
+    // 删掉尾随空格后按 edit 重建：芯片应保住，而不是溶解成可编辑文本
+    fillEditor(el, "/review @src/a.ts", "edit");
+    assert.equal(domChipKey(el), "/review\n@src/a.ts");
+  });
+
+  it("手打的 token 永远保持文本：半截输入与带尾随空格都不成芯片", () => {
+    const el = editor();
+    fillEditor(el, "/re", "edit");
+    assert.equal(domChipKey(el), "");
+    // 完整打完并敲了空格，只要没从面板选中，就仍是文本
+    fillEditor(el, "/review ", "edit");
+    assert.equal(domChipKey(el), "");
+    fillEditor(el, "@src/a.ts ", "edit");
+    assert.equal(domChipKey(el), "");
+  });
+
+  it("外部写入（面板选中路径）用 display，仍会固化成芯片", () => {
+    const el = editor();
+    fillEditor(el, "/review @src/a.ts ", "display");
+    assert.equal(domChipKey(el), "/review\n@src/a.ts");
+  });
+
+  it("chipKey 带上 pinned 后与 domChipKey 一致，避免每次输入都重绘", () => {
+    const el = editor();
+    fillEditor(el, "/review ", "display");
+    const domKey = domChipKey(el);
+    const pinned = new Set(domKey.split("\n").filter(Boolean));
+    assert.equal(chipKey("/review", "edit", pinned), domKey);
+    assert.equal(chipKey("/review", "edit"), "");
+  });
+});
+
+describe("链接芯片", () => {
+  it("序列化回完整 URL，DOM 只展示短标签", () => {
+    const el = editor();
+    const url = "https://github.com/a/b";
+    el.appendChild(createChip("link", url));
+    assert.equal(serializeComposerEditor(el), url);
+    assert.equal(domChipKey(el), url);
+    assert.ok(el.textContent?.includes("github.com/a/b"));
+    assert.ok(!(el.textContent ?? "").includes("https://"));
+  });
+
+  it("粘贴的网址（pinned）回填成芯片，手打的不成芯片", () => {
+    const el = editor();
+    const url = "https://a.com/x";
+    fillEditor(el, `${url} `, "edit", undefined, new Set([url]));
+    assert.equal(domChipKey(el), url);
+    fillEditor(el, "https://b.com/y ", "edit");
+    assert.equal(domChipKey(el), "");
+  });
+});
+
 describe("setPlainCaret / getPlainCaret", () => {
   it("round-trips an offset inside a text node", () => {
     const el = editor();

@@ -3,6 +3,8 @@
  * 对外暴露与 textarea 相近的 handle（focus / selection / caret 锚点）。
  * DOM 序列化与光标见 ./dom，DOM 变更见 ./mutate。
  */
+
+import type { ChatAttachmentRef } from "@thinker-workbench/shared";
 import {
   type FormEvent,
   forwardRef,
@@ -13,6 +15,7 @@ import {
   useRef,
 } from "react";
 import { ComposerHistory, composerHistoryAction } from "../composerHistory";
+import { extractUrls } from "../composerMentions";
 import {
   caretAnchor,
   chipKey,
@@ -43,10 +46,24 @@ type Props = {
   onCaretChange?: () => void;
   /** 剪贴板含图片时回调；返回 true 表示已处理（不再插入纯文本）。 */
   onPasteImages?: (files: File[]) => boolean | undefined;
+  /** 剪贴板含文件（含图片，统一附件流）时回调；返回 true 表示已处理（不再插入纯文本）。 */
+  onPasteFiles?: (files: File[]) => boolean | undefined;
+  /** 外部附件引用（@file:<id> → 展示名），供回填时解析芯片标签。 */
+  attachments?: ChatAttachmentRef[];
 };
 
 export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function ComposerEditor(
-  { value, placeholder, className, onChange, onKeyDown, onCaretChange, onPasteImages },
+  {
+    value,
+    placeholder,
+    className,
+    onChange,
+    onKeyDown,
+    onCaretChange,
+    onPasteImages,
+    onPasteFiles,
+    attachments,
+  },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -56,6 +73,8 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
   const composingRef = useRef(false);
   const historyRef = useRef(new ComposerHistory());
   const applyingHistory = useRef(false);
+  /** 本次粘贴文本里的网址：允许固化成链接芯片（手打网址不芯片化）。 */
+  const pastedUrlsRef = useRef<string[]>([]);
 
   useImperativeHandle(ref, () => ({
     focus: () => elRef.current?.focus(),
@@ -79,24 +98,28 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     if (!el) return;
     // 组合输入期间勿同步，避免打断 IME
     if (composingRef.current) return;
+    const domText = serializeComposerEditor(el);
+    // 受控同步三态：noop / pureAppend / fullReplace
     if (skipSync.current) {
       skipSync.current = false;
       lastValue.current = value;
       // DOM 已一致才跳过；否则仍须同步（避免 skipSync 卡住时发完消息清不掉）
-      if (serializeComposerEditor(el) === value) return;
-    } else if (value === lastValue.current && serializeComposerEditor(el) === value) {
+      if (domText === value) return;
+    } else if (value === lastValue.current && domText === value) {
       return;
     }
     const hadFocus = document.activeElement === el;
-    const caret = hadFocus ? getPlainCaret(el) : value.length;
-    // 外部整段替换（发送后清空、载入编辑）时丢弃本框历史
-    historyRef.current.clear();
+    // 纯追加（粘贴/附加文件 token、行尾补 @ 引用、mention 追加）：保留历史、光标跟末尾
+    const pureAppend = value.length > domText.length && value.startsWith(domText);
+    const caret = hadFocus ? (pureAppend ? value.length : getPlainCaret(el)) : value.length;
+    // 仅「整段替换」（发送后清空 / 载入编辑 / 不一致恢复）才清空撤销栈；纯追加不清
+    if (!pureAppend) historyRef.current.clear();
     // 外部写入用 display：行末完整 token 也固化为芯片
-    fillEditor(el, value, "display");
+    fillEditor(el, value, "display", attachments);
     lastValue.current = value;
     if (hadFocus) setPlainCaret(el, caret);
     el.classList.toggle("is-empty", !value);
-  }, [value]);
+  }, [value, attachments]);
 
   useEffect(() => {
     const el = elRef.current;
@@ -108,11 +131,18 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     const el = elRef.current;
     if (!el) return;
     const next = serializeComposerEditor(el);
-    const rebuild = allowRebuild && chipKey(next, "edit") !== domChipKey(el);
+    const domKey = domChipKey(el);
+    // 已固化的芯片免检：否则删掉尾随空格的芯片每次输入都被判为「芯片集合变了」而反复重绘
+    const pinned = new Set(domKey.split("\n").filter(Boolean));
+    // 粘贴进来的网址：本次允许固化成链接芯片
+    for (const url of pastedUrlsRef.current) pinned.add(url);
+    pastedUrlsRef.current = [];
+    const rebuild = allowRebuild && chipKey(next, "edit", pinned) !== domKey;
     if (rebuild) {
-      // 输入中用 edit：仅「后跟空白」的 token 固化，避免半截 /cre 成芯片
+      // 输入中用 edit：仅「已固化」（面板选中 / 附件 / 粘贴网址）的 token 固化，
+      // 避免手打的 /cre、@path、网址在输入过程中被芯片化
       const caret = getPlainCaret(el);
-      fillEditor(el, next, "edit");
+      fillEditor(el, next, "edit", attachments, pinned);
       setPlainCaret(el, caret);
     } else {
       ensureTrailingPad(el, next);
@@ -134,7 +164,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     const el = elRef.current;
     if (!el || !next) return;
     applyingHistory.current = true;
-    fillEditor(el, next.text, "edit");
+    fillEditor(el, next.text, "edit", attachments);
     setPlainCaret(el, next.caret);
     skipSync.current = true;
     lastValue.current = next.text;
@@ -231,17 +261,26 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
   function onPaste(e: React.ClipboardEvent<HTMLDivElement>) {
     const files: File[] = [];
     for (const item of Array.from(e.clipboardData.items ?? [])) {
-      if (item.kind === "file" && item.type.startsWith("image/")) {
+      if (item.kind === "file") {
         const f = item.getAsFile();
         if (f) files.push(f);
       }
     }
-    if (files.length > 0 && onPasteImages?.(files)) {
+    // 统一附件流：composer 把所有文件（含图片）落盘为 @file:<id> 芯片；
+    // 原位编辑流只传 onPasteImages，图片回退到旧附图通道。
+    if (files.length > 0 && onPasteFiles?.(files)) {
+      e.preventDefault();
+      return;
+    }
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (imageFiles.length > 0 && onPasteImages?.(imageFiles)) {
       e.preventDefault();
       return;
     }
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
+    // 文本里的网址自动固化为链接芯片；纯文本插入后由 emitFromDom 完成芯片化
+    pastedUrlsRef.current = extractUrls(text);
     document.execCommand("insertText", false, text);
   }
 

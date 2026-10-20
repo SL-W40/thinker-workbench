@@ -58,7 +58,7 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["packages/{shared,engine,desktop,markdown}/tests/**/*.test.ts"],
+          include: ["packages/{shared,engine,desktop,markdown,file-parsers}/tests/**/*.test.ts"],
         },
       },
       {
@@ -89,6 +89,7 @@ export default defineConfig({
         "packages/markdown/src/**/*.{ts,tsx}",
         "packages/engine/src/**/*.{ts,tsx}",
         "packages/desktop/src/**/*.{ts,tsx}",
+        "packages/file-parsers/src/**/*.{ts,tsx}",
         "packages/renderer/src/**/*.{ts,tsx}",
       ],
       exclude: [

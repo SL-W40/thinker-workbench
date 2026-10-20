@@ -213,6 +213,20 @@ const api: ThinkerApi = {
       }),
     readChatImagePreview: (imagePath) =>
       ipcRenderer.invoke(IpcChannels.chatImagesReadPreview, imagePath),
+    saveAttachment: (workspaceId, input) =>
+      ipcRenderer.invoke(IpcChannels.chatAttachmentsSave, {
+        workspaceId,
+        bytes: input.bytes,
+        mime: input.mime,
+        name: input.name,
+      }),
+    readAttachment: (workspaceId, id) =>
+      ipcRenderer.invoke(IpcChannels.chatAttachmentsRead, { workspaceId, id }),
+    parseWorkspaceFileText: (workspaceId, p) =>
+      ipcRenderer.invoke(IpcChannels.workspaceFsParseText, {
+        workspaceId,
+        path: p,
+      }),
     setActiveSession: (sessionId) =>
       ipcRenderer.invoke(IpcChannels.chatSessionsSetActive, sessionId),
     getActiveSessionId: () => ipcRenderer.invoke(IpcChannels.chatSessionsGetActive),

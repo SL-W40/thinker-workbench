@@ -28,6 +28,7 @@
     "@langchain/langgraph-checkpoint-sqlite": "^1.1.0",
     "@langchain/openai": "^1.6.2",
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "@thinker-workbench/file-parsers": "workspace:*",
     "@thinker-workbench/shared": "workspace:*",
     "better-sqlite3": "12.11.1",
     "gpt-tokenizer": "^4.0.0",

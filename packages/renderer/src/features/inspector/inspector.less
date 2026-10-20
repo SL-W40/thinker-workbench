@@ -1277,6 +1277,25 @@
   box-shadow: 0 0 0 2px var(--focus);
 }
 
+/* 设计系统 Input 渲染为 .tw-input 壳 + 内层 input：胶囊自身已有边框与背景，
+   壳必须完全透明并参与 flex，否则会出现双层边框、width:100% 撑破胶囊、min-height 溢出 */
+.changes-filelist__search .tw-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.changes-filelist__search .tw-input:focus-within {
+  outline: none;
+}
+
 .changes-filelist__search-ico {
   display: inline-flex;
   align-items: center;

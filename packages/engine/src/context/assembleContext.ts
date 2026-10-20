@@ -4,6 +4,7 @@
  */
 import {
   type AiLocale,
+  type ChatAttachmentRef,
   type ChatMode,
   type ContextUsageSegment,
   type ContextUsageSnapshot,
@@ -35,6 +36,8 @@ export type AssembleContextInput = {
   latestUserText?: string;
   /** 用户 `@` 选中的工作区相对路径。 */
   contextPaths?: string[];
+  /** 外部附件引用；文档解析文本并入 `<context_files>`。 */
+  attachments?: ChatAttachmentRef[];
   /** 子代理只读：收紧写/ shell / Task。 */
   childReadonly?: boolean;
   /** 是否暴露 Task / task_await。 */
@@ -91,7 +94,7 @@ function conversationText(messages: ChatMessage[]): string {
  * 组装完整上下文与分段用量。
  * workspace / dataDir 优先用入参，否则读进程内已配置值。
  */
-export function assembleContext(input: AssembleContextInput): AssembledContext {
+export async function assembleContext(input: AssembleContextInput): Promise<AssembledContext> {
   const mode = input.chatMode ?? getChatMode();
   const dataDir = input.dataDir !== undefined ? input.dataDir : getDataDir();
   const workspaceRoot =
@@ -109,7 +112,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const rules = loadRules(dataDir, workspaceRoot);
   const latestUser = input.latestUserText ?? latestUserFromMessages(input.messages);
   const skills = loadSkills(dataDir, workspaceRoot, latestUser, input.contextPaths ?? []);
-  const contextFiles = loadContextFilesBlock(workspaceRoot, input.contextPaths);
+  const contextFiles = await loadContextFilesBlock(workspaceRoot, input.contextPaths, input.attachments);
   const tools = listChatTools({
     childReadonly: input.childReadonly,
     allowTask: input.allowTask,

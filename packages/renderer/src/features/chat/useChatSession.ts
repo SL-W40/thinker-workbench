@@ -8,6 +8,7 @@
  */
 
 import {
+  type ChatAttachmentRef,
   type ChatImageRef,
   type ChatMessage,
   createTraceId,
@@ -32,6 +33,7 @@ import {
   listWorkspaces,
   onThreadsChanged,
   onWorkspacesChanged,
+  saveAttachment,
   setActiveSession,
   setLastWorkspaceId,
 } from "../../bridge/workspaces";
@@ -40,7 +42,11 @@ import { appLog } from "../../log/sessionLog";
 import { useEnsureModelSecrets, useShowModelSecretGate } from "../modelSecrets/ModelSecretGate";
 import type { ComposerEditorHandle } from "./ComposerEditor";
 import { chatSubmitBlocked } from "./chatSubmit";
-import { extractContextPaths } from "./composerMentions";
+import {
+  extractAttachmentIds,
+  extractContextPaths,
+  formatFileAttachment,
+} from "./composerMentions";
 import {
   ensureLiveRunRegistry,
   listBusyLiveRuns,
@@ -72,7 +78,7 @@ import { useChatMessageEdit } from "./useChatMessageEdit";
 import { useChatPersistence } from "./useChatPersistence";
 import { useChatRunQueue } from "./useChatRunQueue";
 import { useChatRunState } from "./useChatRunState";
-import { useDraftImages, type WorkspaceGate } from "./useDraftImages";
+import type { WorkspaceGate } from "./useDraftImages";
 
 /** 续跑前可丢掉的空壳错误助手气泡。 */
 function isResumeStubMessage(message: ChatMessage): boolean {
@@ -105,15 +111,47 @@ export function useChatSession(visible = true) {
   const workspaceIdRef = useRef<string | null>(null);
   /** 发送前缺少工作空间 / 会话时的门禁（显示在输入框上方）*/
   const [workspaceGate, setWorkspaceGate] = useState<WorkspaceGate>(null);
-  /** 草稿附图：选择 / 粘贴 / 拖入的落盘与占位管理（见 useDraftImages）。 */
-  const {
-    draftImages,
-    draftImagesRef,
-    clearDraftImages,
-    attachImageFilesTo,
-    attachImageFiles,
-    removeDraftImage,
-  } = useDraftImages({ workspaceId, setWorkspaceGate });
+  /** 草稿外部附件：上传 / 粘贴 / 拖入的落盘引用；发送时按文本中的 @file:<id> 收口。 */
+  const [draftAttachments, setDraftAttachments] = useState<ChatAttachmentRef[]>([]);
+  const draftAttachmentsRef = useRef<ChatAttachmentRef[]>(draftAttachments);
+  useEffect(() => {
+    draftAttachmentsRef.current = draftAttachments;
+  }, [draftAttachments]);
+  const clearDraftAttachments = useCallback(() => setDraftAttachments([]), []);
+  const attachFiles = useCallback(
+    async (files: File[]) => {
+      if (!workspaceId) return;
+      const refs: ChatAttachmentRef[] = [];
+      for (const f of files) {
+        try {
+          const bytes = new Uint8Array(await f.arrayBuffer());
+          const ref = await saveAttachment(workspaceId, {
+            bytes,
+            mime: f.type || "application/octet-stream",
+            name: f.name,
+          });
+          refs.push(ref);
+        } catch (err) {
+          console.error("attachFiles failed", err);
+        }
+      }
+      if (refs.length === 0) return;
+      setDraftAttachments((prev) => [...prev, ...refs]);
+      const insertText = refs.map((r) => formatFileAttachment(r.id)).join("");
+      // 直接追加：@file: 解析已放宽，可紧接前文（无前导空格）成芯片
+      setDraft((prev) => prev + insertText);
+    },
+    [workspaceId],
+  );
+  const removeAttachment = useCallback((id: string) => {
+    setDraftAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+  /** 草稿文本变化：回收未被 @file: 引用的资产（删除芯片即移除资产）。 */
+  const reconcileDraftAttachments = useCallback((text: string) => {
+    setDraft(text);
+    const ids = new Set(extractAttachmentIds(text));
+    setDraftAttachments((prev) => prev.filter((a) => ids.has(a.id)));
+  }, []);
   const [activeTraceId, setActiveTraceId] = useState<string | null>(null);
   /** cancelled：仅时间线可续；crashed：输入区也提示检查点续跑*/
   const [resumeKind, setResumeKind] = useState<null | "cancelled" | "crashed">(null);
@@ -147,7 +185,7 @@ export function useChatSession(visible = true) {
     send,
     busy,
     queued: queue.queued,
-    attachImageFilesTo,
+    workspaceId,
   });
   useChatEventStream(run, {
     threadId,
@@ -265,7 +303,7 @@ export function useChatSession(visible = true) {
     setCanResume(false);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftImages();
+    clearDraftAttachments();
     setWorkspaceGate(null);
     setActiveTraceId(null);
 
@@ -557,7 +595,7 @@ export function useChatSession(visible = true) {
     setWorkspaceGate(null);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftImages();
+    clearDraftAttachments();
     requestStickToBottom();
 
     // 持久化侧栏选中等非绘制关键副作用
@@ -599,7 +637,7 @@ export function useChatSession(visible = true) {
     setWorkspaceGate(null);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftImages();
+    clearDraftAttachments();
     run.activeRunIdRef.current = null;
     run.targetMsgIdRef.current = null;
     run.streamTextRef.current = "";
@@ -658,7 +696,7 @@ export function useChatSession(visible = true) {
     setWorkspaceGate(null);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftImages();
+    clearDraftAttachments();
     run.activeRunIdRef.current = null;
     run.targetMsgIdRef.current = null;
     run.streamTextRef.current = "";
@@ -677,13 +715,20 @@ export function useChatSession(visible = true) {
     // 进行中或排队：允许改草稿 / 模式 / 附图，但不能再提交
     if (chatSubmitBlocked(busy, queue.queuedRef.current)) return;
     let sendImages: ChatImageRef[] = [];
-    const imageSource = replaceUserId ? edit.editImagesRef.current : draftImagesRef.current;
-    // 原位重发要带上正在传的图；底部草稿则先发已就绪的，未传完的不带上
-    if (replaceUserId && imageSource.some((img) => img.uploading)) return;
-    sendImages = imageSource
-      .filter((img) => !img.uploading && img.path.trim())
-      .map(({ id, path, mime, width, height }) => ({ id, path, mime, width, height }));
-    if (!text && sendImages.length === 0) return;
+    // 统一资产：底部与编辑态都走 @file: 芯片；编辑态资产在 edit.editAttachments
+    const assetSource = replaceUserId
+      ? edit.editAttachmentsRef.current
+      : draftAttachmentsRef.current;
+    const referencedAttIds = new Set(extractAttachmentIds(text));
+    const draftAtts = assetSource.filter((a) => referencedAttIds.has(a.id));
+    // 图片类附件走 image_ref 视觉通道（不进 <context_files> 文本解析）；其余为文档附件
+    const imageAtts = draftAtts.filter((a) => a.mime.startsWith("image/"));
+    const sendAttachments = draftAtts.filter((a) => !a.mime.startsWith("image/"));
+    sendImages = [
+      ...sendImages,
+      ...imageAtts.map((a) => ({ id: a.id, path: a.path, mime: a.mime, width: 0, height: 0 })),
+    ];
+    if (!text && sendImages.length === 0 && draftAtts.length === 0) return;
     if (submittingRef.current) return;
     submittingRef.current = true;
 
@@ -732,7 +777,7 @@ export function useChatSession(visible = true) {
     }
     edit.clearUserEdit();
     setDraft("");
-    if (!replaceUserId) clearDraftImages();
+    clearDraftAttachments();
     setCanResume(false);
     const traceId = createTraceId();
     setActiveTraceId(traceId);
@@ -752,6 +797,7 @@ export function useChatSession(visible = true) {
       false,
       undefined,
       sendImages.length > 0 ? sendImages : undefined,
+      draftAtts.length > 0 ? draftAtts : undefined,
     );
     const pending: ChatMessage = {
       ...createMessage("assistant", "", true, []),
@@ -783,6 +829,7 @@ export function useChatSession(visible = true) {
         traceId,
         ...(sendImages.length > 0 ? { images: sendImages } : {}),
         ...(contextPaths.length > 0 ? { contextPaths } : {}),
+        ...(sendAttachments.length > 0 ? { attachments: sendAttachments } : {}),
       });
       if (run.runEpoch.isStale(epoch)) return;
       if (result.ok && result.runId) {
@@ -1199,13 +1246,14 @@ export function useChatSession(visible = true) {
   return {
     messages: run.messages,
     draft,
-    setDraft,
-    draftImages,
-    attachImageFiles,
-    removeDraftImage,
-    editImages: edit.editImages,
-    attachEditImageFiles: edit.attachEditImageFiles,
-    removeEditImage: edit.removeEditImage,
+    setDraft: reconcileDraftAttachments,
+    draftAttachments,
+    attachFiles,
+    removeAttachment,
+    clearDraftAttachments,
+    editAttachments: edit.editAttachments,
+    attachEditFiles: edit.attachEditFiles,
+    removeEditAttachment: edit.removeEditAttachment,
     busy,
     queued: queue.queued,
     empty,

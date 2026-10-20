@@ -14,7 +14,7 @@ import {
 } from "../configApply";
 import { postToParent } from "../port";
 
-export function onContextUsage(message: UtilityContextUsage): void {
+export async function onContextUsage(message: UtilityContextUsage): Promise<void> {
   applyConfig({
     catalog: message.catalog,
     selection: message.selection,
@@ -38,7 +38,7 @@ export function onContextUsage(message: UtilityContextUsage): void {
   }));
 
   try {
-    const ctx = assembleContext({
+    const ctx = await assembleContext({
       messages,
       aiLocale: message.aiLocale ?? getAiLocale(),
       allowEmoji: getAllowEmoji(),

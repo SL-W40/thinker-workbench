@@ -450,6 +450,12 @@ export const zh: MessageTree = {
       typeToSearch: "继续输入搜索 · Esc / 空格保留纯 @",
       searching: "搜索「{q}」",
       noRecent: "暂无最近文件，输入名称搜索 · Esc / 空格保留纯 @",
+      preview: {
+        open: "在检视器中打开",
+        missing: "文件不存在",
+        external: "外部附件",
+        parseFailed: "无法解析内容",
+      },
     },
     send: "发送",
     sendHint: "发送  ·  ⏎　换行  ·  ⇧⏎",
@@ -462,6 +468,9 @@ export const zh: MessageTree = {
       attach: "添加图片",
       remove: "移除图片",
       visionUntagged: "当前模型未开启视觉理解，图片仍会发送。",
+    },
+    attachments: {
+      attach: "添加附件",
     },
     mode: {
       label: "聊天模式",

@@ -131,6 +131,36 @@ export type ThinkerWorkspacesApi = {
   ): Promise<import("../protocol/message").ChatImageRef>;
   /** 按绝对路径读取附图预览 data URL（须在工作空间 images 目录内）。 */
   readChatImagePreview(imagePath: string): Promise<{ dataUrl: string } | null>;
+  /**
+   * 将工作空间外的文件落盘到 `{dataDir}/workspaces/{workspaceId}/attachments/`。
+   * 返回引用（不含字节）；`kind` 由 MIME / 扩展名推断。
+   */
+  saveAttachment(
+    workspaceId: string,
+    input: { bytes: Uint8Array; mime: string; name: string },
+  ): Promise<import("../protocol/message").ChatAttachmentRef>;
+  /**
+   * 按 id 读取外部附件预览：图片返回 dataUrl；文档/文本经解析层返回 text。
+   * 缺失返回 null。
+   */
+  readAttachment(
+    workspaceId: string,
+    id: string,
+  ): Promise<
+    | {
+        name: string;
+        size: number;
+        mime: string;
+        dataUrl?: string | null;
+        text?: string | null;
+      }
+    | null
+  >;
+  /** 读取工作空间内某文件经解析层抽取的纯文本（用于文档悬停预览）。 */
+  parseWorkspaceFileText(
+    workspaceId: string,
+    path: string,
+  ): Promise<{ text: string } | null>;
   setActiveSession(sessionId: string | null): Promise<void>;
   getActiveSessionId(): Promise<string | null>;
   getLastWorkspaceId(): Promise<string | null>;

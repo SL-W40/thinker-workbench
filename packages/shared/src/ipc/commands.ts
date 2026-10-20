@@ -3,7 +3,7 @@
  * 由 renderer 或主进程发起，经 utilityProcess 交给 AgentRuntime 执行。
  */
 
-import type { ChatImageRef } from "../protocol/message";
+import type { ChatAttachmentRef, ChatImageRef } from "../protocol/message";
 
 /** 多轮上下文中的一条历史消息（不含当前用户输入）。 */
 export type AgentHistoryMessage = {
@@ -48,6 +48,11 @@ export type AgentRunCommand = {
    * engine 组装上下文时限大小读入并注入 `<context_files>`。
    */
   contextPaths?: string[];
+  /**
+   * 外部附件引用（工作空间外文件，绝对路径已落盘 dataDir）。
+   * engine 按文档类型解析文本并入上下文，与 contextPaths 同源处理。
+   */
+  attachments?: ChatAttachmentRef[];
 };
 
 /** 取消正在进行的运行（按 runId 或 sessionId 寻址；禁止无目标 cancel-all）。 */
