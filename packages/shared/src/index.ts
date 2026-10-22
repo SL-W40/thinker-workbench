@@ -190,6 +190,8 @@ export {
   SHELL_APPROVAL_MODES,
   shellAllowlistWithoutBlocked,
   shellCommandBaseToken,
+  shellCommandsToAllowlist,
+  shellWhitelistTokens,
   THEME_CATALOG_VERSION,
   WORKSPACE_ACCESS_OPTIONS,
 } from "./ipc/general";

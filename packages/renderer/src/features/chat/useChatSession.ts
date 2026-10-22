@@ -42,6 +42,7 @@ import { useT } from "../../i18n/useI18n";
 import { appLog } from "../../log/sessionLog";
 import { useEnsureModelSecrets, useShowModelSecretGate } from "../modelSecrets/ModelSecretGate";
 import type { DraftChatImage } from "./ChatImageStrip";
+import { chatSubmitBlocked } from "./chatSubmit";
 import type { ComposerEditorHandle } from "./ComposerEditor";
 import { extractContextPaths } from "./composerMentions";
 import {
@@ -68,11 +69,13 @@ import {
   appendThinkingText,
   applyHitlRequest,
   applyHitlResolved,
+  isTimelineHitlKind,
   applyShellCommandBackgrounded,
   applyShellCommandExited,
   applyStatus,
   applySubagentEvent,
   applyToolEvent,
+  reconcileTimelineReply,
   bindShellSessionId,
   deactivateAll,
   freezeTimelineHistory,
@@ -232,6 +235,17 @@ export function useChatSession(visible = true) {
     draftImagesRef.current = [];
     setDraftImages([]);
   }, []);
+  /** 原位编辑中的附图（可增删，发送前不写回历史）。 */
+  const [editImages, setEditImages] = useState<DraftChatImage[]>([]);
+  const editImagesRef = useRef<DraftChatImage[]>([]);
+  editImagesRef.current = editImages;
+  const clearEditImages = useCallback(() => {
+    for (const img of editImagesRef.current) {
+      if (img.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(img.previewUrl);
+    }
+    editImagesRef.current = [];
+    setEditImages([]);
+  }, []);
   const [busy, setBusy] = useState(false);
   /** 本会话已入队、尚未占并行槽。不要把它当成 busy。 */
   const [queued, setQueued] = useState(false);
@@ -389,6 +403,7 @@ export function useChatSession(visible = true) {
     editDraftRef.current = "";
     setEditingUserId(null);
     setEditDraft("");
+    clearEditImages();
   }
 
   function setEditDraftValue(value: string) {
@@ -970,10 +985,7 @@ export function useChatSession(visible = true) {
 
       if (event.type === "hitl") {
         const hitlKind = event.request?.kind;
-        if (
-          event.phase === "request" &&
-          (hitlKind === "shell_approval" || hitlKind === "shell_write_approval")
-        ) {
+        if (event.phase === "request" && hitlKind && isTimelineHitlKind(hitlKind)) {
           timelineRef.current = applyHitlRequest(timelineRef.current, event.request!);
           patchTarget({ timeline: [...timelineRef.current], pending: true });
         } else if (event.phase === "resolved") {
@@ -981,6 +993,7 @@ export function useChatSession(visible = true) {
             timelineRef.current,
             event.hitlId,
             event.response?.actionId,
+            event.response?.values,
           );
           patchTarget({ timeline: [...timelineRef.current], pending: true });
         }
@@ -1039,7 +1052,7 @@ export function useChatSession(visible = true) {
       if (event.type === "done") {
         const text = event.text || streamText.current;
         streamText.current = text;
-        timelineRef.current = deactivateAll(timelineRef.current);
+        timelineRef.current = reconcileTimelineReply(deactivateAll(timelineRef.current), text);
         setCanResume(false);
         setMessages((prev) => {
           const next = prev.map((m) =>
@@ -1433,9 +1446,12 @@ export function useChatSession(visible = true) {
     await setActiveSession(null);
   }
 
-  /** 选择 / 粘贴 / 拖入图片：立刻落盘。 */
-  const attachImageFiles = useCallback(
-    async (files: File[]) => {
+  /** 选择 / 粘贴 / 拖入图片：立刻落盘。草稿与原位编辑共用。 */
+  const attachImageFilesTo = useCallback(
+    async (
+      files: File[],
+      setImages: (updater: (prev: DraftChatImage[]) => DraftChatImage[]) => void,
+    ) => {
       const imageFiles = files.filter((f) => f.type.startsWith("image/"));
       if (imageFiles.length === 0) return;
 
@@ -1461,7 +1477,7 @@ export function useChatSession(visible = true) {
           previewUrl,
           uploading: true,
         };
-        setDraftImages((prev) => [...prev, placeholder]);
+        setImages((prev) => [...prev, placeholder]);
         try {
           const buf = new Uint8Array(await file.arrayBuffer());
           const saved = await saveChatImage(wid, {
@@ -1469,14 +1485,14 @@ export function useChatSession(visible = true) {
             mime: file.type || "image/png",
             name: file.name,
           });
-          setDraftImages((prev) =>
+          setImages((prev) =>
             prev.map((img) =>
               img.id === tempId ? { ...saved, previewUrl, uploading: false } : img,
             ),
           );
         } catch (err) {
           URL.revokeObjectURL(previewUrl);
-          setDraftImages((prev) => prev.filter((img) => img.id !== tempId));
+          setImages((prev) => prev.filter((img) => img.id !== tempId));
           appLog("chat.images").warn("save failed", {
             meta: {
               error: err instanceof Error ? err.message : String(err),
@@ -1489,8 +1505,26 @@ export function useChatSession(visible = true) {
     [workspaceId, t],
   );
 
+  const attachImageFiles = useCallback(
+    (files: File[]) => attachImageFilesTo(files, setDraftImages),
+    [attachImageFilesTo],
+  );
+
+  const attachEditImageFiles = useCallback(
+    (files: File[]) => attachImageFilesTo(files, setEditImages),
+    [attachImageFilesTo],
+  );
+
   const removeDraftImage = useCallback((id: string) => {
     setDraftImages((prev) => {
+      const hit = prev.find((img) => img.id === id);
+      if (hit?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
+      return prev.filter((img) => img.id !== id);
+    });
+  }, []);
+
+  const removeEditImage = useCallback((id: string) => {
+    setEditImages((prev) => {
       const hit = prev.find((img) => img.id === id);
       if (hit?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(hit.previewUrl);
       return prev.filter((img) => img.id !== id);
@@ -1501,18 +1535,16 @@ export function useChatSession(visible = true) {
    * @param override 快捷方式 / 原位编辑的正文。   * @param replaceUserId 从该用户消息截断后重发；未传则追加到末尾。   */
   async function send(override?: string, replaceUserId?: string | null) {
     const text = (override ?? draft).trim();
+    // 进行中或排队：允许改草稿 / 模式 / 附图，但不能再提交
+    if (chatSubmitBlocked(busy, queuedRef.current)) return;
     let sendImages: ChatImageRef[] = [];
-    if (replaceUserId) {
-      const orig = messagesRef.current.find((m) => m.id === replaceUserId);
-      sendImages = Array.isArray(orig?.images) ? [...orig.images] : [];
-    } else {
-      // 仍在上传的图不发送
-      sendImages = draftImagesRef.current
-        .filter((img) => !img.uploading && img.path.trim())
-        .map(({ id, path, mime, width, height }) => ({ id, path, mime, width, height }));
-    }
+    const imageSource = replaceUserId ? editImagesRef.current : draftImagesRef.current;
+    // 原位重发要带上正在传的图；底部草稿则先发已就绪的，未传完的不带上
+    if (replaceUserId && imageSource.some((img) => img.uploading)) return;
+    sendImages = imageSource
+      .filter((img) => !img.uploading && img.path.trim())
+      .map(({ id, path, mime, width, height }) => ({ id, path, mime, width, height }));
     if (!text && sendImages.length === 0) return;
-    if ((busy || queuedRef.current) && !replaceUserId) return;
     if (submittingRef.current) return;
     submittingRef.current = true;
 
@@ -1553,18 +1585,6 @@ export function useChatSession(visible = true) {
     setWorkspaceGate(null);
 
     if (replaceUserId) {
-      if (busy || queuedRef.current) {
-        const cancelSid = sessionIdRef.current;
-        const cancelRunId = activeRunId.current ?? undefined;
-        try {
-          await cancelAgent({
-            ...(cancelRunId ? { runId: cancelRunId } : {}),
-            ...(cancelSid ? { sessionId: cancelSid } : {}),
-          });
-        } catch {
-          /* 取消失败时同会话互斥会拒绝叠送 */
-        }
-      }
       abortRunSilently();
       const idx = messagesRef.current.findIndex((m) => m.id === replaceUserId);
       if (idx >= 0) {
@@ -1979,15 +1999,10 @@ export function useChatSession(visible = true) {
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (e.key !== "Enter") return;
-    // Shift+Enter：换行；Enter：发送
-    if (e.shiftKey) {
-      e.preventDefault();
-      document.execCommand("insertLineBreak");
-      return;
-    }
+    // Shift+Enter 换行由 ComposerEditor 处理；Enter 发送
+    if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
-    if (busy || queued) return;
+    if (chatSubmitBlocked(busy, queued)) return;
     void send();
   }
 
@@ -2007,6 +2022,10 @@ export function useChatSession(visible = true) {
     const text = msg.text ?? "";
     editDraftRef.current = text;
     setEditDraft(text);
+    clearEditImages();
+    const images = Array.isArray(msg.images) ? msg.images.map((img) => ({ ...img })) : [];
+    editImagesRef.current = images;
+    setEditImages(images);
     window.requestAnimationFrame(() => {
       const el = editInputRef.current;
       if (!el) return;
@@ -2023,19 +2042,16 @@ export function useChatSession(visible = true) {
       clearUserEdit();
       return;
     }
-    if (e.key !== "Enter") return;
-    if (e.shiftKey) {
-      e.preventDefault();
-      document.execCommand("insertLineBreak");
-      return;
-    }
+    if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
+    if (chatSubmitBlocked(busy, queued)) return;
     const id = editingUserIdRef.current;
     if (!id) return;
     void send(editDraftRef.current, id);
   }
 
   function sendUserEdit() {
+    if (chatSubmitBlocked(busy, queued)) return;
     const id = editingUserIdRef.current;
     if (!id) return;
     void send(editDraftRef.current, id);
@@ -2111,6 +2127,9 @@ export function useChatSession(visible = true) {
     draftImages,
     attachImageFiles,
     removeDraftImage,
+    editImages,
+    attachEditImageFiles,
+    removeEditImage,
     busy,
     queued,
     empty,

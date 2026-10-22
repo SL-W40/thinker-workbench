@@ -3,10 +3,16 @@
  * 输出默认折叠，超出时底部渐隐 + 居中箭头展开。
  */
 import { Badge, Button } from "@thinker-workbench/design/react";
-import { type ChatTimelineToolStep, stripAnsi } from "@thinker-workbench/shared";
-import { useLayoutEffect, useRef, useState } from "react";
-import { respondHitl } from "../../bridge/thinker";
+import {
+  type ChatTimelineToolStep,
+  type GeneralSettings,
+  shellCommandsToAllowlist,
+  stripAnsi,
+} from "@thinker-workbench/shared";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { GENERAL_SETTINGS_CHANGED, getGeneralSettings, respondHitl } from "../../bridge/thinker";
 import { useT } from "../../i18n/useI18n";
+import { formatShellPurpose } from "./explainShellCommand";
 import { SHELL_COLLAPSED_LINES, shellOutputLikelyOverflows } from "./shellOutputOverflow";
 
 type Props = {
@@ -33,6 +39,7 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const outputRef = useRef<HTMLPreElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const hitl = step.hitl;
   const awaiting = Boolean(hitl);
@@ -48,16 +55,18 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
   const writeParent = hitl?.parentCommand?.trim() ?? "";
   const writePreview = hitl?.dataPreview ?? "";
   const isWriteApproval = Boolean(awaiting && (writeParent || writePreview));
-  const reviewNote = isWriteApproval
+  const purpose = isWriteApproval
     ? ""
-    : hitlBody && command && hitlBody.startsWith(command.slice(0, Math.min(command.length, 400)))
-      ? hitlBody
-          .slice(command.slice(0, 400).length)
-          .replace(/^\s*\n+/, "")
-          .trim()
-      : hitlBody && hitlBody !== command
-        ? hitlBody
-        : "";
+    : (hitl?.purpose?.trim() ||
+        (hitlBody && command && hitlBody.startsWith(command.slice(0, Math.min(command.length, 400)))
+          ? hitlBody
+              .slice(command.slice(0, 400).length)
+              .replace(/^\s*\n+/, "")
+              .replace(/^\(|\)$/g, "")
+              .trim()
+          : hitlBody && hitlBody !== command
+            ? hitlBody
+            : ""));
 
   // 流式输出会变长：必须随 displayOut 重测。空依赖会导致首帧无输出时 overflows=false，之后永远不出现展开。
   useLayoutEffect(() => {
@@ -79,6 +88,44 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
     Boolean(displayOut) &&
     (expanded || overflows || shellOutputLikelyOverflows(displayOut, SHELL_COLLAPSED_LINES));
 
+  // 审批卡出现时滚进视野，避免停在气泡上方、用户只看到「执行中」。
+  useEffect(() => {
+    if (!awaiting) return;
+    cardRef.current?.scrollIntoView({ block: "nearest" });
+  }, [awaiting, hitl?.hitlId]);
+
+  const [shellLists, setShellLists] = useState<{
+    allow: string[];
+    block: string[];
+  } | null>(null);
+  useEffect(() => {
+    if (!awaiting) return;
+    let cancelled = false;
+    const apply = (general: GeneralSettings) => {
+      if (!cancelled) {
+        setShellLists({ allow: general.shellAllowlist, block: general.shellBlocklist });
+      }
+    };
+    void getGeneralSettings()
+      .then(apply)
+      .catch(() => {});
+    const onChanged = (event: Event) => {
+      const saved = (event as CustomEvent<GeneralSettings>).detail;
+      if (saved) apply(saved);
+    };
+    window.addEventListener(GENERAL_SETTINGS_CHANGED, onChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(GENERAL_SETTINGS_CHANGED, onChanged);
+    };
+  }, [awaiting]);
+
+  const whitelistTokens = shellCommandsToAllowlist(
+    command,
+    shellLists?.allow ?? [],
+    shellLists?.block ?? [],
+  );
+
   async function onHitlAction(actionId: string) {
     if (!hitl || busy) return;
     setBusy(true);
@@ -91,25 +138,34 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
 
   return (
     <div
+      ref={cardRef}
       className={`run-shell-card${running ? " is-running" : ""}${failed ? " is-failed" : ""}${awaiting ? " is-awaiting" : ""}`}
     >
       <div className="run-shell-card__head">
-        <span className="run-shell-card__tool" aria-hidden="true">
-          $
-        </span>
-        <span className="run-shell-card__cmd">{command}</span>
         {awaiting ? (
           <Badge variant="accent" className="run-shell-card__badge">
             {t("chat.shellAwaitingApproval")}
           </Badge>
-        ) : running ? (
+        ) : (
+          <span className="run-shell-card__tool" aria-hidden="true">
+            $
+          </span>
+        )}
+        <span className="run-shell-card__cmd">
+          {awaiting
+            ? isWriteApproval
+              ? t("chat.shellWriteIntoCommand")
+              : t("hitl.shellApproval.title")
+            : command}
+        </span>
+        {awaiting ? null : running ? (
           <span className="run-shell-card__status">{t("chat.toolRunning")}</span>
         ) : backgrounded ? (
           <span className="run-shell-card__status">{t("chat.shellBackgrounded")}</span>
         ) : failed ? (
           <span className="run-shell-card__status is-err">{t("chat.toolFailed")}</span>
         ) : null}
-        {canOpenTerminal ? (
+        {canOpenTerminal && !awaiting ? (
           <Button
             variant="text"
             size="sm"
@@ -139,30 +195,15 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
               <p className="run-shell-card__note">{t("chat.shellWriteWillSend")}</p>
               <pre className="run-shell-card__write-data">{writePreview || "(empty)"}</pre>
             </div>
-          ) : reviewNote ? (
-            <p className="run-shell-card__note">{reviewNote}</p>
-          ) : null}
-          <div className="run-shell-card__actions">
-            {hitl.actions.map((action) => (
-              <Button
-                key={action.id}
-                size="sm"
-                variant={
-                  action.style === "danger"
-                    ? "danger"
-                    : action.style === "primary"
-                      ? "primary"
-                      : action.style === "ghost"
-                        ? "ghost"
-                        : "secondary"
-                }
-                disabled={busy}
-                onClick={() => void onHitlAction(action.id)}
-              >
-                {actionLabel(t, action.id, action.label)}
-              </Button>
-            ))}
-          </div>
+          ) : (
+            <>
+              <p className="run-shell-card__note">
+                {formatShellPurpose(command, t) || purpose}
+              </p>
+              <p className="run-shell-card__label">{t("chat.shellApprovalCommand")}</p>
+              <pre className="run-shell-card__write-cmd">{command}</pre>
+            </>
+          )}
         </div>
       ) : null}
 
@@ -189,6 +230,67 @@ export function ShellCard({ step, onOpenTerminal }: Props) {
               />
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {awaiting && hitl ? (
+        <div className="run-shell-card__actions">
+          {hitl.actions.map((action) => {
+            const variant =
+              action.style === "danger"
+                ? "danger"
+                : action.style === "primary"
+                  ? "primary"
+                  : action.style === "ghost"
+                    ? "ghost"
+                    : "secondary";
+            if (action.id !== "allow_and_whitelist") {
+              return (
+                <Button
+                  key={action.id}
+                  size="sm"
+                  variant={variant}
+                  disabled={busy}
+                  onClick={() => void onHitlAction(action.id)}
+                >
+                  {actionLabel(t, action.id, action.label)}
+                </Button>
+              );
+            }
+            const nativeTitle =
+              whitelistTokens.length > 0
+                ? `${t("hitl.whitelistTipLead")}: ${whitelistTokens.join(", ")}`
+                : t("hitl.whitelistEmpty");
+            return (
+              <span key={action.id} className="run-shell-card__tip">
+                <Button
+                  size="sm"
+                  variant={variant}
+                  disabled={busy}
+                  title={nativeTitle}
+                  onClick={() => void onHitlAction(action.id)}
+                >
+                  {actionLabel(t, action.id, action.label)}
+                </Button>
+                <span className="run-shell-card__tip-bubble" role="tooltip">
+                  <span className="run-shell-card__tip-lead">
+                    {whitelistTokens.length > 0
+                      ? t("hitl.whitelistTipLead")
+                      : t("hitl.whitelistEmpty")}
+                  </span>
+                  {whitelistTokens.length > 0 ? (
+                    <ul className="run-shell-card__tip-list">
+                      {whitelistTokens.map((token) => (
+                        <li key={token}>
+                          <code>{token}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </span>
+              </span>
+            );
+          })}
         </div>
       ) : null}
     </div>

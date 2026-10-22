@@ -50,6 +50,7 @@ export async function agent(
       messages: ctx.messages,
       tools: ctx.tools,
       system: ctx.system,
+      systemSections: ctx.systemSections,
       onToken: (text, channel) => {
         emit({ type: "token", text, channel: channel ?? "reply" });
       },

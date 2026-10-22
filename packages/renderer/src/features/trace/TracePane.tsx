@@ -3,11 +3,13 @@
  */
 import {
   Button,
+  ChevronLeftIcon,
   ChevronRightIcon,
   ContextMenu,
   type ContextMenuItemProps,
   EmptyState,
   FolderIcon,
+  IconButton,
   Input,
   Modal,
   SegmentedControl,
@@ -20,6 +22,8 @@ import type {
 } from "@thinker-workbench/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../../i18n/useI18n";
+import { getModelSettings, MODEL_SETTINGS_CHANGED } from "../../bridge/thinker";
+import { listWorkspaces } from "../../bridge/workspaces";
 import { CallTreeDiagram } from "./CallTreeDiagram";
 import {
   callTreeLabel,
@@ -28,13 +32,17 @@ import {
   UNKNOWN_RUN_ID,
 } from "./callTreeModel";
 import { SequenceDiagram } from "./SequenceDiagram";
+import { SpanOverview } from "./SpanOverview";
+import { omitOutputOverview, type OverviewNames } from "./overviewModel";
 import { TracePayloadView } from "./TracePayloadView";
 import "./trace.less";
 
 const DETAIL_WIDTH_KEY = "tw.trace.detailWidth";
+const DETAIL_COLLAPSED_KEY = "tw.trace.detailCollapsed";
 const DETAIL_WIDTH_DEFAULT = 380;
-const DETAIL_WIDTH_MIN = 220;
+const DETAIL_WIDTH_MIN = 350;
 const DETAIL_WIDTH_MAX = 560;
+const DETAIL_RAIL_WIDTH = 40;
 
 function readDetailWidth(): number {
   try {
@@ -47,6 +55,14 @@ function readDetailWidth(): number {
   }
 }
 
+function readDetailCollapsed(): boolean {
+  try {
+    return localStorage.getItem(DETAIL_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 type Props = {
   active: boolean;
   /** 从聊天跳转时聚焦会话（可选）。*/
@@ -55,14 +71,6 @@ type Props = {
 
 /** calltree=追踪树（默认）；sequence=时序 */
 type ViewMode = "calltree" | "sequence";
-
-function formatTs(ts: number): string {
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return String(ts);
-  }
-}
 
 /** 侧栏短时间：月/日 时:分 */
 function formatShortTs(ts: number): string {
@@ -122,7 +130,9 @@ export function TracePane({ active, focusSessionId = null }: Props) {
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState | null>(null);
   const [detailWidth, setDetailWidth] = useState(readDetailWidth);
+  const [detailCollapsed, setDetailCollapsed] = useState(readDetailCollapsed);
   const [resizingDetail, setResizingDetail] = useState(false);
+  const [overviewNames, setOverviewNames] = useState<OverviewNames>({});
   const resizeStartX = useRef(0);
   const resizeStartW = useRef(DETAIL_WIDTH_DEFAULT);
 
@@ -135,6 +145,52 @@ export function TracePane({ active, focusSessionId = null }: Props) {
       /* ignore */
     }
   }, [detailWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DETAIL_COLLAPSED_KEY, detailCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [detailCollapsed]);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    const applyModels = (models: Array<{ id: string; label: string; model: string }>) => {
+      const next: Record<string, string> = {};
+      for (const entry of models) {
+        const name = (entry.label || entry.model).trim();
+        if (name) next[entry.id] = name;
+      }
+      setOverviewNames((prev) => ({ ...prev, models: next }));
+    };
+    void getModelSettings()
+      .then((catalog) => {
+        if (!cancelled) applyModels(catalog.models);
+      })
+      .catch(() => {});
+    void listWorkspaces()
+      .then((rows) => {
+        if (cancelled) return;
+        const workspaces: Record<string, string> = {};
+        for (const row of rows) {
+          const name = row.name.trim();
+          if (name) workspaces[row.id] = name;
+        }
+        setOverviewNames((prev) => ({ ...prev, workspaces }));
+      })
+      .catch(() => {});
+    const onModels = (event: Event) => {
+      const detail = (event as CustomEvent<{ models?: Array<{ id: string; label: string; model: string }> }>).detail;
+      if (detail?.models) applyModels(detail.models);
+    };
+    window.addEventListener(MODEL_SETTINGS_CHANGED, onModels);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(MODEL_SETTINGS_CHANGED, onModels);
+    };
+  }, [active]);
 
   useEffect(() => {
     if (!resizingDetail) return;
@@ -465,7 +521,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
     <div
       className={`trace-pane${resizingDetail ? " is-resizing-detail" : ""}`}
       style={{
-        gridTemplateColumns: `minmax(160px, 220px) minmax(0, 1fr) ${detailWidth}px`,
+        gridTemplateColumns: `minmax(160px, 220px) minmax(0, 1fr) ${detailCollapsed ? DETAIL_RAIL_WIDTH : detailWidth}px`,
       }}
     >
       <aside className="trace-pane__sessions">
@@ -620,24 +676,37 @@ export function TracePane({ active, focusSessionId = null }: Props) {
         )}
       </section>
 
-      <aside className="trace-pane__detail">
-        <div
-          className="trace-pane__detail-resize"
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={DETAIL_WIDTH_MIN}
-          aria-valuemax={DETAIL_WIDTH_MAX}
-          aria-valuenow={detailWidth}
-          aria-label={t("tools.trace.resizeDetail")}
-          title={t("tools.trace.resizeDetail")}
-          onPointerDown={(event) => {
-            event.preventDefault();
-            resizeStartX.current = event.clientX;
-            resizeStartW.current = detailWidth;
-            setResizingDetail(true);
-          }}
-        />
-        {!selectedSpan ? (
+      <aside className={`trace-pane__detail${detailCollapsed ? " is-collapsed" : ""}`}>
+        {detailCollapsed ? null : (
+          <div
+            className="trace-pane__detail-resize"
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuemin={DETAIL_WIDTH_MIN}
+            aria-valuemax={DETAIL_WIDTH_MAX}
+            aria-valuenow={detailWidth}
+            aria-label={t("tools.trace.resizeDetail")}
+            title={t("tools.trace.resizeDetail")}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              resizeStartX.current = event.clientX;
+              resizeStartW.current = detailWidth;
+              setResizingDetail(true);
+            }}
+          />
+        )}
+        <div className="trace-pane__detail-bar">
+          <IconButton
+            variant="ghost"
+            size="sm"
+            aria-label={t(detailCollapsed ? "tools.trace.expandDetail" : "tools.trace.collapseDetail")}
+            title={t(detailCollapsed ? "tools.trace.expandDetail" : "tools.trace.collapseDetail")}
+            onClick={() => setDetailCollapsed((collapsed) => !collapsed)}
+          >
+            {detailCollapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          </IconButton>
+        </div>
+        {detailCollapsed ? null : !selectedSpan ? (
           loadingSpans || runSpans.length > 0 ? (
             <div className="trace-pane__loading">
               <Spinner />
@@ -645,37 +714,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
           ) : null
         ) : (
           <div className="trace-pane__detail-body">
-            <h3>{callTreeLabel(selectedSpan)}</h3>
-            <dl className="trace-pane__facts">
-              <div>
-                <dt>runType</dt>
-                <dd>{selectedSpan.runType}</dd>
-              </div>
-              <div>
-                <dt>source</dt>
-                <dd>{selectedSpan.source}</dd>
-              </div>
-              <div>
-                <dt>status</dt>
-                <dd>{selectedSpan.status ?? "…"}</dd>
-              </div>
-              <div>
-                <dt>start</dt>
-                <dd>{formatTs(selectedSpan.startTs)}</dd>
-              </div>
-              {selectedSpan.endTs ? (
-                <div>
-                  <dt>end</dt>
-                  <dd>{formatTs(selectedSpan.endTs)}</dd>
-                </div>
-              ) : null}
-            </dl>
-            {selectedSpan.summary ? (
-              <div className="trace-pane__summary-block">
-                <div className="trace-pane__field-label">summary</div>
-                <pre className="trace-pane__prose">{selectedSpan.summary}</pre>
-              </div>
-            ) : null}
+            <SpanOverview span={selectedSpan} output={payloadOut?.json} names={overviewNames} />
             {payloadIn ? (
               <TracePayloadView
                 title={t("tools.trace.input")}
@@ -687,23 +726,7 @@ export function TracePane({ active, focusSessionId = null }: Props) {
             {payloadOut ? (
               <TracePayloadView
                 title={t("tools.trace.output")}
-                payload={payloadOut}
-                truncatedLabel={t("tools.trace.truncated")}
-                partialLabel={t("tools.trace.partial")}
-              />
-            ) : null}
-            {selectedSpan.attrs ? (
-              <TracePayloadView
-                title="attrs"
-                payload={{
-                  id: "attrs",
-                  runId: selectedSpan.id,
-                  side: "out",
-                  ts: selectedSpan.startTs,
-                  bytes: 0,
-                  truncated: false,
-                  json: selectedSpan.attrs,
-                }}
+                payload={{ ...payloadOut, json: omitOutputOverview(payloadOut.json) }}
                 truncatedLabel={t("tools.trace.truncated")}
                 partialLabel={t("tools.trace.partial")}
               />

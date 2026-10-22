@@ -68,11 +68,17 @@ export type ToolParameters = {
 /** 解析后的工具参数对象。 */
 export type ToolArgs = Record<string, unknown>;
 
+/**
+ * 发给模型的 parameters。
+ * 内置工具多用轻量 ToolParameters；需要数组 / 嵌套对象时可用完整 JSON Schema。
+ */
+export type ToolParametersSchema = ToolParameters | Record<string, unknown>;
+
 /** 注册表中的工具规格。 */
 export type ToolSpec = {
   name: string;
   description: string;
-  parameters: ToolParameters;
+  parameters: ToolParametersSchema;
   run: (args: ToolArgs, ctx: ToolContext) => Promise<ToolResult>;
 };
 
@@ -80,6 +86,6 @@ export type ToolSpec = {
 export type DefineToolInput = {
   name: string;
   description: string;
-  parameters: ToolParameters;
+  parameters: ToolParametersSchema;
   execute: (args: ToolArgs, ctx: ToolContext) => Promise<ToolExecuteResult>;
 };

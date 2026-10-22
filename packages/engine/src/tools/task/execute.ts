@@ -6,6 +6,7 @@
 import { createId, type SubagentChildEvent } from "@thinker-workbench/shared";
 import { getMaxSubagentSteps } from "../../config/runtimeLimits";
 import { assembleContext } from "../../context/assembleContext";
+import { joinSystemSections } from "../../prompts/systemSections";
 import { startedToolCallIdSet } from "../../graph/nodes/toolsResume";
 import type { GraphState } from "../../graph/types";
 import { chatWithFailover, configureModelCatalog, getModelSelection } from "../../model/catalog";
@@ -324,11 +325,15 @@ function emitSubagent(
 const LIVE_PLANNING = "Planning next moves";
 const LIVE_THINKING = "Thinking…";
 
+/** 卡片底栏预览最多保留的字符数（思考尾部 / 回复 / 完成摘要）。 */
+const LIVE_LINE_MAX = 40;
+const SETTLED_SUMMARY_MAX = 48;
+
 /** 卡片底栏：思考/回复预览（单行）。 */
 function formatThinkingLiveLine(buf: string): string {
   const compact = buf.replace(/\s+/g, " ").trim();
   if (!compact) return LIVE_PLANNING;
-  const tail = compact.length > 96 ? compact.slice(-96) : compact;
+  const tail = compact.length > LIVE_LINE_MAX ? compact.slice(-LIVE_LINE_MAX) : compact;
   return `${LIVE_THINKING} ${tail}`;
 }
 
@@ -544,7 +549,12 @@ export async function runChildAgent(options: {
               "Always end with a final text report (no tool call).",
               "If you cannot finish, summarize findings so far instead of more exploration.",
             ].join("\n");
-            const system = `${options.systemBody}\n\n${efficiency}\n\n${assembled.system}`;
+            const systemSections = [
+              { id: "subagent", text: options.systemBody },
+              { id: "subagentRules", text: efficiency },
+              ...assembled.systemSections,
+            ];
+            const system = joinSystemSections(systemSections);
 
             let thinkingBuf = "";
             let replyBuf = "";
@@ -554,6 +564,7 @@ export async function runChildAgent(options: {
                 messages: assembled.messages,
                 tools: assembled.tools,
                 system,
+                systemSections,
                 onToken: (text, channel) => {
                   const ch = channel ?? "reply";
                   if (ch === "thinking") {
@@ -566,7 +577,7 @@ export async function runChildAgent(options: {
                   } else {
                     replyBuf += text;
                     const compact = replyBuf.replace(/\s+/g, " ").trim();
-                    emitProgress(compact.slice(-96) || LIVE_PLANNING, {
+                    emitProgress(compact.slice(-LIVE_LINE_MAX) || LIVE_PLANNING, {
                       type: "token",
                       text,
                       channel: "reply",
@@ -586,7 +597,7 @@ export async function runChildAgent(options: {
             const calls = result.toolCalls;
             if (!calls.length) {
               const summary = (result.content || "").trim() || "(empty subagent reply)";
-              emitProgress(summary.slice(0, 120));
+              emitProgress(summary.slice(0, SETTLED_SUMMARY_MAX));
               return { ok: true, summary };
             }
             for (const call of calls) {

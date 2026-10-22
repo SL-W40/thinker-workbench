@@ -146,18 +146,33 @@ export function getModelSettings(): Promise<ModelCatalogPublic> {
   return settings.getModel();
 }
 
+/**
+ * `setModel` / `probeModel` 成功后在 `window` 上派发的自定义事件名。
+ * `detail` 为最新 `ModelCatalogPublic`（供对话里的模型选择器同步）。
+ */
+export const MODEL_SETTINGS_CHANGED = "tw:model-settings";
+
+/** 通知同窗口的模型选择器：目录已变。 */
+function publishModelSettings(catalog: ModelCatalogPublic): void {
+  window.dispatchEvent(new CustomEvent(MODEL_SETTINGS_CHANGED, { detail: catalog }));
+}
+
 /** 部分更新模型目录并返回最新公开快照。 */
-export function setModelSettings(patch: ModelCatalogPatch): Promise<ModelCatalogPublic> {
+export async function setModelSettings(patch: ModelCatalogPatch): Promise<ModelCatalogPublic> {
   const settings = api()?.settings;
   if (!settings) return Promise.reject(new Error("Settings API unavailable."));
-  return settings.setModel(patch);
+  const saved = await settings.setModel(patch);
+  publishModelSettings(saved);
+  return saved;
 }
 
 /** 对指定模型做连通性测试。 */
-export function probeModel(request: ModelProbeRequest): Promise<ModelProbeResult> {
+export async function probeModel(request: ModelProbeRequest): Promise<ModelProbeResult> {
   const settings = api()?.settings;
   if (!settings?.probeModel) return Promise.reject(new Error("Settings API unavailable."));
-  return settings.probeModel(request);
+  const result = await settings.probeModel(request);
+  publishModelSettings(result.catalog);
+  return result;
 }
 
 /** 发消息前解锁已存 API key（会触发 OS 钥匙串）。 */

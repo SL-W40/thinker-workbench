@@ -185,4 +185,84 @@ describe("filesystem tools", () => {
     assert.match(found, /src\/app.ts/);
     assert.doesNotMatch(found, /node_modules/);
   });
+
+  it("grep 单行截断、每文件配额、total_matches 与输出模式；list_dir 条目封顶", async () => {
+    const TAB = String.fromCharCode(9);
+    const NL = String.fromCharCode(10);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-caps-"));
+    fs.mkdirSync(path.join(root, "src"));
+    fs.mkdirSync(path.join(root, "noisy"));
+
+    // 超长行：内容截断并标注省略字符数，但 path:line 指针完整（可 read_file 精读）
+    const longLine = `const token = "${"x".repeat(600)}";`;
+    fs.writeFileSync(path.join(root, "src", "long.ts"), `${longLine}${NL}`, "utf8");
+    // 吵闹文件：30 个命中，超过每文件配额 20
+    fs.writeFileSync(
+      path.join(root, "noisy", "many.ts"),
+      Array.from({ length: 30 }, (_, i) => `token ${i}`).join(NL),
+      "utf8",
+    );
+    // 普通文件的命中不被吵闹文件挤掉
+    fs.writeFileSync(path.join(root, "src", "quiet.ts"), `token here${NL}`, "utf8");
+
+    const grep = await grepTool({ pattern: "token", path: "." }, ctx(root));
+    const rows = grep.split(NL);
+    const header: Record<string, string> = {};
+    for (const row of rows.slice(0, 5)) {
+      const [key, value] = row.split(TAB);
+      header[key ?? ""] = value ?? "";
+    }
+    assert.equal(header.matches, "22"); // 20（吵闹文件配额）+ 1 + 1
+    assert.equal(header.total_matches, "32"); // 含被配额抑制的 10 条
+    assert.equal(header.truncated, "true");
+
+    const longHit = rows.find((row) => row.startsWith("src/long.ts:1:")) ?? "";
+    assert.ok(longHit.length > 0, "long.ts 命中存在");
+    assert.ok(longHit.startsWith(`src/long.ts:1:const token = "`), "指针与内容前缀保留");
+    assert.ok(longHit.includes("…[+117 chars]"), "省略字符数标注");
+    assert.equal(longHit.length, `src/long.ts:1:`.length + 500 + "…[+117 chars]".length);
+
+    assert.ok(
+      rows.some((row) => row.startsWith("noisy/many.ts:20:")),
+      "配额内最后一条可见",
+    );
+    assert.ok(!rows.some((row) => row.startsWith("noisy/many.ts:21:")), "超额被每文件配额抑制");
+    assert.ok(rows.some((row) => row.startsWith("src/quiet.ts:1:")), "未被吵闹文件挤占");
+
+    // files 模式：只有路径
+    const files = await grepTool({ pattern: "token", path: ".", output_mode: "files" }, ctx(root));
+    assert.ok(files.split(NL).includes("src/quiet.ts"));
+    assert.ok(!files.split(NL).some((row) => row.includes(":1:")), "不含命中行");
+
+    // count 模式：每文件真实命中数（不受每文件配额限制）
+    const count = await grepTool({ pattern: "token", path: ".", output_mode: "count" }, ctx(root));
+    assert.ok(count.split(NL).includes(`noisy/many.ts${TAB}30`));
+    assert.ok(count.split(NL).includes(`src/long.ts${TAB}1`));
+
+    // glob 过滤与 ignore_case
+    const globbed = await grepTool({ pattern: "token", path: ".", glob: "src/**" }, ctx(root));
+    assert.ok(globbed.split(NL).some((row) => row.startsWith("src/quiet.ts:1:")));
+    assert.ok(!globbed.includes("noisy"), "glob 过滤掉 noisy 目录");
+
+    const cased = await grepTool(
+      { pattern: "TOKEN", path: ".", ignore_case: true },
+      ctx(root),
+    );
+    assert.ok(cased.split(NL).some((row) => row.startsWith("src/quiet.ts:1:")), "ignore_case 命中");
+    const strict = await grepTool({ pattern: "TOKEN", path: "." }, ctx(root));
+    assert.ok(strict.split(NL).includes(`matches${TAB}0`), "默认大小写敏感");
+
+    // list_dir 条目封顶
+    fs.mkdirSync(path.join(root, "many"));
+    for (let i = 0; i < 405; i++) {
+      fs.writeFileSync(path.join(root, "many", `f${i}.txt`), "x", "utf8");
+    }
+    const listed = await listDirTool({ path: "many" }, ctx(root));
+    assert.equal(listed.split(NL).length, 403); // path + entries + truncated + 400 条
+    assert.ok(listed.split(NL).includes(`entries${TAB}405`));
+    assert.ok(listed.split(NL).includes(`truncated${TAB}true`));
+    const small = await listDirTool({ path: "src" }, ctx(root));
+    assert.ok(small.split(NL).includes(`entries${TAB}2`));
+    assert.ok(small.split(NL).includes(`truncated${TAB}false`));
+  });
 });

@@ -375,6 +375,10 @@ export function App() {
                 onEditDraftChange={session.setEditDraft}
                 onEditKeyDown={session.onEditKeyDown}
                 onSendUserEdit={session.sendUserEdit}
+                sendBlocked={session.busy || session.queued}
+                editImages={session.editImages}
+                onAttachEditImages={(files) => void session.attachEditImageFiles(files)}
+                onRemoveEditImage={session.removeEditImage}
                 onCancelUserEdit={session.cancelUserEdit}
               />
               <Composer

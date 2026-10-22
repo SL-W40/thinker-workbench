@@ -3,6 +3,7 @@
  * 图节点只依赖 ChatModel.chat，不关心具体 HTTP 实现。
  */
 import type { ToolParameters } from "../tools/types";
+import type { SystemSection } from "../prompts/systemSections";
 
 /** Agent 循环用到的聊天角色。 */
 export type ChatRole = "system" | "user" | "assistant" | "tool";
@@ -61,6 +62,8 @@ export type ChatRequest = {
   tools?: ChatToolDefinition[];
   /** 覆盖默认对话 system prompt。 */
   system?: string;
+  /** 与 system 对应的分块；只写入 Trace，不发给模型。 */
+  systemSections?: SystemSection[];
   /**
    * 若设置，则请求使用 stream: true，并对每个文本 delta 回调。
    * `channel: thinking` 为推理字段；默认 `reply` 为助手正文。

@@ -18,11 +18,13 @@ import {
   appendThinkingText,
   applyHitlRequest,
   applyHitlResolved,
+  isTimelineHitlKind,
   applyQueuedSlotEvent,
   applyStatus,
   applySubagentEvent,
   applyToolEvent,
   deactivateAll,
+  reconcileTimelineReply,
 } from "./timelineModel";
 
 export type LiveRunSlot = {
@@ -55,9 +57,6 @@ function notify(): void {
   for (const l of listeners) l();
 }
 
-function isTimelineHitl(kind: string): boolean {
-  return kind === "shell_approval" || kind === "shell_write_approval";
-}
 
 /** 启动全局事件订阅（幂等）。 */
 export function ensureLiveRunRegistry(): void {
@@ -255,14 +254,19 @@ async function applyAgentEvent(event: AgentEvent): Promise<void> {
 
   if (event.type === "hitl") {
     if (event.phase === "request" && event.request) {
-      if (isTimelineHitl(event.request.kind)) {
+      if (isTimelineHitlKind(event.request.kind)) {
         slot.timeline = applyHitlRequest(slot.timeline, event.request);
         slot.modalHitl = null;
       } else {
         slot.modalHitl = event.request;
       }
     } else if (event.phase === "resolved") {
-      slot.timeline = applyHitlResolved(slot.timeline, event.hitlId, event.response?.actionId);
+      slot.timeline = applyHitlResolved(
+        slot.timeline,
+        event.hitlId,
+        event.response?.actionId,
+        event.response?.values,
+      );
       if (slot.modalHitl?.hitlId === event.hitlId) slot.modalHitl = null;
     }
     syncTargetMessage(slot);
@@ -324,6 +328,7 @@ async function settleSlot(
 
   if (event.type === "done") {
     const text = event.text || slot.streamText;
+    slot.timeline = reconcileTimelineReply(slot.timeline, text);
     slot.messages = slot.messages.map((m) =>
       m.id === slot.targetMsgId
         ? {

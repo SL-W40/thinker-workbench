@@ -6,8 +6,7 @@ import {
   type HitlRequest,
   type HitlResponse,
   IpcChannels,
-  isShellTokenBlocked,
-  shellCommandBaseToken,
+  shellCommandsToAllowlist,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, Notification } from "electron";
 import { getNotificationIconPath } from "../config/paths";
@@ -56,7 +55,7 @@ function windowsHitlToastXml(req: HitlRequest): string {
 
 /**
  * 统一 HITL 答复入口（UI Modal / 系统通知按钮）。
- * `allow_and_whitelist` 时把首 token 写入 GeneralSettings 并经 hello 同步到 agent。
+ * `allow_and_whitelist` 时把命令链上尚未加白的命令名写入 GeneralSettings，并经 hello 同步到 agent。
  */
 export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
   if (resolved.has(response.hitlId)) return;
@@ -66,16 +65,16 @@ export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
 
   if (response.actionId === "allow_and_whitelist" && req) {
     const command = typeof req.payload?.command === "string" ? req.payload.command : "";
-    const token = shellCommandBaseToken(command);
     const general = getGeneralSettings();
     // 硬拒绝不能经确认写入白名单；落盘规范化也会再剔一次。答复仍交给 agent。
-    if (
-      token &&
-      !isShellTokenBlocked(token, general.shellBlocklist) &&
-      !general.shellAllowlist.includes(token)
-    ) {
+    const tokens = shellCommandsToAllowlist(
+      command,
+      general.shellAllowlist,
+      general.shellBlocklist,
+    );
+    if (tokens.length > 0) {
       const next = saveGeneralSettings({
-        shellAllowlist: [...general.shellAllowlist, token],
+        shellAllowlist: [...general.shellAllowlist, ...tokens],
       });
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {

@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import {
   getModelSettings,
   getSessionModelSelection,
+  MODEL_SETTINGS_CHANGED,
   setModelSettings,
   setSessionModelSelection,
 } from "../../bridge/thinker";
@@ -80,6 +81,19 @@ export function ModelPicker({ sessionId, disabled }: Props) {
     return () => {
       cancelled = true;
     };
+  }, [sessionId]);
+
+  // 设置页改目录后选择器仍挂着，靠事件刷新列表与展示名
+  useEffect(() => {
+    function onChanged(event: Event) {
+      const detail = (event as CustomEvent<ModelCatalogPublic>).detail;
+      if (!detail || !Array.isArray(detail.models)) return;
+      setCatalog(detail);
+      // 无会话覆盖时选用跟全局走；有覆盖则只换目录
+      if (!sessionId) setSelection(detail.selection ?? { mode: "auto" });
+    }
+    window.addEventListener(MODEL_SETTINGS_CHANGED, onChanged);
+    return () => window.removeEventListener(MODEL_SETTINGS_CHANGED, onChanged);
   }, [sessionId]);
 
   const triggerLabel = useMemo(() => {

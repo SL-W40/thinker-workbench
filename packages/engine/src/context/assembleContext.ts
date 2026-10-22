@@ -15,6 +15,7 @@ import { contentToPlainText, countImageRefs, IMAGE_TOKEN_ESTIMATE } from "../mod
 import type { ChatMessage, ChatToolDefinition } from "../model/types";
 import { buildEnvironmentContextMessage } from "../prompts/environment";
 import { emojiInstruction, languageInstruction, SYSTEM_PROMPT } from "../prompts/system";
+import { joinSystemSections, type SystemSection } from "../prompts/systemSections";
 import { loadRules } from "../rules/loadRules";
 import { loadSkills } from "../skills/loadSkills";
 import { getSubagentIndexText } from "../subagents/registry";
@@ -44,6 +45,8 @@ export type AssembleContextInput = {
 
 export type AssembledContext = {
   system: string;
+  /** 与 system 同序的分块，供 Trace 折叠展示。 */
+  systemSections: SystemSection[];
   tools: ChatToolDefinition[];
   messages: ChatMessage[];
   segments: ContextUsageSegment[];
@@ -111,12 +114,16 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const conversation = conversationText(input.messages);
 
   const subagentIndex = getSubagentIndexText();
-  const systemParts = [base, environment, buildChatModeAddendum(mode)];
-  if (subagentIndex) systemParts.push(subagentIndex);
-  if (rules.text) systemParts.push(rules.text);
-  if (skills.text) systemParts.push(skills.text);
-  if (contextFiles.text) systemParts.push(contextFiles.text);
-  const system = systemParts.join("\n\n");
+  const systemSections: SystemSection[] = [
+    { id: "base", text: base },
+    { id: "environment", text: environment },
+    { id: "mode", text: buildChatModeAddendum(mode) },
+  ];
+  if (subagentIndex) systemSections.push({ id: "subagents", text: subagentIndex });
+  if (rules.text) systemSections.push({ id: "rules", text: rules.text });
+  if (skills.text) systemSections.push({ id: "skills", text: skills.text });
+  if (contextFiles.text) systemSections.push({ id: "contextFiles", text: contextFiles.text });
+  const system = joinSystemSections(systemSections);
 
   const segmentDefs: Array<{ id: ContextUsageSegment["id"]; text: string }> = [
     { id: "system", text: `${base}\n\n${environment}\n\n${subagentIndex}` },
@@ -135,6 +142,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
 
   return {
     system,
+    systemSections,
     tools,
     messages: input.messages,
     segments,

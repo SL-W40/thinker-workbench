@@ -22,9 +22,6 @@ import type { ChatCompletionResult, ChatRequest } from "./types";
 function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
   const messages = request.messages ?? [];
   const tools = request.tools ?? [];
-  const toolNames = tools
-    .map((t) => t.function?.name)
-    .filter((n): n is string => typeof n === "string" && n.length > 0);
   const last = messages[messages.length - 1];
   const lastRole = last?.role;
   const lastPlain =
@@ -39,11 +36,15 @@ function modelChatInputSummary(request: ChatRequest): Record<string, unknown> {
   const lastPreview = lastPlain ? lastPlain.slice(0, 120) : undefined;
   return {
     messageCount: messages.length,
-    toolNames,
+    ...(tools.length > 0 ? { tools } : {}),
     lastRole,
     ...(lastPreview ? { lastContentPreview: lastPreview } : {}),
     messages,
-    ...(request.system ? { system: request.system } : {}),
+    ...(request.systemSections && request.systemSections.length > 0
+      ? { system: request.systemSections }
+      : request.system
+        ? { system: request.system }
+        : {}),
   };
 }
 

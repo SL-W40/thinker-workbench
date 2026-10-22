@@ -58,7 +58,8 @@ export function isStandaloneTool(name: string): boolean {
     name === "shell_await" ||
     name === "shell_write" ||
     name === "Task" ||
-    name === "task_await"
+    name === "task_await" ||
+    name === "ask_user"
   );
 }
 

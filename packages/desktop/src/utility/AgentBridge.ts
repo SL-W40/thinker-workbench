@@ -179,7 +179,6 @@ export class AgentBridge {
                   : typeof attrs.title === "string"
                     ? attrs.title
                     : undefined,
-              bumpRun: s.name === "run",
             });
           } else {
             endTraceSpan(raw.spanId, {

@@ -16,6 +16,7 @@ import {
   browserSnapshotToolSpec,
   browserTypeToolSpec,
 } from "./browser/tool";
+import { askUserToolSpec } from "./ask_user/tool";
 import { deleteFileToolSpec } from "./delete_file/tool";
 import { editFileToolSpec } from "./edit_file/tool";
 import { grepToolSpec } from "./grep/tool";
@@ -37,6 +38,7 @@ const tools = new Map<string, ToolSpec>([
   [listDirToolSpec.name, listDirToolSpec],
   [searchFilesToolSpec.name, searchFilesToolSpec],
   [timeToolSpec.name, timeToolSpec],
+  [askUserToolSpec.name, askUserToolSpec],
   [shellToolSpec.name, shellToolSpec],
   [shellAwaitToolSpec.name, shellAwaitToolSpec],
   [shellWriteToolSpec.name, shellWriteToolSpec],

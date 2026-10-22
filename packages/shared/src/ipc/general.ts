@@ -429,6 +429,71 @@ export function shellCommandBaseToken(command: string): string {
   return name.replace(/\.(exe|cmd|bat|com|ps1)$/i, "").toLowerCase();
 }
 
+/** 按 && / || / ; 拆开命令链，引号内的分隔符不算。 */
+function splitShellChain(command: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i] ?? "";
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    const two = command.slice(i, i + 2);
+    if (two === "&&" || two === "||") {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      i += 1;
+      continue;
+    }
+    if (ch === ";" || ch === "\n") {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+/**
+ * 一条命令链里会被当作「命令名」加白的 token（去重、保持出现顺序）。
+ * `cd packages/renderer && npx tsc` → `cd`、`npx`。
+ */
+export function shellWhitelistTokens(command: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const segment of splitShellChain(command)) {
+    const token = shellCommandBaseToken(segment);
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+  }
+  return out;
+}
+
+/**
+ * 点「允许并加入白名单」时真正会新写入的命令名。
+ * 已在白名单或落在硬拒绝上的不再列入。
+ */
+export function shellCommandsToAllowlist(
+  command: string,
+  allowlist: readonly string[],
+  blocklist: readonly string[],
+): string[] {
+  return shellWhitelistTokens(command).filter(
+    (token) => !allowlist.includes(token) && !isShellTokenBlocked(token, blocklist),
+  );
+}
+
 /** 设置页可选的日志保留天数（含「永不」= 0）。 */
 export const LOG_RETENTION_DAY_OPTIONS = [0, 7, 14, 30, 90] as const;
 

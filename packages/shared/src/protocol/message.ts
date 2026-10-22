@@ -85,6 +85,25 @@ export type ChatTimelineToolStep = {
     parentCommand?: string;
     /** shell_write：将写入的内容预览。 */
     dataPreview?: string;
+    /** 这条命令要做什么（研判理由等）；没有则卡片用默认说明。 */
+    purpose?: string;
+  };
+  /**
+   * ask_user 澄清题。答复写入 answers 后卡片只读。
+   * 与 hitl 分开存，避免会话收束时把已答内容清掉。
+   */
+  clarify?: {
+    hitlId: string;
+    questions: Array<{
+      id: string;
+      prompt: string;
+      options: Array<{ id: string; label: string }>;
+    }>;
+    answers?: Array<{
+      id: string;
+      optionId?: string;
+      text?: string;
+    }>;
   };
 };
 

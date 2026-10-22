@@ -6,6 +6,7 @@ import {
   CheckIcon,
   CopyIcon,
   IconButton,
+  PaperclipIcon,
   RestartIcon,
   useDesignTheme,
 } from "@thinker-workbench/design/react";
@@ -21,7 +22,7 @@ import {
   useState,
 } from "react";
 import { isBrowserableUrl, requestOpenBrowser } from "../bridge/browser";
-import { ChatImageStrip } from "../features/chat/ChatImageStrip";
+import { ChatImageStrip, type DraftChatImage } from "../features/chat/ChatImageStrip";
 import { ChatUsageBar } from "../features/chat/ChatUsageBar";
 import { SendGlyph } from "../features/chat/Composer";
 import { ComposerEditor, type ComposerEditorHandle } from "../features/chat/ComposerEditor";
@@ -30,6 +31,7 @@ import { ModelPicker } from "../features/chat/ModelPicker";
 import { ModePicker } from "../features/chat/ModePicker";
 import { normalizeChatMessage, visibleAssistantText } from "../features/chat/messageModel";
 import { RunTimeline } from "../features/chat/RunTimeline";
+import { reconcileTimelineReply } from "../features/chat/timelineModel";
 import { EMPTY_USAGE, totalTokens } from "../features/chat/usageStats";
 import { useT } from "../i18n/useI18n";
 
@@ -144,6 +146,11 @@ type BubbleProps = {
   onEditDraftChange?: (value: string) => void;
   onEditKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
   onSendEdit?: () => void;
+  /** 进行中或排队：原位编辑仍可改文字和图片，但不能发送。*/
+  sendBlocked?: boolean;
+  editImages?: DraftChatImage[];
+  onAttachEditImages?: (files: File[]) => void;
+  onRemoveEditImage?: (id: string) => void;
   /** 失焦 / Esc：退出原位编辑，历史不变。*/
   onCancelEdit?: () => void;
   /** 当前会话：编辑态模型选用与底部 Composer 共用。*/
@@ -168,13 +175,17 @@ export function Bubble({
   onEditDraftChange,
   onEditKeyDown,
   onSendEdit,
+  sendBlocked = false,
+  editImages = [],
+  onAttachEditImages,
+  onRemoveEditImage,
   onCancelEdit,
   sessionId = null,
 }: BubbleProps) {
   const t = useT();
   const view = normalizeChatMessage(message);
   const { markdownTheme } = useDesignTheme();
-  const timeline = view.timeline ?? [];
+  const timeline = reconcileTimelineReply(view.timeline ?? [], view.text ?? "");
   const showTimeline = timeline.length > 0 || Boolean(view.pending);
   const hasText = Boolean(view.text?.trim());
   // reply 已按序插入时间线时，不再在底部重复渲染整段正
@@ -191,6 +202,9 @@ export function Bubble({
     role === "assistant" &&
     !live &&
     (totalTokens(usage) > 0 || durationMs > 0 || Boolean(view.traceId));
+  const editFileRef = useRef<HTMLInputElement | null>(null);
+  /** 系统文件框会让编辑区失焦；选图期间不要退出编辑。 */
+  const pickingEditFileRef = useRef(false);
   const copyableText = role === "assistant" ? visibleAssistantText(view) : "";
   // 流式结束后才显示复制；正文可来自 message.text 或时间线 text 步
   const showCopy = role === "assistant" && !live && Boolean(copyableText);
@@ -231,6 +245,7 @@ export function Bubble({
         if (focusInModelPicker(next)) return;
         // 点发送 / 模型菜单时焦点可能先离开；等一帧再判
         window.setTimeout(() => {
+          if (pickingEditFileRef.current) return;
           if (root.contains(document.activeElement)) return;
           if (focusInModelPicker(document.activeElement)) return;
           if (
@@ -243,17 +258,40 @@ export function Bubble({
           onCancelEdit?.();
         }, 0);
       };
-      const editHasImages = Array.isArray(view.images) && view.images.length > 0;
+      const editHasImages = editImages.some((img) => !img.uploading && Boolean(img.path.trim()));
+      const editUploading = editImages.some((img) => img.uploading);
       return (
         <li className="bubble role-user">
           <div className="user-prompt user-prompt--editing composer-shell" onBlur={leaveIfOutside}>
-            {editHasImages ? <ChatImageStrip images={view.images!} /> : null}
+            {editImages.length > 0 ? (
+              <ChatImageStrip images={editImages} onRemove={onRemoveEditImage} />
+            ) : null}
             <ComposerEditor
               ref={editInputRef}
               value={editDraft}
               placeholder={t("chat.placeholder")}
               onChange={(v) => onEditDraftChange?.(v)}
               onKeyDown={onEditKeyDown}
+              onPasteImages={(files) => {
+                if (!onAttachEditImages || files.length === 0) return false;
+                void onAttachEditImages(files);
+                return true;
+              }}
+            />
+            <input
+              ref={editFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
+              multiple
+              hidden
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []).filter((f) =>
+                  f.type.startsWith("image/"),
+                );
+                e.target.value = "";
+                pickingEditFileRef.current = false;
+                if (files.length) onAttachEditImages?.(files);
+              }}
             />
             <div className="composer-bar">
               <div className="composer-bar-left">
@@ -262,14 +300,38 @@ export function Bubble({
               </div>
               <div className="composer-bar-right">
                 <IconButton
+                  className="composer-attach"
+                  size="md"
+                  variant="ghost"
+                  aria-label={t("chat.images.attach")}
+                  title={t("chat.images.attach")}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    pickingEditFileRef.current = true;
+                    editFileRef.current?.click();
+                    // 取消文件框时 change 不会触发，焦点回来后再放开
+                    window.addEventListener(
+                      "focus",
+                      () => {
+                        window.setTimeout(() => {
+                          pickingEditFileRef.current = false;
+                        }, 0);
+                      },
+                      { once: true },
+                    );
+                  }}
+                >
+                  <PaperclipIcon />
+                </IconButton>
+                <IconButton
                   className="composer-send"
                   size="lg"
                   variant="secondary"
-                  disabled={!editDraft.trim() && !editHasImages}
+                  disabled={sendBlocked || editUploading || (!editDraft.trim() && !editHasImages)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onSendEdit?.()}
                   aria-label={t("chat.send")}
-                  title={t("chat.sendHint")}
+                  title={sendBlocked ? t("chat.sendBlocked") : t("chat.sendHint")}
                 >
                   <span className="composer-send__ico" aria-hidden="true">
                     <SendGlyph />

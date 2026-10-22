@@ -11,7 +11,7 @@ import {
   type HitlRequest,
 } from "@thinker-workbench/shared";
 
-const THINKING_SUMMARY_MAX = 140;
+const THINKING_SUMMARY_MAX = 48;
 
 /** 排队等待文案的时间线 id。出队、失败或取消后整段去掉。 */
 export const QUEUED_WAIT_STEP_ID = "queued-wait";
@@ -53,6 +53,34 @@ export function applyQueuedSlotEvent(
   if (!QUEUE_PROMOTE_EVENTS.has(eventType) || slot.busy) return;
   slot.timeline = stripQueuedWait(slot.timeline);
   slot.busy = true;
+}
+
+/**
+ * 流式 token 可能在句中停住，而 done 的正文更完整。
+ * 仅当完整正文以时间线已有叙述为前缀时，把缺的尾巴补进最后一段 text。
+ */
+export function reconcileTimelineReply(
+  steps: ChatTimelineStep[],
+  fullText: string,
+): ChatTimelineStep[] {
+  const full = fullText.trim();
+  if (!full) return steps;
+  const indexes: number[] = [];
+  const parts: string[] = [];
+  steps.forEach((step, index) => {
+    if (step.kind !== "text") return;
+    indexes.push(index);
+    parts.push(step.text);
+  });
+  if (indexes.length === 0) return steps;
+  const streamed = parts.join("\n\n");
+  if (!full.startsWith(streamed) || full.length === streamed.length) return steps;
+  const last = indexes[indexes.length - 1]!;
+  const prev = steps[last];
+  if (prev?.kind !== "text") return steps;
+  const copy = [...steps];
+  copy[last] = { ...prev, text: prev.text + full.slice(streamed.length) };
+  return copy;
 }
 
 /** 截断到 max 字符，末尾加省略号。 */
@@ -389,8 +417,8 @@ export function applyToolEvent(
         resultPaths: event.resultPaths ?? prev.resultPaths,
         resultPathKinds: event.resultPathKinds ?? prev.resultPathKinds,
         ...mergeRestoreCache(prev, event),
-        // 真实 tool start：清掉审批挂载
-        hitl: undefined,
+        // 审批卡片先于真正执行出现。迟到的 tool start 不能把选择按钮抹掉。
+        hitl: prev.hitl,
         phase: "start",
         active: true,
       };
@@ -508,13 +536,109 @@ export function appendShellLiveOutput(
   return copy;
 }
 
+/** 这些 HITL 挂在时间线卡片上，不进 Modal。 */
+export function isTimelineHitlKind(kind: string): boolean {
+  return kind === "shell_approval" || kind === "shell_write_approval" || kind === "clarify";
+}
+
+function parseClarifyQuestions(payload: Record<string, unknown> | undefined): NonNullable<
+  Extract<ChatTimelineStep, { kind: "tool" }>["clarify"]
+>["questions"] {
+  const raw = payload?.questions;
+  if (!Array.isArray(raw)) return [];
+  const questions: NonNullable<Extract<ChatTimelineStep, { kind: "tool" }>["clarify"]>["questions"] =
+    [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { id?: unknown; prompt?: unknown; options?: unknown };
+    const prompt = typeof row.prompt === "string" ? row.prompt.trim() : "";
+    if (!prompt) continue;
+    const id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : `q${questions.length + 1}`;
+    const options: Array<{ id: string; label: string }> = [];
+    if (Array.isArray(row.options)) {
+      for (const opt of row.options) {
+        if (!opt || typeof opt !== "object") continue;
+        const option = opt as { id?: unknown; label?: unknown };
+        const label = typeof option.label === "string" ? option.label.trim() : "";
+        if (!label) continue;
+        const optionId =
+          typeof option.id === "string" && option.id.trim()
+            ? option.id.trim()
+            : `opt_${options.length + 1}`;
+        options.push({ id: optionId, label });
+      }
+    }
+    questions.push({ id, prompt, options });
+  }
+  return questions;
+}
+
+function parseClarifyAnswers(values: Record<string, unknown> | undefined) {
+  const raw = values?.answers;
+  if (!Array.isArray(raw)) return [];
+  const answers: NonNullable<
+    NonNullable<Extract<ChatTimelineStep, { kind: "tool" }>["clarify"]>["answers"]
+  > = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { id?: unknown; optionId?: unknown; text?: unknown };
+    const id = typeof row.id === "string" ? row.id.trim() : "";
+    if (!id) continue;
+    const optionId = typeof row.optionId === "string" ? row.optionId.trim() : "";
+    const text = typeof row.text === "string" ? row.text.trim() : "";
+    answers.push({
+      id,
+      ...(optionId ? { optionId } : {}),
+      ...(text ? { text } : {}),
+    });
+  }
+  return answers;
+}
+
 /**
- * HITL 请求：shell_approval / shell_write_approval 挂时间线卡片；其它 kind 走 Modal。
+ * HITL 请求：shell 审批与 clarify 挂时间线卡片；其它 kind 走 Modal。
  */
 export function applyHitlRequest(
   steps: ChatTimelineStep[],
   request: HitlRequest,
 ): ChatTimelineStep[] {
+  if (request.kind === "clarify") {
+    const questions = parseClarifyQuestions(request.payload);
+    const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
+    const clarify = { hitlId: request.hitlId, questions };
+    const existing = next.findIndex(
+      (s) =>
+        s.kind === "tool" &&
+        (s.hitl?.hitlId === request.hitlId || s.clarify?.hitlId === request.hitlId),
+    );
+    if (existing >= 0) {
+      const prev = next[existing];
+      if (prev.kind !== "tool") return next;
+      const copy = [...next];
+      copy[existing] = { ...prev, name: "ask_user", clarify, phase: "start", active: true };
+      return copy;
+    }
+    for (let i = next.length - 1; i >= 0; i--) {
+      const s = next[i];
+      if (s.kind === "tool" && s.name === "ask_user" && s.phase === "start" && s.active && !s.clarify) {
+        const copy = [...next];
+        copy[i] = { ...s, clarify, phase: "start", active: true };
+        return copy;
+      }
+    }
+    return [
+      ...next,
+      {
+        id: createId("tl"),
+        kind: "tool",
+        name: "ask_user",
+        summary: questions[0]?.prompt,
+        clarify,
+        phase: "start",
+        active: true,
+      },
+    ];
+  }
   if (request.kind !== "shell_approval" && request.kind !== "shell_write_approval") {
     return steps;
   }
@@ -536,6 +660,8 @@ export function applyHitlRequest(
   const next = dropTrailingEphemeralThoughts(deactivateStatuses(steps));
   // 已有同 hitlId 则刷新
   const existing = next.findIndex((s) => s.kind === "tool" && s.hitl?.hitlId === request.hitlId);
+  const reviewReason =
+    typeof request.payload?.reviewReason === "string" ? request.payload.reviewReason.trim() : "";
   const hitl = {
     hitlId: request.hitlId,
     title: request.title,
@@ -547,6 +673,7 @@ export function applyHitlRequest(
     })),
     parentCommand: parentCommand || undefined,
     dataPreview: dataPreview || undefined,
+    purpose: reviewReason || undefined,
   };
   const sessionId = typeof request.payload?.sessionId === "string" ? request.payload.sessionId : "";
 
@@ -626,13 +753,27 @@ export function applyHitlResolved(
   steps: ChatTimelineStep[],
   hitlId: string,
   actionId?: string,
+  values?: Record<string, unknown>,
 ): ChatTimelineStep[] {
-  const idx = steps.findIndex((s) => s.kind === "tool" && s.hitl?.hitlId === hitlId);
+  const idx = steps.findIndex(
+    (s) => s.kind === "tool" && (s.hitl?.hitlId === hitlId || s.clarify?.hitlId === hitlId),
+  );
   if (idx < 0) return steps;
   const prev = steps[idx];
   if (prev.kind !== "tool") return steps;
   const denied = actionId === "deny";
   const copy = [...steps];
+  if (prev.clarify && !denied) {
+    copy[idx] = {
+      ...prev,
+      hitl: undefined,
+      clarify: { ...prev.clarify, answers: parseClarifyAnswers(values) },
+      phase: "end",
+      active: false,
+      ok: true,
+    };
+    return copy;
+  }
   copy[idx] = {
     ...prev,
     hitl: undefined,

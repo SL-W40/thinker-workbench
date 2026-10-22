@@ -19,6 +19,7 @@ import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
 import { useT } from "../../i18n/useI18n";
 import { FileGlyph, IconFolder } from "../inspector/icons";
 import { BrowserScreenshotThumb } from "./BrowserScreenshotThumb";
+import { ClarifyCards } from "./ClarifyCards";
 import { DeleteFileCard } from "./DeleteFileCard";
 import { FileDiffView } from "./FileDiffView";
 import { classifyRunError, isSoftStopCode } from "./runErrors";
@@ -1026,6 +1027,14 @@ function ToolStepRow({
   // Task 启动由 subagent 行展示，避免重复
   if (step.name === "Task") {
     return null;
+  }
+
+  if (step.name === "ask_user" || step.clarify) {
+    return (
+      <li className={`run-timeline-item run-timeline-item--tool${running ? " is-active" : ""}`}>
+        <ClarifyCards step={step} />
+      </li>
+    );
   }
 
   // task_await / shell_await：纯文字行（HITL 审批仍走 Shell 卡片：
