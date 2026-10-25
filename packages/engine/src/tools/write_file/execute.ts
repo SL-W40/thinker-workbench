@@ -70,6 +70,10 @@ async function writeFileInner(args: ToolArgs, ctx: ToolContext): Promise<ToolExe
     const lines = splitLines(before);
     range = resolveRangeInFile(parsed, lines.length, pathLabel);
     after = joinLines(replaceLineRange(lines, range, contents), eol);
+  } else if (existed && detectEol(before) === "\r\n") {
+    // 整文件覆盖时保留原行尾：模型给出的内容多为 LF，直接用会把 CRLF 文件整份改写，
+    // 让 diff / 提交里混进无关的行尾变更（EOL churn）
+    after = joinLines(splitLines(contents), "\r\n");
   } else {
     after = contents;
   }

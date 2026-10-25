@@ -11,6 +11,7 @@
 export * from "./api";
 export * from "./defaults";
 export * from "./fontScale";
+export * from "./gitRiskPolicy";
 export * from "./http";
 export * from "./limits";
 export * from "./normalize";

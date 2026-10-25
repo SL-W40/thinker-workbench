@@ -285,4 +285,73 @@ describe("filesystem tools", () => {
     assert.ok(small.split(NL).includes(`entries${TAB}2`));
     assert.ok(small.split(NL).includes(`truncated${TAB}false`));
   });
+
+  it("edit_file 兼容 CRLF：LF 的 old_string 能命中，写回保留 CRLF", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-eol-"));
+    const file = path.join(root, "crlf.txt");
+    fs.writeFileSync(file, "alpha\r\nbeta\r\ngamma\r\n", "utf8");
+
+    const result = await editFileTool(
+      { path: "crlf.txt", old_string: "beta", new_string: "BETA" },
+      ctx(root),
+    );
+    if (typeof result === "string") assert.fail("expected ui result");
+    assert.match(result.output, /replacements\t1/);
+    assert.equal(fs.readFileSync(file, "utf8"), "alpha\r\nBETA\r\ngamma\r\n");
+  });
+
+  it("edit_file 对 CRLF 文件仍接受带 CRLF 的 old_string，LF 文件行为不变", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-eol2-"));
+    const crlf = path.join(root, "crlf.txt");
+    fs.writeFileSync(crlf, "one\r\ntwo\r\n", "utf8");
+    await editFileTool(
+      { path: "crlf.txt", old_string: "one\r\ntwo", new_string: "one\r\nTWO" },
+      ctx(root),
+    );
+    assert.equal(fs.readFileSync(crlf, "utf8"), "one\r\nTWO\r\n");
+
+    const lf = path.join(root, "lf.txt");
+    fs.writeFileSync(lf, "one\ntwo\n", "utf8");
+    await editFileTool({ path: "lf.txt", old_string: "two", new_string: "TWO" }, ctx(root));
+    assert.equal(fs.readFileSync(lf, "utf8"), "one\nTWO\n");
+  });
+
+  it("edit_file 匹配失败时报错带行尾类型与候选行号，多匹配时列出行号", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-eol3-"));
+    fs.writeFileSync(path.join(root, "crlf.txt"), "alpha\r\nbeta\r\nbeta\r\n", "utf8");
+
+    await assert.rejects(
+      editFileTool({ path: "crlf.txt", old_string: "missing", new_string: "x" }, ctx(root)),
+      /not found/,
+    );
+    await assert.rejects(
+      editFileTool({ path: "crlf.txt", old_string: "missing", new_string: "x" }, ctx(root)),
+      /CRLF/,
+    );
+    await assert.rejects(
+      editFileTool({ path: "crlf.txt", old_string: "alpa", new_string: "x" }, ctx(root)),
+      /closest line 1 shares a 3-char prefix/,
+    );
+    await assert.rejects(
+      editFileTool({ path: "crlf.txt", old_string: "beta", new_string: "x" }, ctx(root)),
+      /matched 2 times \(lines: 2, 3\)/,
+    );
+  });
+
+  it("write_file 整写保留已存在文件的 CRLF，新建文件用 LF", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-eol4-"));
+    const crlf = path.join(root, "crlf.txt");
+    fs.writeFileSync(crlf, "old\r\n", "utf8");
+
+    const rewritten = await writeFileTool(
+      { path: "crlf.txt", contents: "new\nsecond\n" },
+      ctx(root),
+    );
+    if (typeof rewritten === "string") assert.fail("expected ui result");
+    assert.equal(fs.readFileSync(crlf, "utf8"), "new\r\nsecond\r\n");
+
+    const created = path.join(root, "fresh.txt");
+    await writeFileTool({ path: "fresh.txt", contents: "a\nb\n" }, ctx(root));
+    assert.equal(fs.readFileSync(created, "utf8"), "a\nb\n");
+  });
 });

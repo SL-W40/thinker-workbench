@@ -124,7 +124,7 @@ export function shellCommandBaseToken(command: string): string {
 }
 
 /** 按 && / || / ; 拆开命令链，引号内的分隔符不算。 */
-function splitShellChain(command: string): string[] {
+export function shellSplitChain(command: string): string[] {
   const parts: string[] = [];
   let current = "";
   let quote: "'" | '"' | null = null;
@@ -165,7 +165,7 @@ function splitShellChain(command: string): string[] {
 export function shellWhitelistTokens(command: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const segment of splitShellChain(command)) {
+  for (const segment of shellSplitChain(command)) {
     const token = shellCommandBaseToken(segment);
     if (!token || seen.has(token)) continue;
     seen.add(token);

@@ -33,7 +33,7 @@ export async function reviewCommand(
           {
             role: "system",
             content:
-              'You classify shell commands for a coding agent. Reply with ONLY JSON: {"decision":"allow"|"ask","reason":"..."}. Use "allow" for clearly safe read-only or routine project commands (git status, ls, pnpm test, etc.). Use "ask" for destructive, network-exfiltrating, privilege, or unclear commands.',
+              'You classify shell commands for a coding agent. Reply with ONLY JSON: {"decision":"allow"|"ask","reason":"..."}. Use "allow" for clearly safe read-only or routine project commands (git status, ls, pnpm test, etc.). Use "ask" for destructive, network-exfiltrating, privilege, or unclear commands. Always use "ask" for git commands that change repository or remote state (commit, push, reset, rebase, clean, restore, revert, branch -D, tag -d, and similar), even when they look routine.',
           },
           {
             role: "user",

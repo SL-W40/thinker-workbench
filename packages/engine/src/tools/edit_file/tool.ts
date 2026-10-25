@@ -20,7 +20,7 @@ export const editFileToolSpec = defineTool({
       old_string: {
         type: "string",
         description:
-          "Exact text to find in the file (must uniquely identify the edit unless replace_all).",
+          "Exact text to find in the file (must uniquely identify the edit unless replace_all). Line endings are preserved automatically: LF-only old_string still matches a CRLF file. On failure the error reports the file's line endings and the closest matching line.",
       },
       new_string: {
         type: "string",
