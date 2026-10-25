@@ -649,6 +649,7 @@ export const en = {
       progress: "{done}/{total} done",
       expand: "Expand todo list",
       collapse: "Collapse todo list",
+      clearCompleted: "Clear completed",
       status: {
         pending: "Pending",
         in_progress: "In progress",

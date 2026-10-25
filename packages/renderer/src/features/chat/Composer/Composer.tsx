@@ -34,10 +34,13 @@ import {
 import { workspaceTree } from "../../../platform/ipc/workspaceFs";
 import { useT } from "../../../ui/i18n/useI18n";
 import { loadFileRecents } from "../../inspector/fileRecents";
+import { SessionTodoBar } from "../panels/SessionTodoBar";
+import { ModelPicker } from "../pickers/ModelPicker";
+import { ModePicker } from "../pickers/ModePicker";
 import { BackgroundTasksBar } from "../usage/BackgroundTasksBar";
+import { ContextUsageControl } from "../usage/ContextUsageControl";
 import { ComposerEditor, type ComposerEditorHandle } from "./ComposerEditor";
 import { ComposerMentionPanel, type MentionItem } from "./ComposerMentionPanel";
-import { ContextUsageControl } from "../usage/ContextUsageControl";
 import {
   type ActiveMention,
   applyMentionInsert,
@@ -46,9 +49,6 @@ import {
   formatSlashSkill,
 } from "./composerMentions";
 import { rankFileMentions, truncateDirLeft } from "./fileMentionRank";
-import { ModelPicker } from "../pickers/ModelPicker";
-import { ModePicker } from "../pickers/ModePicker";
-import { SessionTodoBar } from "../panels/SessionTodoBar";
 import { SendGlyph, StopGlyph } from "./glyphs";
 import { collectMentionPaths, SKILLS_PAGE } from "./mentionPaths";
 
@@ -72,6 +72,8 @@ type Props = {
   messages?: ChatMessage[];
   /** 会话待办：展示在输入框上方（会话级状态，独立于计划）。 */
   todos?: ChatTodo[];
+  /** 清理已完成待办（只保留未完成项）。 */
+  onClearCompletedTodos?: () => void;
   gateMessage?: string | null;
   onOpenWorkspace?: () => void;
   onOpenTerminal?: (detail?: {
@@ -99,6 +101,7 @@ export function Composer({
   threadId = null,
   messages = [],
   todos = [],
+  onClearCompletedTodos,
   gateMessage,
   onOpenWorkspace,
   onOpenTerminal,
@@ -387,7 +390,7 @@ export function Composer({
               : t("chat.mention.empty")
         }
       />
-      <SessionTodoBar todos={todos} running={busy} />
+      <SessionTodoBar todos={todos} running={busy} onClearCompleted={onClearCompletedTodos} />
       <BackgroundTasksBar threadId={threadId ?? undefined} onOpenTerminal={onOpenTerminal} />
       {visionUntagged && hasImageAttachments ? (
         <Callout tone="warning" className="composer-gate">

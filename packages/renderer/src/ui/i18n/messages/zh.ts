@@ -637,6 +637,7 @@ export const zh: MessageTree = {
       progress: "{done}/{total} 已完成",
       expand: "展开待办列表",
       collapse: "收起待办列表",
+      clearCompleted: "清除已完成",
       status: {
         pending: "待开始",
         in_progress: "进行中",

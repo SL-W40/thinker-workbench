@@ -4,7 +4,7 @@
  * 待办独立于计划 —— 任何模式都能规划步骤而不产出方案；有进行中项时自动展开，
  * 让「正在做哪一步」始终可见。
  */
-import { ChevronRightIcon } from "@thinker-workbench/design/react";
+import { Button, ChevronRightIcon } from "@thinker-workbench/design/react";
 import { type ChatTodo, todoProgress } from "@thinker-workbench/shared";
 import { useEffect, useState } from "react";
 import { useT } from "../../../ui/i18n/useI18n";
@@ -16,11 +16,14 @@ type Props = {
   todos: readonly ChatTodo[];
   /** 当前是否有 run 在跑：决定进行中项是转圈还是「未完成」。 */
   running?: boolean;
+  /** 清理已完成待办（只保留未完成项）；无回调时不显示入口。 */
+  onClearCompleted?: () => void;
 };
 
-export function SessionTodoBar({ todos, running = false }: Props) {
+export function SessionTodoBar({ todos, running = false, onClearCompleted }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const hasDone = todos.some((todo) => todo.status === "done");
 
   // 出现进行中项时自动展开：动画与当前步骤不该被折叠藏起来
   useEffect(() => {
@@ -34,24 +37,36 @@ export function SessionTodoBar({ todos, running = false }: Props) {
 
   return (
     <div className={`session-todos${open ? " is-open" : ""}`}>
-      <button
-        type="button"
-        className="session-todos__head"
-        aria-expanded={open}
-        aria-label={open ? t("chat.todos.collapse") : t("chat.todos.expand")}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="session-todos__chev" aria-hidden="true">
-          <ChevronRightIcon size="sm" open={open} />
-        </span>
-        <span className="session-todos__title">{t("chat.todos.title")}</span>
-        <span className="session-todos__count">
-          {t("chat.todos.progress", { done: String(done), total: String(total) })}
-        </span>
-        <span className="session-todos__bar" aria-hidden="true">
-          <span className="session-todos__fill" style={{ width: `${percent}%` }} />
-        </span>
-      </button>
+      <div className="session-todos__head">
+        <button
+          type="button"
+          className="session-todos__toggle"
+          aria-expanded={open}
+          aria-label={open ? t("chat.todos.collapse") : t("chat.todos.expand")}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="session-todos__chev" aria-hidden="true">
+            <ChevronRightIcon size="sm" open={open} />
+          </span>
+          <span className="session-todos__title">{t("chat.todos.title")}</span>
+          <span className="session-todos__count">
+            {t("chat.todos.progress", { done: String(done), total: String(total) })}
+          </span>
+          <span className="session-todos__bar" aria-hidden="true">
+            <span className="session-todos__fill" style={{ width: `${percent}%` }} />
+          </span>
+        </button>
+        {onClearCompleted && hasDone ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="session-todos__clear"
+            onClick={onClearCompleted}
+          >
+            {t("chat.todos.clearCompleted")}
+          </Button>
+        ) : null}
+      </div>
       {open ? (
         <div className="session-todos__body">
           <TodoList todos={todos} dense running={running} />

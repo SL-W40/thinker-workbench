@@ -17,7 +17,6 @@
 }
 
 .session-todos__head {
-  appearance: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -25,9 +24,21 @@
   min-width: 0;
   margin: 0;
   padding: 6px 10px;
-  border: 0;
   /* 圆角与外壳内沿对齐：悬停底色贴边也不出角 */
   border-radius: 17px 17px 0 0;
+}
+
+/* 折叠开关：真正的按钮，与清除按钮并排；占满剩余宽度，让进度条吃满整行 */
+.session-todos__toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -35,8 +46,8 @@
   cursor: pointer;
 }
 
-.session-todos__head:hover,
-.session-todos__head:focus-visible {
+.session-todos__toggle:hover,
+.session-todos__toggle:focus-visible {
   background: color-mix(in srgb, var(--ink, #000) 5%, transparent);
   outline: none;
 }
@@ -83,6 +94,15 @@
   /* 细进度条压一档透明度，避免变成一条生硬黑线 */
   background: color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 78%, transparent);
   transition: width 220ms ease;
+}
+
+/* 清除已完成按钮：与折叠开关并排贴右 */
+.session-todos__clear {
+  flex: none;
+  margin-left: 2px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .session-todos__body {

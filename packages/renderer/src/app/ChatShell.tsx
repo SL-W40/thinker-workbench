@@ -166,6 +166,7 @@ export function ChatShell({
           threadId={session.threadId}
           messages={session.messages}
           todos={session.todos}
+          onClearCompletedTodos={session.clearCompletedTodos}
           gateMessage={session.workspaceGate?.message ?? null}
           onOpenWorkspace={
             session.workspaceGate?.kind === "no-workspace"

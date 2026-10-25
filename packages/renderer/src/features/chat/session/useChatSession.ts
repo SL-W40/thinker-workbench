@@ -9,7 +9,7 @@
  *   由本文件用 sendRef 中转（沿用拆分前函数声明提升的时序语义，事件回调里读到的都是已装配的实现）
  */
 
-import type { ChatMessage, ChatTodo } from "@thinker-workbench/shared";
+import { type ChatMessage, type ChatTodo, unfinishedTodos } from "@thinker-workbench/shared";
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { cancelAgent, pickDirectory } from "../../../platform/ipc/thinker";
 import {
@@ -122,6 +122,13 @@ export function useChatSession(visible = true) {
       console.error("setSessionTodos failed", err),
     );
   }, []);
+
+  /**
+   * 清理已完成待办：只保留未完成（含进行中）项，并复用 applyTodos 的防抖落库路径。
+   */
+  const clearCompletedTodos = useCallback(() => {
+    applyTodos(unfinishedTodos(todosRef.current));
+  }, [applyTodos]);
 
   /** 切会话 / 首次挂载：从会话记录取回待办；离开旧会话前先把待办补写回去。 */
   useEffect(() => {
@@ -364,6 +371,7 @@ export function useChatSession(visible = true) {
     /** 会话待办（会话级状态，独立于计划）与其更新入口。 */
     todos,
     applyTodos,
+    clearCompletedTodos,
     draftAttachments: attachments.draftAttachments,
     attachFiles: attachments.attachFiles,
     removeAttachment: attachments.removeAttachment,
