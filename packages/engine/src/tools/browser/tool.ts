@@ -28,7 +28,7 @@ export const browserNavigateToolSpec = defineTool({
       reveal: {
         type: "boolean",
         description:
-          "When true (default), show the Browser panel. Set false for background navigation.",
+          "When true (default), show the Browser panel. Set false for background navigation (requires the panel to already be open).",
       },
       take_screenshot_afterwards: {
         type: "boolean",
@@ -43,7 +43,7 @@ export const browserNavigateToolSpec = defineTool({
 export const browserLockToolSpec = defineTool({
   name: "browser_lock",
   description:
-    'Lock or unlock the built-in browser for AI control. Use action "lock" before interacting so the user sees an "AI controlling" overlay on hover; "unlock" when done. The user can click Take control to unlock.',
+    'Lock or unlock the built-in browser for AI control. Use action "lock" before interacting so the user sees an "AI controlling" note over the page; "unlock" when done. The lock is also released automatically when the run ends.',
   parameters: {
     type: "object",
     properties: {
@@ -60,7 +60,7 @@ export const browserLockToolSpec = defineTool({
 export const browserSnapshotToolSpec = defineTool({
   name: "browser_snapshot",
   description:
-    "Capture an accessibility-style snapshot of interactive elements with opaque refs (e1, e2, …). Also captures a viewport screenshot for the timeline (set take_screenshot_afterwards=false to skip). Call before click/type/fill. Refs are invalidated after navigation.",
+    "Capture an accessibility-style snapshot of interactive elements with opaque refs (e1, e2, …). Also captures a viewport screenshot for the timeline (set take_screenshot_afterwards=false to skip). Requires a page to be open — call browser_navigate first when the Browser panel is empty. Call before click/type/fill. Refs are invalidated after navigation.",
   parameters: {
     type: "object",
     properties: {

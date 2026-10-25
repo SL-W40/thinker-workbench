@@ -5,7 +5,7 @@
 import { useDesignTheme } from "@thinker-workbench/design/react";
 import type { ShellProfile, TerminalSession } from "@thinker-workbench/shared";
 import "@xterm/xterm/css/xterm.css";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   consumePendingOpenTerminal,
   createTerminal,
@@ -17,8 +17,8 @@ import {
   type OpenTerminalDetail,
   onTerminalEvent,
   resizeTerminal,
-} from "../../../bridge/terminal";
-import { useT } from "../../../i18n/useI18n";
+} from "../../../platform/ipc/terminal";
+import { useT } from "../../../ui/i18n/useI18n";
 import "../TerminalPane.less";
 import { resolveDefaultProfile } from "./profile";
 import { SessionList } from "./SessionList";
@@ -33,7 +33,11 @@ type Props = {
   onFocusSessionConsumed?: () => void;
 };
 
-export function TerminalPane({
+/**
+ * memo：xterm 是面板里最贵的子树（挂载要建实例 + FitAddon + 全量输出回放），
+ * 顶层 state 变化不该让它重渲染。
+ */
+export const TerminalPane = memo(function TerminalPane({
   active = true,
   focusSessionId = null,
   onFocusSessionConsumed,
@@ -349,4 +353,4 @@ export function TerminalPane({
       />
     </div>
   );
-}
+});

@@ -14,15 +14,25 @@ import { postToParent } from "./port";
 type Pending = {
   resolve: (event: UtilityBrowserEvent) => void;
   reject: (err: Error) => void;
+  /** 兜底超时：主进程不回应时也必须还给模型一个错误，否则整个 run 卡死。 */
+  timer: ReturnType<typeof setTimeout>;
 };
 
 const pending = new Map<string, Pending>();
+
+/**
+ * 单次浏览器动作的等待上限。
+ * 主进程正常会 reply（成功或错误），这里的超时只兜「没人回」：面板没起来、
+ * 渲染进程卡住、utility ↔ main 通道断掉。
+ */
+export const BROWSER_CALL_TIMEOUT_MS = 45_000;
 
 /** 主进程 browserEvent 到达。 */
 export function handleBrowserEvent(event: UtilityBrowserEvent): void {
   const p = pending.get(event.requestId);
   if (!p) return;
   pending.delete(event.requestId);
+  clearTimeout(p.timer);
   if (event.phase === "error") {
     p.reject(new Error(event.error || "Browser error"));
     return;
@@ -70,9 +80,23 @@ export function browserCall(
     }
     const onAbort = () => {
       pending.delete(requestId);
+      clearTimeout(timer);
       reject(new Error("Run cancelled."));
     };
     signal?.addEventListener("abort", onAbort, { once: true });
+
+    const timer = setTimeout(() => {
+      if (!pending.has(requestId)) return;
+      pending.delete(requestId);
+      signal?.removeEventListener("abort", onAbort);
+      reject(
+        new Error(
+          `Browser did not respond within ${Math.round(BROWSER_CALL_TIMEOUT_MS / 1000)}s ` +
+            "(the panel may be closed, or the page is busy). " +
+            "Open the Browser panel and retry, or call browser_navigate first.",
+        ),
+      );
+    }, BROWSER_CALL_TIMEOUT_MS);
 
     pending.set(requestId, {
       resolve: (event) => {
@@ -86,6 +110,7 @@ export function browserCall(
         signal?.removeEventListener("abort", onAbort);
         reject(err);
       },
+      timer,
     });
 
     postToParent(req);

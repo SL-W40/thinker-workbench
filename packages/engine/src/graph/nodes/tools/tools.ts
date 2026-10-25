@@ -6,7 +6,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getLimit } from "../../../config/runtimeLimits";
 import { sleep } from "../../../model/retry";
 import type { ChatMessage, ChatToolCall } from "../../../model/types";
-import { markToolCallStarted } from "../../../runtime/runContext";
+import { getLoadedToolNames, markToolCallStarted } from "../../../runtime/runContext";
 import { seedFailedBackgroundTask } from "../../../tools/task/execute";
 import type { AgentGraphState, AgentGraphUpdate } from "../../annotation";
 import {
@@ -16,6 +16,18 @@ import {
 } from "../toolsResume";
 import { parseToolArgs } from "./args";
 import { emitToolEndFromMessage, resolveOne, runOne, takeBackgroundTaskBatch } from "./runner";
+
+/**
+ * 本 run 里尚未同步进图状态的已装载工具名。
+ * 工具执行（含 tool_search）把命中名写进 run 上下文，这里摘出来交给 state，
+ * 使 agent 节点下一轮能把它们的完整 schema 展开进 body.tools。
+ */
+function newlyLoadedToolNames(state: AgentGraphState): string[] {
+  const loaded = getLoadedToolNames();
+  if (loaded.length === 0) return [];
+  const known = new Set(state.loadedToolNames ?? []);
+  return loaded.filter((name) => !known.has(name));
+}
 
 /**
  * 默认每次只执行一个 pending tool，便于节点结束后落 checkpoint。
@@ -111,6 +123,7 @@ export async function tools(
       if (msg) ordered.push(msg);
     }
     const usingOverride = (base.messagesOverride?.length ?? 0) > 0;
+    const newLoaded = newlyLoadedToolNames(base);
     return {
       ...(ordered.length ? { messages: ordered } : {}),
       ...(usingOverride
@@ -118,6 +131,7 @@ export async function tools(
         : {}),
       pendingToolCalls: base.pendingToolCalls.slice(batch.length),
       ...(newlyStarted.length ? { startedToolCallIds: newlyStarted } : {}),
+      ...(newLoaded.length ? { loadedToolNames: newLoaded } : {}),
       lastToolEndedAt: Date.now(),
     };
   }
@@ -147,6 +161,7 @@ export async function tools(
   const newlyStarted = startedIds.filter((id) => !prevStarted.has(id));
 
   const usingOverride = (base.messagesOverride?.length ?? 0) > 0;
+  const newLoaded = newlyLoadedToolNames(base);
   return {
     ...(message ? { messages: [message] } : {}),
     ...(usingOverride && message
@@ -154,6 +169,7 @@ export async function tools(
       : {}),
     pendingToolCalls: rest,
     ...(newlyStarted.length ? { startedToolCallIds: newlyStarted } : {}),
+    ...(newLoaded.length ? { loadedToolNames: newLoaded } : {}),
     lastToolEndedAt: Date.now(),
   };
 }

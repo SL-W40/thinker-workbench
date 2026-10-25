@@ -55,6 +55,8 @@ export const IpcChannels = {
   settingsSetGeneral: "settings:setGeneral",
   /** 主进程向其它窗口推送已保存的通用设置（主题 / 语言等跨窗同步）。 */
   settingsGeneralChanged: "settings:generalChanged",
+  /** 会话 ChatMode 变更广播（工具请求切模式后，各处的模式选择器同步）。 */
+  settingsSessionChatModeChanged: "settings:sessionChatModeChanged",
   /** 预览系统通知或完成提示音。 */
   settingsPreviewAttention: "settings:previewAttention",
   /** 选择目录（数据 / 日志路径）。 */
@@ -135,6 +137,8 @@ export const IpcChannels = {
   chatSessionsRemove: "chatSessions:remove",
   /** 落库会话消息。 */
   chatSessionsSaveMessages: "chatSessions:saveMessages",
+  /** 全量写回会话待办（会话级状态）。 */
+  chatSessionsSetTodos: "chatSessions:setTodos",
   /** 将用户附图写入工作空间 images 目录。 */
   chatImagesSave: "chatImages:save",
   /** 读取已落盘附图预览（data URL）。 */
@@ -158,12 +162,70 @@ export const IpcChannels = {
   /** 会话 / 线程列表变更广播。 */
   threadsChanged: "threads:changed",
 
+  /** 跨会话全文检索（FTS5）。 */
+  chatSessionsSearch: "chatSessions:search",
+  /** 导出单个会话（Markdown / JSON）。 */
+  chatSessionsExport: "chatSessions:export",
+  /** 导入会话 JSON（落为目标工作区的新会话）。 */
+  chatSessionsImport: "chatSessions:import",
+
+  /** Git 暂存。 */
+  workspaceGitStage: "workspaceGit:stage",
+  /** Git 取消暂存。 */
+  workspaceGitUnstage: "workspaceGit:unstage",
+  /** Git 放弃工作区改动。 */
+  workspaceGitDiscard: "workspaceGit:discard",
+  /** Git 提交。 */
+  workspaceGitCommit: "workspaceGit:commit",
+  /** Git 检出（分支切换 / 文件还原）。 */
+  workspaceGitCheckout: "workspaceGit:checkout",
+  /** Git 分支列表。 */
+  workspaceGitBranchList: "workspaceGit:branchList",
+  /** Git push。 */
+  workspaceGitPush: "workspaceGit:push",
+  /** Git pull。 */
+  workspaceGitPull: "workspaceGit:pull",
+  /** Git stash push。 */
+  workspaceGitStashPush: "workspaceGit:stashPush",
+  /** Git stash pop。 */
+  workspaceGitStashPop: "workspaceGit:stashPop",
+
+  /** 读取 Checkpoint 保留策略。 */
+  checkpointsRetentionGet: "checkpoints:retentionGet",
+  /** 写入 Checkpoint 保留策略补丁。 */
+  checkpointsRetentionSet: "checkpoints:retentionSet",
+  /** 读取 Checkpoint 占用统计。 */
+  checkpointsStats: "checkpoints:stats",
+  /** 立即按策略裁剪。 */
+  checkpointsPruneNow: "checkpoints:pruneNow",
+  /** 变更条目处置（回滚 / 采纳）。 */
+  changesDisposition: "changes:disposition",
+
+  /** 读取更新状态。 */
+  appUpdateState: "app:updateState",
+  /** 检查更新。 */
+  appUpdateCheck: "app:updateCheck",
+  /** 下载更新。 */
+  appUpdateDownload: "app:updateDownload",
+  /** 安装并重启。 */
+  appUpdateInstall: "app:updateInstall",
+  /** 主进程推送更新状态。 */
+  appUpdateEvent: "app:updateEvent",
+
   /** 列出工作空间目录树。 */
   workspaceFsTree: "workspaceFs:tree",
   /** 读取工作空间内文本文件。 */
   workspaceFsRead: "workspaceFs:read",
   /** 写入工作空间内文本文件。 */
   workspaceFsWrite: "workspaceFs:write",
+  /** 新建目录。 */
+  workspaceFsMkdir: "workspaceFs:mkdir",
+  /** 重命名 / 同工作空间内移动。 */
+  workspaceFsRename: "workspaceFs:rename",
+  /** 删除文件或目录（优先系统回收站）。 */
+  workspaceFsRemove: "workspaceFs:remove",
+  /** 在系统文件管理器中显示。 */
+  workspaceFsReveal: "workspaceFs:reveal",
   /** Git status。 */
   workspaceGitStatus: "workspaceGit:status",
   /** 单文件 Git diff。 */
@@ -200,8 +262,12 @@ export const IpcChannels = {
   browserGoForward: "browser:goForward",
   /** 刷新。 */
   browserReload: "browser:reload",
-  /** 同步 WebContentsView 视口 bounds。 */
-  browserSetBounds: "browser:setBounds",
+  /** 渲染层上报 <webview> 的 webContents id（面板挂载时）。 */
+  browserAttachWebview: "browser:attachWebview",
+  /** 渲染层上报 <webview> 卸载（切 tab / 关面板）。 */
+  browserDetachWebview: "browser:detachWebview",
+  /** 上报 <webview> 视口尺寸（CSS px）。 */
+  browserSetViewport: "browser:setViewport",
   /** 显示 / 隐藏内置浏览器视图。 */
   browserSetVisible: "browser:setVisible",
   /** 用户接管（解除 AI 锁定）。 */

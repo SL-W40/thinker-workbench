@@ -1,0 +1,162 @@
+/* 待办列表：有序序号 + 状态标记（进行中旋转动画） */
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.todo-list__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tw-fg-muted, var(--muted, rgba(90, 70, 50, 0.62)));
+}
+
+.todo-list__ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: todo;
+}
+
+.todo-list.is-dense .todo-list__ol {
+  gap: 4px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.todo-item__order {
+  flex: none;
+  min-width: 14px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--tw-fg-muted, var(--muted, rgba(90, 70, 50, 0.62)));
+}
+
+/* 状态标记：待开始空心环、进行中转圈弧线、已完成细勾 */
+.todo-item__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.todo-item__ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--tw-fg-muted, #8a8478) 70%, transparent);
+  stroke-width: 1.2;
+}
+
+.todo-item.is-in_progress .todo-item__ring {
+  /* 只画一段弧，靠旋转做出转圈感 */
+  stroke: var(--tw-accent, var(--accent, #3b82f6));
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 9 20;
+}
+
+.todo-item.is-in_progress .todo-item__mark {
+  animation: todo-mark-spin 900ms linear infinite;
+}
+
+.todo-item.is-in_progress .todo-item__label {
+  color: color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 82%, var(--ink, #111));
+}
+
+/* 快照 / 停摆：不播动画（只有真在跑才转） */
+.todo-item.is-static .todo-item__mark {
+  animation: none;
+}
+
+/* 停摆：run 已收尾但模型没标完成 —— 状态真值仍是 in_progress，这里只停转并降级配色 */
+.todo-item.is-stalled .todo-item__mark {
+  animation: none;
+}
+
+.todo-item.is-stalled .todo-item__ring {
+  /* 静态整圈（不再是半截弧，避免看成进度），描边退回灰调 */
+  stroke: color-mix(in srgb, var(--tw-fg-muted, #8a8478) 70%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: none;
+}
+
+.todo-item.is-stalled .todo-item__label {
+  color: inherit;
+}
+
+.todo-item.is-done .todo-item__ring {
+  stroke: color-mix(in srgb, var(--tw-success, var(--success, #2f9e5f)) 55%, transparent);
+}
+
+.todo-item__check {
+  fill: none;
+  stroke: var(--tw-success, var(--success, #2f9e5f));
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.todo-item.is-done .todo-item__label {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.todo-item.is-done .todo-item__order,
+.todo-item.is-done .todo-item__status {
+  opacity: 0.7;
+}
+
+.todo-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.todo-item__status {
+  flex: none;
+  font-size: 11px;
+  color: var(--tw-fg-muted, var(--muted, rgba(90, 70, 50, 0.62)));
+}
+
+/* 本次新增 / 删除：放在状态规则之后，保证颜色标注压过状态色 */
+.todo-item.is-added .todo-item__label {
+  color: color-mix(in srgb, var(--tw-success, var(--success, #2f9e5f)) 88%, var(--ink, #111));
+}
+
+.todo-item.is-added .todo-item__status {
+  color: var(--tw-success, var(--success, #2f9e5f));
+}
+
+.todo-item.is-removed .todo-item__label {
+  color: color-mix(in srgb, var(--tw-danger, var(--danger, #c0392b)) 85%, var(--ink, #111));
+  text-decoration: line-through;
+}
+
+.todo-item.is-removed .todo-item__status {
+  color: var(--tw-danger, var(--danger, #c0392b));
+}
+
+@keyframes todo-mark-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .todo-item.is-in_progress .todo-item__mark {
+    animation: none;
+  }
+}

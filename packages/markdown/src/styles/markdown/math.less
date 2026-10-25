@@ -1,0 +1,34 @@
+// 数学公式：行内与块级排版、渲染失败兜底。
+// Markdown 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+// Token 约定见 packages/markdown/src/themes/tokens.ts。
+
+.tw-md-math {
+  font-size: 1.05em;
+}
+
+.tw-md-math--display,
+
+.tw-md-math-block {
+  display: block;
+  margin: 16px 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.tw-md-math-error {
+  font-family: var(--md-font-mono);
+  font-size: 0.88em;
+  color: var(--md-danger);
+  background: var(--md-danger-bg);
+  padding: 0.12em 0.35em;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.tw-md-math-error--display {
+  display: block;
+  margin: 12px 0;
+  text-align: left;
+  padding: 9px 12px;
+}
+

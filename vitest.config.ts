@@ -30,10 +30,6 @@ export default defineConfig({
         repoRoot,
         "packages/design/src/styles/controls.less",
       ),
-      "@thinker-workbench/design/notes.less": path.resolve(
-        repoRoot,
-        "packages/markdown/src/styles/notes.less",
-      ),
       "@thinker-workbench/design": path.resolve(repoRoot, "packages/design/src/index.ts"),
       "@thinker-workbench/markdown/react": path.resolve(
         repoRoot,

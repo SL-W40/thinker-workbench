@@ -6,12 +6,15 @@
 import { useDesignTheme } from "@thinker-workbench/design/react";
 import { MarkdownView } from "@thinker-workbench/markdown/react";
 import { useEffect, useRef, useState } from "react";
-import { isBrowserableUrl, requestOpenBrowser } from "../../bridge/browser";
-import { useT } from "../../i18n/useI18n";
+import { isBrowserableUrl, requestOpenBrowser } from "../../platform/ipc/browser";
+import { useT } from "../../ui/i18n/useI18n";
+import { MoreVerticalIcon } from "../../ui/icons";
 import { FileEditor, type FileEditorProps } from "./FileEditor";
-import { MoreVerticalIcon } from "./icons";
-
-type ViewMode = "edit" | "preview";
+import {
+  loadMarkdownViewMode,
+  type MarkdownViewMode,
+  saveMarkdownViewMode,
+} from "./markdownViewMode";
 
 type MarkdownFileViewProps = FileEditorProps & {
   /** 在编辑器内打开文件（相对链接用）。 */
@@ -45,7 +48,7 @@ function resolveDocLink(href: string, mdPath?: string | null): string | null {
 export function MarkdownFileView(props: MarkdownFileViewProps) {
   const { value, path, modelPath, readOnly, onChange, onSave, onOpenFile } = props;
   const t = useT();
-  const [mode, setMode] = useState<ViewMode>("edit");
+  const [mode, setMode] = useState<MarkdownViewMode>(() => loadMarkdownViewMode());
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef<HTMLDivElement>(null);
   const { markdownTheme } = useDesignTheme();
@@ -96,6 +99,7 @@ export function MarkdownFileView(props: MarkdownFileViewProps) {
                 className={`md-fileview__menu-item${mode === "preview" ? " is-active" : ""}`}
                 onClick={() => {
                   setMode("preview");
+                  saveMarkdownViewMode("preview");
                   setMenuOpen(false);
                 }}
               >
@@ -108,6 +112,7 @@ export function MarkdownFileView(props: MarkdownFileViewProps) {
                 className={`md-fileview__menu-item${mode === "edit" ? " is-active" : ""}`}
                 onClick={() => {
                   setMode("edit");
+                  saveMarkdownViewMode("edit");
                   setMenuOpen(false);
                 }}
               >

@@ -2,10 +2,14 @@
  * 内置浏览器契约（renderer ↔ main；agent 经 utility browserRequest）。
  */
 
-/** 视口矩形（相对主窗口 content，DIP）。 */
-export type BrowserBounds = {
-  x: number;
-  y: number;
+/**
+ * <webview> 的会话分区：与主窗口隔离，cookie 持久。
+ * 渲染层用它给标签打 partition，主进程不再自建 session。
+ */
+export const BROWSER_PARTITION = "persist:thinker-browser";
+
+/** 视口尺寸（CSS px）。 */
+export type BrowserViewport = {
   width: number;
   height: number;
 };
@@ -45,7 +49,12 @@ export type ThinkerBrowserApi = {
   goBack(): Promise<BrowserState>;
   goForward(): Promise<BrowserState>;
   reload(): Promise<BrowserState>;
-  setBounds(bounds: BrowserBounds): Promise<void>;
+  /** 面板挂载后上报 webview 的 webContents id（主进程据此接管自动化）。 */
+  attachWebview(webContentsId: number, viewport: BrowserViewport): Promise<void>;
+  /** 面板卸载：webview 即将销毁。 */
+  detachWebview(): Promise<void>;
+  /** webview 尺寸变化。 */
+  setViewport(viewport: BrowserViewport): Promise<void>;
   setVisible(visible: boolean): Promise<void>;
   /** 用户点击「接管」解除 AI 锁定。 */
   takeControl(): Promise<BrowserState>;

@@ -15,6 +15,6 @@ registerFileParser(docxParser);
 registerFileParser(xlsxParser);
 registerFileParser(legacyOfficeParser);
 
-export type { FileParser, ParseInput, ParsedFileResult } from "./types";
-export { registerFileParser, getFileParser, parseFile } from "./registry";
+export { getFileParser, parseFile, registerFileParser } from "./registry";
+export type { FileParser, ParsedFileResult, ParseInput } from "./types";
 export { extOf } from "./types";

@@ -15,7 +15,7 @@ import {
 import type { HostContext } from "../hostContext";
 
 export function onHello(ctx: HostContext, message: UtilityHello): void {
-  ctx.ensureRuntime(message.checkpointDir);
+  // checkpointDir 不再由 hello 下发：run / resume 按工作区下发给对应 runtime
   applyTrace(ctx.ensureRuntime, message.trace);
   applyConfig({
     catalog: message.catalog,

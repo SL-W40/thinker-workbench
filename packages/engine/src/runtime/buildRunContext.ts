@@ -3,6 +3,7 @@
  */
 import {
   type ChatMode,
+  type ChatTodo,
   DEFAULT_CHAT_MODE,
   DEFAULT_SHELL_ALLOWLIST,
   DEFAULT_SHELL_APPROVAL_MODE,
@@ -13,6 +14,7 @@ import {
   normalizeShellAllowlist,
   normalizeShellApprovalMode,
   normalizeShellBlocklist,
+  normalizeTodos,
   normalizeWorkspaceAccess,
   type ShellApprovalMode,
   type ShellProfile,
@@ -33,6 +35,8 @@ export type BuildRunContextInput = {
   workspaceName?: string;
   /** 本 run 数据目录（记忆等落盘）。 */
   dataDir?: string;
+  /** 本 run 工作空间 id（记忆库按工作区落盘）。 */
+  workspaceId?: string;
   /** 记忆仓库；省略则记忆仅运行时（不持久化）。 */
   memoryRepository?: MemoryRepository;
   chatMode?: ChatMode;
@@ -49,6 +53,8 @@ export type BuildRunContextInput = {
   /** 本 run 限额快照（桌面随 UtilityRun 下发；省略时取进程默认）。 */
   limits?: RuntimeLimits;
   route?: { userText?: string; contextPaths?: string[]; hasImages?: boolean };
+  /** 会话既有待办（run 开始时的会话状态），播种进本轮镜像。 */
+  todos?: ChatTodo[];
   emit: RunEmitter;
 };
 
@@ -86,6 +92,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     workspaceRoot: input.workspaceRoot,
     workspaceName: input.workspaceName?.trim() || undefined,
     dataDir: input.dataDir,
+    workspaceId: input.workspaceId?.trim() || undefined,
     memoryRepository: input.memoryRepository,
     chatMode: normalizeChatMode(input.chatMode ?? DEFAULT_CHAT_MODE),
     workspaceAccess: normalizeWorkspaceAccess(input.workspaceAccess, DEFAULT_WORKSPACE_ACCESS),
@@ -111,6 +118,11 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     usage: createUsageLedger(),
     hitlIds: new Set(),
     taskIds: new Set(),
+    loadedToolNames: new Set(),
+    // 会话待办本轮镜像：由会话记录播种，工具写入后靠 todo 事件回传落库
+    todos: normalizeTodos(input.todos),
+    // 默认计划拥有会话待办（create_plan 选「保留独立」时才置 false）
+    planOwnsTodos: true,
     // 缺省视为历史延续（resume / 子代理派生）；run() 入口会显式改写为 true
     freshUserTurn: false,
   };

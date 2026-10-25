@@ -21,6 +21,7 @@ export {
   DatabaseIcon,
   DebugModeIcon,
   DownloadIcon,
+  EyeIcon,
   FilterIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -45,5 +46,6 @@ export {
   SidebarLeftIcon,
   SidebarRightIcon,
   StopIcon,
+  ThinkingIcon,
   TrashIcon,
 } from "./icons";

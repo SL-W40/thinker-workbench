@@ -3,7 +3,8 @@
  */
 
 export const CATALOG_SCHEMA_VERSION = 1;
-export const CHAT_SCHEMA_VERSION = 1;
+/** 2：chat_sessions 增 todos_json（会话待办；老库由 thinkerDb 幂等补列）。 */
+export const CHAT_SCHEMA_VERSION = 2;
 export const TRACE_SCHEMA_VERSION = 1;
 
 /** 会话 Trace 索引库（trace.db）。 */
@@ -112,7 +113,9 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
   active_run_id TEXT,
   interrupt_reason TEXT,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  /** 会话待办（JSON 数组，全量替换；NULL 即空）。 */
+  todos_json TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_order

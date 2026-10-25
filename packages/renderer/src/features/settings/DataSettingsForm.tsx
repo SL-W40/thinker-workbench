@@ -4,9 +4,12 @@
 import { Button, Field, Input, Modal, Progress, Switch } from "@thinker-workbench/design/react";
 import type { DataDirPaths } from "@thinker-workbench/shared";
 import { useEffect, useId, useState } from "react";
-import { resolveDataDir } from "../../bridge/thinker";
-import { useI18n } from "../../i18n/useI18n";
+import { resolveDataDir } from "../../platform/ipc/thinker";
+import { useI18n } from "../../ui/i18n/useI18n";
+import { CheckpointRetentionSection } from "./CheckpointRetentionSection";
 import { formatBytes } from "./generalLabels";
+import { SessionTransferSection } from "./SessionTransferSection";
+import { UpdateSection } from "./UpdateSection";
 import { useGeneralSettings } from "./useGeneralSettings";
 
 type Props = {
@@ -192,6 +195,13 @@ export function DataSettingsForm({ active = true }: Props) {
           </li>
         </ul>
       </section>
+
+      {/* Checkpoint 保留策略：此前只能在 DevTools 控制台调，现在提供正式入口 */}
+      <CheckpointRetentionSection active={active} />
+      {/* 会话导出 / 导入 */}
+      <SessionTransferSection active={active} />
+      {/* 桌面自动更新（dev 构建自动显示为不支持） */}
+      <UpdateSection active={active} />
 
       {error ? <p className="settings-err">{error}</p> : null}
 

@@ -1,0 +1,143 @@
+/**
+ * @ 文件芯片悬停预览卡片（玻璃浮层 + 青色语义呼应）。
+ */
+.mention-preview {
+  position: fixed;
+  z-index: 1000;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elev, #fff) 92%, transparent);
+  border: 1px solid var(--border, rgba(15, 23, 42, 0.12));
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.18),
+    0 2px 8px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(12px) saturate(1.2);
+  color: var(--ink, #0f172a);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: auto;
+  animation: mention-preview-in 0.14s ease-out;
+
+  @media (prefers-color-scheme: dark) {
+    background: color-mix(in srgb, var(--bg-elev, #0f172a) 92%, transparent);
+    border-color: var(--border, rgba(226, 232, 240, 0.14));
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  &__loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px 0;
+    color: var(--ink-muted, var(--muted, #64748b));
+  }
+
+  &__missing {
+    padding: 10px 0;
+    color: var(--danger, #ef4444);
+  }
+
+  &__media {
+    display: block;
+    max-width: 100%;
+    max-height: 180px;
+    margin: 0 auto 8px;
+    border-radius: 8px;
+    background: var(--bg, #f1f5f9);
+    object-fit: contain;
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--ink, #0f172a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__meta {
+    color: var(--ink-muted, var(--muted, #64748b));
+    font-size: 11px;
+  }
+
+  &__path {
+    color: var(--ink-muted, var(--muted, #64748b));
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__text {
+    margin: 8px 0 0;
+    padding: 8px;
+    max-height: 140px;
+    overflow: auto;
+    border-radius: 8px;
+    background: var(--bg, #f1f5f9);
+    color: var(--ink, #0f172a);
+    font-family:
+      ui-monospace, "SFMono-Regular", "JetBrains Mono", "Menlo", monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    @media (prefers-color-scheme: dark) {
+      background: rgba(15, 23, 42, 0.6);
+    }
+  }
+
+  &__hint {
+    margin-top: 6px;
+    color: var(--ink-muted, var(--muted, #64748b));
+    font-size: 11px;
+  }
+
+  &__open {
+    margin-top: 10px;
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, #0e7490 40%, transparent);
+    background: color-mix(in srgb, #0e7490 10%, transparent);
+    color: #0e7490;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      transform 0.1s ease;
+
+    &:hover {
+      background: color-mix(in srgb, #0e7490 18%, transparent);
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
+  }
+}
+
+@keyframes mention-preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

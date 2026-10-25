@@ -26,7 +26,6 @@ export default defineConfig({
       "@thinker-workbench/design/react": path.resolve(designSrc, "react/index.ts"),
       "@thinker-workbench/design/styles.less": path.resolve(designSrc, "styles/design.less"),
       "@thinker-workbench/design/controls.less": path.resolve(designSrc, "styles/controls.less"),
-      "@thinker-workbench/design/notes.less": path.resolve(markdownSrc, "styles/notes.less"),
       "@thinker-workbench/design": path.resolve(designSrc, "index.ts"),
       "@thinker-workbench/markdown/react": path.resolve(markdownSrc, "react/index.ts"),
       "@thinker-workbench/markdown/styles.less": path.resolve(markdownSrc, "styles/markdown.less"),

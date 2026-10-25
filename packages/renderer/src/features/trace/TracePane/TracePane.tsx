@@ -20,9 +20,9 @@ import type {
   TraceSpanRecord,
 } from "@thinker-workbench/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getModelSettings, MODEL_SETTINGS_CHANGED } from "../../../bridge/thinker";
-import { listWorkspaces } from "../../../bridge/workspaces";
-import { useT } from "../../../i18n/useI18n";
+import { getModelSettings, MODEL_SETTINGS_CHANGED } from "../../../platform/ipc/thinker";
+import { listWorkspaces } from "../../../platform/ipc/workspaces";
+import { useT } from "../../../ui/i18n/useI18n";
 import { CallTreeDiagram } from "../CallTreeDiagram";
 import { groupSpansByRun, type TraceRunGroup, UNKNOWN_RUN_ID } from "../callTreeModel";
 import type { OverviewNames } from "../overviewModel";

@@ -2,9 +2,11 @@
  * workspacesStore 行映射纯函数（rows.ts）。
  */
 import assert from "node:assert/strict";
+import { DEFAULT_WORKSPACE_ID } from "@thinker-workbench/shared";
 import { describe, it } from "vitest";
 import { getDefaultWorkspaceRoot } from "../../../src/config/paths";
 import {
+  isDefaultWorkspaceId,
   isDefaultWorkspaceRoot,
   mapSession,
   mapThread,
@@ -60,9 +62,14 @@ describe("mapWorkspace", () => {
     assert.equal(ws.isDefault, false);
   });
 
-  it("flags the default workspace root", () => {
-    const ws = mapWorkspace({ ...WS_ROW, root_path: getDefaultWorkspaceRoot() });
+  it("flags the default workspace by fixed id", () => {
+    const ws = mapWorkspace({ ...WS_ROW, id: DEFAULT_WORKSPACE_ID });
     assert.equal(ws.isDefault, true);
+  });
+
+  it("默认工作区根落在该 id 目录的 project 下", () => {
+    const root = getDefaultWorkspaceRoot();
+    assert.ok(root.replace(/\\/g, "/").endsWith(`workspaces/${DEFAULT_WORKSPACE_ID}/project`));
   });
 });
 
@@ -91,6 +98,13 @@ describe("mapThread", () => {
     assert.equal(t.runStatus, "running");
     assert.equal(t.pinned, false);
     assert.equal(t.sortOrder, 2);
+  });
+});
+
+describe("isDefaultWorkspaceId", () => {
+  it("matches the fixed default id", () => {
+    assert.equal(isDefaultWorkspaceId(DEFAULT_WORKSPACE_ID), true);
+    assert.equal(isDefaultWorkspaceId("ws_abc"), false);
   });
 });
 

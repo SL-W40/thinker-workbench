@@ -1,11 +1,10 @@
 /**
  * 基础浅色主题——黑白灰极简。
  */
-import { lightTheme as mdLight } from "@thinker-workbench/markdown";
+import { lightTheme as mdLight, SANS_STACK } from "@thinker-workbench/markdown";
 import { notesChrome } from "./chrome";
 import type { DesignTheme } from "./types";
 
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdLight.vars["--md-font-mono"] ?? "";
 
 /** 基础浅色——黑白灰极简。 */
@@ -29,13 +28,12 @@ export const lightTheme: DesignTheme = {
     "--tw-code-bg": "#efefef",
     "--tw-placeholder": "rgba(0, 0, 0, 0.4)",
     "--tw-hover": "rgba(0, 0, 0, 0.05)",
-    "--tw-font-body": SANS,
+    "--tw-font-body": SANS_STACK,
     "--tw-font-mono": MONO,
     "--tw-radius": "10px",
     "--tw-radius-control": "8px",
     "--tw-shadow-soft": "rgba(0, 0, 0, 0.08)",
     ...notesChrome({
-      paperRule: "rgba(0, 0, 0, 0.05)",
       paperMargin: "rgba(0, 0, 0, 0.03)",
       paperGlow: "transparent",
       titlebarBg: "rgba(255, 255, 255, 0.94)",

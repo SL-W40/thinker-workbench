@@ -4,11 +4,12 @@
  * 受包边界约束，引擎无法直连 desktop 的 chat.db；且 better-sqlite3 在引擎依赖树中
  * 默认不可静态解析（仅作为 langchain sqlite checkpointer 的传递依赖存在）。
  * 因此这里用「动态 import + 内存兜底」：
- *   - 若运行环境能解析 better-sqlite3，则在 dataDir 建 session_memory.sqlite（会话级耐久）；
+ *   - 若运行环境能解析 better-sqlite3，则在工作区目录建 memory.sqlite（会话级耐久）；
  *   - 否则退化为进程内 Map（跨轮可用，不跨进程重启）。
  * 要启用磁盘耐久，只需在 packages/engine/package.json 显式声明 better-sqlite3 并安装。
  */
 
+import { dataPath } from "@thinker-workbench/shared";
 import type { MemoryKind, MemoryRepository } from "./repository";
 
 /** 进程内退化实现（无 dataDir 或 better-sqlite3 不可用时）。 */
@@ -25,12 +26,16 @@ function createInMemoryRepository(): MemoryRepository {
 }
 
 /**
- * 由 dataDir 构造记忆仓库（异步：尝试 SQLite，失败兜底内存）。
+ * 由 dataDir + workspaceId 构造记忆仓库（异步：尝试 SQLite，失败兜底内存）。
+ * 落点 `<dataDir>/workspaces/<id>/memory.sqlite`；无 workspaceId 时退回内存实现。
  */
 export async function createSqliteMemoryRepository(
   dataDir: string | undefined,
+  workspaceId?: string,
 ): Promise<MemoryRepository> {
   if (!dataDir) return createInMemoryRepository();
+  const wsId = workspaceId?.trim();
+  if (!wsId) return createInMemoryRepository();
   try {
     // 用变量名规避 tsc 对尚未安装依赖的静态解析（运行时才真正解析）。
     const sqliteModuleName = "better-sqlite3";
@@ -41,8 +46,9 @@ export async function createSqliteMemoryRepository(
     if (!Database) return createInMemoryRepository();
     const fs = await import("node:fs");
     const path = await import("node:path");
-    fs.mkdirSync(dataDir, { recursive: true });
-    const db = new Database(path.join(dataDir, "session_memory.sqlite"));
+    const dbFile = dataPath(dataDir, "wsMemory", { workspaceId: wsId });
+    fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+    const db = new Database(dbFile);
     db.exec(
       `CREATE TABLE IF NOT EXISTS session_memory (
         session_id TEXT NOT NULL,

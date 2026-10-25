@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, it, vi } from "vitest";
 
-vi.mock("../../../src/i18n/useI18n", () => ({
+vi.mock("../../../src/ui/i18n/useI18n", () => ({
   useT: () => (key: string) => key,
   useI18n: () => ({ t: (key: string) => key }),
 }));

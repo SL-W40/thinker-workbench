@@ -84,7 +84,7 @@ export async function onRun(ctx: HostContext, message: UtilityRun): Promise<void
     });
     return;
   }
-  const runtime = ctx.ensureRuntime();
+  const runtime = ctx.ensureRuntime(message.checkpointDir);
   const emit = bindRuntimeEmitter(
     (e) => runtime.events.emit(e),
     message.threadId,
@@ -98,6 +98,7 @@ export async function onRun(ctx: HostContext, message: UtilityRun): Promise<void
     workspaceRoot,
     workspaceName,
     dataDir: message.dataDir,
+    workspaceId: message.workspaceId,
     chatMode: message.chatMode,
     workspaceAccess: message.workspaceAccess,
     allowAiDeleteFiles: message.allowAiDeleteFiles,
@@ -115,6 +116,8 @@ export async function onRun(ctx: HostContext, message: UtilityRun): Promise<void
       contextPaths: message.command.contextPaths,
       hasImages: runImages.length > 0 || historyHasImages,
     },
+    // 会话既有待办播种进本轮：todo 工具与 create_plan 据此续写
+    todos: message.sessionTodos,
     emit,
   });
   await runtime.run({

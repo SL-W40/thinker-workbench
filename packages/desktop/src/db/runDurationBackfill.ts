@@ -15,7 +15,7 @@
  */
 import type Database from "better-sqlite3";
 import { desktopLog } from "../log/setup";
-import { openTraceDb } from "../trace/traceDb";
+import { traceDbFor } from "../trace/workspaceTraceDb";
 import {
   mergeDurationIntoPayload,
   type SpanWindow,
@@ -113,18 +113,10 @@ export function backfillRunDurations(options: BackfillOptions = {}): DurationBac
     : listWorkspaces().map((w) => w.id);
   if (workspaceIds.length === 0) return stats;
 
-  let trace: Database.Database;
-  try {
-    trace = openTraceDb();
-  } catch (err) {
-    desktopLog("backfill.duration").warn("trace db unavailable", {
-      meta: { error: err instanceof Error ? err.message : String(err) },
-    });
-    return stats;
-  }
-
   for (const workspaceId of workspaceIds) {
     try {
+      // Trace 已按工作区分库：每个工作区用自己的库回填
+      const trace = traceDbFor(workspaceId);
       const db = openWorkspaceChatDb(workspaceId);
       if (!options.force && readVersion(db) >= RUN_DURATION_BACKFILL_VERSION) continue;
 

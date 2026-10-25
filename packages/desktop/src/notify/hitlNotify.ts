@@ -6,11 +6,13 @@ import {
   type HitlRequest,
   type HitlResponse,
   IpcChannels,
+  isChatMode,
   shellCommandsToAllowlist,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, Notification } from "electron";
 import { getNotificationIconPath } from "../config/paths";
 import { getGeneralSettings, saveGeneralSettings } from "../config/settingsStore";
+import { setSessionChatMode } from "../db/workspacesStore/kv";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { pushAgentHello } from "../utility/startAgentProcess";
 import { showMainWindow } from "../window/tray";
@@ -62,6 +64,23 @@ export function respondHitl(response: HitlResponse, bridge: AgentBridge): void {
   resolved.add(response.hitlId);
   const req = pending.get(response.hitlId);
   pending.delete(response.hitlId);
+
+  // 模式切换：用户点了「切换」才落库会话 ChatMode（引擎侧本 run 已自行生效），
+  // 并广播给各窗口，让模式选择器同步。
+  if (req?.kind === "mode_switch" && response.actionId === "switch") {
+    const target = req.payload?.targetMode;
+    const sessionId = req.payload?.sessionId;
+    if (typeof target === "string" && isChatMode(target) && typeof sessionId === "string") {
+      const saved = setSessionChatMode(sessionId, target);
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed()) continue;
+        win.webContents.send(IpcChannels.settingsSessionChatModeChanged, {
+          sessionId,
+          chatMode: saved,
+        });
+      }
+    }
+  }
 
   if (response.actionId === "allow_and_whitelist" && req) {
     const command = typeof req.payload?.command === "string" ? req.payload.command : "";
@@ -155,8 +174,8 @@ export function handleHitlAgentEvent(event: AgentEvent, bridge: AgentBridge): vo
   pending.set(event.hitlId, event.request);
   resolved.delete(event.hitlId);
 
-  // 密钥输入必须走应用内密码框，不能靠系统 Toast 提交
-  if (event.request.kind === "shell_secret_input") {
+  // 密钥输入 / 模式切换必须走应用内卡片，不能靠系统 Toast（按钮不是 allow/deny）
+  if (event.request.kind === "shell_secret_input" || event.request.kind === "mode_switch") {
     if (!anyWindowFocused()) showMainWindow();
     return;
   }

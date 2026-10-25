@@ -3,7 +3,11 @@
  * ToolSpec 是注册表里的完整条目；DefineToolInput 是 defineTool 的友好入参。
  */
 
-import type { ChatTimelineResultPathKind } from "@thinker-workbench/shared";
+import type {
+  ChatPlanUpdateHint,
+  ChatTimelineResultPathKind,
+  ChatTodo,
+} from "@thinker-workbench/shared";
 
 /** 给 C 端时间线用的结构化附件（不替代 output 进模型上下文）。 */
 export type ToolUiPayload = {
@@ -28,6 +32,14 @@ export type ToolUiPayload = {
   resultPathKinds?: ChatTimelineResultPathKind[];
   /** 以 image_ref 进入模型上下文的图片（视觉模型可见；如 computer_screenshot）。 */
   modelImages?: string[];
+  /** `todo`：本次调用后的待办快照（供时间线卡片定格展示）。 */
+  todos?: ChatTodo[];
+  /** `todo`：相对调用前新增的条目 id。 */
+  todoAdded?: string[];
+  /** `todo`：相对调用前被删除的条目 id。 */
+  todoRemoved?: string[];
+  /** `update_plan`：这次更新改了哪几步（时间线一行展示）。 */
+  planUpdate?: ChatPlanUpdateHint;
 };
 
 /** 工具执行结果：ok 表示业务成功，output 始终是给模型看的文本。 */
@@ -76,12 +88,25 @@ export type ToolArgs = Record<string, unknown>;
  */
 export type ToolParametersSchema = ToolParameters | Record<string, unknown>;
 
+/** 工具分组；MCP 工具统一归入 "mcp"。 */
+export type ToolGroup = "file" | "shell" | "browser" | "task" | "plan" | "meta" | "git" | "mcp";
+
 /** 注册表中的工具规格。 */
 export type ToolSpec = {
   name: string;
   description: string;
   parameters: ToolParametersSchema;
   run: (args: ToolArgs, ctx: ToolContext) => Promise<ToolResult>;
+  /**
+   * 分组标签。当前只用于延迟层的诊断与统计，
+   * 不参与过滤（过滤仍走 chatMode.ts 的名单，避免两处规则不同步）。
+   */
+  group?: ToolGroup;
+  /**
+   * 是否允许延迟加载：延迟模式下只暴露索引，命中后才展开完整 parameters。
+   * 缺省 false —— 内置工具一律常驻；仅 MCP 工具置 true。
+   */
+  deferrable?: boolean;
 };
 
 /** defineTool 入参：execute 只返回成功字符串，异常由包装层变成 ok:false。 */

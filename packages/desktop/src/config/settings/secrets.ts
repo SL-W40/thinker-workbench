@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import { isRecord, type UnlockModelSecretsResult } from "@thinker-workbench/shared";
 import { decryptSecret } from "../secretCrypto";
-import { bootstrapSettingsPath, settingsPath } from "./paths";
+import { bootstrapSettingsPath, settingsPath } from "./filePaths";
 import { loadSettings } from "./settingsStore";
 import { type DiskModelCatalog, type DiskSettings, lastApiKeyEncByProvider } from "./state";
 

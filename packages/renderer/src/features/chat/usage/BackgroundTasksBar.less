@@ -1,0 +1,168 @@
+/* Composer 上方：background shell 任务条（贴在输入壳上沿） */
+
+.bg-tasks {
+  /* 与输入壳同宽同圆角：单独出现时自己就是栈顶 */
+  width: var(--composer-content-width, 100%);
+  margin: 0 auto;
+  /* 不留内边距：留白交给 head，悬停底色才能铺满整行 */
+  box-sizing: border-box;
+  border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.18)));
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: color-mix(
+    in srgb,
+    var(--bg-elev, var(--tw-bg-elev, #f7f7f7)) 88%,
+    var(--tw-accent, var(--accent, #111)) 4%
+  );
+}
+
+/* 叠在待办条下面：接缝处拉平，两条拼成一张卡 */
+.session-todos + .bg-tasks {
+  border-radius: 0;
+}
+
+.session-todos + .bg-tasks .bg-tasks__head {
+  border-radius: 0;
+}
+
+.bg-tasks__head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  /* 栈顶时圆角与外壳内沿对齐；叠在待办条下面则由相邻选择器拉平 */
+  border-radius: 17px 17px 0 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bg-tasks__head:hover,
+.bg-tasks__head:focus-visible {
+  background: color-mix(in srgb, var(--ink, #000) 5%, transparent);
+  outline: none;
+}
+
+.bg-tasks.is-expanded .bg-tasks__head {
+  /* 展开时与任务列表拉开间距（叠加 head 自身的 6px 下内边距） */
+  margin-bottom: 4px;
+}
+
+/* 与待办条一致：一颗箭头，展开时旋转 */
+.bg-tasks__icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted, var(--muted, var(--tw-fg-muted)));
+}
+
+.bg-tasks__head:hover .bg-tasks__icon,
+.bg-tasks__head:focus-visible .bg-tasks__icon,
+.bg-tasks.is-expanded .bg-tasks__icon {
+  color: var(--ink, var(--tw-fg));
+}
+
+.bg-tasks__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink, var(--tw-fg));
+}
+
+.bg-tasks__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bg-tasks__list > li {
+  min-width: 0;
+}
+
+.bg-tasks__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border-radius: 7px;
+  transition: background-color 120ms ease;
+}
+
+.bg-tasks__row:hover,
+.bg-tasks__row:focus-within {
+  background: color-mix(in srgb, var(--ink, #000) 4%, transparent);
+}
+
+/* 扁平任务行：不用白底描边药丸，与待办条目同一套行语言 */
+.bg-tasks__cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 3px 6px;
+  border-radius: 7px;
+  color: var(--ink-muted, var(--muted, var(--tw-fg-muted)));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bg-tasks__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行操作：默认隐身，悬停 / 键盘聚焦该行时才浮出 */
+.bg-tasks__ops {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.bg-tasks__row:hover .bg-tasks__ops,
+.bg-tasks__ops:focus-within {
+  opacity: 1;
+}
+
+/* 触屏没有悬停：操作按钮常驻 */
+@media (hover: none) {
+  .bg-tasks__ops {
+    opacity: 1;
+  }
+}
+
+.bg-tasks__dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tw-success, var(--success, #3ecf8e));
+  opacity: 0.85;
+}
+
+.bg-tasks__cmd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,8 +1,9 @@
 /**
- * 会话 Trace SQLite 索引（trace.db）。
+ * 会话 Trace SQLite 索引（按工作区各自一份 trace.db）。
+ *
+ * 所有函数都要求 workspaceId：Trace 与工作区同生命周期，删工作区整目录带走。
+ * 不传 workspaceId 的列表查询走跨工作区聚合（见 listSessionsAcrossWorkspaces）。
  */
-import fs from "node:fs";
-import path from "node:path";
 import type {
   TraceListSessionsQuery,
   TraceRunType,
@@ -12,52 +13,8 @@ import type {
   TraceSpanStatus,
 } from "@thinker-workbench/shared";
 import { isRecord } from "@thinker-workbench/shared";
-import Database from "better-sqlite3";
-import { getTraceDir } from "../config/paths";
-import { TRACE_SCHEMA_SQL, TRACE_SCHEMA_VERSION } from "../db/schema";
-import { ensureTraceDirs } from "./sessionJsonl";
-
-let db: Database.Database | null = null;
-
-function dbPath(): string {
-  return path.join(getTraceDir(), "trace.db");
-}
-
-export function openTraceDb(): Database.Database {
-  if (db) return db;
-  ensureTraceDirs();
-  const file = dbPath();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  db = new Database(file);
-  db.pragma("journal_mode = WAL");
-  db.exec(TRACE_SCHEMA_SQL);
-  const row = db.prepare("SELECT value FROM schema_meta WHERE key = ?").get("version") as
-    | { value: string }
-    | undefined;
-  if (!row) {
-    db.prepare("INSERT INTO schema_meta(key, value) VALUES (?, ?)").run(
-      "version",
-      String(TRACE_SCHEMA_VERSION),
-    );
-  }
-  // 回填历史数据：早期 run_count 依赖永不触发的 bumpRun，全为 0
-  db.exec(
-    `UPDATE sessions SET run_count = (
-       SELECT COUNT(DISTINCT COALESCE(run_id, '')) FROM spans WHERE session_id = sessions.session_id
-     ) WHERE run_count = 0`,
-  );
-  return db;
-}
-
-export function closeTraceDb(): void {
-  if (!db) return;
-  try {
-    db.close();
-  } catch {
-    /* ignore */
-  }
-  db = null;
-}
+import type { Database } from "better-sqlite3";
+import { listWorkspaceIds, traceDbFor } from "./workspaceTraceDb";
 
 type SpanRow = {
   span_id: string;
@@ -76,6 +33,16 @@ type SpanRow = {
   input_ref: string | null;
   output_ref: string | null;
   attrs_json: string | null;
+};
+
+type SessionRow = {
+  session_id: string;
+  workspace_id: string | null;
+  thread_id: string | null;
+  title: string | null;
+  first_ts: number;
+  last_ts: number;
+  run_count: number;
 };
 
 function rowToSpan(r: SpanRow): TraceSpanRecord {
@@ -108,16 +75,86 @@ function rowToSpan(r: SpanRow): TraceSpanRecord {
   };
 }
 
-export function upsertSession(meta: {
-  sessionId: string;
-  workspaceId?: string;
-  threadId?: string;
-  title?: string;
-  ts: number;
-}): void {
-  const d = openTraceDb();
+function rowToSession(r: SessionRow, workspaceId: string): TraceSessionSummary {
+  return {
+    sessionId: r.session_id,
+    workspaceId: r.workspace_id ?? workspaceId,
+    threadId: r.thread_id ?? undefined,
+    title: r.title ?? undefined,
+    firstTs: r.first_ts,
+    lastTs: r.last_ts,
+    runCount: r.run_count,
+  };
+}
+
+const SESSION_COLUMNS = `session_id, workspace_id, thread_id, title, first_ts, last_ts, run_count`;
+
+function querySessions(
+  db: Database,
+  query: TraceListSessionsQuery,
+  workspaceId: string,
+): TraceSessionSummary[] {
+  const limit = Math.min(500, Math.max(1, query.limit ?? 100));
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  if (query.workspaceId) {
+    clauses.push("workspace_id = ?");
+    params.push(query.workspaceId);
+  }
+  if (query.q?.trim()) {
+    clauses.push("(title LIKE ? OR session_id LIKE ? OR thread_id LIKE ?)");
+    const like = `%${query.q.trim()}%`;
+    params.push(like, like, like);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = db
+    .prepare(
+      `SELECT ${SESSION_COLUMNS}
+       FROM sessions ${where}
+       ORDER BY last_ts DESC
+       LIMIT ?`,
+    )
+    .all(...params, limit) as SessionRow[];
+  return rows.map((r) => rowToSession(r, workspaceId));
+}
+
+/** 单工作区内查询会话（按 last_ts 倒序）。 */
+export function listWorkspaceSessions(
+  workspaceId: string,
+  query: TraceListSessionsQuery = {},
+): TraceSessionSummary[] {
+  return querySessions(traceDbFor(workspaceId), query, workspaceId);
+}
+
+/** 跨工作区聚合查询（调用方未指定 workspaceId 时）。 */
+export function listSessionsAcrossWorkspaces(
+  query: TraceListSessionsQuery = {},
+): TraceSessionSummary[] {
+  const limit = Math.min(500, Math.max(1, query.limit ?? 100));
+  const merged: TraceSessionSummary[] = [];
+  for (const id of listWorkspaceIds()) {
+    try {
+      merged.push(...listWorkspaceSessions(id, { ...query, limit: 500 }));
+    } catch {
+      /* 单个工作区库损坏不拖垮整体 */
+    }
+  }
+  return merged.sort((a, b) => b.lastTs - a.lastTs).slice(0, limit);
+}
+
+/** 列表查询入口：指定工作区走单库，否则跨工作区聚合。 */
+export function listSessions(query: TraceListSessionsQuery = {}): TraceSessionSummary[] {
+  const workspaceId = query.workspaceId?.trim();
+  if (workspaceId) return listWorkspaceSessions(workspaceId, query);
+  return listSessionsAcrossWorkspaces(query);
+}
+
+export function upsertSession(
+  workspaceId: string,
+  meta: { sessionId: string; threadId?: string; title?: string; ts: number },
+): void {
+  const d = traceDbFor(workspaceId);
   // run_count 由 spans 表派生：一次运行 = 一个不同的 agentRunId（与渲染端分组口径一致）。
-  // 不再靠调用方传 bumpRun：引擎顶层 span 名为 graph.*，没有叫 "run" 的 span，旧增量永远不触发。
   const existing = d
     .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
     .get(meta.sessionId) as { session_id: string } | undefined;
@@ -127,7 +164,7 @@ export function upsertSession(meta: {
        VALUES (?, ?, ?, ?, ?, ?, (SELECT COUNT(DISTINCT COALESCE(run_id, '')) FROM spans WHERE session_id = ?))`,
     ).run(
       meta.sessionId,
-      meta.workspaceId ?? null,
+      workspaceId,
       meta.threadId ?? null,
       meta.title ?? null,
       meta.ts,
@@ -138,14 +175,14 @@ export function upsertSession(meta: {
   }
   d.prepare(
     `UPDATE sessions SET
-       workspace_id = COALESCE(?, workspace_id),
+       workspace_id = COALESCE(workspace_id, ?),
        thread_id = COALESCE(?, thread_id),
        title = COALESCE(?, title),
        last_ts = MAX(last_ts, ?),
        run_count = (SELECT COUNT(DISTINCT COALESCE(run_id, '')) FROM spans WHERE session_id = ?)
      WHERE session_id = ?`,
   ).run(
-    meta.workspaceId ?? null,
+    workspaceId,
     meta.threadId ?? null,
     meta.title ?? null,
     meta.ts,
@@ -154,8 +191,8 @@ export function upsertSession(meta: {
   );
 }
 
-export function insertSpanStart(span: TraceSpanRecord): void {
-  const d = openTraceDb();
+export function insertSpanStart(workspaceId: string, span: TraceSpanRecord): void {
+  const d = traceDbFor(workspaceId);
   d.prepare(
     `INSERT OR REPLACE INTO spans(
       span_id, session_id, run_id, trace_id, parent_span_id, task_id,
@@ -180,22 +217,22 @@ export function insertSpanStart(span: TraceSpanRecord): void {
     span.attrs ? JSON.stringify(span.attrs) : null,
   );
   // span 落库后再刷会话：run_count 派生自此表，顺序反了会漏算本次运行
-  upsertSession({
+  upsertSession(workspaceId, {
     sessionId: span.sessionId,
-    workspaceId: typeof span.attrs?.workspaceId === "string" ? span.attrs.workspaceId : undefined,
     threadId: typeof span.attrs?.threadId === "string" ? span.attrs.threadId : undefined,
     ts: span.startTs,
   });
 }
 
-export function getSpan(spanId: string): TraceSpanRecord | null {
-  const row = openTraceDb().prepare("SELECT * FROM spans WHERE span_id = ?").get(spanId) as
-    | SpanRow
-    | undefined;
+export function getSpan(workspaceId: string, spanId: string): TraceSpanRecord | null {
+  const row = traceDbFor(workspaceId)
+    .prepare("SELECT * FROM spans WHERE span_id = ?")
+    .get(spanId) as SpanRow | undefined;
   return row ? rowToSpan(row) : null;
 }
 
 export function updateSpanEnd(
+  workspaceId: string,
   spanId: string,
   patch: {
     status?: TraceSpanStatus;
@@ -205,7 +242,7 @@ export function updateSpanEnd(
     attrs?: Record<string, unknown>;
   },
 ): TraceSpanRecord | null {
-  const d = openTraceDb();
+  const d = traceDbFor(workspaceId);
   const prev = d.prepare("SELECT * FROM spans WHERE span_id = ?").get(spanId) as
     | SpanRow
     | undefined;
@@ -231,97 +268,57 @@ export function updateSpanEnd(
       attrs_json = COALESCE(?, attrs_json)
      WHERE span_id = ?`,
   ).run(patch.status ?? null, patch.summary ?? null, endTs, patch.outputRef ?? null, attrs, spanId);
-  upsertSession({ sessionId: prev.session_id, ts: endTs });
+  upsertSession(workspaceId, { sessionId: prev.session_id, ts: endTs });
   const next = d.prepare("SELECT * FROM spans WHERE span_id = ?").get(spanId) as SpanRow;
   return rowToSpan(next);
 }
 
-export function setSpanInputRef(spanId: string, inputRef: string): void {
-  openTraceDb().prepare("UPDATE spans SET input_ref = ? WHERE span_id = ?").run(inputRef, spanId);
+export function setSpanInputRef(workspaceId: string, spanId: string, inputRef: string): void {
+  traceDbFor(workspaceId)
+    .prepare("UPDATE spans SET input_ref = ? WHERE span_id = ?")
+    .run(inputRef, spanId);
 }
 
-export function listSessions(query: TraceListSessionsQuery = {}): TraceSessionSummary[] {
-  const d = openTraceDb();
-  const limit = Math.min(500, Math.max(1, query.limit ?? 100));
-  const clauses: string[] = [];
-  const params: unknown[] = [];
-  if (query.workspaceId) {
-    clauses.push("workspace_id = ?");
-    params.push(query.workspaceId);
-  }
-  if (query.q?.trim()) {
-    clauses.push("(title LIKE ? OR session_id LIKE ? OR thread_id LIKE ?)");
-    const like = `%${query.q.trim()}%`;
-    params.push(like, like, like);
-  }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  const rows = d
-    .prepare(
-      `SELECT session_id, workspace_id, thread_id, title, first_ts, last_ts, run_count
-       FROM sessions ${where}
-       ORDER BY last_ts DESC
-       LIMIT ?`,
-    )
-    .all(...params, limit) as Array<{
-    session_id: string;
-    workspace_id: string | null;
-    thread_id: string | null;
-    title: string | null;
-    first_ts: number;
-    last_ts: number;
-    run_count: number;
-  }>;
-  return rows.map((r) => ({
-    sessionId: r.session_id,
-    workspaceId: r.workspace_id ?? undefined,
-    threadId: r.thread_id ?? undefined,
-    title: r.title ?? undefined,
-    firstTs: r.first_ts,
-    lastTs: r.last_ts,
-    runCount: r.run_count,
-  }));
-}
-
-export function listSessionSpans(sessionId: string): TraceSpanRecord[] {
-  const rows = openTraceDb()
+export function listSessionSpans(workspaceId: string, sessionId: string): TraceSpanRecord[] {
+  const rows = traceDbFor(workspaceId)
     .prepare("SELECT * FROM spans WHERE session_id = ? ORDER BY start_ts ASC")
     .all(sessionId) as SpanRow[];
   return rows.map(rowToSpan);
 }
 
-export function listSessionsOldestFirst(): TraceSessionSummary[] {
-  const rows = openTraceDb()
-    .prepare(
-      `SELECT session_id, workspace_id, thread_id, title, first_ts, last_ts, run_count
-       FROM sessions ORDER BY last_ts ASC`,
-    )
-    .all() as Array<{
-    session_id: string;
-    workspace_id: string | null;
-    thread_id: string | null;
-    title: string | null;
-    first_ts: number;
-    last_ts: number;
-    run_count: number;
-  }>;
-  return rows.map((r) => ({
-    sessionId: r.session_id,
-    workspaceId: r.workspace_id ?? undefined,
-    threadId: r.thread_id ?? undefined,
-    title: r.title ?? undefined,
-    firstTs: r.first_ts,
-    lastTs: r.last_ts,
-    runCount: r.run_count,
-  }));
+/** 按最后活跃时间升序（保留策略删最旧的用）。 */
+export function listSessionsOldestFirst(workspaceId: string): TraceSessionSummary[] {
+  const rows = traceDbFor(workspaceId)
+    .prepare(`SELECT ${SESSION_COLUMNS} FROM sessions ORDER BY last_ts ASC`)
+    .all() as SessionRow[];
+  return rows.map((r) => rowToSession(r, workspaceId));
+}
+
+/**
+ * 由 traceId 反查该轮的 agent runId（文件检查点按 runId 归档）。
+ * 取该 trace 下任一 span 的 run_id；无则 null（老数据 / trace 已清）。
+ */
+export function findRunIdByTraceId(workspaceId: string, traceId: string): string | null {
+  const id = traceId.trim();
+  if (!id) return null;
+  try {
+    const row = traceDbFor(workspaceId)
+      .prepare("SELECT run_id FROM spans WHERE trace_id = ? AND run_id IS NOT NULL LIMIT 1")
+      .get(id) as { run_id: string } | undefined;
+    return row?.run_id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function notePayloadIndex(
+  workspaceId: string,
   sessionId: string,
   payloadId: string,
   offset: number,
   length: number,
 ): void {
-  openTraceDb()
+  traceDbFor(workspaceId)
     .prepare(
       `INSERT OR REPLACE INTO payloads(session_id, payload_id, offset, length)
        VALUES (?, ?, ?, ?)`,
@@ -330,28 +327,29 @@ export function notePayloadIndex(
 }
 
 export function findPayloadIndex(
+  workspaceId: string,
   sessionId: string,
   payloadId: string,
 ): { offset: number; length: number } | null {
-  const row = openTraceDb()
+  const row = traceDbFor(workspaceId)
     .prepare("SELECT offset, length FROM payloads WHERE session_id = ? AND payload_id = ?")
     .get(sessionId, payloadId) as { offset: number; length: number } | undefined;
   return row ?? null;
 }
 
-export function deletePayloadIndex(sessionId: string): void {
-  openTraceDb().prepare("DELETE FROM payloads WHERE session_id = ?").run(sessionId);
+export function deletePayloadIndex(workspaceId: string, sessionId: string): void {
+  traceDbFor(workspaceId).prepare("DELETE FROM payloads WHERE session_id = ?").run(sessionId);
 }
 
-export function deleteSession(sessionId: string): void {
-  const d = openTraceDb();
+export function deleteSession(workspaceId: string, sessionId: string): void {
+  const d = traceDbFor(workspaceId);
   d.prepare("DELETE FROM payloads WHERE session_id = ?").run(sessionId);
   d.prepare("DELETE FROM spans WHERE session_id = ?").run(sessionId);
   d.prepare("DELETE FROM sessions WHERE session_id = ?").run(sessionId);
 }
 
-export function sessionCount(): number {
-  const row = openTraceDb().prepare("SELECT COUNT(*) AS c FROM sessions").get() as {
+export function sessionCount(workspaceId: string): number {
+  const row = traceDbFor(workspaceId).prepare("SELECT COUNT(*) AS c FROM sessions").get() as {
     c: number;
   };
   return row.c;

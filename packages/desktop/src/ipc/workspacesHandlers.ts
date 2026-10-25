@@ -1,20 +1,25 @@
 /**
  * 工作空间 / 聊天会话 IPC：CRUD、折叠态、变更广播。
  */
+
+import fs from "node:fs";
 import {
+  type ChatExportFormat,
+  type ChatExportInput,
+  type ChatImportInput,
   type ChatMessage,
+  type ChatSearchInput,
+  type ChatTodo,
   IpcChannels,
   type MoveSessionInput,
   type ReorderInput,
   type WorkspaceCreateInput,
 } from "@thinker-workbench/shared";
-import { BrowserWindow, type IpcMain, shell } from "electron";
+import { BrowserWindow, dialog, type IpcMain, type OpenDialogOptions, shell } from "electron";
+import { readAttachment, saveAttachment } from "../chat/attachments";
+import { exportChatSession, importChatSession } from "../chat/chatExport";
 import { readChatImagePreview, saveChatImage } from "../chat/chatImages";
-import {
-  parseWorkspaceFileText,
-  readAttachment,
-  saveAttachment,
-} from "../chat/attachments";
+import { searchChat } from "../db/messagesSearch";
 import { openCatalogDb } from "../db/thinkerDb";
 import {
   clearWorkspace,
@@ -40,9 +45,11 @@ import {
   setCollapsedWorkspaceIds,
   setLastWorkspaceId,
   setSessionPinned,
+  setSessionTodos,
   setWorkspacePinned,
 } from "../db/workspacesStore";
 import type { AgentBridge } from "../utility/AgentBridge";
+import { toBytes } from "./normalize";
 
 /** 删会话前先停掉该会话 in-flight run，降低 Trace 迟到写回概率。 */
 function cancelSessionRuns(bridge: AgentBridge | undefined, sessionId: string): void {
@@ -190,6 +197,13 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
   );
 
   ipcMain.handle(
+    IpcChannels.chatSessionsSetTodos,
+    async (_e, payload: { sessionId: string; todos: ChatTodo[] }) => {
+      return setSessionTodos(payload.sessionId, payload.todos ?? []);
+    },
+  );
+
+  ipcMain.handle(
     IpcChannels.chatImagesSave,
     async (
       _e,
@@ -200,15 +214,8 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
         name?: string;
       },
     ) => {
-      const raw = payload.bytes;
-      const bytes =
-        raw instanceof Uint8Array
-          ? raw
-          : raw instanceof ArrayBuffer
-            ? new Uint8Array(raw)
-            : new Uint8Array(0);
       return saveChatImage(payload.workspaceId, {
-        bytes,
+        bytes: toBytes(payload.bytes),
         mime: payload.mime,
         name: payload.name,
       });
@@ -225,15 +232,8 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
       _e,
       payload: { workspaceId: string; bytes: Uint8Array | ArrayBuffer; mime: string; name: string },
     ) => {
-      const raw = payload.bytes;
-      const bytes =
-        raw instanceof Uint8Array
-          ? raw
-          : raw instanceof ArrayBuffer
-            ? new Uint8Array(raw)
-            : new Uint8Array(0);
       return saveAttachment(payload.workspaceId, {
-        bytes,
+        bytes: toBytes(payload.bytes),
         mime: payload.mime,
         name: payload.name,
       });
@@ -244,12 +244,6 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
     IpcChannels.chatAttachmentsRead,
     async (_e, payload: { workspaceId: string; id: string }) =>
       readAttachment(payload.workspaceId, payload.id),
-  );
-
-  ipcMain.handle(
-    IpcChannels.workspaceFsParseText,
-    async (_e, payload: { workspaceId: string; path: string }) =>
-      parseWorkspaceFileText(payload.workspaceId, payload.path),
   );
 
   ipcMain.handle(IpcChannels.chatSessionsSetActive, async (_e, sessionId: string | null) => {
@@ -271,5 +265,63 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
 
   ipcMain.handle(IpcChannels.chatSessionsSetCollapsed, async (_e, ids: string[]) => {
     setCollapsedWorkspaceIds(ids);
+  });
+
+  ipcMain.handle(IpcChannels.chatSessionsSearch, async (_e, input: ChatSearchInput) => {
+    try {
+      const { hits, truncated } = searchChat(input ?? { query: "" });
+      return { ok: true as const, hits, truncated };
+    } catch (err) {
+      return { ok: false as const, hits: [], truncated: false, error: String(err) };
+    }
+  });
+
+  // 导出：没给路径就地弹系统保存框（主进程统一处理原生 dialog）
+  ipcMain.handle(IpcChannels.chatSessionsExport, async (_e, input: ChatExportInput) => {
+    const fmt: ChatExportFormat = input?.format === "json" ? "json" : "markdown";
+    const sessionId = input?.sessionId ?? "";
+    const requested = input?.targetPath?.trim();
+    if (requested) {
+      return exportChatSession({ sessionId, format: fmt, targetPath: requested });
+    }
+    const prepared = await exportChatSession({ sessionId, format: fmt });
+    if (!prepared.ok || !prepared.content) return prepared;
+    const dialogOptions = {
+      title: fmt === "json" ? "导出会话 JSON" : "导出会话 Markdown",
+      defaultPath: prepared.fileName ?? (fmt === "json" ? "chat.json" : "chat.md"),
+      filters:
+        fmt === "json"
+          ? [{ name: "JSON", extensions: ["json"] }]
+          : [{ name: "Markdown", extensions: ["md"] }],
+    };
+    const win = BrowserWindow.getFocusedWindow();
+    const picked = win
+      ? await dialog.showSaveDialog(win, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions);
+    if (picked.canceled || !picked.filePath) return { ok: false, format: fmt };
+    return exportChatSession({ sessionId, format: fmt, targetPath: picked.filePath });
+  });
+
+  // 导入：没给内容就地弹系统打开框并读取（renderer 不直读本地文件）
+  ipcMain.handle(IpcChannels.chatSessionsImport, async (_e, input: ChatImportInput) => {
+    let content = input?.content?.trim();
+    if (!content) {
+      const dialogOptions = {
+        title: "导入会话 JSON",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        properties: ["openFile"],
+      } satisfies OpenDialogOptions;
+      const win = BrowserWindow.getFocusedWindow();
+      const picked = win
+        ? await dialog.showOpenDialog(win, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
+      if (picked.canceled || !picked.filePaths[0]) return { ok: false, error: "已取消" };
+      content = fs.readFileSync(picked.filePaths[0], "utf8");
+    }
+    return importChatSession({
+      workspaceId: input?.workspaceId ?? "",
+      content,
+      title: input?.title,
+    });
   });
 }

@@ -19,6 +19,28 @@ export function outcomeToSessionStatus(outcome: RunOutcome): SessionRunStatus {
   }
 }
 
+/** outcome + detail → 落进会话表的中断原因。 */
+export function interruptReasonFor(outcome: RunOutcome, detail: SettleDetail): string | null {
+  return outcome === "done"
+    ? null
+    : outcome === "cancelled"
+      ? "cancelled"
+      : outcome === "crashed"
+        ? "crash"
+        : (detail.error ?? "failed");
+}
+
+/** 未派发就结束时，写进气泡的文本与状态标签。 */
+export function orphanPendingFinalize(
+  outcome: RunOutcome,
+  detail: SettleDetail,
+): { text: string; status: string } {
+  return {
+    text: outcome === "cancelled" ? "Run cancelled." : (detail.error ?? "failed"),
+    status: outcome === "cancelled" ? "CANCELLED" : "failed",
+  };
+}
+
 /** 无引擎事件时，向渲染进程广播合成终态（done / error）。 */
 export function broadcastTerminalEvent(
   entry: OpenRun,

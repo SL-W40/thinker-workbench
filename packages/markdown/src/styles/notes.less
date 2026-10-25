@@ -31,20 +31,37 @@
   --dock-fade: rgba(244, 235, 224, 0.92);
   --win-close: #9b3b2e;
   --win-close-ink: #f7efe3;
-  --paper-rule: rgba(120, 90, 60, 0.12);
   --paper-margin: rgba(180, 120, 90, 0.14);
   --paper-glow: rgba(196, 165, 116, 0.2);
-  /* ThemeProvider 已写入时优先使用设计 `--tw-*`。 */
+  /* ThemeProvider 已写入时优先使用设计 `--tw-*`；回退栈顺序与 markdown 主题一致：西文在前、中文在后。 */
   --font-body: var(
     --tw-font-body,
+    "Segoe UI Variable Text",
     "Segoe UI",
+    system-ui,
+    -apple-system,
+    Roboto,
+    "Helvetica Neue",
+    Arial,
     "PingFang SC",
+    "Hiragino Sans GB",
     "Microsoft YaHei UI",
+    "Noto Sans CJK SC",
     sans-serif
   );
   --font: var(--tw-font-ui, var(--font-body));
   --display: var(--tw-font-ui, var(--font-body));
-  --mono: var(--tw-font-mono, ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace);
+  --mono: var(
+    --tw-font-mono,
+    "Cascadia Code",
+    "Cascadia Mono",
+    Consolas,
+    ui-monospace,
+    "SFMono-Regular",
+    "SF Mono",
+    Menlo,
+    monospace
+  );
   --radius: 14px;
   --scrollbar-size: 7px;
   --scrollbar-track: transparent;
@@ -52,6 +69,7 @@
   --scrollbar-thumb-hover: rgba(107, 83, 68, 0.5);
 }
 
+/* 背景不画纸面横线：只保留左侧页边距竖线与顶部光晕，主题间仅底色深浅不同。 */
 .notes-paper() {
   background-color: var(--bg);
   background-image:
@@ -61,19 +79,7 @@
       var(--paper-margin) 1px,
       transparent 1px
     ),
-    repeating-linear-gradient(
-      180deg,
-      transparent 0,
-      transparent 28px,
-      var(--paper-rule) 28px,
-      var(--paper-rule) 29px
-    ),
     radial-gradient(120% 80% at 50% 0%, var(--paper-glow), transparent 55%);
-
-  /* Mono：纯色底，无横线 / 网格（`data-tw-theme` 由 applyDesignTheme 写入）。 */
-  html[data-tw-theme="mono"] & {
-    background-image: none;
-  }
 }
 
 .notes-ink-border() {

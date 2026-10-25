@@ -1,42 +1,39 @@
 /**
- * 内置浏览器：主窗口 WebContentsView + AI 锁定蒙层 + 自动化动作。
+ * 内置浏览器：渲染层 <webview> 里的页面 + 主进程自动化。
  *
- * 设计要点（参考 Cursor WebviewBrowserManager，不照搬）：
- * - reveal 只“请求”渲染层开面板；可见性（visible）只由渲染层 setVisible 驱动
- * - 挂载不变式：attached ⇔ visible 且非空白页（锁定时例外）；
- *   不可见 / 空白时一律 removeChildView——0×0 或离屏占位都会吞掉该区域输入，
- *   曾导致切 tab / 切页面后那块区域点击滑动失灵
+ * 设计要点：
+ * - 页面本身是渲染层的 <webview> 标签（DOM 合成，应用内浮层能压住它），
+ *   主进程不建 WebContentsView，只借 webContents id 接管它做自动化
+ * - 挂载：面板挂载时渲染层上报 webContents id；切 tab / 关面板即上报卸载
+ * - 自动化需要面板真的打开：未挂载时先 broadcast reveal 并等一会儿挂载，
+ *   等不到才报错（离屏截图在 <webview> 下没有意义）
  * - 同 URL 且已落定则跳过 loadURL
  * - 导航中再次 navigate 则 stop 后换目标；动作前等待加载落定
- * - UI 尚未上报 bounds 时用离屏占位尺寸，保证截图可用
+ * - 切 tab 会销毁 guest：记住最后地址，重新挂载且空白时自动还原
  */
 import fs from "node:fs";
 import path from "node:path";
 import {
   BROWSER_ABOUT_BLANK,
-  type BrowserBounds,
   type BrowserState,
+  type BrowserViewport,
   browserUrlsEqual,
   normalizeBrowserUrl,
-  resolveVisualThemeId,
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";
-import { nativeTheme, session, type WebContents, WebContentsView } from "electron";
-import { getDataDir } from "../config/paths";
-import { getGeneralSettings } from "../config/settingsStore";
+import { type WebContents, webContents } from "electron";
+import { getCacheDir } from "../config/paths";
 import { desktopLog } from "../log/setup";
-import { getMainWindow } from "../window/createWindow";
 import {
+  ATTACH_WAIT_MS,
+  CAPTURE_TIMEOUT_MS,
   FALLBACK_VIEWPORT_H,
   FALLBACK_VIEWPORT_W,
   LOAD_SETTLE_TIMEOUT_MS,
-  PARTITION,
 } from "./browserConstants";
 import { broadcast } from "./browserEvents";
 import { waitForLoadSettle } from "./loadSettle";
 import { maybeOpenLocalLinkExternally } from "./localLinks";
-import { overlayCopyFor } from "./overlayCopy";
-import { buildOverlayDataUrl, overlayTokensForVisual } from "./overlayHtml";
 import {
   clickScript,
   fillScript,
@@ -46,37 +43,45 @@ import {
   scrollScript,
   typeScript,
 } from "./pageScripts";
-import { applyViewBounds, captureBounds, viewBoundsFor } from "./viewGeometry";
+
+/** <webview> 事件订阅句柄，卸载时逐个摘掉。 */
+type WebContentsBinding = {
+  wc: WebContents;
+  off: Array<() => void>;
+};
 
 class BrowserSessionManager {
-  private view: WebContentsView | null = null;
-  private overlay: WebContentsView | null = null;
-  private attached = false;
-  private overlayAttached = false;
+  private wc: WebContents | null = null;
+  private binding: WebContentsBinding | null = null;
   private visible = false;
   private locked = false;
-  private bounds: BrowserBounds = { x: 0, y: 0, width: 0, height: 0 };
+  private viewport: BrowserViewport = { width: 0, height: 0 };
   private viewportWidth = 0;
   private viewportHeight = 0;
   private loading = false;
   private deviceMetricsActive = false;
-  private overlayConsoleBound = false;
   /** 导航世代：并发 navigate 时旧 load 结果作废。 */
   private loadSeq = 0;
+  /** 切 tab 后 guest 会销毁：记住最后地址，重新挂载时还原。 */
+  private lastUrl = BROWSER_ABOUT_BLANK;
+  /** 等待面板挂载的调用方（reveal 后等 attach）。 */
+  private attachWaiters: Array<(wc: WebContents | null) => void> = [];
+  private attachTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** 当前状态快照。 */
   getState(): BrowserState {
-    const wc = this.view?.webContents;
+    const wc = this.liveContents();
+    const url = wc ? wc.getURL() : BROWSER_ABOUT_BLANK;
     return {
-      url: wc && !wc.isDestroyed() ? wc.getURL() : BROWSER_ABOUT_BLANK,
-      title: wc && !wc.isDestroyed() ? wc.getTitle() : "",
+      url: url || BROWSER_ABOUT_BLANK,
+      title: wc ? wc.getTitle() : "",
       loading: this.loading,
-      canGoBack: Boolean(wc && !wc.isDestroyed() && wc.navigationHistory.canGoBack()),
-      canGoForward: Boolean(wc && !wc.isDestroyed() && wc.navigationHistory.canGoForward()),
+      canGoBack: Boolean(wc && wc.navigationHistory.canGoBack()),
+      canGoForward: Boolean(wc && wc.navigationHistory.canGoForward()),
       locked: this.locked,
-      visible: this.visible && this.bounds.width > 0 && this.bounds.height > 0,
-      viewportWidth: this.viewportWidth || this.bounds.width || FALLBACK_VIEWPORT_W,
-      viewportHeight: this.viewportHeight || this.bounds.height || FALLBACK_VIEWPORT_H,
+      visible: this.visible && Boolean(wc),
+      viewportWidth: this.viewportWidth || this.viewport.width || FALLBACK_VIEWPORT_W,
+      viewportHeight: this.viewportHeight || this.viewport.height || FALLBACK_VIEWPORT_H,
     };
   }
 
@@ -84,228 +89,160 @@ class BrowserSessionManager {
     broadcast({ type: "state", state: this.getState() });
   }
 
-  private requireMainWindow(): NonNullable<ReturnType<typeof getMainWindow>> {
-    const win = getMainWindow();
-    if (!win || win.isDestroyed()) {
-      throw new Error(
-        "Built-in browser is unavailable (main window not ready). Open the app window and retry.",
-      );
-    }
-    return win;
+  /** 仍活着的 guest webContents；未挂载 / 已销毁返回 null。 */
+  private liveContents(): WebContents | null {
+    const wc = this.wc;
+    if (!wc || wc.isDestroyed()) return null;
+    return wc;
   }
 
-  /** 确保页面 view 已创建；**仅可见时挂载**（不可见时挂载会吞掉该区域的输入）。 */
-  private ensureView(): WebContentsView {
-    const win = this.requireMainWindow();
-    if (!this.view) {
-      const ses = session.fromPartition(PARTITION);
-      this.view = new WebContentsView({
-        webPreferences: {
-          session: ses,
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          javascript: true,
-        },
-      });
-      this.view.setBackgroundColor("#ffffff");
-      const wc = this.view.webContents;
-      wc.setWindowOpenHandler(({ url }) => {
-        void this.navigate(url, { reveal: true });
-        return { action: "deny" };
-      });
-      wc.on("did-start-loading", () => {
-        this.loading = true;
-        // URL 已切换：按新的空白/非空白状态决定挂载
-        this.applyBounds();
-        this.emitState();
-      });
-      wc.on("did-stop-loading", () => {
-        this.loading = false;
-        this.applyBounds();
-        this.emitState();
-      });
-      wc.on("page-title-updated", () => this.emitState());
-      wc.on("did-navigate", () => {
-        this.applyBounds();
-        this.emitState();
-      });
-      wc.on("did-navigate-in-page", () => {
-        this.applyBounds();
-        this.emitState();
-      });
-      wc.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
-        if (!isMainFrame) return;
-        this.loading = false;
-        broadcast({
-          type: "error",
-          message: `Failed to load (${code}): ${desc} — ${url}`,
-        });
-        this.emitState();
-      });
+  // ---------- 挂载 / 卸载 ----------
+
+  /** 渲染层 <webview> 就绪：上报其 webContents id。 */
+  attachWebview(webContentsId: number, viewport?: BrowserViewport): void {
+    const wc = typeof webContentsId === "number" ? webContents.fromId(webContentsId) : undefined;
+    if (!wc || wc.isDestroyed()) {
+      desktopLog("browser").warn("attachWebview: bad webContents id", { webContentsId });
+      return;
     }
-    // 挂载严格跟随 visible：agent 的 snapshot / screenshot / navigate(reveal:false)
-    // 在面板关闭时也必须保持摘除，否则会盖住当前 tab 吞掉点击与滚轮
-    if (this.visible && !this.attached) {
-      win.contentView.addChildView(this.view);
-      this.attached = true;
-      desktopLog("browser").info("view attached");
+    if (viewport) this.setViewport(viewport);
+    // dom-ready 每次导航都会再触发：同一个 guest 不必重复订阅
+    if (this.binding?.wc === wc) {
+      this.emitState();
+      this.flushAttachWaiters(wc);
+      return;
     }
-    return this.view;
+    this.unbind();
+    this.wc = wc;
+    this.binding = this.bind(wc);
+    desktopLog("browser").info("webview attached", { webContentsId });
+    // 面板刚挂载但页面空白：把切 tab 前的地址还回去（guest 已被销毁过）
+    const url = wc.getURL();
+    if ((!url || url === BROWSER_ABOUT_BLANK) && this.lastUrl !== BROWSER_ABOUT_BLANK) {
+      const restore = this.lastUrl;
+      void wc.loadURL(restore).catch(() => undefined);
+    }
+    this.emitState();
+    this.flushAttachWaiters(wc);
+  }
+
+  /** 渲染层 <webview> 即将销毁。 */
+  detachWebview(): void {
+    const wc = this.liveContents();
+    if (wc) {
+      const url = wc.getURL();
+      if (url && url !== BROWSER_ABOUT_BLANK) this.lastUrl = url;
+    }
+    this.unbind();
+    this.wc = null;
+    this.loading = false;
+    desktopLog("browser").info("webview detached");
+    this.flushAttachWaiters(null);
+    this.emitState();
+  }
+
+  private bind(wc: WebContents): WebContentsBinding {
+    const off: Array<() => void> = [];
+    const on = <E extends keyof WebContentsEventMap>(event: E, handler: WebContentsEventMap[E]) => {
+      wc.on(event as never, handler as never);
+      off.push(() => wc.off(event as never, handler as never));
+    };
+    on("did-start-loading", () => {
+      this.loading = true;
+      this.emitState();
+    });
+    on("did-stop-loading", () => {
+      this.loading = false;
+      this.emitState();
+    });
+    on("page-title-updated", () => this.emitState());
+    on("did-navigate", () => this.emitState());
+    on("did-navigate-in-page", () => this.emitState());
+    on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
+      if (!isMainFrame) return;
+      this.loading = false;
+      broadcast({
+        type: "error",
+        message: `Failed to load (${code}): ${desc} — ${url}`,
+      });
+      this.emitState();
+    });
+    // 页面里的 window.open / target=_blank 一律留在内置浏览器
+    wc.setWindowOpenHandler(({ url }) => {
+      void this.navigate(url, { reveal: true });
+      return { action: "deny" };
+    });
+    return { wc, off };
+  }
+
+  private unbind(): void {
+    const binding = this.binding;
+    if (!binding) return;
+    for (const off of binding.off) {
+      try {
+        off();
+      } catch {
+        /* wc 可能已销毁 */
+      }
+    }
+    this.binding = null;
   }
 
   /**
-   * 不可见时为截图 / 求值准备离屏绘制面：只设 bounds、不挂载。
-   * （挂载的 view 即使离屏/0×0 也可能吞输入；capturePage 对未挂载 view 有效。）
+   * 取可用的 guest；未挂载时请求渲染层开面板并等它挂载。
+   * 等不到返回 null —— 调用方据此给出「先打开浏览器面板」的错误。
    */
-  private ensureCaptureSurface(): void {
-    const view = this.view;
-    if (!view) return;
-    if (this.visible) {
-      this.applyBounds();
-      return;
-    }
-    view.setBounds(captureBounds(this.bounds));
+  private async resolveContents(options?: { wait?: boolean }): Promise<WebContents | null> {
+    const live = this.liveContents();
+    if (live) return live;
+    if (options?.wait === false) return null;
+    return this.waitForAttach();
   }
 
-  private overlayCopy(): { title: string; takeControl: string } {
-    return overlayCopyFor(getGeneralSettings().uiLocale);
-  }
-
-  private ensureOverlay(): WebContentsView {
-    const win = this.requireMainWindow();
-    if (!this.overlay) {
-      this.overlay = new WebContentsView({
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-        },
-      });
-      this.overlay.setBackgroundColor("#00000000");
-      this.overlay.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    }
-    // 蒙层同样只跟随 visible 挂载：透明蒙层挂在不可见面板上会成为“隐形点击黑洞”
-    if (!this.visible) return this.overlay;
-    if (!this.overlayAttached) {
-      win.contentView.addChildView(this.overlay);
-      this.overlayAttached = true;
-    } else {
-      // 重新置顶
-      win.contentView.removeChildView(this.overlay);
-      win.contentView.addChildView(this.overlay);
-    }
-    return this.overlay;
-  }
-
-  private async loadOverlayHtml(): Promise<void> {
-    const overlay = this.ensureOverlay();
-    const general = getGeneralSettings();
-    const visual = resolveVisualThemeId(general.uiTheme, nativeTheme.shouldUseDarkColors);
-    const tokens = overlayTokensForVisual(String(visual), general.customThemes);
-    const copy = this.overlayCopy();
-    const url = buildOverlayDataUrl({ tokens, ...copy });
-    await overlay.webContents.loadURL(url);
-    if (!this.overlayConsoleBound) {
-      this.overlayConsoleBound = true;
-      overlay.webContents.on("console-message", (_e, _level, message) => {
-        if (String(message).includes("__TW_BROWSER_TAKE_CONTROL__")) {
-          void this.takeControl();
-        }
-      });
-    }
-    await overlay.webContents.executeJavaScript(`
-      window.takeControl = () => { console.log('__TW_BROWSER_TAKE_CONTROL__'); };
-    `);
-  }
-
-  /** 当前是否空白页（无实际内容）：空白时不挂载，占位符区域保持可交互。 */
-  private isBlankPage(): boolean {
-    const wc = this.view?.webContents;
-    if (!wc || wc.isDestroyed()) return true;
-    const url = wc.getURL();
-    return !url || url === BROWSER_ABOUT_BLANK;
-  }
-
-  private applyBounds(): void {
-    // 不可见或空白页（未锁定时）= 必须摘除：0×0 / 离屏占位都不能可靠停止吞输入，
-    // 这是“切 tab / 关面板后该区域点击滑动失灵”的根因。
-    // 锁定时空白页也挂载：蒙层“AI 控制中”本就是模态盖层
-    const next = viewBoundsFor({
-      visible: this.visible,
-      blank: this.isBlankPage(),
-      locked: this.locked,
-      measured: this.bounds.width >= 2 && this.bounds.height >= 2,
-      bounds: this.bounds,
+  private waitForAttach(): Promise<WebContents | null> {
+    broadcast({ type: "reveal" });
+    return new Promise((resolve) => {
+      this.attachWaiters.push(resolve);
+      if (this.attachTimer) return;
+      this.attachTimer = setTimeout(() => {
+        this.attachTimer = null;
+        this.flushAttachWaiters(this.liveContents());
+      }, ATTACH_WAIT_MS);
     });
-    if (!next.view) {
-      this.detachViews();
-      return;
-    }
-    applyViewBounds(this.view, this.overlay, next);
   }
 
-  /** 同步视口洞 bounds（DIP）。 */
-  setBounds(bounds: BrowserBounds): void {
-    this.bounds = {
-      x: Math.round(bounds.x),
-      y: Math.round(bounds.y),
-      width: Math.max(0, Math.round(bounds.width)),
-      height: Math.max(0, Math.round(bounds.height)),
+  private flushAttachWaiters(wc: WebContents | null): void {
+    if (this.attachTimer) {
+      clearTimeout(this.attachTimer);
+      this.attachTimer = null;
+    }
+    const waiters = this.attachWaiters;
+    this.attachWaiters = [];
+    for (const resolve of waiters) resolve(wc);
+  }
+
+  // ---------- 视口 / 可见性 ----------
+
+  setViewport(viewport: BrowserViewport): void {
+    this.viewport = {
+      width: Math.max(0, Math.round(viewport.width ?? 0)),
+      height: Math.max(0, Math.round(viewport.height ?? 0)),
     };
     if (!this.deviceMetricsActive) {
-      this.viewportWidth = this.bounds.width || FALLBACK_VIEWPORT_W;
-      this.viewportHeight = this.bounds.height || FALLBACK_VIEWPORT_H;
+      this.viewportWidth = this.viewport.width || FALLBACK_VIEWPORT_W;
+      this.viewportHeight = this.viewport.height || FALLBACK_VIEWPORT_H;
     }
-    if (this.visible) this.ensureView();
-    this.applyBounds();
     this.emitState();
   }
 
-  /** 显示 / 隐藏（切 tab 或关右侧栏）。 */
   setVisible(visible: boolean): void {
-    this.visible = visible;
-    if (visible) {
-      this.ensureView();
-    } else {
-      // 必须真正摘除子 view：仅置 0×0 bounds 时，已加载内容的 view 仍会
-      // 残留最后一帧绘制，关面板后盖住聊天内容
-      this.detachViews();
-    }
-    this.applyBounds();
+    this.visible = Boolean(visible);
     this.emitState();
   }
 
-  /** 摘除浏览器 view 与 AI 控制浮层（WebContents 保留，重新显示时原样恢复）。 */
-  private detachViews(): void {
-    const win = getMainWindow();
-    if (!win || win.isDestroyed()) return;
-    let removed = false;
-    if (this.attached && this.view) {
-      try {
-        win.contentView.removeChildView(this.view);
-        removed = true;
-      } catch {
-        /* view 可能已随窗口销毁 */
-      }
-      this.attached = false;
-    }
-    if (this.overlayAttached && this.overlay) {
-      try {
-        win.contentView.removeChildView(this.overlay);
-        removed = true;
-      } catch {
-        /* overlay 可能已随窗口销毁 */
-      }
-      this.overlayAttached = false;
-    }
-    if (removed) desktopLog("browser").info("views detached");
-  }
+  // ---------- 导航 ----------
 
-  /**
-   * 等待主文档加载落定（did-stop-loading / fail / 超时）。
-   * 已不在 loading 则立即返回。
-   */
+  /** 等待主文档加载落定（did-stop-loading / fail / 超时）。 */
   private waitForLoadSettle(wc: WebContents, timeoutMs = LOAD_SETTLE_TIMEOUT_MS): Promise<void> {
     return waitForLoadSettle(wc, timeoutMs);
   }
@@ -313,7 +250,6 @@ class BrowserSessionManager {
   /**
    * 导航并可选要求 UI 打开面板。
    * `preferBuiltin: true` 时忽略「本地链接走系统浏览器」设置（供 AI 自动化）。
-   * reveal 不带 url：主进程已 load，renderer 只开 tab，避免再次 navigate 死循环。
    */
   async navigate(
     url: string,
@@ -323,16 +259,14 @@ class BrowserSessionManager {
     if (!options?.preferBuiltin && maybeOpenLocalLinkExternally(target)) {
       return this.getState();
     }
-    const view = this.ensureView();
-    const wc = view.webContents;
-
-    if (options?.reveal !== false) {
-      // 只“请求”渲染层开面板：可见性由渲染层 setVisible 驱动。
-      // 主进程擅自置 visible=true 会在用户已切走（聊天页卸载）时把 view
-      // 贴回窗口，盖住当前页面吞掉输入
-      broadcast({ type: "reveal" });
+    if (options?.reveal !== false) broadcast({ type: "reveal" });
+    // reveal:false 是「后台导航」：<webview> 没挂载就没页面可载，不去请求开面板
+    const wc = await this.resolveContents(options?.reveal === false ? { wait: false } : {});
+    if (!wc) {
+      throw new Error(
+        "The built-in browser panel is not open. Open the Browser panel (or ask the user to) and retry.",
+      );
     }
-    this.applyBounds();
 
     // 已在目标页且不在加载：只 reveal，勿再 load（防 UI pendingUrl / 重复工具调用）
     if (browserUrlsEqual(wc.getURL(), target) && !wc.isLoading()) {
@@ -351,6 +285,7 @@ class BrowserSessionManager {
       if (seq !== this.loadSeq) return this.getState();
     }
 
+    this.lastUrl = target;
     try {
       await wc.loadURL(target);
     } catch (err) {
@@ -368,49 +303,56 @@ class BrowserSessionManager {
   }
 
   async goBack(): Promise<BrowserState> {
-    const view = this.ensureView();
-    const history = view.webContents.navigationHistory;
+    const wc = await this.resolveContents({ wait: false });
+    if (!wc) return this.getState();
+    const history = wc.navigationHistory;
     if (history.canGoBack()) {
       const seq = ++this.loadSeq;
       history.goBack();
-      await this.waitForLoadSettle(view.webContents);
+      await this.waitForLoadSettle(wc);
       if (seq !== this.loadSeq) return this.getState();
+      this.syncLastUrl(wc);
     }
     this.emitState();
     return this.getState();
   }
 
   async goForward(): Promise<BrowserState> {
-    const view = this.ensureView();
-    const history = view.webContents.navigationHistory;
+    const wc = await this.resolveContents({ wait: false });
+    if (!wc) return this.getState();
+    const history = wc.navigationHistory;
     if (history.canGoForward()) {
       const seq = ++this.loadSeq;
       history.goForward();
-      await this.waitForLoadSettle(view.webContents);
+      await this.waitForLoadSettle(wc);
       if (seq !== this.loadSeq) return this.getState();
+      this.syncLastUrl(wc);
     }
     this.emitState();
     return this.getState();
   }
 
   async reload(): Promise<BrowserState> {
-    const view = this.ensureView();
+    const wc = await this.resolveContents({ wait: false });
+    if (!wc) return this.getState();
     const seq = ++this.loadSeq;
-    view.webContents.reload();
-    await this.waitForLoadSettle(view.webContents);
+    wc.reload();
+    await this.waitForLoadSettle(wc);
     if (seq !== this.loadSeq) return this.getState();
     this.emitState();
     return this.getState();
   }
 
+  private syncLastUrl(wc: WebContents): void {
+    const url = wc.getURL();
+    if (url && url !== BROWSER_ABOUT_BLANK) this.lastUrl = url;
+  }
+
+  // ---------- AI 锁定 ----------
+
   async setLocked(locked: boolean): Promise<BrowserState> {
     this.locked = locked;
-    if (locked) {
-      // 同 navigate：只请求渲染层开面板，不擅自置 visible
-      this.ensureView();
-      await this.loadOverlayHtml();
-    }
-    this.applyBounds();
+    // 蒙层现在是渲染层的 DOM（<webview> 之上），主进程只需广播状态 + 请求开面板
     if (locked) broadcast({ type: "reveal" });
     this.emitState();
     return this.getState();
@@ -420,38 +362,89 @@ class BrowserSessionManager {
     return this.setLocked(false);
   }
 
-  /** 主题变更时刷新蒙层配色。 */
-  async refreshOverlayTheme(): Promise<void> {
-    if (this.locked && this.overlay) {
-      await this.loadOverlayHtml();
-      this.applyBounds();
+  /**
+   * 任务结束时交还控制权。
+   *
+   * 蒙层上没有「接管」按钮（那太像一个必须回答的弹窗），所以必须由 run 结束
+   * 兜底解锁 —— 否则模型 lock 之后忘了 unlock，用户就被永久挡在页面外。
+   */
+  async releaseLock(): Promise<void> {
+    if (!this.locked) return;
+    await this.setLocked(false);
+  }
+
+  // ---------- 自动化 ----------
+
+  /**
+   * 自动化动作的前置检查。
+   *
+   * 面板没开（guest 未挂载）或还停在 about:blank 时立刻报错：对着空白页做快照
+   * 没有意义，而 capturePage 在未绘制的页面上可能一直不返回 —— 表现为工具行
+   * 一直「进行中」，整个 run 卡死。
+   */
+  private async requireReady(): Promise<WebContents> {
+    const wc = await this.resolveContents({ wait: false });
+    if (!wc) {
+      throw new Error(
+        "The built-in browser panel is not open. Open the Browser panel and call browser_navigate first, then retry.",
+      );
     }
+    const url = wc.getURL();
+    if (!url || url === BROWSER_ABOUT_BLANK) {
+      throw new Error(
+        "No page is loaded in the built-in browser. Call browser_navigate with a URL first, then retry.",
+      );
+    }
+    return wc;
   }
 
   private async evalPage<T>(script: string): Promise<T> {
-    const view = this.ensureView();
-    await this.waitForLoadSettle(view.webContents);
-    // 离屏绘制面：不挂载也能执行 / 捕获，避免盖住当前界面
-    this.ensureCaptureSurface();
-    return (await view.webContents.executeJavaScript(script, true)) as T;
+    const wc = await this.requireReady();
+    await this.waitForLoadSettle(wc);
+    return (await wc.executeJavaScript(script, true)) as T;
+  }
+
+  /**
+   * 抓一张 PNG；超时 / 空图返回 null。
+   * 交互动作里的截图是附赠品，不能因为它失败就让整次调用失败。
+   */
+  private async capturePng(): Promise<Buffer | null> {
+    const wc = await this.requireReady();
+    await this.waitForLoadSettle(wc);
+    const shot = await Promise.race([
+      wc
+        .capturePage()
+        .then((img) => (img.isEmpty() ? null : img.toPNG()))
+        .catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), CAPTURE_TIMEOUT_MS)),
+    ]);
+    if (!shot) desktopLog("browser").warn("capturePage timed out or empty");
+    return shot;
+  }
+
+  /** 截图落盘，返回路径。 */
+  private writeShot(png: Buffer): string {
+    const dir = getCacheDir("browser-screenshots");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `shot-${Date.now()}.png`);
+    fs.writeFileSync(file, png);
+    return file;
   }
 
   private async maybeScreenshot(take: boolean | undefined): Promise<string | undefined> {
     if (!take) return undefined;
-    return this.screenshot();
+    const png = await this.capturePng();
+    return png ? this.writeShot(png) : undefined;
   }
 
   async screenshot(): Promise<string> {
-    const view = this.ensureView();
-    await this.waitForLoadSettle(view.webContents);
-    // 确保有非零绘制面（离屏，不挂载）
-    this.ensureCaptureSurface();
-    const img = await view.webContents.capturePage();
-    const dir = path.join(getDataDir(), "browser-screenshots");
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `shot-${Date.now()}.png`);
-    fs.writeFileSync(file, img.toPNG());
-    return file;
+    const png = await this.capturePng();
+    if (!png) {
+      throw new Error(
+        "Screenshot failed: the page did not render in time. Open the Browser panel and retry.",
+      );
+    }
+    return this.writeShot(png);
   }
 
   async resize(width: number, height: number): Promise<BrowserState> {
@@ -460,10 +453,9 @@ class BrowserSessionManager {
     this.viewportWidth = w;
     this.viewportHeight = h;
     this.deviceMetricsActive = true;
-    const view = this.ensureView();
-    this.ensureCaptureSurface();
+    const wc = await this.requireReady();
     try {
-      const dbg = view.webContents.debugger;
+      const dbg = wc.debugger;
       if (!dbg.isAttached()) dbg.attach("1.3");
       await dbg.sendCommand("Emulation.setDeviceMetricsOverride", {
         width: w,
@@ -610,39 +602,30 @@ class BrowserSessionManager {
 
   /** 主窗销毁时清理。 */
   dispose(): void {
-    const win = getMainWindow();
-    if (this.overlay) {
-      try {
-        if (win && !win.isDestroyed()) win.contentView.removeChildView(this.overlay);
-      } catch {
-        /* ignore */
-      }
-      try {
-        this.overlay.webContents.close();
-      } catch {
-        /* ignore */
-      }
-      this.overlay = null;
-    }
-    if (this.view) {
-      try {
-        if (win && !win.isDestroyed()) win.contentView.removeChildView(this.view);
-      } catch {
-        /* ignore */
-      }
-      try {
-        this.view.webContents.close();
-      } catch {
-        /* ignore */
-      }
-      this.view = null;
-    }
-    this.attached = false;
-    this.overlayAttached = false;
+    this.unbind();
+    this.wc = null;
     this.visible = false;
     this.locked = false;
     this.loadSeq = 0;
+    this.lastUrl = BROWSER_ABOUT_BLANK;
+    this.flushAttachWaiters(null);
   }
 }
+
+/** WebContents 事件名 → 处理器参数类型（仅取用得到的几个）。 */
+type WebContentsEventMap = {
+  "did-start-loading": () => void;
+  "did-stop-loading": () => void;
+  "page-title-updated": () => void;
+  "did-navigate": () => void;
+  "did-navigate-in-page": () => void;
+  "did-fail-load": (
+    _e: unknown,
+    code: number,
+    desc: string,
+    url: string,
+    isMainFrame: boolean,
+  ) => void;
+};
 
 export const browserSessionManager = new BrowserSessionManager();

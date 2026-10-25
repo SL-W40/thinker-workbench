@@ -7,8 +7,8 @@ import { assembleContext } from "../../src/context/assembleContext";
 import { joinSystemSections } from "../../src/prompts/systemSections";
 
 describe("assembleContext system sections", () => {
-  it("分块按原顺序拼回 system", () => {
-    const ctx = assembleContext({
+  it("分块按原顺序拼回 system", async () => {
+    const ctx = await assembleContext({
       messages: [{ role: "user", content: "hi" }],
       aiLocale: "en",
       allowEmoji: false,
@@ -22,8 +22,8 @@ describe("assembleContext system sections", () => {
     assert.equal(ctx.system, joinSystemSections(ctx.systemSections));
   });
 
-  it("memory 段位于 systemSections 末尾，不抢在 base/mode 之前", () => {
-    const ctx = assembleContext({
+  it("memory 段位于 systemSections 末尾，不抢在 base/mode 之前", async () => {
+    const ctx = await assembleContext({
       messages: [{ role: "user", content: "hi" }],
       aiLocale: "en",
       allowEmoji: false,

@@ -12,6 +12,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** @type {{ pkg: string; files: string[] }[]} */
 const steps = [
+  // engine / desktop 的 esbuild 直接解析 file-parsers 的 artifacts，先于 shared 产出
+  {
+    pkg: "@thinker-workbench/file-parsers",
+    files: ["packages/file-parsers/artifacts/index.js"],
+  },
   {
     pkg: "@thinker-workbench/shared",
     files: ["packages/shared/artifacts/index.js"],
@@ -38,5 +43,5 @@ for (const step of steps) {
 }
 
 if (built === 0) {
-  console.log("[dev:prepare] shared artifacts ready");
+  console.log("[dev:prepare] workspace artifacts ready");
 }

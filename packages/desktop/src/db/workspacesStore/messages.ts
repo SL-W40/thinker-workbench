@@ -1,10 +1,42 @@
 /**
  * 消息持久化（chat.db chat_messages 表）。
  */
-import { type ChatMessage, type ChatSessionRecord, sanitizeUsage } from "@thinker-workbench/shared";
+import {
+  type ChatMessage,
+  type ChatPlanTodo,
+  type ChatSessionRecord,
+  isPlanStatus,
+  sanitizeUsage,
+} from "@thinker-workbench/shared";
+import { indexSessionMessages, type SearchIndexRow } from "../messagesSearch";
 import { activityAtFromMessages } from "../sessionActivity";
 import { chatDb, type MsgRow } from "./db";
 import { getSession } from "./sessions";
+
+/** 回读落库的计划结构；不合法则丢弃，避免脏数据污染展示。 */
+export function readPlan(value: unknown): ChatMessage["plan"] {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as {
+    id?: unknown;
+    title?: unknown;
+    description?: unknown;
+    status?: unknown;
+    todos?: unknown;
+    markdown?: unknown;
+  };
+  if (typeof raw.id !== "string" || !raw.id.trim()) return undefined;
+  if (!isPlanStatus(raw.status)) return undefined;
+  return {
+    id: raw.id,
+    ...(typeof raw.title === "string" && raw.title.trim() ? { title: raw.title } : {}),
+    ...(typeof raw.description === "string" && raw.description.trim()
+      ? { description: raw.description }
+      : {}),
+    status: raw.status,
+    todos: Array.isArray(raw.todos) ? (raw.todos as ChatPlanTodo[]) : [],
+    markdown: typeof raw.markdown === "string" ? raw.markdown : "",
+  };
+}
 
 export function saveMessagesToDb(
   workspaceId: string,
@@ -23,6 +55,8 @@ export function saveMessagesToDb(
     .get(sessionId) as { created_at: number } | undefined;
   const fallback = sessionRow?.created_at ?? now;
   const activityAt = activityAtFromMessages(messages, fallback);
+  // 与消息同批重建检索索引（先删后插，保证索引与表行一致）
+  const indexRows: SearchIndexRow[] = [];
   const tx = db.transaction(() => {
     del.run(sessionId);
     for (let seq = 0; seq < messages.length; seq++) {
@@ -54,7 +88,8 @@ export function saveMessagesToDb(
         m.durationMs != null ||
         m.runStartedAt != null ||
         Boolean(m.traceId) ||
-        Boolean(images?.length);
+        Boolean(images?.length) ||
+        Boolean(m.plan);
       const payload = hasPayload
         ? JSON.stringify({
             timeline,
@@ -66,13 +101,23 @@ export function saveMessagesToDb(
             runStartedAt: m.pending ? m.runStartedAt : undefined,
             traceId: m.traceId,
             ...(images?.length ? { images } : {}),
+            // 计划随消息落库（不写工作空间），重启后随会话恢复
+            ...(m.plan ? { plan: m.plan } : {}),
           })
         : null;
       ins.run(m.id, sessionId, m.role, m.text, m.createdAt ?? now, m.pending ? 1 : 0, payload, seq);
+      const idx = indexRows.length;
+      indexRows[idx] = {
+        seq,
+        role: m.role,
+        text: m.text,
+        createdAt: m.createdAt ?? now,
+      };
     }
     db.prepare("UPDATE chat_sessions SET updated_at = ? WHERE id = ?").run(activityAt, sessionId);
   });
   tx();
+  indexSessionMessages(db, sessionId, indexRows);
 }
 
 export function saveMessages(sessionId: string, messages: ChatMessage[]): void {
@@ -97,6 +142,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
     let runStartedAt: number | undefined;
     let traceId: string | undefined;
     let images: ChatMessage["images"];
+    let plan: ChatMessage["plan"];
     if (row.payload_json) {
       try {
         const parsed = JSON.parse(row.payload_json) as {
@@ -108,6 +154,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
           runStartedAt?: number;
           traceId?: string;
           images?: ChatMessage["images"];
+          plan?: unknown;
         };
         timeline = parsed.timeline;
         if (typeof parsed.pending === "boolean") pending = parsed.pending;
@@ -125,6 +172,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
         if (Array.isArray(parsed.images) && parsed.images.length > 0) {
           images = parsed.images;
         }
+        plan = readPlan(parsed.plan);
       } catch {
         /* ignore */
       }
@@ -142,6 +190,7 @@ export function loadMessages(sessionId: string): ChatMessage[] {
       runStartedAt,
       traceId,
       ...(images?.length ? { images } : {}),
+      ...(plan ? { plan } : {}),
     };
   });
 }

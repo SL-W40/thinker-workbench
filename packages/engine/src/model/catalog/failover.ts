@@ -89,6 +89,15 @@ export async function chatWithFailover(
         else replyBuf += text;
         request.onToken?.(text, channel);
       },
+      // 参数增量同样算「已吐内容」：切换候选会造成半截 JSON 与重复卡片
+      ...(request.onToolCallDelta
+        ? {
+            onToolCallDelta: (delta) => {
+              if (delta.argsChunk) emittedTokens = true;
+              request.onToolCallDelta?.(delta);
+            },
+          }
+        : {}),
     };
 
     try {

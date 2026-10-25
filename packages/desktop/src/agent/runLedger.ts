@@ -36,7 +36,12 @@ import {
   resolveSession,
   THREAD_BUSY,
 } from "./runCoordinator";
-import { broadcastTerminalEvent, outcomeToSessionStatus } from "./runLedger/settle";
+import {
+  broadcastTerminalEvent,
+  interruptReasonFor,
+  orphanPendingFinalize,
+  outcomeToSessionStatus,
+} from "./runLedger/settle";
 import { armTimer, clearTimer } from "./runLedger/timers";
 import type {
   AdmissionDispatchJob,
@@ -285,14 +290,7 @@ class RunLedger {
     this.bySessionId.delete(entry.sessionId);
 
     const status = outcomeToSessionStatus(outcome);
-    const interruptReason =
-      outcome === "done"
-        ? null
-        : outcome === "cancelled"
-          ? "cancelled"
-          : outcome === "crashed"
-            ? "crash"
-            : (detail.error ?? "failed");
+    const interruptReason = interruptReasonFor(outcome, detail);
 
     try {
       setSessionRunStatus(entry.sessionId, status, {
@@ -306,11 +304,12 @@ class RunLedger {
     // 还没派发就结束：渲染进程可能不在这个会话上，把错误写进气泡
     if (entry.phase === "queued" && outcome !== "done") {
       try {
+        const orphan = orphanPendingFinalize(outcome, detail);
         finalizeOrphanPendingMessages(
           entry.workspaceId,
           entry.sessionId,
-          outcome === "cancelled" ? "Run cancelled." : (detail.error ?? "failed"),
-          outcome === "cancelled" ? "CANCELLED" : "failed",
+          orphan.text,
+          orphan.status,
         );
       } catch {
         /* 气泡收束失败不挡住释放槽位 */
@@ -596,26 +595,15 @@ class RunLedger {
     try {
       setSessionRunStatus(session.id, status, {
         activeRunId: null,
-        interruptReason:
-          outcome === "done"
-            ? null
-            : outcome === "cancelled"
-              ? "cancelled"
-              : outcome === "crashed"
-                ? "crash"
-                : (detail.error ?? "failed"),
+        interruptReason: interruptReasonFor(outcome, detail),
       });
     } catch {
       return false;
     }
     if (session.runStatus === "queued" && outcome !== "done") {
       try {
-        finalizeOrphanPendingMessages(
-          session.workspaceId,
-          session.id,
-          outcome === "cancelled" ? "Run cancelled." : (detail.error ?? "failed"),
-          outcome === "cancelled" ? "CANCELLED" : "failed",
-        );
+        const orphan = orphanPendingFinalize(outcome, detail);
+        finalizeOrphanPendingMessages(session.workspaceId, session.id, orphan.text, orphan.status);
       } catch {
         /* 气泡收束失败不挡住释放槽位 */
       }

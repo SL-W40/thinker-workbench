@@ -9,7 +9,7 @@ import { BrowserWindow, Notification, shell } from "electron";
 import { getNotificationIconPath } from "../config/paths";
 import { getGeneralSettings } from "../config/settingsStore";
 import { showMainWindow } from "../window/tray";
-import { notifyCopy } from "./copy";
+import { notifyCopy } from "./notifyCopy";
 
 /** 设置页预览类型：系统通知或完成音。 */
 export type AttentionPreviewKind = "notification" | "sound";

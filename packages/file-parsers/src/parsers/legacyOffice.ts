@@ -2,8 +2,9 @@
  * Office 旧格式（.doc / .xls）解析：officeparser（回调式 API，包成 Promise）。
  * 旧格式解析能力弱于新版（docx/xlsx），失败由上层降级。
  */
-import type { FileParser, ParseInput, ParsedFileResult } from "../types";
+
 import officeparser from "officeparser";
+import type { FileParser, ParsedFileResult, ParseInput } from "../types";
 
 function parseBuffer(buf: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,7 +23,12 @@ export const legacyOfficeParser: FileParser = {
     return ext === "doc" || ext === "xls";
   },
   async parse(input: ParseInput): Promise<ParsedFileResult> {
-    const text = await parseBuffer(Buffer.from(input.bytes));
-    return { text, kind: "document" };
+    // 契约：解析实现内部自管异常，返回 error 让上层降级，不抛给调用方。
+    try {
+      const text = await parseBuffer(Buffer.from(input.bytes));
+      return { text, kind: "document" };
+    } catch (err) {
+      return { kind: "document", error: err instanceof Error ? err.message : String(err) };
+    }
   },
 };

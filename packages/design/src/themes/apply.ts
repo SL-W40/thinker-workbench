@@ -2,8 +2,8 @@
  * 主题解析、合成与 CSS 变量落盘。
  * `applyDesignTheme` 把 UI + markdown token 写到宿主元素。
  */
-import type { MarkdownTheme } from "@thinker-workbench/markdown";
-import { LEGACY_UI_ALIASES } from "../tokens/keys";
+import { type MarkdownTheme, SANS_STACK } from "@thinker-workbench/markdown";
+import { LEGACY_UI_ALIASES, type UiTokenKey } from "../tokens/keys";
 import { auroraTheme } from "./aurora";
 import { darkTheme } from "./dark";
 import { eyecareTheme } from "./eyecare";
@@ -86,6 +86,60 @@ export function createDesignTheme(
   };
 }
 
+/**
+ * 次级 token 的缺省派生规则：主题未显式提供时按「前景色 N% 叠加」生成。
+ *
+ * 这些 token 此前从未被写入过，Less 里只能退到 `var(--x, 兜底)` 的兜底值，
+ * 导致同一处样式在深浅主题下表现不一致。统一派生后天然随主题翻转，
+ * 也不必为每个内置主题手填一整套色值。
+ */
+const DERIVED_FROM_FG: Record<string, number> = {
+  "--tw-bg-subtle": 4,
+  "--tw-bg-muted": 7,
+  "--tw-surface-2": 9,
+  "--tw-surface-hover": 6,
+  "--tw-border-subtle": 12,
+};
+
+/** 直接引用其它 token 的次级 token。 */
+const DERIVED_ALIAS: Record<string, UiTokenKey> = {
+  "--tw-panel-solid": "--tw-bg-elev",
+};
+
+/** 成功色缺省值：按明暗各给一个，保证对比度。 */
+const SUCCESS_BY_SCHEME: Record<string, string> = {
+  light: "#2f8a4e",
+  dark: "#3fb950",
+};
+
+/**
+ * 在应用阶段才产生的 token——主题表里不需要、也不该有对应值。
+ * 校验「每个主题是否提供了全部 token」时必须排除这批。
+ */
+export const APPLIED_STAGE_TOKENS: readonly string[] = [
+  "--tw-font-ui",
+  ...Object.keys(DERIVED_FROM_FG),
+  ...Object.keys(DERIVED_ALIAS),
+  "--tw-success",
+];
+
+/** 写入派生 token；主题已显式提供的不覆盖。 */
+function applyDerivedTokens(el: HTMLElement, ui: Record<string, string>, dark: boolean): void {
+  const fg = ui["--tw-fg"] || "#111111";
+  for (const [key, percent] of Object.entries(DERIVED_FROM_FG)) {
+    if (typeof ui[key] === "string") continue;
+    el.style.setProperty(key, `color-mix(in srgb, ${fg} ${percent}%, transparent)`);
+  }
+  for (const [key, source] of Object.entries(DERIVED_ALIAS)) {
+    if (typeof ui[key] === "string") continue;
+    const value = ui[source];
+    if (typeof value === "string") el.style.setProperty(key, value);
+  }
+  if (typeof ui["--tw-success"] !== "string") {
+    el.style.setProperty("--tw-success", dark ? SUCCESS_BY_SCHEME.dark : SUCCESS_BY_SCHEME.light);
+  }
+}
+
 export type ApplyThemeOptions = {
   /** 默认 `document.documentElement`。 */
   target?: HTMLElement | null;
@@ -120,9 +174,11 @@ export function applyDesignTheme(
     }
   }
 
+  // 次级 token（弱化表面 / 弱化边框 / 成功色）由前景色派生，主题可显式覆盖
+  applyDerivedTokens(el, resolved.ui, el.style.colorScheme === "dark");
+
   // UI / markdown 正文字体与 body 对齐，并写入 `--font` / `--display` 等遗留别名。
-  const body =
-    resolved.ui["--tw-font-body"] || '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
+  const body = resolved.ui["--tw-font-body"] || SANS_STACK;
   el.style.setProperty("--tw-font-ui", body);
   el.style.setProperty("--md-font", body);
   el.style.setProperty("--font", body);

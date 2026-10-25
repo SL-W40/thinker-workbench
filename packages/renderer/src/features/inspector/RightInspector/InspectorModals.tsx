@@ -2,7 +2,7 @@
  * RightInspector 模态框：未保存关闭确认 + 另存为。
  */
 import { Button, Field, Input, Modal } from "@thinker-workbench/design/react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import type { StageTab } from "../types";
 
 /** 未命名缓冲首次保存：填写相对路径。 */

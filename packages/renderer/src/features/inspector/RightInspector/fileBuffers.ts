@@ -2,7 +2,7 @@
  * 按路径读入编辑缓冲（RightInspector 文件 tab 共用）。
  */
 import type { Dispatch, SetStateAction } from "react";
-import { workspaceReadFile } from "../../../bridge/workspaceFs";
+import { workspaceReadFile } from "../../../platform/ipc/workspaceFs";
 import type { MediaPreviewInfo } from "../MediaPreview";
 import { fileTabKey } from "./tabs";
 

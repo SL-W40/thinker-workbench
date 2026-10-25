@@ -4,7 +4,7 @@
 import { highlightCode } from "@thinker-workbench/markdown";
 import { escapeHtml } from "@thinker-workbench/shared";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import { diffLineKey, langFromPath, parseUnifiedDiff } from "./diffText";
 import { enqueueHighlightJob, HIGHLIGHT_CHUNK } from "./highlightQueue";
 

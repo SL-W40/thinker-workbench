@@ -9,8 +9,8 @@
  */
 import { Button, Callout, Modal } from "@thinker-workbench/design/react";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
-import { unlockModelSecrets } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
+import { unlockModelSecrets } from "../../platform/ipc/thinker";
+import { useT } from "../../ui/i18n/useI18n";
 
 /** Retry 后的持久反馈（避免「一闪就没」）。 */
 type RetryFeedback = "ok" | "still-denied" | null;

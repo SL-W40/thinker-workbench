@@ -19,7 +19,10 @@ export async function onCheckpointClear(
     });
   };
   try {
-    await ctx.ensureRuntime().clearThreadCheckpoints(message.threadId);
+    // 按目录缓存了多个 runtime：逐个清理，命中哪个是哪个
+    for (const runtime of ctx.listRuntimes()) {
+      await runtime.clearThreadCheckpoints(message.threadId);
+    }
     finish(true);
   } catch (err) {
     finish(false, err instanceof Error ? err.message : String(err));

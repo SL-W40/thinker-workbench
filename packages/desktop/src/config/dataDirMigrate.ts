@@ -1,39 +1,49 @@
 /**
  * 应用根目录变更预览与历史数据迁移。
  *
- * 迁移范围：当前 dataDir 下全部顶层内容（catalog / workspaces / logs / session /
- * skills / mcps 及未来新增），以及引导路径上的 `settings.json`（若尚未在根内）。
+ * 迁移范围：当前 dataDir 下全部顶层内容（state / workspaces / customize / cache 及未来新增），
+ * 以及引导路径上的 `settings.json`（若尚未在根内）。展示名由共享布局表按分类归并生成。
  */
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  DataDirChangePreview,
-  DataDirChangeRequest,
-  DataDirChangeResult,
-  DataDirMigrateItem,
-  DataDirMigrateProgress,
-  GeneralSettings,
+import {
+  type DataDirChangePreview,
+  type DataDirChangeRequest,
+  type DataDirChangeResult,
+  type DataDirMigrateItem,
+  type DataDirMigrateProgress,
+  type DataKind,
+  type GeneralSettings,
+  listDataEntries,
 } from "@thinker-workbench/shared";
 import { closeThinkerDb } from "../db/thinkerDb";
 import { countRunningSessions } from "../db/workspacesStore";
-import { closeLogsDb } from "../log/logsDb";
 import { getDataDir } from "./paths";
 import { resetSessionCache, saveSessionNow } from "./sessionStore";
+import { samePath } from "./settings/filePaths";
 import { commitDataDirSetting, getGeneralSettings, settingsPath } from "./settingsStore";
 import { resolveDataDir } from "./thinkerHome";
 
-/** 已知顶层目录/文件的展示名（其余顶层项也会一并迁移）。 */
-const KNOWN_LABELS: Record<string, string> = {
-  "catalog.db": "catalog.db",
-  "catalog.db-wal": "catalog.db-wal",
-  "catalog.db-shm": "catalog.db-shm",
-  workspaces: "workspaces",
-  logs: "logs",
-  "session.json": "session.json",
-  skills: "skills",
-  rules: "rules",
-  mcps: "mcps",
+/** 分类展示名（顶层同名目录归并后用）。 */
+const KIND_LABELS: Record<DataKind, string> = {
+  config: "设置",
+  state: "应用状态",
+  workspace: "工作区数据",
+  content: "自定义内容",
+  cache: "缓存",
 };
+
+/** 由布局表生成「顶层名 → 展示名」，新增目录自动出现在迁移清单里。 */
+function topLevelLabels(): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const entry of listDataEntries()) {
+    const top = entry.rel.split("/")[0];
+    if (!top || top.includes("{") || labels[top]) continue;
+    labels[top] = KIND_LABELS[entry.kind];
+  }
+  labels["settings.json"] = KIND_LABELS.config;
+  return labels;
+}
 
 type ProgressFn = (progress: DataDirMigrateProgress) => void;
 
@@ -87,12 +97,6 @@ function collectFiles(root: string): Array<{ abs: string; rel: string; size: num
   return out;
 }
 
-function samePath(a: string, b: string): boolean {
-  const na = path.resolve(a);
-  const nb = path.resolve(b);
-  return process.platform === "win32" ? na.toLowerCase() === nb.toLowerCase() : na === nb;
-}
-
 function isNested(parent: string, child: string): boolean {
   const p = path.resolve(parent);
   const c = path.resolve(child);
@@ -123,6 +127,7 @@ export function listMigratableItems(fromDataDir: string): DataDirMigrateItem[] {
 
   if (!fs.existsSync(fromDataDir)) return items;
 
+  const labels = topLevelLabels();
   const names = fs.readdirSync(fromDataDir).sort((a, b) => a.localeCompare(b));
   for (const name of names) {
     // 跳过临时/锁文件以外的 sqlite 附属已在 KNOWN；全部顶层都迁
@@ -136,7 +141,7 @@ export function listMigratableItems(fromDataDir: string): DataDirMigrateItem[] {
     if (st.isSymbolicLink()) continue;
     items.push({
       id: name === "settings.json" ? "settings" : `data:${name}`,
-      label: KNOWN_LABELS[name] ?? name,
+      label: labels[name] ?? name,
       sourcePath,
       destRelative: name,
       exists: true,
@@ -214,7 +219,6 @@ export function applyDataDirChange(
     } catch {
       /* ignore */
     }
-    closeLogsDb();
     closeThinkerDb();
 
     if (request.migrate) {

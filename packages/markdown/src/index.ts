@@ -39,9 +39,11 @@ export {
   type MdTokenKey,
   type MermaidLook,
   type MermaidThemeName,
+  MONO_STACK,
   mermaidVariablesFromCss,
   notesTheme,
   resolveTheme,
+  SANS_STACK,
 } from "./themes";
 export type {
   AlertKind,

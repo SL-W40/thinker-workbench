@@ -14,6 +14,11 @@ export function fileTabKey(path: string): string {
   return `file:${path}`;
 }
 
+/** 计划虚拟文档的标签键（键形如 plan:<planId>）。 */
+export function planTabKey(planId: string): string {
+  return `plan:${planId}`;
+}
+
 export function baseName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;

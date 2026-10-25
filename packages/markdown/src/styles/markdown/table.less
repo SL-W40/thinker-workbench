@@ -1,0 +1,41 @@
+// 表格：宽表横向滚动容器、流式未闭合表的降噪样式。
+// Markdown 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+// Token 约定见 packages/markdown/src/themes/tokens.ts。
+
+/* 宽表在气泡 / flex 窄列里横向滚动，而不是挤扁换行 */
+.tw-md-table-wrap {
+  margin: 16px 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.tw-md-table-wrap--streaming {
+  position: relative;
+}
+
+/* 流式表：略降对比，末行只做极淡提示，避免整块高亮跳动 */
+.tw-md-table--streaming {
+  th,
+  td {
+    border-color: color-mix(in srgb, var(--md-border) 78%, transparent);
+  }
+}
+
+.tw-md-table-row--live td {
+  background: color-mix(in srgb, var(--md-fg) 2.5%, var(--md-panel));
+}
+
+.tw-md-pending-line {
+  margin: 0.65em 0;
+  color: var(--md-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tw-md-pending-text {
+  font-family: var(--md-font-mono);
+  font-size: 0.9em;
+}
+

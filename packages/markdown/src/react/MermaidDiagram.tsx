@@ -6,7 +6,7 @@ import mermaid from "mermaid";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { looksRenderable } from "../mermaid/looksRenderable";
 import { nextRenderDelay } from "../mermaid/streamScheduler";
-import { sourceSignature, streamRenderSource } from "../mermaid/streamSource";
+import { renderRequestKey, streamRenderSource } from "../mermaid/streamSource";
 import { mermaidVariablesFromCss } from "../themes/tokens";
 import { MermaidActions } from "./MermaidActions";
 import { clampMermaidZoom, type MermaidIntrinsicInfo, MermaidViewport } from "./MermaidViewport";
@@ -117,8 +117,8 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
     // 流式只喂「完整行前缀」：半行源码必然解析失败，白白走一遍语法与布局
     const source = streamRenderSource(value, incomplete);
     if (!source) return;
-    // 内容（或主题）没变就不重新排期
-    const requestKey = `${sourceSignature(source)}|${theme.id}|${theme.mermaid.theme}|${look}`;
+    // 内容（或主题、流式/定稿状态）没变就不重新排期
+    const requestKey = renderRequestKey(source, theme.id, theme.mermaid.theme, look, incomplete);
     if (requestKey === lastRequestRef.current) return;
     lastRequestRef.current = requestKey;
 
@@ -194,6 +194,12 @@ export function MermaidDiagram({ value, incomplete = false }: Props) {
     () => () => {
       window.clearTimeout(timerRef.current);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      // 在途请求已随卸载作废，必须一并清掉去重键：
+      // StrictMode 会「挂载 → 清理 → 再挂载」，若键还留着，重挂后 effect 会因
+      // 「内容没变」直接跳过排期，而这次排期早被上面的 clearTimeout 取消了，
+      // 历史消息（内容不再变化）就永远停在骨架上，图再也出不来。
+      lastRequestRef.current = "";
     },
     [],
   );

@@ -9,9 +9,7 @@ import { getActiveWorkspaceRoot } from "../db/workspacesStore";
 import { createDataBroadcastBatcher } from "./dataBroadcastBatcher";
 import { resolveShellProfile } from "./detectShellProfiles";
 import { buildDirectExecArgs } from "./directExecArgs";
-import { loadNodePty } from "./loadNodePty";
-import { appendOutputWithSpill } from "./outputSpill";
-import { completeResult, createRun, stillRunningResult } from "./sessionRun";
+import { buildSessionMeta, completeResult, createRun, stillRunningResult } from "./sessionRun";
 import { buildPtyEnv } from "./shellEnv";
 import {
   hasDoneMarker,
@@ -21,6 +19,8 @@ import {
   submitLine,
   wrapWithDoneMarker,
 } from "./shellMarkers";
+import { appendOutputWithSpill } from "./shellOutputPolicy";
+import { spawnPty } from "./spawnPty";
 import { broadcast } from "./terminalEvents";
 import type {
   AgentShellRun,
@@ -74,7 +74,6 @@ class TerminalSessionManager {
     rows?: number;
     profileId?: string;
   }): TerminalSession {
-    const pty = loadNodePty();
     const general = getGeneralSettings();
     const profile = resolveShellProfile(options?.profileId?.trim() || general.shellProfileId);
     const cwd = options?.cwd?.trim() || getActiveWorkspaceRoot() || process.cwd();
@@ -83,7 +82,7 @@ class TerminalSessionManager {
     const sessionId = createId("term");
     const env = buildPtyEnv({ THINKER_AGENT: "1" });
 
-    const proc = pty.spawn(profile.path, profile.args, {
+    const proc = spawnPty(profile.path, profile.args, {
       name: "xterm-256color",
       cols,
       rows,
@@ -91,7 +90,7 @@ class TerminalSessionManager {
       env,
     });
 
-    const meta: TerminalSession = {
+    const meta = buildSessionMeta({
       sessionId,
       title: profile.name,
       cwd,
@@ -100,8 +99,7 @@ class TerminalSessionManager {
       status: "running",
       fromAgent: false,
       profileId: profile.id,
-      createdAt: Date.now(),
-    };
+    });
 
     this.attach(sessionId, meta, proc, null);
     broadcast({ type: "created", session: { ...meta } });
@@ -377,25 +375,23 @@ class TerminalSessionManager {
     });
 
     const title = options.command.trim().slice(0, 40) || profile.name;
-    const meta: TerminalSession = {
+    const meta = buildSessionMeta({
       sessionId,
       title,
       cwd,
       cols,
       rows,
       status: "starting",
-      command: options.command,
       fromAgent: true,
       profileId: profile.id,
+      command: options.command,
       runId: options.runId,
       threadId: options.threadId,
-      createdAt: Date.now(),
-    };
+    });
 
     let proc: IPty;
     try {
-      const pty = loadNodePty();
-      proc = pty.spawn(profile.path, profile.args, {
+      proc = spawnPty(profile.path, profile.args, {
         name: "xterm-256color",
         cols,
         rows,
@@ -443,26 +439,24 @@ class TerminalSessionManager {
     });
 
     const title = options.command.trim().slice(0, 40) || profile.name;
-    const meta: TerminalSession = {
+    const meta = buildSessionMeta({
       sessionId,
       title,
       cwd,
       cols,
       rows,
       status: "starting",
-      command: options.command,
       fromAgent: true,
       profileId: profile.id,
+      command: options.command,
       runId: options.runId,
       threadId: options.threadId,
-      createdAt: Date.now(),
-    };
+    });
 
     const inv = buildDirectExecArgs(profile, options.command);
     let proc: IPty;
     try {
-      const pty = loadNodePty();
-      proc = pty.spawn(inv.file, inv.args, {
+      proc = spawnPty(inv.file, inv.args, {
         name: "xterm-256color",
         cols,
         rows,

@@ -147,6 +147,8 @@ export function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 内置浏览器用 <webview> 承载：DOM 合成，应用内浮层能压在页面之上
+      webviewTag: true,
     },
   });
   // 再设一次，避免部分 Windows 构建只吃构造参数里的旧缓存路径

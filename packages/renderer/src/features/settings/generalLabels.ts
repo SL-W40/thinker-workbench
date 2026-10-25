@@ -7,7 +7,7 @@ import type {
   ShellApprovalMode,
   WorkspaceAccess,
 } from "@thinker-workbench/shared";
-import type { MessageKey } from "../../i18n/translate";
+import type { MessageKey } from "../../ui/i18n/translate";
 
 export function retentionLabel(days: number, t: (key: MessageKey) => string): string {
   if (days <= 0) return t("settings.general.logRetention.never");

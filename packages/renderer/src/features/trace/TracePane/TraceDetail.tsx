@@ -9,7 +9,7 @@ import {
 } from "@thinker-workbench/design/react";
 import type { TracePayloadRecord, TraceSpanRecord } from "@thinker-workbench/shared";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import type { OverviewNames } from "../overviewModel";
 import { omitOutputOverview } from "../overviewModel";
 import { SpanOverview } from "../SpanOverview";

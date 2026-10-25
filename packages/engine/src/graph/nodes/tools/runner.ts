@@ -42,6 +42,7 @@ export function emitToolEndFromMessage(
     detail: ok ? "ok" : "interrupted",
     ok,
     command: commandHint,
+    todo: hints.todo,
   });
   void message;
 }
@@ -95,6 +96,8 @@ export async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<C
     path: hints.path,
     summary: hints.summary,
     command: commandHint,
+    // todo：动作与受影响条目只在 start 带（入参即事实），end 由时间线沿用
+    todo: hints.todo,
   });
   let content: string | ChatContentPart[];
   if (!parsed.ok) {
@@ -130,6 +133,15 @@ export async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<C
       const diff =
         (result.ui?.diff && result.ui.diff.length > 0 ? result.ui.diff : undefined) ??
         (result.ok ? fallbackDiff(name, parsed.args) : undefined);
+      // todo：把调用后的待办快照与增删 id 并进结构化提示（卡片定格展示）
+      const todo = hints.todo
+        ? {
+            ...hints.todo,
+            ...(result.ui?.todos?.length ? { items: result.ui.todos } : {}),
+            ...(result.ui?.todoAdded?.length ? { added: result.ui.todoAdded } : {}),
+            ...(result.ui?.todoRemoved?.length ? { removed: result.ui.todoRemoved } : {}),
+          }
+        : undefined;
       emit?.({
         type: "tool",
         phase: "end",
@@ -139,6 +151,9 @@ export async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<C
         summary: hints.summary,
         detail: result.ok ? "ok" : "error",
         ok: result.ok,
+        todo,
+        // update_plan：这次改了哪几步（start 只有入参，end 才有 diff）
+        ...(result.ui?.planUpdate ? { planUpdate: result.ui.planUpdate } : {}),
         diff,
         sessionId: result.ui?.sessionId,
         command: result.ui?.command ?? commandHint,

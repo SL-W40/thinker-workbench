@@ -20,9 +20,9 @@ import {
   type ModelTag,
 } from "@thinker-workbench/shared";
 import { useEffect, useId, useRef, useState } from "react";
-import { getModelSettings, probeModel, setModelSettings } from "../../../bridge/thinker";
-import { useT } from "../../../i18n/useI18n";
-import { isUnlockDeniedError } from "../../chat/systemErrors";
+import { getModelSettings, probeModel, setModelSettings } from "../../../platform/ipc/thinker";
+import { useT } from "../../../ui/i18n/useI18n";
+import { isUnlockDeniedError } from "../../chat";
 import { useEnsureModelSecrets, useShowModelSecretGate } from "../../modelSecrets/ModelSecretGate";
 import {
   type ModelForm,

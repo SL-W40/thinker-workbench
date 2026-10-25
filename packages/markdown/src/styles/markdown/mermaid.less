@@ -1,0 +1,213 @@
+// Mermaid 视图：首帧骨架、层叠换帧、缩放控件与错误态。
+// Markdown 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+// Token 约定见 packages/markdown/src/themes/tokens.ts。
+
+// —— Mermaid（纸面 token；无扫光骨架，流式靠防抖真渲染） ——
+.tw-md-mermaid-viewport {
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+  touch-action: none;
+  cursor: grab;
+  background-color: var(--md-mermaid-paper);
+  background-image:
+    linear-gradient(
+      90deg,
+      var(--md-mermaid-margin) 0,
+      var(--md-mermaid-margin) 1px,
+      transparent 1px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 27px,
+      var(--md-mermaid-rule) 27px,
+      var(--md-mermaid-rule) 28px
+    ),
+    radial-gradient(120% 90% at 50% 0%, var(--md-mermaid-glow), transparent 55%);
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  /* 高度占位：换帧时高度平滑过渡，避免下方文字被顶动 */
+  transition: height 180ms ease;
+}
+
+/* 换帧叠放：新帧淡入、旧帧淡出（旧帧不参与手势与无障碍树） */
+.tw-md-mermaid-layer {
+  animation: tw-md-mermaid-in 180ms ease-out;
+}
+
+.tw-md-mermaid-layer--out {
+  position: absolute;
+  inset: 0;
+  padding: 22px 20px 24px;
+  text-align: center;
+  pointer-events: none;
+  animation: tw-md-mermaid-out 180ms ease-out forwards;
+}
+
+/* 首帧骨架：低对比圆角块 + 极缓呼吸，不做扫光，避免抢注意力 */
+.tw-md-mermaid-skeleton {
+  min-height: 160px;
+  margin: 10px;
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--md-fg) 5%, var(--md-mermaid-paper));
+  animation: tw-md-mermaid-breathe 2.4s ease-in-out infinite;
+}
+
+.tw-md-mermaid-viewport__stage {
+  /* 仅平移；缩放改 SVG 宽高，避免 scale 栅格化发糊 */
+  transform-origin: 0 0;
+  display: inline-block;
+}
+
+.tw-md-mermaid-canvas {
+  padding: 22px 20px 24px;
+  text-align: center;
+  background: transparent;
+
+  &--empty {
+    min-height: 120px;
+    background-color: var(--md-mermaid-paper);
+    background-image:
+      linear-gradient(
+        90deg,
+        var(--md-mermaid-margin) 0,
+        var(--md-mermaid-margin) 1px,
+        transparent 1px
+      ),
+      repeating-linear-gradient(
+        180deg,
+        transparent 0,
+        transparent 27px,
+        var(--md-mermaid-rule) 27px,
+        var(--md-mermaid-rule) 28px
+      ),
+      radial-gradient(120% 90% at 50% 0%, var(--md-mermaid-glow), transparent 55%);
+  }
+
+  svg {
+    max-width: none;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    pointer-events: none;
+    user-select: none;
+
+    text,
+    .nodeLabel,
+    .edgeLabel,
+    foreignObject div,
+    foreignObject span {
+      font-family: var(--md-font) !important;
+    }
+
+    .edgeLabel {
+      font-size: 13px;
+    }
+  }
+}
+
+.tw-md-mermaid-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 2px;
+  padding: 1px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-fg) 5%, transparent);
+}
+
+.tw-md-mermaid-zoom__btn,
+
+.tw-md-mermaid-zoom__pct {
+  appearance: none;
+  box-sizing: border-box;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--md-fg-muted);
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--md-fg) 8%, transparent);
+    color: var(--md-fg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--md-accent);
+    outline-offset: 1px;
+  }
+}
+
+.tw-md-mermaid-zoom__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.tw-md-mermaid-zoom__pct {
+  min-width: 44px;
+  height: 24px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tw-md-mermaid-error {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--md-danger);
+  text-align: left;
+  white-space: pre-wrap;
+  font-size: 14px;
+  background: var(--md-danger-bg);
+
+  &--banner {
+    border-bottom: 1px solid color-mix(in srgb, var(--md-danger) 28%, var(--md-border));
+  }
+}
+
+@keyframes tw-md-mermaid-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tw-md-mermaid-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes tw-md-mermaid-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+

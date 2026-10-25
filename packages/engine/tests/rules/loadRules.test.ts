@@ -17,13 +17,15 @@ describe("loadRules", () => {
   it("同名文件两处都保留，按相对路径排序，忽略空文件和点文件", () => {
     const data = fs.mkdtempSync(path.join(os.tmpdir(), "tw-rules-data-"));
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), "tw-rules-ws-"));
-    fs.mkdirSync(path.join(data, "rules", "sub"), { recursive: true });
+    // 全局 Rules 落点在 <dataDir>/customize/rules
+    const globalRules = path.join(data, "customize", "rules");
+    fs.mkdirSync(path.join(globalRules, "sub"), { recursive: true });
     fs.mkdirSync(path.join(ws, ".thinker", "rules"), { recursive: true });
-    fs.writeFileSync(path.join(data, "rules", "b.md"), "global-b\n", "utf8");
-    fs.writeFileSync(path.join(data, "rules", "sub", "a.txt"), "nested\n", "utf8");
-    fs.writeFileSync(path.join(data, "rules", "skip.json"), "nope", "utf8");
-    fs.writeFileSync(path.join(data, "rules", ".hidden.md"), "hidden", "utf8");
-    fs.writeFileSync(path.join(data, "rules", "empty.md"), "  \n", "utf8");
+    fs.writeFileSync(path.join(globalRules, "b.md"), "global-b\n", "utf8");
+    fs.writeFileSync(path.join(globalRules, "sub", "a.txt"), "nested\n", "utf8");
+    fs.writeFileSync(path.join(globalRules, "skip.json"), "nope", "utf8");
+    fs.writeFileSync(path.join(globalRules, ".hidden.md"), "hidden", "utf8");
+    fs.writeFileSync(path.join(globalRules, "empty.md"), "  \n", "utf8");
     fs.writeFileSync(path.join(ws, ".thinker", "rules", "b.mdc"), "local-b\n", "utf8");
 
     const loaded = loadRules(data, ws);

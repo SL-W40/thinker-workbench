@@ -1,11 +1,10 @@
 /**
  * 护眼创意主题——柔和灰绿，适合长时间阅读。
  */
-import { eyecareTheme as mdEyecare } from "@thinker-workbench/markdown";
+import { eyecareTheme as mdEyecare, SANS_STACK } from "@thinker-workbench/markdown";
 import { notesChrome } from "./chrome";
 import type { DesignTheme } from "./types";
 
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdEyecare.vars["--md-font-mono"] ?? "";
 
 /** 护眼——柔和灰绿。 */
@@ -29,13 +28,12 @@ export const eyecareTheme: DesignTheme = {
     "--tw-code-bg": "#e2e8d8",
     "--tw-placeholder": "rgba(95, 109, 90, 0.7)",
     "--tw-hover": "rgba(47, 58, 44, 0.06)",
-    "--tw-font-body": SANS,
+    "--tw-font-body": SANS_STACK,
     "--tw-font-mono": MONO,
     "--tw-radius": "14px",
     "--tw-radius-control": "10px",
     "--tw-shadow-soft": "rgba(47, 58, 44, 0.08)",
     ...notesChrome({
-      paperRule: "rgba(79, 111, 82, 0.1)",
       paperMargin: "rgba(79, 111, 82, 0.12)",
       paperGlow: "rgba(79, 111, 82, 0.12)",
       titlebarBg: "rgba(238, 242, 230, 0.94)",

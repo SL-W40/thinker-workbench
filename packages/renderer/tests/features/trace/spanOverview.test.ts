@@ -27,7 +27,7 @@ function span(partial: Partial<TraceSpanRecord> = {}): TraceSpanRecord {
 describe("englishLabel", () => {
   it("已知字段用当前语言的单词", () => {
     assert.equal(fieldLabel("en", "providerResponseId"), "Provider response ID");
-    assert.equal(fieldLabel("zh", "inputTokens"), "输入 token");
+    assert.equal(fieldLabel("zh", "inputTokens"), "输入");
     assert.equal(fieldLabel("en", "sessionTitle"), "Session title");
   });
 
@@ -61,7 +61,7 @@ describe("buildSpanOverview", () => {
     );
     assert.deepEqual(
       model.stats.map((stat) => stat.label),
-      ["Input tokens", "Output tokens"],
+      ["Input", "Output"],
     );
     assert.equal(model.partial, false);
   });
@@ -78,7 +78,7 @@ describe("buildSpanOverview", () => {
     assert.deepEqual(model.chips, ["模型调用", "来自代理", "2.5 秒", "对话第 1 轮"]);
     assert.equal(model.rows.find((row) => row.value === "thread_a")?.label, "会话线程 ID");
     assert.equal(model.rows.find((row) => row.value === "是")?.label, "后台任务");
-    assert.equal(model.stats[0]?.label, "输入 token");
+    assert.equal(model.stats[0]?.label, "输入");
   });
 
   it("不展示候选序号，模型和工作区带名称", () => {

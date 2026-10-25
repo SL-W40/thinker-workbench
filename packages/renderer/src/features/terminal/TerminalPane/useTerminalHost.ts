@@ -5,7 +5,7 @@ import type { TerminalSession } from "@thinker-workbench/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { resizeTerminal, writeTerminal } from "../../../bridge/terminal";
+import { resizeTerminal, writeTerminal } from "../../../platform/ipc/terminal";
 import { applyTerminalHostColors, readXtermTheme } from "../xtermTheme";
 
 type Theme = Parameters<typeof readXtermTheme>[0];

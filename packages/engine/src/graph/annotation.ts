@@ -12,7 +12,8 @@ function appendMessages(left: ChatMessage[], right: ChatMessage[]): ChatMessage[
   return left.concat(right);
 }
 
-function mergeStartedIds(left: string[], right: string[]): string[] {
+/** 去重追加：用于 startedToolCallIds / loadedToolNames 这类「累积集合」通道。 */
+export function mergeStartedIds(left: string[], right: string[]): string[] {
   if (!right.length) return left;
   if (!left.length) return right;
   const seen = new Set(left);
@@ -35,6 +36,15 @@ export const AgentStateAnnotation = Annotation.Root({
   reply: Annotation<string>,
   pendingToolCalls: Annotation<ChatToolCall[]>,
   startedToolCallIds: Annotation<string[], string[]>({
+    reducer: mergeStartedIds,
+    default: () => [],
+  }),
+  /**
+   * 本 run 已通过 tool_search 装载的 MCP 工具名（延迟加载用）。
+   * 由 tools 节点从 run 上下文同步进来，agent 节点据此展开完整 schema。
+   * 走状态通道而非纯内存，以便 resume 后仍然展开。
+   */
+  loadedToolNames: Annotation<string[], string[]>({
     reducer: mergeStartedIds,
     default: () => [],
   }),

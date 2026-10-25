@@ -3,7 +3,7 @@
  * 无设置 API（浏览器预览）时保持关闭。
  */
 import { useEffect, useState } from "react";
-import { getGeneralSettings } from "../../bridge/thinker";
+import { getGeneralSettings } from "../../platform/ipc/thinker";
 import { OnboardingModal } from "./OnboardingModal";
 
 /** 在 `general.onboardingCompleted` 为 false 时弹出首次设置对话框。 */

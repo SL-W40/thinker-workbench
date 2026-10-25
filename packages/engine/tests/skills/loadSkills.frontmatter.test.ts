@@ -23,7 +23,7 @@ describe("loadSkills frontmatter", () => {
 
   it("解析 description: >- 多行块标量", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tw-skills-"));
-    const dir = path.join(tmp, "skills", "create-skills");
+    const dir = path.join(tmp, "customize", "skills", "create-skills");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, "SKILL.md"),

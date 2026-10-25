@@ -56,6 +56,17 @@ export type ChatToolDefinition = {
   };
 };
 
+/**
+ * 流式工具调用参数增量：同一响应内按 `index` 归并。
+ * `name` 为拼接后的当前值（可能尚未完整），`argsChunk` 是本次新增的参数片段。
+ */
+export type ChatToolCallDelta = {
+  index: number;
+  id?: string;
+  name: string;
+  argsChunk: string;
+};
+
 /** 一次 chat 请求。 */
 export type ChatRequest = {
   /** 对话轮次（system 单独通过 system / 默认提示词施加）。 */
@@ -68,9 +79,14 @@ export type ChatRequest = {
   /**
    * 若设置，则请求使用 stream: true，并对每个文本 delta 回调。
    * `channel: thinking` 为推理字段；默认 `reply` 为助手正文。
-   * tool_call 增量在客户端静默拼装，工具执行时再整段展示 diff。
    */
   onToken?: (text: string, channel?: "reply" | "thinking") => void;
+  /**
+   * 工具调用参数增量（仅流式请求）。
+   * 用于让「一键成形」的长参数（如 create_plan 的计划正文）边生成边展示；
+   * 不设置时参数照旧在客户端静默拼装。
+   */
+  onToolCallDelta?: (delta: ChatToolCallDelta) => void;
 };
 
 /** 单次补全的 token 用量（与 shared ModelUsage 对齐）。 */

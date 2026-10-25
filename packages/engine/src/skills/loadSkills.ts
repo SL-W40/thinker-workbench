@@ -9,7 +9,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { parseYamlFrontmatter } from "@thinker-workbench/shared";
+import { dataPath, parseYamlFrontmatter } from "@thinker-workbench/shared";
 
 /** 单个已解析 skill。 */
 export type SkillDefinition = {
@@ -192,7 +192,7 @@ export function loadSkills(
 
   const roots: Array<{ source: string; root: string }> = [];
   if (dataDir?.trim()) {
-    roots.push({ source: "global", root: path.join(dataDir.trim(), "skills") });
+    roots.push({ source: "global", root: dataPath(dataDir.trim(), "customSkills") });
   }
   if (workspaceRoot?.trim()) {
     const ws = workspaceRoot.trim();

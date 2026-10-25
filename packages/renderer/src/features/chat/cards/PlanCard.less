@@ -1,0 +1,145 @@
+/* 计划卡片（时间线内 create_plan 调用）：标识 + 标题 + 描述 + 状态 + 进度条 + 查看计划 */
+
+.plan-card {
+  --plan-surface: color-mix(in srgb, var(--panel, #fff) 92%, var(--bg, transparent));
+  --plan-line: color-mix(in srgb, var(--line, #e4e0d8) 88%, transparent);
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--plan-line);
+  border-radius: 10px;
+  background: var(--plan-surface);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+
+  &.is-drafting {
+    border-color: color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 45%, var(--plan-line));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 10%, transparent);
+  }
+}
+
+.plan-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.plan-card__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.plan-card__title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.plan-card__desc {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--muted) 92%, var(--ink));
+  line-height: 1.45;
+}
+
+.plan-card__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plan-card__bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  overflow: hidden;
+}
+
+.plan-card__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 70%, transparent),
+    var(--tw-accent, var(--accent, #3b82f6))
+  );
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.plan-card__count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.plan-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 22px;
+}
+
+.plan-card__drafting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+
+  &::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tw-accent, var(--accent, #3b82f6));
+    animation: plan-card-pulse 1.1s ease-in-out infinite;
+  }
+}
+
+@keyframes plan-card-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.plan-card__view {
+  margin-right: -4px;
+}

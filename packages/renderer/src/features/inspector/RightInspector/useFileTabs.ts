@@ -1,10 +1,12 @@
 /**
  * RightInspector 标签与文件操作：开 / 关 / 保存 / 另存 / 草稿。
  */
+
+import type { ChatPlan } from "@thinker-workbench/shared";
 import { type Dispatch, type SetStateAction, useCallback } from "react";
-import { forgetSubagentStep } from "../../../bridge/subagent";
-import { workspaceWriteFile } from "../../../bridge/workspaceFs";
-import { useT } from "../../../i18n/useI18n";
+import { forgetSubagentStep } from "../../../platform/ipc/subagent";
+import { workspaceWriteFile } from "../../../platform/ipc/workspaceFs";
+import { useT } from "../../../ui/i18n/useI18n";
 import { pushFileRecent } from "../fileRecents";
 import { resolveActiveKey } from "../inspectorUi";
 import type { MediaPreviewInfo } from "../MediaPreview";
@@ -16,7 +18,7 @@ import {
   TERMINAL_TAB_KEY,
 } from "../types";
 import { loadFileBuffers } from "./fileBuffers";
-import { baseName, fileTabKey, isDraftTabKey, normalizeRelPath } from "./tabs";
+import { baseName, fileTabKey, isDraftTabKey, normalizeRelPath, planTabKey } from "./tabs";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -151,6 +153,22 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     [ensureTab, t, setBrowserPendingUrl],
   );
 
+  /**
+   * 打开计划文档预览。
+   * 虚拟文档：只建标签并记 planId，内容从会话活跃计划取，不落工作空间。
+   */
+  const openPlan = useCallback(
+    (plan: ChatPlan) => {
+      ensureTab({
+        key: planTabKey(plan.id),
+        kind: "plan",
+        title: t("inspector.section.plan"),
+        planId: plan.id,
+      });
+    },
+    [ensureTab, t],
+  );
+
   function openChanges() {
     ensureTab({
       key: CHANGES_TAB_KEY,
@@ -167,6 +185,7 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     });
   }
 
+  /** 打开文件。 */
   async function openFile(path: string) {
     if (!workspaceId || !path) return;
     const key = fileTabKey(path);
@@ -176,7 +195,12 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     // 展开祖先目录
     setOpenDirs((prev) => withAncestorDirs(prev, path));
 
-    ensureTab({ key, kind: "file", title, path });
+    ensureTab({
+      key,
+      kind: "file",
+      title,
+      path,
+    });
 
     // 已有草稿或媒体预览则不重新读
     if (drafts[key] != null || saved[key] != null || mediaByKey[key] != null) return;
@@ -359,6 +383,7 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     openChanges,
     openFilesPane,
     openFile,
+    openPlan,
     saveFile,
     commitSaveAs,
     onNewFile,

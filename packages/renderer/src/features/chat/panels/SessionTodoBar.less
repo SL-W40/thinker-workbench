@@ -1,0 +1,113 @@
+/* Composer 上方：会话待办条（贴在输入壳上沿，与 background 任务条同构） */
+
+.session-todos {
+  /* 与输入壳同宽同圆角：叠在壳上沿时左右不留缝 */
+  width: var(--composer-content-width, 100%);
+  margin: 0 auto;
+  /* 不留内边距：留白交给 head，悬停底色才能铺满整行 */
+  box-sizing: border-box;
+  border: 1px solid var(--line, var(--tw-border, rgba(90, 70, 50, 0.18)));
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: color-mix(
+    in srgb,
+    var(--bg-elev, var(--tw-bg-elev, #f7f7f7)) 88%,
+    var(--tw-accent, var(--accent, #111)) 4%
+  );
+}
+
+.session-todos__head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 0;
+  /* 圆角与外壳内沿对齐：悬停底色贴边也不出角 */
+  border-radius: 17px 17px 0 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-todos__head:hover,
+.session-todos__head:focus-visible {
+  background: color-mix(in srgb, var(--ink, #000) 5%, transparent);
+  outline: none;
+}
+
+.session-todos__chev {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--ink-muted, var(--muted, var(--tw-fg-muted)));
+}
+
+.session-todos__title {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink, var(--tw-fg));
+}
+
+.session-todos__count {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted, var(--muted, var(--tw-fg-muted)));
+}
+
+/* 细进度条：占满剩余宽度，给「还剩多少」一个直观比例 */
+.session-todos__bar {
+  flex: 1;
+  min-width: 24px;
+  height: 2px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink, #000) 9%, transparent);
+  overflow: hidden;
+}
+
+.session-todos__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  /* 细进度条压一档透明度，避免变成一条生硬黑线 */
+  background: color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 78%, transparent);
+  transition: width 220ms ease;
+}
+
+.session-todos__body {
+  /* 与 head 的 6px 下内边距叠加，展开后标题行与列表留出呼吸 */
+  padding: 4px 10px 8px;
+  /* 三四十项也不把输入框顶走：给个高度上限，在条内滚动；条目一条不少 */
+  max-height: 34vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 细滚动条：原生粗细在这么窄的条里太抢眼 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink, #000) 30%, transparent) transparent;
+
+  &::-webkit-scrollbar {
+    width: 9px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink, #000) 30%, transparent);
+    background-clip: padding-box;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

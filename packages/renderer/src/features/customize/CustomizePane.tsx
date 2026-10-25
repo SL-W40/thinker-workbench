@@ -4,8 +4,8 @@
 import { SegmentedControl } from "@thinker-workbench/design/react";
 import type { WorkspaceRecord } from "@thinker-workbench/shared";
 import { useEffect, useState } from "react";
-import { listWorkspaces } from "../../bridge/workspaces";
-import { useT } from "../../i18n/useI18n";
+import { listWorkspaces } from "../../platform/ipc/workspaces";
+import { useT } from "../../ui/i18n/useI18n";
 import { AgentsCustomizePanel } from "./AgentsCustomizePanel";
 import { McpCustomizePanel } from "./McpCustomizePanel";
 import { RulesCustomizePanel } from "./RulesCustomizePanel";

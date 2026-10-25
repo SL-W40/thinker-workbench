@@ -3,6 +3,7 @@
  */
 import {
   type ChatSessionRecord,
+  type ChatTodo,
   createSessionId,
   createThreadId,
   type MoveSessionInput,
@@ -11,6 +12,7 @@ import {
   type ThreadMeta,
 } from "@thinker-workbench/shared";
 import { peekThreadCheckpoint } from "../checkpointClear";
+import { deleteSessionIndex } from "../messagesSearch";
 import { buildOrphanHealPayload } from "../orphanHeal";
 import { planQueuedHeal } from "../queuedHeal";
 import { purgeSessionArtifacts } from "../sessionArtifacts";
@@ -24,6 +26,7 @@ import {
   lookupIndexByThread,
   unindexSession,
 } from "./sessionIndex";
+import { writeSessionTodos } from "./sessionTodos";
 import { getWorkspace, listWorkspaces } from "./workspaces";
 
 function requireSession(workspaceId: string, id: string): ChatSessionRecord {
@@ -259,7 +262,7 @@ export function healRunningSessions(options?: { preserveQueued?: boolean }): num
         continue;
       }
 
-      const ckpt = peekThreadCheckpoint(row.thread_id);
+      const ckpt = peekThreadCheckpoint(ws.id, row.thread_id);
       if (ckpt) {
         const dirtyReason = /no pending interrupt|tool_approval/i.test(row.interrupt_reason ?? "");
         const alreadyCrashed = row.run_status === "crashed" && !dirtyReason;
@@ -407,6 +410,19 @@ export function renameSession(sessionId: string, title: string): ChatSessionReco
   return requireSession(session.workspaceId, sessionId);
 }
 
+/**
+ * 全量写回会话待办（会话级状态，独立于计划）。
+ * 传入空数组即清空；落库前统一规范化，避免脏结构写进库。
+ */
+export function setSessionTodos(sessionId: string, todos: readonly ChatTodo[]): ChatSessionRecord {
+  const session = getSession(sessionId);
+  if (!session) throw new Error("Session not found.");
+  chatDb(session.workspaceId)
+    .prepare("UPDATE chat_sessions SET todos_json = ? WHERE id = ?")
+    .run(writeSessionTodos(todos), sessionId);
+  return requireSession(session.workspaceId, sessionId);
+}
+
 export function setSessionPinned(sessionId: string, pinned: boolean): ChatSessionRecord {
   const session = getSession(sessionId);
   if (!session) throw new Error("Session not found.");
@@ -475,11 +491,13 @@ export function removeSession(sessionId: string): void {
   const session = getSession(sessionId);
   if (!session) throw new Error("Session not found.");
   const threadId = session.threadId;
+  // 先删检索索引：DELETE 级联会带上聊天行，但 FTS 表不受外键约束
+  deleteSessionIndex(chatDb(session.workspaceId), sessionId);
   chatDb(session.workspaceId).prepare("DELETE FROM chat_sessions WHERE id = ?").run(sessionId);
   unindexSession(sessionId);
   if (getKv(KV_ACTIVE) === sessionId) setKv(KV_ACTIVE, "");
   clearSessionModelSelection(sessionId);
   clearSessionChatMode(sessionId);
   // checkpoint + Trace（失败忽略，不拖垮删会话）
-  purgeSessionArtifacts({ sessionId, threadId });
+  purgeSessionArtifacts({ sessionId, workspaceId: session.workspaceId, threadId });
 }

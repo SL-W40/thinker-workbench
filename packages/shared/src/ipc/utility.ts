@@ -3,6 +3,7 @@
  * 所有消息固定 `channel: "utility"`，用 `kind` 区分方向与语义；勿与 renderer IPC channel 混淆。
  */
 
+import type { ChatTodo } from "../protocol/todo";
 import type { SubagentDefinition } from "./agents";
 import type { ChatMode } from "./chatMode";
 import type {
@@ -84,12 +85,10 @@ export type UtilityRuntimeSettings = {
  */
 export type RuntimeSettingsSnapshot = Required<UtilityRuntimeSettings>;
 
-/** 主进程 → 子进程：握手，下发检查点目录与初始模型 / 语言。 */
+/** 主进程 → 子进程：握手，下发初始模型 / 语言（检查点目录随 run / resume 按工作区下发）。 */
 export type UtilityHello = {
   channel: "utility";
   kind: "hello";
-  /** 检查点落盘目录；省略则由子进程使用默认策略。 */
-  checkpointDir?: string;
   /** 完整模型目录（含明文 key）。 */
   catalog?: ModelCatalog;
   /** 本轮生效的选用（会话覆盖或全局）。 */
@@ -124,8 +123,12 @@ export type UtilityRun = {
   sessionId?: string;
   /** 工作空间 id（Trace 会话元数据）。 */
   workspaceId?: string;
+  /** 本轮检查点目录（`<dataDir>/workspaces/<id>/checkpoints`）。 */
+  checkpointDir?: string;
   /** 会话标题（Trace 列表展示）。 */
   sessionTitle?: string;
+  /** 会话既有待办：run 开始时播种进本次 run，供 todo / create_plan 读写。 */
+  sessionTodos?: ChatTodo[];
   /** 用户消息等运行命令。 */
   command: AgentRunCommand;
   /**
@@ -174,8 +177,12 @@ export type UtilityResume = {
   sessionId?: string;
   /** 工作空间 id（Trace 会话元数据）。 */
   workspaceId?: string;
+  /** 本轮检查点目录（`<dataDir>/workspaces/<id>/checkpoints`）。 */
+  checkpointDir?: string;
   /** 会话标题（Trace 列表展示）。 */
   sessionTitle?: string;
+  /** 会话既有待办：恢复时同样播种，保证待办不因续跑丢失。 */
+  sessionTodos?: ChatTodo[];
   /** 本轮工作区根。 */
   workspaceRoot?: string;
   catalog?: ModelCatalog;
@@ -202,6 +209,16 @@ export type UtilityContextUsage = {
   allowAiDeleteFiles?: boolean;
   workspaceRoot?: string;
   dataDir?: string;
+  /**
+   * 主进程按生效选用解析出的上下文窗口。
+   * 估算走「不解锁密钥」的快照路径，子进程拿不到明文 apiKey，
+   * 故窗口必须由主进程下发，否则会回退默认 128K。
+   */
+  contextWindow?: number;
+  /** 主进程解析的 emoji 偏好；防止被 configureChatModel 覆盖成 false。 */
+  allowEmoji?: boolean;
+  /** 会话级 ChatMode，保证 mode 段与工具清单与真实请求一致。 */
+  chatMode?: ChatMode;
 };
 
 /** 子进程 → 主进程：上下文占用估算结果。 */
@@ -387,6 +404,44 @@ export type UtilityMcpStatus = {
   status: McpServerRuntimeStatus;
 };
 
+/** 子进程 → 主进程：Git 只读检视请求（Git 二进制只在主进程可用）。 */
+export type UtilityGitRequest = {
+  channel: "utility";
+  kind: "gitRequest";
+  requestId: string;
+  action: GitRequestAction;
+  /** 目标工作空间 id；省略时主进程按 threadId 反查工作区。 */
+  workspaceId?: string;
+  /** 发起请求的 run / thread，用于宿主侧日志归属。 */
+  runId?: string;
+  threadId?: string;
+  /** git_diff 的目标路径过滤；省略表示全部改动。 */
+  paths?: string[];
+  /** unified diff 上下文行数；省略取默认 3。 */
+  contextLines?: number;
+  /** 输出字符上限（截断保护）；省略取 shellOutputCap。 */
+  maxChars?: number;
+};
+
+/** Git 只读请求动作（写操作不在其中，避免给模型开写权限）。 */
+export type GitRequestAction = "status" | "diff";
+
+/** 主进程 → 子进程：Git 只读检视结果。 */
+export type UtilityGitResult = {
+  channel: "utility";
+  kind: "gitResult";
+  requestId: string;
+  phase: GitResultPhase;
+  /** status / diff 的纯文本结果（已做面向模型的压缩排版与截断）。 */
+  output?: string;
+  error?: string;
+  /** 是否因 maxChars 截断。 */
+  truncated?: boolean;
+};
+
+/** Git 结果阶段：先 `data` 再 `result`/`error`，保证客户端总能收到终态。 */
+export type GitResultPhase = "data" | "result" | "error";
+
 /**
  * 子进程异常退出通知（由主进程侧观察 exit 后构造，不一定经 parentPort）。
  * `code` 为进程退出码；被信号杀死时可能为 null。
@@ -409,6 +464,7 @@ export type UtilityToChild =
   | UtilityPtyEvent
   | UtilityBrowserEvent
   | UtilityHitlResult
+  | UtilityGitResult
   | UtilityMcpReload;
 
 /** utility 子进程发给主进程的全部消息。 */
@@ -421,5 +477,6 @@ export type UtilityToParent =
   | UtilityPtyRequest
   | UtilityBrowserRequest
   | UtilityHitlRequestMessage
+  | UtilityGitRequest
   | UtilityMcpStatus
   | TraceSpanMessage;

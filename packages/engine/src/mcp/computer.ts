@@ -5,7 +5,7 @@
  * 输入模拟走 PowerShell（user32 SendInput 系 API + SendKeys），
  * 截图用 GDI+ CopyFromScreen 存 PNG。
  *
- * 截图落盘 `{dataDir}/computer/images/`：
+ * 截图落盘 `<dataDir>/cache/computer/images/`：
  * - `ui.resultPaths` 供时间线展开缩略图；
  * - `ui.modelImages` 以 image_ref 进入模型上下文（视觉模型可见）。
  *

@@ -11,8 +11,8 @@ import {
   Spinner,
 } from "@thinker-workbench/design/react";
 import { lazy, type ReactNode, Suspense } from "react";
-import type { MessageKey } from "../../i18n/translate";
-import { useT } from "../../i18n/useI18n";
+import type { MessageKey } from "../../ui/i18n/translate";
+import { useT } from "../../ui/i18n/useI18n";
 import { SettingsPane } from "../settings/SettingsPane";
 import type { SettingsSectionId } from "../settings/sections";
 import "./tools.less";
@@ -23,7 +23,7 @@ const TracePane = lazy(async () => {
 });
 
 const ComponentsPane = lazy(async () => {
-  const m = await import("../components/ComponentsPane");
+  const m = await import("../catalog/ComponentsPane");
   return { default: m.ComponentsPane };
 });
 

@@ -1,5 +1,5 @@
-@import "@thinker-workbench/design/notes.less";
-@import "./features/components/components.less";
+@import "@thinker-workbench/markdown/notes.less";
+@import "./features/catalog/catalog.less";
 
 :root {
   .notes-tokens();
@@ -16,11 +16,6 @@ body,
   margin: 0;
 }
 
-html {
-  user-select: none;
-  -webkit-user-select: none;
-}
-
 /* 设置 → 外观：界面字体大小档位（样式为 px，用 zoom 整体缩放） */
 html[data-tw-font-scale="small"] {
   zoom: 0.875;
@@ -28,15 +23,6 @@ html[data-tw-font-scale="small"] {
 
 html[data-tw-font-scale="large"] {
   zoom: 1.125;
-}
-
-input,
-textarea,
-select,
-[contenteditable="true"],
-.bubble-main {
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 body {
@@ -75,6 +61,13 @@ code {
 }
 
 .chat-shell {
+  /*
+   * 三栏宽度以 CSS 变量下发（useChatPanels 的 shellVars）：
+   * 拖拽时只改这三个变量，不需要把宽度灌进 React state，整棵树不用重渲染。
+   */
+  --chat-left-width: 260px;
+  --chat-right-width: 380px;
+
   display: flex;
   align-items: stretch;
   width: 100%;
@@ -94,7 +87,7 @@ code {
     var(--composer-max-width),
     calc(100% - 2 * var(--composer-gutter))
   );
-  /* 量到壳宽前先吃剩余；量到后由 App inline flex-basis 钉死 */
+  /* 量到壳宽前先吃剩余；量到后由 .chat-main--fitted 用 --chat-main-width 钉死 */
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -107,6 +100,41 @@ code {
   .chat-main {
     --composer-max-width: 1152px;
   }
+}
+
+/*
+ * 量到壳宽后中间列由变量钉死；未量到时（--chat-main-width 未下发）上面那条
+ * flex: 1 1 auto 继续吃剩余。必须排在 .chat-main 之后，否则同特异性被后者覆盖。
+ */
+.chat-main--fitted {
+  flex: 0 0 var(--chat-main-width);
+}
+
+/*
+ * 拖拽期把重排圈在容器内部：三栏宽度实时变化，contain: layout 让每栏自己的
+ * 重排不外溢到兄弟列与外层（否则一次宽度变化会变成整壳 layout）。
+ * 只取 layout，不取 paint —— paint 会让容器成为 fixed / absolute 后代的包含块，
+ * 可能夹住浮层与右键菜单；这两个容器本来就有 overflow 裁剪。
+ */
+.chat-shell.is-resizing .chat-side__body,
+.chat-shell.is-resizing .stage-shell {
+  contain: layout;
+}
+
+/*
+ * 中间聊天列是唯一没做窗口化的重内容：拖拽期让屏外气泡跳过 layout / paint，
+ * 每帧只重排视口里那两三个气泡。只在拖拽期生效，松手即移除，
+ * 避免长期存在时估算高度影响滚动条与贴底跟随。
+ *
+ * 已知风险：从未渲染过的气泡会用 160px 估算高度，拖拽起手瞬间总高变化可能让
+ * 贴底位置抖一下；渲染过的气泡由 auto 关键字记住真实高度，不会抖。
+ * 若实测抖动或中间列仍掉帧，回退顺序：
+ *   1) 只冻结 .stage .thread（居中的对称留白，观感可接受）
+ *   2) 中间列改幽灵竖线预览（拖拽期不改宽度，松手提交）
+ */
+.chat-shell.is-resizing .stage .bubble {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
 }
 
 .chat-side {
@@ -136,16 +164,24 @@ code {
     backdrop-filter: blur(8px);
   }
 
+  /* 拖宽时每帧都要重做一次全高的背景模糊，这里临时关掉；松手后自动恢复。
+     只改属性值不改结构，避免又变成 fixed 包含块。 */
+  &.is-dragging::before {
+    backdrop-filter: none;
+  }
+
   > * {
     position: relative;
     z-index: 1;
   }
 
   &--left {
+    width: var(--chat-left-width);
     border-right: 1.5px solid var(--line);
   }
 
   &--right {
+    width: var(--chat-right-width);
     border-left: 1.5px solid var(--line);
   }
 
@@ -1676,7 +1712,13 @@ kbd {
   color: color-mix(in srgb, var(--ink) 82%, var(--muted));
   font-family: var(
     --tw-font-body,
+    "Segoe UI Variable Text",
     "Segoe UI",
+    system-ui,
+    -apple-system,
+    Roboto,
+    "Helvetica Neue",
+    Arial,
     "PingFang SC",
     "Hiragino Sans GB",
     "Microsoft YaHei UI",
@@ -1917,8 +1959,6 @@ html[data-tw-theme="dark"] .mention-chip--at {
   line-height: 1.55;
   font-size: 14px;
   color: var(--ink);
-  user-select: text;
-  -webkit-user-select: text;
 
   .tw-md {
     font-size: inherit;
@@ -1951,7 +1991,7 @@ html[data-tw-theme="dark"] .mention-chip--at {
   gap: 6px;
   max-width: 100%;
   text-align: left;
-  /* 避免 bubble-main 的 user-select:text 把点击变成划词，导致无法展开 */
+  /* 避免点击被识别成划词，导致无法展开 */
   user-select: none;
   -webkit-user-select: none;
 
@@ -2058,8 +2098,6 @@ html[data-tw-theme="dark"] .mention-chip--at {
   background: transparent;
   border: 0;
   border-radius: 0;
-  user-select: text;
-  -webkit-user-select: text;
   scrollbar-width: thin;
 }
 
@@ -2221,6 +2259,41 @@ html[data-tw-theme="dark"] .mention-chip--at {
 
 .run-timeline-tool-bit.is-err {
   color: var(--danger, #9b3b2e);
+}
+
+/* 计划更新行：进度与逐项变更（完成 / 新增 / 删除 / 退回） */
+.run-timeline-tool-bit.is-plan-progress {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-timeline-tool-bit.is-plan-change {
+  flex: 0 1 auto;
+
+  &::before {
+    content: none;
+  }
+
+  margin-left: 8px;
+}
+
+.run-timeline-plan-glyph {
+  margin-right: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-timeline-tool-bit.is-plan-change.is-completed,
+.run-timeline-tool-bit.is-plan-change.is-added {
+  color: var(--tw-success, var(--success, #2f9e5f));
+}
+
+.run-timeline-tool-bit.is-plan-change.is-removed {
+  color: var(--tw-danger, var(--danger, #9b3b2e));
+  text-decoration: line-through;
+}
+
+.run-timeline-tool-bit.is-plan-change.is-reopened {
+  color: color-mix(in srgb, var(--tw-accent, var(--accent, #3b82f6)) 78%, var(--ink, #1b1b1f));
 }
 
 /* 子代理 Task 卡片：轻量表面 + 三点加载 + 底部单行活跃时间线 */
@@ -2684,16 +2757,53 @@ html[data-tw-theme="dark"] .mention-chip--at {
   color: var(--ink);
 }
 
+/* 单题轮播：顶部进度条 / 中间当前题 / 底部上一步·下一步 */
+.run-clarify__pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 12px 8px;
+}
+
+.run-clarify__step {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted, var(--muted));
+}
+
+.run-clarify__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.run-clarify__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+
+  &.is-answered {
+    background: color-mix(in srgb, var(--tw-accent, var(--accent, #111)) 60%, transparent);
+  }
+
+  &.is-current {
+    background: var(--tw-accent, var(--accent, #111));
+    transform: scale(1.35);
+  }
+}
+
 .run-clarify__q {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 4px 12px 12px;
-
-  & + & {
-    padding-top: 12px;
-    border-top: 1px solid color-mix(in srgb, var(--line, transparent) 80%, transparent);
-  }
 }
 
 .run-clarify__prompt {
@@ -2735,10 +2845,42 @@ html[data-tw-theme="dark"] .mention-chip--at {
   width: 100%;
 }
 
-.run-clarify__settled {
+.run-clarify__summary {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  padding: 4px 12px 12px;
+}
+
+.run-clarify__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.run-clarify__row-prompt {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted, var(--muted));
+  line-height: 1.4;
+}
+
+.run-clarify__nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 12px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  padding-top: 10px;
+}
+
+.run-clarify__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .run-clarify__answer {
@@ -2752,14 +2894,6 @@ html[data-tw-theme="dark"] .mention-chip--at {
   &.is-custom {
     color: var(--ink-muted, var(--muted));
   }
-}
-
-.run-clarify__submit {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0 12px 12px;
 }
 
 .run-clarify__error {
@@ -3089,15 +3223,14 @@ html[data-tw-theme="dark"] .mention-chip--at {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  /* 不设 color，留给 FileGlyph 扩展名着色；文件夹用 muted */
-  color: color-mix(in srgb, var(--muted) 70%, var(--ink));
+  width: 16px;
+  height: 16px;
+  /* 图标自带配色（material），不在这里着色 */
 
   svg {
     display: block;
-    width: 13px;
-    height: 13px;
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -3346,24 +3479,8 @@ html[data-tw-theme="dark"] .mention-chip--at {
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  font-family: var(
-    --mono,
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace
-  );
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 8%, var(--run-diff-surface));
-  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  width: 16px;
+  height: 16px;
 }
 
 .run-diff-name {
@@ -3441,8 +3558,6 @@ html[data-tw-theme="dark"] .mention-chip--at {
   font-size: 12px;
   line-height: 1.5;
   tab-size: 2;
-  user-select: text;
-  -webkit-user-select: text;
   color: var(--run-diff-fg);
   background: var(--run-diff-surface);
 
@@ -3661,6 +3776,12 @@ html[data-tw-theme="dark"] .mention-chip--at {
   margin: 0 auto 10px;
 }
 
+/* 有待办 / 后台任务横条贴在壳上沿时：壳顶拉平，圆角交给栈顶那条 */
+.session-todos ~ .composer-shell,
+.bg-tasks ~ .composer-shell {
+  border-radius: 0 0 18px 18px;
+}
+
 .composer-shell {
   position: relative;
   box-sizing: border-box;
@@ -3772,7 +3893,13 @@ html[data-tw-theme="dark"] .mention-chip--at {
   /* 输入用清晰无衬线栈 */
   font-family: var(
     --tw-font-body,
+    "Segoe UI Variable Text",
     "Segoe UI",
+    system-ui,
+    -apple-system,
+    Roboto,
+    "Helvetica Neue",
+    Arial,
     "PingFang SC",
     "Hiragino Sans GB",
     "Microsoft YaHei UI",

@@ -1,5 +1,8 @@
 /**
  * Trace span 写入入口：截断 → jsonl → SQLite 索引。
+ *
+ * workspaceId 必填：Trace 落在所属工作区的库里。
+ * 拿不到归属（会话尚未登记 / 已删）时跳过写入并告警，不落无归属数据。
  */
 import {
   createSpanId,
@@ -15,6 +18,7 @@ import { isSessionArtifactsPurged } from "../db/sessionArtifacts";
 import { appendPayload } from "./sessionJsonl";
 import { getSpan, insertSpanStart, updateSpanEnd, upsertSession } from "./traceDb";
 import { limitsFromGeneral, truncateForTrace } from "./truncate";
+import { resolveWorkspaceIdForSession } from "./workspaceTraceDb";
 
 export type StartSpanInput = {
   spanId?: string;
@@ -35,6 +39,9 @@ export type StartSpanInput = {
   title?: string;
 };
 
+/** spanId → 所属工作区：end 阶段按 spanId 反查（会话索引已不可用时仍能配对）。 */
+const spanWorkspace = new Map<string, string>();
+
 /** 开关关闭时仍返回 id，便于调用方配对 end。 */
 function enabled(): boolean {
   try {
@@ -44,25 +51,39 @@ function enabled(): boolean {
   }
 }
 
-/** 开始 span；返回 spanId（关闭采集时仍返回 id，便于调用方配对 end）。 */
+/** 解析 span 归属工作区；拿不到则告警并返回 null。 */
+function resolveWorkspace(sessionId: string, hint?: string): string | null {
+  const direct = hint?.trim();
+  if (direct) return direct;
+  const fromIndex = resolveWorkspaceIdForSession(sessionId);
+  if (fromIndex) return fromIndex;
+  console.warn(`[trace] workspaceId unknown, span dropped for session ${sessionId}`);
+  return null;
+}
+
+/** 开始 span；返回 spanId（关闭采集或无归属时仍返回 id，便于调用方配对 end）。 */
 export function startTraceSpan(input: StartSpanInput): string {
   const spanId = input.spanId?.trim() || createSpanId();
   if (!enabled()) return spanId;
-  if (!input.sessionId.trim()) return spanId;
+  const sessionId = input.sessionId.trim();
+  if (!sessionId) return spanId;
   // 聊天已删：忽略迟到写入，避免 Trace 会话「删了又回来」
-  if (isSessionArtifactsPurged(input.sessionId)) return spanId;
+  if (isSessionArtifactsPurged(sessionId)) return spanId;
+
+  const workspaceId = resolveWorkspace(sessionId, input.workspaceId);
+  if (!workspaceId) return spanId;
+  spanWorkspace.set(spanId, workspaceId);
 
   const limits = limitsFromGeneral();
   const startTs = input.startTs ?? Date.now();
   const attrs = {
     ...(input.attrs ?? {}),
-    ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+    workspaceId,
     ...(input.threadId ? { threadId: input.threadId } : {}),
   };
 
-  upsertSession({
-    sessionId: input.sessionId,
-    workspaceId: input.workspaceId,
+  upsertSession(workspaceId, {
+    sessionId,
     threadId: input.threadId,
     title: input.title,
     ts: startTs,
@@ -71,7 +92,7 @@ export function startTraceSpan(input: StartSpanInput): string {
   let inputRef: string | undefined;
   if (input.input !== undefined) {
     const cut = truncateForTrace(input.input, limits);
-    inputRef = appendPayload(input.sessionId, {
+    inputRef = appendPayload(workspaceId, sessionId, {
       runId: spanId,
       side: "in",
       ts: startTs,
@@ -87,7 +108,7 @@ export function startTraceSpan(input: StartSpanInput): string {
 
   const record: TraceSpanRecord = {
     id: spanId,
-    sessionId: input.sessionId,
+    sessionId,
     agentRunId: input.agentRunId,
     traceId: input.traceId,
     parentId: input.parentId,
@@ -101,7 +122,7 @@ export function startTraceSpan(input: StartSpanInput): string {
     inputRef,
     attrs: Object.keys(attrs).length ? attrs : undefined,
   };
-  insertSpanStart(record);
+  insertSpanStart(workspaceId, record);
   return spanId;
 }
 
@@ -118,12 +139,24 @@ export function endTraceSpan(
   },
 ): void {
   if (!enabled()) return;
-  if (!spanId.trim()) return;
+  const id = spanId.trim();
+  if (!id) return;
 
-  const prev = getSpan(spanId);
-  const sessionId = patch.sessionId ?? prev?.sessionId;
-  if (!sessionId) return;
-  if (isSessionArtifactsPurged(sessionId)) return;
+  const known = spanWorkspace.get(id);
+  const workspaceId =
+    known ?? (patch.sessionId ? resolveWorkspaceIdForSession(patch.sessionId) : null) ?? null;
+  if (!workspaceId) {
+    console.warn(`[trace] workspaceId unknown, span end dropped for ${id}`);
+    return;
+  }
+
+  const prev = getSpan(workspaceId, id);
+  const targetSessionId = patch.sessionId ?? prev?.sessionId;
+  if (!targetSessionId) return;
+  if (isSessionArtifactsPurged(targetSessionId)) {
+    spanWorkspace.delete(id);
+    return;
+  }
 
   const limits = limitsFromGeneral();
   const endTs = patch.endTs ?? Date.now();
@@ -131,8 +164,8 @@ export function endTraceSpan(
 
   if (patch.error !== undefined) {
     const cut = truncateForTrace(patch.error, limits);
-    outputRef = appendPayload(sessionId, {
-      runId: spanId,
+    outputRef = appendPayload(workspaceId, targetSessionId, {
+      runId: id,
       side: "err",
       ts: endTs,
       bytes: cut.bytes,
@@ -141,8 +174,8 @@ export function endTraceSpan(
     });
   } else if (patch.output !== undefined) {
     const cut = truncateForTrace(patch.output, limits);
-    outputRef = appendPayload(sessionId, {
-      runId: spanId,
+    outputRef = appendPayload(workspaceId, targetSessionId, {
+      runId: id,
       side: "out",
       ts: endTs,
       bytes: cut.bytes,
@@ -151,13 +184,14 @@ export function endTraceSpan(
     });
   }
 
-  updateSpanEnd(spanId, {
+  updateSpanEnd(workspaceId, id, {
     status: patch.status ?? (patch.error !== undefined ? "error" : "ok"),
     summary: patch.summary,
     endTs,
     outputRef,
     attrs: patch.attrs,
   });
+  spanWorkspace.delete(id);
 }
 
 /** IPC：renderer start。 */

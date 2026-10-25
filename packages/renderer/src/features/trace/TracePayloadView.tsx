@@ -5,8 +5,8 @@
 import { ChevronRightIcon, SegmentedControl } from "@thinker-workbench/design/react";
 import type { TracePayloadRecord } from "@thinker-workbench/shared";
 import { type ReactNode, useMemo, useState } from "react";
-import type { MessageKey } from "../../i18n/translate";
-import { useT } from "../../i18n/useI18n";
+import type { MessageKey } from "../../ui/i18n/translate";
+import { useT } from "../../ui/i18n/useI18n";
 import {
   countMessageRoles,
   formatTraceJson,

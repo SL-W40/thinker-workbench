@@ -15,24 +15,25 @@ import {
   type ContextUsageSnapshot,
   createId,
   DEFAULT_CHAT_MODE,
+  DEFAULT_CONTEXT_WINDOW,
   emptyContextUsageSnapshot,
   type HitlResponse,
   type LogRecord,
   type ModelSelection,
   normalizeChatMode,
-  type UtilityBrowserRequest,
-  type UtilityPtyRequest,
+  PREVIEW_BODY_CHARS,
   type UtilityToChild,
+  withTextPreview,
 } from "@thinker-workbench/shared";
 import type { UtilityProcess } from "electron";
-import { releaseBrowserLease, tryAcquireBrowserLease } from "../agent/resourceGovernor";
 import { runLedger } from "../agent/runLedger";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
-import { getDataDir } from "../config/paths";
+import { getDataDir, getWorkspaceCheckpointDir } from "../config/paths";
 import {
   getGeneralSettings,
   getModelCatalog,
   getModelCatalogSnapshot,
+  resolvePrimaryModelMeta,
   unlockModelSecretsForRun,
 } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
@@ -47,7 +48,7 @@ import { desktopLog } from "../log/setup";
 import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
-import { PREVIEW_BODY_CHARS, withTextPreview } from "../util/preview";
+import { handleBrowserRequest, handleGitRequest, handlePtyRequest } from "./agentHostRequests";
 import { isUtilityToParent } from "./transfer";
 
 /** 已派发、供 cancel 附带 sessionId 的轻量记录（终态由 RunLedger 收口）。 */
@@ -135,11 +136,15 @@ export class AgentBridge {
         return;
       }
       if (raw.kind === "ptyRequest") {
-        void this.handlePtyRequest(raw);
+        void handlePtyRequest((message) => this.send(message), raw);
         return;
       }
       if (raw.kind === "browserRequest") {
-        void this.handleBrowserRequest(raw);
+        void handleBrowserRequest((message) => this.send(message), raw);
+        return;
+      }
+      if (raw.kind === "gitRequest") {
+        void handleGitRequest((message) => this.send(message), raw);
         return;
       }
       if (raw.kind === "hitl") {
@@ -223,211 +228,6 @@ export class AgentBridge {
   }
 
   /** 处理 utility 侧 PTY 请求。 */
-  private async handlePtyRequest(req: UtilityPtyRequest): Promise<void> {
-    const reply = (
-      phase: "data" | "exit" | "result" | "error",
-      extra: Partial<{
-        sessionId: string;
-        data: string;
-        exitCode: number | null;
-        backgrounded: boolean;
-        outcome: "complete" | "still_running";
-        wakeReason: "exit" | "timeout" | "pattern" | "background";
-        output: string;
-        outputPath: string;
-        outputBytes: number;
-        outputTruncated: boolean;
-        execMode: "login" | "direct";
-        error: string;
-      }> = {},
-    ) => {
-      try {
-        this.send({
-          channel: "utility",
-          kind: "ptyEvent",
-          requestId: req.requestId,
-          phase,
-          ...extra,
-        });
-      } catch {
-        /* child gone */
-      }
-    };
-
-    const replyWaitResult = (result: {
-      sessionId: string;
-      output: string;
-      exitCode: number | null;
-      backgrounded: boolean;
-      outcome: "complete" | "still_running";
-      wakeReason?: "exit" | "timeout" | "pattern" | "background";
-      outputPath?: string;
-      outputBytes?: number;
-      outputTruncated?: boolean;
-      execMode?: "login" | "direct";
-    }) => {
-      reply("result", {
-        sessionId: result.sessionId,
-        output: result.output,
-        exitCode: result.exitCode,
-        backgrounded: result.backgrounded,
-        outcome: result.outcome,
-        wakeReason: result.wakeReason,
-        outputPath: result.outputPath,
-        outputBytes: result.outputBytes,
-        outputTruncated: result.outputTruncated,
-        execMode: result.execMode,
-      });
-    };
-
-    try {
-      if (req.action === "exec") {
-        if (!req.command?.trim()) {
-          reply("error", { error: "Missing command." });
-          return;
-        }
-        const execMode = req.execMode === "direct" ? "direct" : "login";
-        let sessionId = "";
-        const started = await terminalSessionManager.startAgentCommand({
-          command: req.command,
-          cwd: req.workingDirectory,
-          cols: req.cols,
-          rows: req.rows,
-          runId: req.runId,
-          threadId: req.threadId,
-          execMode,
-          onSession: (id) => {
-            sessionId = id;
-          },
-          onData: (data) => reply("data", { sessionId, data }),
-        });
-        sessionId = started.sessionId || sessionId;
-
-        const shouldAwait = req.await !== false;
-        const budgetMs = req.blockUntilMs ?? 30_000;
-        // await:false 或 budget<=0：立刻 still_running，不弃跟踪
-        if (!shouldAwait || budgetMs <= 0) {
-          const result = await terminalSessionManager.waitAgentCommand(sessionId, {
-            budgetMs: 0,
-            onData: (data) => reply("data", { sessionId, data }),
-          });
-          replyWaitResult(result);
-          return;
-        }
-
-        const waited = await terminalSessionManager.waitAgentCommand(sessionId, {
-          budgetMs,
-          onData: (data) => reply("data", { sessionId, data }),
-        });
-        if (waited.outcome === "complete") {
-          terminalSessionManager.finishAwait(sessionId, waited);
-        }
-        replyWaitResult(waited);
-        return;
-      }
-
-      if (req.action === "await") {
-        if (!req.sessionId?.trim()) {
-          reply("error", { error: "Missing sessionId." });
-          return;
-        }
-        const result = terminalSessionManager.finishAwait(
-          req.sessionId,
-          await terminalSessionManager.waitAgentCommand(req.sessionId, {
-            budgetMs: req.blockUntilMs ?? 30_000,
-            pattern: req.pattern,
-            requestId: req.requestId,
-            onData: (data) => reply("data", { sessionId: req.sessionId, data }),
-          }),
-        );
-        replyWaitResult(result);
-        return;
-      }
-
-      if (req.action === "write") {
-        if (!req.sessionId?.trim() || typeof req.data !== "string") {
-          reply("error", { error: "Missing sessionId or data." });
-          return;
-        }
-        if (!terminalSessionManager.canWrite(req.sessionId)) {
-          reply("error", {
-            error: "Session not writable (need running login agent session).",
-          });
-          return;
-        }
-        terminalSessionManager.write(req.sessionId, req.data);
-        reply("result", {
-          sessionId: req.sessionId,
-          output: "",
-          outcome: "complete",
-          wakeReason: "exit",
-          backgrounded: false,
-        });
-        return;
-      }
-
-      if (req.action === "kill") {
-        if (!req.sessionId?.trim()) {
-          reply("error", { error: "Missing sessionId." });
-          return;
-        }
-        terminalSessionManager.kill(req.sessionId);
-        reply("result", { sessionId: req.sessionId, output: "" });
-        return;
-      }
-
-      reply("error", { error: `Unknown pty action: ${req.action}` });
-    } catch (err) {
-      reply("error", { error: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  /** 处理 utility 侧浏览器自动化请求。 */
-  private async handleBrowserRequest(req: UtilityBrowserRequest): Promise<void> {
-    const reply = (
-      phase: "result" | "error",
-      extra: Partial<{ output: string; error: string; screenshotPath: string }> = {},
-    ) => {
-      try {
-        this.send({
-          channel: "utility",
-          kind: "browserEvent",
-          requestId: req.requestId,
-          phase,
-          ...extra,
-        });
-      } catch {
-        /* child gone */
-      }
-    };
-
-    const runId = req.runId?.trim() ?? "";
-    if (runId && !tryAcquireBrowserLease(runId)) {
-      reply("error", {
-        error: "Browser is busy with another session. Wait or stop the other run.",
-      });
-      return;
-    }
-
-    try {
-      if (!getGeneralSettings().allowAiBrowser) {
-        reply("error", {
-          error:
-            "Browser tools are disabled in Settings (Browser protection). Ask the user to turn protection off if browser automation is required.",
-        });
-        return;
-      }
-      const result = await browserSessionManager.handleRequest(req);
-      reply("result", {
-        output: result.output,
-        screenshotPath: result.screenshotPath,
-      });
-    } catch (err) {
-      reply("error", { error: err instanceof Error ? err.message : String(err) });
-    } finally {
-      if (runId) releaseBrowserLease(runId);
-    }
-  }
 
   /**
    * 子进程退出时调用：清空 child/ready，未结算 run 交 RunLedger 统一 settle。
@@ -449,7 +249,9 @@ export class AgentBridge {
     runLedger.settleAllOnExit(error);
     for (const [id, pending] of this.pendingContextUsage) {
       clearTimeout(pending.timer);
-      pending.resolve(emptyContextUsageSnapshot());
+      pending.resolve(
+        emptyContextUsageSnapshot(this.resolveContextUsageMeta().limit, "utility_not_ready"),
+      );
       this.pendingContextUsage.delete(id);
     }
     for (const [id, pending] of this.pendingCheckpointClear) {
@@ -471,47 +273,81 @@ export class AgentBridge {
   }
 
   /**
+   * 解析估算用的上下文窗口（不解锁钥匙串）。
+   *
+   * 子进程拿到的是「无明文 apiKey」的快照，`resolveModelSettings` 会返回 null，
+   * 因此窗口必须由主进程解析后随消息下发，否则 UI 永远显示默认 128K。
+   */
+  private resolveContextUsageMeta(): {
+    limit: number;
+    allowEmoji: boolean;
+    threadId?: string;
+  } {
+    const activeId = getActiveSessionId();
+    const activeSession = activeId ? getSession(activeId) : null;
+    // 用量估算只需 contextWindow 等元数据，禁止走 modelPayload（会弹钥匙串）
+    const { catalog, selection } = this.modelPayloadSnapshot(activeSession?.threadId);
+    const meta = resolvePrimaryModelMeta(catalog, selection);
+    return {
+      limit:
+        typeof meta.contextWindow === "number" && meta.contextWindow > 0
+          ? meta.contextWindow
+          : DEFAULT_CONTEXT_WINDOW,
+      allowEmoji: meta.allowEmoji ?? false,
+      threadId: activeSession?.threadId,
+    };
+  }
+
+  /**
    * 向 utility 请求上下文占用快照（与 assembleContext 同源）。
-   * 超时或未就绪时返回空快照。
+   * 超时 / 未就绪 / send 失败都返回带原因的空快照（数值不可信，UI 显示「不可用」）。
    */
   async getContextUsage(
     request: ContextUsageRequest = {},
     timeoutMs = 8_000,
   ): Promise<ContextUsageSnapshot> {
+    let meta = this.resolveContextUsageMeta();
     try {
       await this.waitUntilReady(timeoutMs);
     } catch {
-      return emptyContextUsageSnapshot();
+      return emptyContextUsageSnapshot(meta.limit, "utility_not_ready");
     }
+    // ready 等待期间模型可能已切换：重取一次窗口
+    meta = this.resolveContextUsageMeta();
     const requestId = createId("ctx");
     const general = getGeneralSettings();
+    const { catalog, selection } = this.modelPayloadSnapshot(meta.threadId);
+    const chatMode = this.chatModePayload(meta.threadId).chatMode;
     return new Promise<ContextUsageSnapshot>((resolve) => {
       const timer = setTimeout(() => {
         this.pendingContextUsage.delete(requestId);
-        resolve(emptyContextUsageSnapshot());
+        resolve(emptyContextUsageSnapshot(meta.limit, "utility_timeout"));
       }, timeoutMs);
       this.pendingContextUsage.set(requestId, { resolve, timer });
       try {
-        const activeId = getActiveSessionId();
-        const activeSession = activeId ? getSession(activeId) : null;
-        // 用量估算只需 contextWindow 等元数据，禁止走 modelPayload（会弹钥匙串）
-        const modelSnap = this.modelPayloadSnapshot(activeSession?.threadId);
         this.send({
           channel: "utility",
           kind: "contextUsage",
           requestId,
           request,
-          ...modelSnap,
+          catalog,
+          selection,
           aiLocale: general.aiLocale,
           workspaceAccess: general.workspaceAccess,
           allowAiDeleteFiles: general.allowAiDeleteFiles,
           workspaceRoot: request.workspaceRoot,
           dataDir: getDataDir(),
+          contextWindow: meta.limit,
+          allowEmoji: meta.allowEmoji,
+          chatMode,
         });
-      } catch {
+      } catch (err) {
         clearTimeout(timer);
         this.pendingContextUsage.delete(requestId);
-        resolve(emptyContextUsageSnapshot());
+        desktopLog("bridge").warn("contextUsage send failed", {
+          meta: { error: err instanceof Error ? err.message : String(err) },
+        });
+        resolve(emptyContextUsageSnapshot(meta.limit, "utility_not_ready"));
       }
     });
   }
@@ -744,6 +580,8 @@ export class AgentBridge {
     const session = getSession(sessionId);
     const workspaceId = session?.workspaceId;
     const sessionTitle = session?.title;
+    // 会话既有待办随 run 下发：engine 本轮据此读写，避免「上一轮规划的步骤」丢失
+    const sessionTodos = session?.todos ?? [];
     const general = getGeneralSettings();
 
     // waitUntilReady 期间可能已取消：勿再派发
@@ -768,7 +606,10 @@ export class AgentBridge {
         traceId,
         sessionId,
         workspaceId,
+        // 检查点随工作区走：一个 engine 进程可服务多个工作区
+        checkpointDir: workspaceId ? getWorkspaceCheckpointDir(workspaceId) : undefined,
         sessionTitle,
+        sessionTodos,
         queuedMs: options.queuedMs,
         command: {
           sessionId,
@@ -822,6 +663,8 @@ export class AgentBridge {
     const session = getSession(sessionId) ?? getSessionByThreadId(threadId);
     const workspaceId = session?.workspaceId;
     const sessionTitle = session?.title;
+    // 续跑同样播种会话待办
+    const sessionTodos = session?.todos ?? [];
 
     if (!runLedger.getOpen(runId)) return;
 
@@ -834,7 +677,9 @@ export class AgentBridge {
         runId,
         sessionId,
         workspaceId,
+        checkpointDir: workspaceId ? getWorkspaceCheckpointDir(workspaceId) : undefined,
         sessionTitle,
+        sessionTodos,
         command: {
           sessionId,
           threadId,
@@ -875,6 +720,8 @@ export class AgentBridge {
     if (event.type !== "done" && event.type !== "error") return;
     const d = this.dispatched.get(event.runId);
     this.dispatched.delete(event.runId);
+    // 浏览器蒙层没有「接管」按钮：run 结束（完成 / 出错 / 被停止）即交还控制权
+    void browserSessionManager.releaseLock();
     desktopLog("bridge.run").info(event.type === "done" ? "done" : "error", {
       traceId: d?.traceId,
       runId: event.runId,

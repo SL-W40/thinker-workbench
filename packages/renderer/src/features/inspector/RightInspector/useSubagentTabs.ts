@@ -13,9 +13,9 @@ import {
   setActiveSubagentTask,
   subagentTabKey,
   subscribeSubagentSteps,
-} from "../../../bridge/subagent";
-import { useT } from "../../../i18n/useI18n";
-import { subagentDisplayTitle } from "../../chat/subagentTitle";
+} from "../../../platform/ipc/subagent";
+import { useT } from "../../../ui/i18n/useI18n";
+import { subagentDisplayTitle } from "../../chat";
 import type { StageTab } from "../types";
 
 type Translate = ReturnType<typeof useT>;

@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { collectMentionPaths, SKILLS_PAGE } from "../../../src/features/chat/Composer/mentionPaths";
+import { collectMentionPaths, SKILLS_PAGE } from "../../../src/features/chat/composer/mentionPaths";
 
 describe("collectMentionPaths", () => {
   it("returns empty for null / empty root", () => {

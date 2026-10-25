@@ -3,7 +3,7 @@
  */
 import { EmptyState } from "@thinker-workbench/design/react";
 import type { WorkspaceMediaKind } from "@thinker-workbench/shared";
-import { useT } from "../../i18n/useI18n";
+import { useT } from "../../ui/i18n/useI18n";
 
 export type MediaPreviewInfo = {
   kind: WorkspaceMediaKind | "binary";

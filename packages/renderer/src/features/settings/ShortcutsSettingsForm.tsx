@@ -16,9 +16,9 @@ import {
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getShortcutsSettings, setShortcutsSettings } from "../../bridge/thinker";
-import type { MessageKey } from "../../i18n/translate";
-import { useT } from "../../i18n/useI18n";
+import { getShortcutsSettings, setShortcutsSettings } from "../../platform/ipc/thinker";
+import type { MessageKey } from "../../ui/i18n/translate";
+import { useT } from "../../ui/i18n/useI18n";
 import { setShortcutRecording } from "../shortcuts/recordingGate";
 
 type Props = {
@@ -67,6 +67,10 @@ const SHORTCUT_COPY: Record<ShortcutId, { titleKey: MessageKey; descriptionKey: 
   navForward: {
     titleKey: "settings.shortcuts.navForwardTitle",
     descriptionKey: "settings.shortcuts.navForwardDescription",
+  },
+  palette: {
+    titleKey: "settings.shortcuts.paletteTitle",
+    descriptionKey: "settings.shortcuts.paletteDescription",
   },
 };
 

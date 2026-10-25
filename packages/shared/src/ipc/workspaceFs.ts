@@ -60,6 +60,8 @@ export type GitStatus = {
   behind: number;
   files: GitChangedFile[];
   totals: { added: number; removed: number };
+  /** 失败时的技术细节（诊断展示用；成功或缺省时为空）。 */
+  detail?: string;
 };
 
 /** 单文件 unified diff。 */
@@ -77,4 +79,12 @@ export type ThinkerWorkspaceFsApi = {
   gitStatus(workspaceId: string): Promise<GitStatus>;
   gitFileDiff(workspaceId: string, path: string, full?: boolean): Promise<GitFileDiff>;
   gitInit(workspaceId: string): Promise<{ ok: boolean; error?: string }>;
+  /** 新建目录（父目录自动创建）；已存在则报错。 */
+  mkdir(workspaceId: string, path: string): Promise<void>;
+  /** 重命名或同工作空间内移动；目标已存在则报错。 */
+  rename(workspaceId: string, from: string, to: string): Promise<void>;
+  /** 删除文件或目录；优先走系统回收站，便于误删恢复。 */
+  remove(workspaceId: string, path: string): Promise<void>;
+  /** 在系统文件管理器中定位该项。 */
+  reveal(workspaceId: string, path: string): Promise<void>;
 };

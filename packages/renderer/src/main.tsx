@@ -15,10 +15,10 @@ import "@thinker-workbench/design/styles.less";
 import "@thinker-workbench/design/controls.less";
 import "@thinker-workbench/markdown/styles.less";
 import "katex/dist/katex.min.css";
-import { readBootAppearance } from "./boot/readBootAppearance";
-import { installBlankRootRecovery } from "./hmr/recoverBlankRoot";
-import { RootApp } from "./RootApp";
-import { applyUiFontScale } from "./theme/fontScale";
+import { RootApp } from "./app";
+import { applyUiFontScale } from "./platform/appearance/fontScale";
+import { readBootAppearance } from "./platform/appearance/readBootAppearance";
+import { installBlankRootRecovery } from "./platform/dev";
 import "./styles.less";
 
 // 全局禁止 Tab 切换焦点（桌面端以指针为主）

@@ -2,7 +2,7 @@
  * 把 span 自身、attrs 和 output 里的身份 / 用量收成顶部卡片的数据。
  */
 import type { AppLocale, TraceSpanRecord } from "@thinker-workbench/shared";
-import { type MessageKey, translate } from "../../i18n/translate";
+import { type MessageKey, translate } from "../../ui/i18n/translate";
 
 const FIELD_KEY: Record<string, MessageKey> = {
   runType: "tools.trace.field.runType",

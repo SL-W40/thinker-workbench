@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getBundledCustomizeDir, getDataDir } from "../config/paths";
+import { getBundledCustomizeDir, getCustomizeDir } from "../config/paths";
 
 type BundledKind = "rules" | "agents" | "mcps";
 
@@ -36,13 +36,12 @@ function copyMissing(src: string, dest: string, installed: string[]): void {
  * @returns 新复制的绝对路径列表
  */
 export function ensureBundledCustomize(): string[] {
-  const dataDir = getDataDir();
   const installed: string[] = [];
   const kinds: BundledKind[] = ["rules", "agents", "mcps"];
   for (const kind of kinds) {
     const bundled = getBundledCustomizeDir(kind);
     if (!bundled) continue;
-    const destRoot = path.join(dataDir, kind);
+    const destRoot = getCustomizeDir(kind);
     fs.mkdirSync(destRoot, { recursive: true });
     try {
       for (const ent of fs.readdirSync(bundled, { withFileTypes: true })) {

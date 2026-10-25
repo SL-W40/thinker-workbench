@@ -18,6 +18,8 @@
   line-height: 1.2;
   cursor: pointer;
   text-align: center;
+  /* 标签永不折行：容器变窄时宁可整块换行或溢出，也别把「提交改动」压成两行 */
+  white-space: nowrap;
 
   &:hover:not(:disabled) {
     border-color: var(--tw-accent, var(--accent));

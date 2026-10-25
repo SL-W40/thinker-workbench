@@ -1,5 +1,5 @@
 /**
- * Trace payload 按偏移读取，删会话时索引一起删。
+ * Trace payload 按偏移读取，删会话时索引一起删（Trace 按工作区分库）。
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,9 +8,14 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "vitest";
 import { resetSettingsCacheForTests } from "../../src/config/settingsStore";
 import { appendPayload, readPayload, removeSessionJsonl } from "../../src/trace/sessionJsonl";
-import { closeTraceDb, findPayloadIndex } from "../../src/trace/traceDb";
+import { findPayloadIndex } from "../../src/trace/traceDb";
+import { closeAllTraceDbs } from "../../src/trace/workspaceTraceDb";
+import { probeSqlite } from "../db/sqliteProbe";
 
-describe("payload index", () => {
+const WS = "ws_payload_test";
+
+// 需要真 SQLite：本机原生模块不可用时跳过（同 messagesSearch 的处理）
+describe.skipIf(!probeSqlite())("payload index", () => {
   let tmp: string;
   let prevHome: string | undefined;
 
@@ -18,12 +23,12 @@ describe("payload index", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tw-payload-"));
     prevHome = process.env.THINKER_HOME;
     process.env.THINKER_HOME = tmp;
-    closeTraceDb();
+    closeAllTraceDbs();
     resetSettingsCacheForTests();
   });
 
   afterEach(() => {
-    closeTraceDb();
+    closeAllTraceDbs();
     resetSettingsCacheForTests();
     if (prevHome === undefined) delete process.env.THINKER_HOME;
     else process.env.THINKER_HOME = prevHome;
@@ -32,7 +37,7 @@ describe("payload index", () => {
 
   it("追加后按 id 读到对应行，删除会话清掉索引", () => {
     const sessionId = "sess-payload";
-    const first = appendPayload(sessionId, {
+    const first = appendPayload(WS, sessionId, {
       runId: "sp1",
       side: "in",
       ts: 1,
@@ -40,7 +45,7 @@ describe("payload index", () => {
       truncated: false,
       json: { n: 1 },
     });
-    const second = appendPayload(sessionId, {
+    const second = appendPayload(WS, sessionId, {
       runId: "sp2",
       side: "out",
       ts: 2,
@@ -48,17 +53,17 @@ describe("payload index", () => {
       truncated: false,
       json: { n: 2 },
     });
-    const loc = findPayloadIndex(sessionId, second);
+    const loc = findPayloadIndex(WS, sessionId, second);
     assert.ok(loc);
     assert.ok(loc.offset > 0);
-    const firstPayload = readPayload(sessionId, first);
-    const secondPayload = readPayload(sessionId, second);
+    const firstPayload = readPayload(WS, sessionId, first);
+    const secondPayload = readPayload(WS, sessionId, second);
     assert.ok(firstPayload);
     assert.ok(secondPayload);
     assert.equal((firstPayload.json as { n: number }).n, 1);
     assert.equal((secondPayload.json as { n: number }).n, 2);
-    removeSessionJsonl(sessionId);
-    assert.equal(findPayloadIndex(sessionId, first), null);
-    assert.equal(readPayload(sessionId, first), null);
+    removeSessionJsonl(WS, sessionId);
+    assert.equal(findPayloadIndex(WS, sessionId, first), null);
+    assert.equal(readPayload(WS, sessionId, first), null);
   });
 });

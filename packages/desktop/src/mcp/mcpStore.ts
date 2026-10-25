@@ -10,7 +10,7 @@ import type {
   McpServerUpsertInput,
 } from "@thinker-workbench/shared";
 import { customizeScopeKey, normalizeCustomizeScope } from "@thinker-workbench/shared";
-import { ensureDir, resolveWritableRoot } from "../customize/paths";
+import { ensureDir, resolveWritableRoot } from "../customize/customizeRoots";
 import { listWorkspaces } from "../db/workspacesStore";
 
 function sanitizeId(raw: string): string {

@@ -9,7 +9,12 @@ import {
   IconButton,
   PaperclipIcon,
 } from "@thinker-workbench/design/react";
-import type { ChatAttachmentRef, ChatMessage, SkillListItem } from "@thinker-workbench/shared";
+import type {
+  ChatAttachmentRef,
+  ChatMessage,
+  ChatTodo,
+  SkillListItem,
+} from "@thinker-workbench/shared";
 import {
   type DragEvent,
   type KeyboardEvent,
@@ -25,24 +30,25 @@ import {
   getSessionModelSelection,
   listSkills,
   MODEL_SETTINGS_CHANGED,
-} from "../../../bridge/thinker";
-import { workspaceTree } from "../../../bridge/workspaceFs";
-import { useT } from "../../../i18n/useI18n";
+} from "../../../platform/ipc/thinker";
+import { workspaceTree } from "../../../platform/ipc/workspaceFs";
+import { useT } from "../../../ui/i18n/useI18n";
 import { loadFileRecents } from "../../inspector/fileRecents";
-import { BackgroundTasksBar } from "../BackgroundTasksBar";
-import { ComposerEditor, type ComposerEditorHandle } from "../ComposerEditor";
-import { ComposerMentionPanel, type MentionItem } from "../ComposerMentionPanel";
-import { ContextUsageControl } from "../ContextUsageControl";
+import { BackgroundTasksBar } from "../usage/BackgroundTasksBar";
+import { ComposerEditor, type ComposerEditorHandle } from "./ComposerEditor";
+import { ComposerMentionPanel, type MentionItem } from "./ComposerMentionPanel";
+import { ContextUsageControl } from "../usage/ContextUsageControl";
 import {
   type ActiveMention,
   applyMentionInsert,
   detectActiveMention,
   formatAtPath,
   formatSlashSkill,
-} from "../composerMentions";
-import { rankFileMentions, truncateDirLeft } from "../fileMentionRank";
-import { ModelPicker } from "../ModelPicker";
-import { ModePicker } from "../ModePicker";
+} from "./composerMentions";
+import { rankFileMentions, truncateDirLeft } from "./fileMentionRank";
+import { ModelPicker } from "../pickers/ModelPicker";
+import { ModePicker } from "../pickers/ModePicker";
+import { SessionTodoBar } from "../panels/SessionTodoBar";
 import { SendGlyph, StopGlyph } from "./glyphs";
 import { collectMentionPaths, SKILLS_PAGE } from "./mentionPaths";
 
@@ -64,6 +70,8 @@ type Props = {
   sessionId?: string | null;
   threadId?: string | null;
   messages?: ChatMessage[];
+  /** 会话待办：展示在输入框上方（会话级状态，独立于计划）。 */
+  todos?: ChatTodo[];
   gateMessage?: string | null;
   onOpenWorkspace?: () => void;
   onOpenTerminal?: (detail?: {
@@ -90,6 +98,7 @@ export function Composer({
   sessionId = null,
   threadId = null,
   messages = [],
+  todos = [],
   gateMessage,
   onOpenWorkspace,
   onOpenTerminal,
@@ -378,6 +387,7 @@ export function Composer({
               : t("chat.mention.empty")
         }
       />
+      <SessionTodoBar todos={todos} running={busy} />
       <BackgroundTasksBar threadId={threadId ?? undefined} onOpenTerminal={onOpenTerminal} />
       {visionUntagged && hasImageAttachments ? (
         <Callout tone="warning" className="composer-gate">

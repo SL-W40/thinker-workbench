@@ -3,7 +3,13 @@
  * 时间线与 IPC 共用同一套产品事件形状。
  */
 
-import type { ChatTimelineResultPathKind } from "../protocol/message";
+import type {
+  ChatPlanStatus,
+  ChatPlanTodo,
+  ChatPlanUpdateHint,
+  ChatTimelineResultPathKind,
+} from "../protocol/message";
+import type { ChatTimelineTodoHint, ChatTodo } from "../protocol/todo";
 import type { HitlKind, HitlRequest, HitlResponse } from "./hitl";
 
 /** 所有 AgentEvent 共有字段。 */
@@ -54,6 +60,10 @@ export type AgentToolEvent = AgentEventBase & {
   backgrounded?: boolean;
   resultPaths?: string[];
   resultPathKinds?: ChatTimelineResultPathKind[];
+  /** `todo` 工具：动作与受影响条目（区分读 / 写）。 */
+  todo?: ChatTimelineTodoHint;
+  /** `update_plan` 工具：这次更新动了哪几步。 */
+  planUpdate?: ChatPlanUpdateHint;
 };
 
 /** HITL。 */
@@ -197,6 +207,43 @@ export type AgentMemoryEvent = AgentEventBase & {
   truncated?: number;
 };
 
+/**
+ * 计划事件。
+ * `drafting`：模型正在流式产出 create_plan 参数（草稿逐段刷新，不含正文）；
+ * `created`：计划已成型；`updated`：执行阶段每步更新。
+ */
+export type AgentPlanEvent = AgentEventBase & {
+  type: "plan";
+  phase: "drafting" | "created" | "updated";
+  /** 计划 id，与 `ChatPlan.id` 对齐。 */
+  planId: string;
+  /** `drafting` 阶段携带的工具调用 id：供时间线把草稿挂到同一次调用上。 */
+  callId?: string;
+  /** 计划标题；`updated` 时可省略（沿用既有标题）。 */
+  title?: string;
+  /** 计划简述；`updated` 时可省略（沿用既有简述）。 */
+  description?: string;
+  /** 计划完成状态。 */
+  status: ChatPlanStatus;
+  /** 待办列表；`updated` 时为全量替换，保证幂等。 */
+  todos: ChatPlanTodo[];
+  /** plan.md 正文；`updated` 且正文未变时可省略。 */
+  markdown?: string;
+};
+
+/**
+ * 会话待办事件：全量替换当前会话待办（幂等）。
+ *
+ * 待办是会话级状态，与计划解耦：`todo` 工具、create_plan、update_plan 都会发。
+ */
+export type AgentTodoEvent = AgentEventBase & {
+  type: "todo";
+  /** 全量待办列表（消费端直接替换，不做增量合并）。 */
+  todos: ChatTodo[];
+  /** 触发来源，供时间线给出不同文案。 */
+  origin?: "todo" | "create_plan" | "update_plan";
+};
+
 /** 推送给 UI 的全部 agent 事件。 */
 export type AgentEvent =
   | AgentTokenEvent
@@ -208,5 +255,7 @@ export type AgentEvent =
   | AgentModelHealthEvent
   | AgentSubagentEvent
   | AgentMemoryEvent
+  | AgentPlanEvent
+  | AgentTodoEvent
   | AgentDoneEvent
   | AgentErrorEvent;

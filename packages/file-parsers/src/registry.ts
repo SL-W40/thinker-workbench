@@ -1,7 +1,7 @@
 /**
  * 解析器注册表：按 (mime, ext) 选 priority 最高且 `supports` 的 parser。
  */
-import type { FileParser, ParseInput, ParsedFileResult } from "./types";
+import type { FileParser, ParsedFileResult, ParseInput } from "./types";
 import { extOf } from "./types";
 
 const registry: FileParser[] = [];

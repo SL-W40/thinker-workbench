@@ -1,5 +1,5 @@
 /**
- * UI / 窗口 session 持久化（`<dataDir>/session.json`）。
+ * UI / 窗口 session 持久化（`<dataDir>/state/session.json`）。
  *
  * 保存路由 hash、设置分区、页面栈与窗口几何；带内存缓存与防抖写入。
  */
@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { PageStackSnapshot, UiSessionSnapshot } from "@thinker-workbench/shared";
 import { computeDefaultWindowSize } from "../window/defaultBounds";
-import { getDataDir } from "./paths";
+import { getSessionFilePath } from "./paths";
 
 /** 持久化的窗口几何（含可选坐标与最大化标志）。 */
 export type SessionWindow = {
@@ -61,9 +61,9 @@ let cached: SessionState | null = null;
 /** 防抖写盘定时器。 */
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** session.json 绝对路径（落在可配置的 dataDir 下）。 */
+/** session.json 绝对路径（`<dataDir>/state/session.json`）。 */
 export function sessionPath(): string {
-  return path.join(getDataDir(), "session.json");
+  return getSessionFilePath();
 }
 
 /** 将任意输入规范为以 `#/` 开头的 hash。 */

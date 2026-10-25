@@ -1,8 +1,9 @@
 /**
- * 截图落盘：`{dataDir}/computer/images/`，保留最近若干张。
+ * 截图落盘：`<dataDir>/cache/computer/images/`，保留最近若干张。
  */
 import fs from "node:fs";
 import path from "node:path";
+import { dataPath } from "@thinker-workbench/shared";
 import { getDataDir } from "../../config/dataDir";
 import type { ToolResult } from "../../tools/types";
 import { parseScreenInfo, runPowerShell, screenInfoText, screenshotPs } from "./powershell";
@@ -13,7 +14,7 @@ const MAX_KEEP_SCREENSHOTS = 60;
 export function screenshotDir(): string | null {
   const dataDir = getDataDir();
   if (!dataDir) return null;
-  return path.join(dataDir, "computer", "images");
+  return dataPath(dataDir, "cacheComputerImages");
 }
 
 /** 生成截图路径并清理旧文件（保留最近 MAX_KEEP_SCREENSHOTS 张）。 */

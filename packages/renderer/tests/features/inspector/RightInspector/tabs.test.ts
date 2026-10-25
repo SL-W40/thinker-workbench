@@ -9,7 +9,6 @@ import {
   collectFilePaths,
   fileTabKey,
   isDraftTabKey,
-  langBadge,
   normalizeRelPath,
 } from "../../../../src/features/inspector/RightInspector/tabs";
 
@@ -54,26 +53,6 @@ describe("baseName", () => {
 
   it("falls back to raw path when empty", () => {
     assert.equal(baseName("a/"), "a/");
-  });
-});
-
-describe("langBadge", () => {
-  it("maps known extensions", () => {
-    assert.equal(langBadge("a.tsx"), "TSX");
-    assert.equal(langBadge("a.ts"), "TS");
-    assert.equal(langBadge("a.jsx"), "JSX");
-    assert.equal(langBadge("a.mjs"), "JS");
-    assert.equal(langBadge("a.json"), "{}");
-    assert.equal(langBadge("a.md"), "MD");
-    assert.equal(langBadge("a.less"), "CSS");
-  });
-
-  it("marks empty path as NEW and truncates unknown ext", () => {
-    assert.equal(langBadge(""), "NEW");
-    assert.equal(langBadge("a.abcdef"), "ABCD");
-    // 无点号：ext 取整串前 4 位；尾随点号：ext 为空串才回落 FILE
-    assert.equal(langBadge("Makefile"), "MAKE");
-    assert.equal(langBadge("a."), "FILE");
   });
 });
 

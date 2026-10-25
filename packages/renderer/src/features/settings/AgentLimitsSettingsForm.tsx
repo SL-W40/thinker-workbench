@@ -20,8 +20,8 @@ import {
   normalizeShellOutputCap,
 } from "@thinker-workbench/shared";
 import { useEffect, useRef, useState } from "react";
-import type { MessageKey } from "../../i18n/translate";
-import { useI18n } from "../../i18n/useI18n";
+import type { MessageKey } from "../../ui/i18n/translate";
+import { useI18n } from "../../ui/i18n/useI18n";
 import { useGeneralSettings } from "./useGeneralSettings";
 
 type Props = {

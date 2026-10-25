@@ -41,6 +41,7 @@ export {
   DebugModeIcon,
   type DesignIconEntry,
   DownloadIcon,
+  EyeIcon,
   FilterIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -69,6 +70,7 @@ export {
   SidebarLeftIcon,
   SidebarRightIcon,
   StopIcon,
+  ThinkingIcon,
   TrashIcon,
 } from "../components/Icon";
 export {
@@ -112,8 +114,8 @@ export { SettingsRow, type SettingsRowProps } from "../components/SettingsRow/Se
 export { SideNavItem, type SideNavItemProps } from "../components/SideNavItem/SideNavItem";
 export { Spinner, type SpinnerProps, type SpinnerSize } from "../components/Spinner/Spinner";
 export { Switch, type SwitchProps } from "../components/Switch/Switch";
+export { reorderTableRows } from "../components/Table/reorderRows";
 export {
-  reorderTableRows,
   Table,
   type TableCellOverflow,
   type TableCellProps,

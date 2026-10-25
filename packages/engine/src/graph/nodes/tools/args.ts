@@ -1,7 +1,10 @@
 /**
  * tools 节点参数解析与 UI 提示（纯函数）。
  */
+
+import type { ChatTimelineTodoHint } from "@thinker-workbench/shared";
 import { buildUnifiedDiff } from "../../../tools/shared/diff";
+import { todoUiHint } from "../../../tools/todo/hint";
 import type { ToolArgs } from "../../../tools/types";
 
 /**
@@ -38,7 +41,15 @@ export function parseToolArgs(
 }
 
 /** 从参数抽出 path / 一行摘要（搜索词等）；改文件预览走 diff，不再塞 replace 摘要。 */
-export function toolUiHints(name: string, args: ToolArgs): { path?: string; summary?: string } {
+export function toolUiHints(
+  name: string,
+  args: ToolArgs,
+): { path?: string; summary?: string; todo?: ChatTimelineTodoHint } {
+  // todo：结构化提示（动作 + 受影响条目），时间线据此区分读 / 写
+  if (name === "todo") {
+    const todo = todoUiHint(args);
+    return todo ? { todo } : {};
+  }
   // browser_navigate：用 url 作可点路径；snapshot / screenshot 用短标签触发展开
   if (name === "browser_navigate" && typeof args.url === "string" && args.url.trim()) {
     return { path: args.url.trim() };

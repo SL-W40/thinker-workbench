@@ -159,6 +159,13 @@ export type ThinkerSettingsApi = ThinkerShortcutsApi &
     getSessionChatMode(sessionId: string): Promise<ChatMode | null>;
     /** 写入会话级 ChatMode。 */
     setSessionChatMode(sessionId: string, chatMode: ChatMode): Promise<ChatMode>;
+    /**
+     * 订阅会话 ChatMode 变更（工具请求切换 / 其它窗口改动）。
+     * @returns 取消订阅函数
+     */
+    onSessionChatModeChanged?(
+      cb: (change: { sessionId: string; chatMode: ChatMode }) => void,
+    ): () => void;
   };
 
 export type { ShortcutsMap };

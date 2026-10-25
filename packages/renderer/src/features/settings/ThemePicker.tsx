@@ -23,9 +23,9 @@ import {
   toCustomThemeExport,
 } from "@thinker-workbench/shared";
 import { useRef, useState } from "react";
-import type { MessageKey } from "../../i18n/translate";
-import { useI18n } from "../../i18n/useI18n";
-import { useAppearance } from "../../theme/useAppearance";
+import { useAppearance } from "../../platform/appearance/useAppearance";
+import type { MessageKey } from "../../ui/i18n/translate";
+import { useI18n } from "../../ui/i18n/useI18n";
 import { CustomThemeEditor } from "./CustomThemeEditor";
 import { forkCustomTheme } from "./customThemeUtils";
 

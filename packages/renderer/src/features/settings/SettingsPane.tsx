@@ -15,7 +15,7 @@ import {
   SideNavItem,
 } from "@thinker-workbench/design/react";
 import type { ComponentType } from "react";
-import { useT } from "../../i18n/useI18n";
+import { useT } from "../../ui/i18n/useI18n";
 import { AgentLimitsSettingsForm } from "./AgentLimitsSettingsForm";
 import { AppearanceSettingsForm } from "./AppearanceSettingsForm";
 import { BrowserNetworkSettingsForm } from "./BrowserNetworkSettingsForm";

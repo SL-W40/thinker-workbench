@@ -47,3 +47,19 @@ export function streamRenderSource(source: string, incomplete: boolean): string 
   if (incomplete && meaningfulLines(prefix.text).length < 2) return null;
   return prefix.text;
 }
+
+/**
+ * 渲染排期键：内容签名 + 主题 + look + 流式/定稿标记。
+ * 流式与定稿必须分开记账：流式期间的最后一次排期可能并未真正出图
+ * （降级、不可渲染、或内容与上一帧相同被跳过），若闭合时键不变会被去重吞掉，
+ * 定稿那次渲染就永远不发生，画面停在骨架上。
+ */
+export function renderRequestKey(
+  source: string,
+  themeId: string,
+  themeName: string,
+  look: string,
+  incomplete: boolean,
+): string {
+  return `${sourceSignature(source)}|${themeId}|${themeName}|${look}|${incomplete ? "streaming" : "final"}`;
+}

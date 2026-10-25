@@ -8,13 +8,16 @@ import type { IpcMain } from "electron";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { registerAgentHandlers } from "./agentHandlers";
 import { registerBrowserHandlers } from "./browserHandlers";
+import { registerCheckpointHandlers } from "./checkpointHandlers";
 import { registerCustomizeHandlers } from "./customizeHandlers";
+import { registerGitHandlers } from "./gitHandlers";
 import { registerMcpHandlers } from "./mcpHandlers";
 import { registerSessionHandlers } from "./sessionHandlers";
 import { registerSettingsHandlers } from "./settingsHandlers";
 import { registerTerminalHandlers } from "./terminalHandlers";
 import { registerToolsHandlers } from "./toolsHandlers";
 import { registerTraceHandlers } from "./traceHandlers";
+import { registerUpdateHandlers } from "./updateHandlers";
 import { registerWindowHandlers } from "./windowHandlers";
 import { registerWorkspaceFsHandlers } from "./workspaceFsHandlers";
 import { registerWorkspacesHandlers } from "./workspacesHandlers";
@@ -37,10 +40,14 @@ export function registerIpc(
   registerWindowHandlers(ipcMain);
   registerWorkspacesHandlers(ipcMain, bridge);
   registerWorkspaceFsHandlers(ipcMain);
+  // Git 写操作（暂存 / 提交 / 放弃 / 分支 / 远端）
+  registerGitHandlers(ipcMain);
+  // Checkpoint：保留策略 + 变更处置（回滚 / 采纳）
+  registerCheckpointHandlers(ipcMain);
   registerAgentHandlers(ipcMain, bridge);
   registerTerminalHandlers(ipcMain);
   registerBrowserHandlers(ipcMain);
-  registerTraceHandlers();
+  registerTraceHandlers(ipcMain);
   // Customize：skills / rules / agents
   registerCustomizeHandlers(ipcMain, bridge);
   registerMcpHandlers(ipcMain, bridge);
@@ -50,4 +57,6 @@ export function registerIpc(
   });
   registerSessionHandlers(ipcMain);
   registerToolsHandlers(ipcMain);
+  // 桌面自动更新（GitHub Releases / electron-updater；dev 下为禁用态）
+  registerUpdateHandlers(ipcMain);
 }

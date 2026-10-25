@@ -27,6 +27,8 @@ export type SessionRow = {
   interrupt_reason: string | null;
   created_at: number;
   updated_at: number;
+  /** 会话待办 JSON；老库缺列时为 undefined。 */
+  todos_json?: string | null;
 };
 
 export type MsgRow = {

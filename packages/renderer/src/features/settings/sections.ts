@@ -3,7 +3,7 @@
  * 与 URL `#/tools/settings/<id>`（及旧 `#/settings/<id>`）及 session 中的 `settingsSection` 对齐。
  * 旧 MCP 分区已迁至控制台 Customize（`#/tools/customize`）。
  */
-import type { MessageKey } from "../../i18n/translate";
+import type { MessageKey } from "../../ui/i18n/translate";
 
 export type SettingsSectionId =
   | "appearance"

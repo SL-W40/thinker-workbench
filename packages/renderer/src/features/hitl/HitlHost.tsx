@@ -4,9 +4,9 @@
 import { Button, Input, Modal } from "@thinker-workbench/design/react";
 import type { HitlRequest } from "@thinker-workbench/shared";
 import { useEffect, useId, useState } from "react";
-import { onAgentEvent, respondHitl } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
-import { isTimelineHitlKind } from "../chat/timelineModel";
+import { onAgentEvent, respondHitl } from "../../platform/ipc/thinker";
+import { useT } from "../../ui/i18n/useI18n";
+import { isTimelineHitlKind } from "../chat";
 import "./HitlHost.less";
 
 export function HitlHost() {

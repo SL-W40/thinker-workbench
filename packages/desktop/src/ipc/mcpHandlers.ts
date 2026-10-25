@@ -26,6 +26,7 @@ import {
 } from "../mcp/mcpStore";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { pushAgentHello } from "../utility/startAgentProcess";
+import { slugify } from "./normalize";
 
 /** 缓存 engine 推送的运行时状态。 */
 const statusById = new Map<string, McpServerRuntimeStatus>();
@@ -117,7 +118,7 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
   });
 
   ipcMain.handle(IpcChannels.mcpUpsert, (_evt, input: McpServerUpsertInput) => {
-    if (sanitize(input.id) === BUILTIN_COMPUTER_MCP_ID) {
+    if (slugify(input.id) === BUILTIN_COMPUTER_MCP_ID) {
       throw new Error("The built-in Computer server cannot be modified.");
     }
     const cfg = upsertMcpConfig(input);
@@ -126,18 +127,18 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
   });
 
   ipcMain.handle(IpcChannels.mcpRemove, (_evt, id: string, scope?: CustomizeScope) => {
-    if (sanitize(String(id ?? "")) === BUILTIN_COMPUTER_MCP_ID) {
+    if (slugify(String(id ?? "")) === BUILTIN_COMPUTER_MCP_ID) {
       throw new Error("The built-in Computer server cannot be removed.");
     }
     removeMcpConfig(String(id ?? ""), scope);
-    statusById.delete(sanitize(id));
+    statusById.delete(slugify(id));
     reloadMcpOnAgent(bridge);
   });
 
   ipcMain.handle(
     IpcChannels.mcpSetEnabled,
     (_evt, id: string, enabled: boolean, scope?: CustomizeScope) => {
-      if (sanitize(String(id ?? "")) === BUILTIN_COMPUTER_MCP_ID) {
+      if (slugify(String(id ?? "")) === BUILTIN_COMPUTER_MCP_ID) {
         throw new Error("The built-in Computer server is always enabled.");
       }
       const cfg = setMcpEnabled(String(id ?? ""), Boolean(enabled), scope);
@@ -157,7 +158,7 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
     const cfg = trialConfig(trial);
     if (!cfg) {
       return {
-        id: sanitize(trial.id),
+        id: slugify(trial.id),
         state: "error" as const,
         error: trial.transport === "http" ? "URL is required." : "Command is required.",
       };
@@ -238,7 +239,7 @@ export function registerMcpHandlers(ipcMain: IpcMain, bridge: AgentBridge): void
 }
 
 function trialConfig(input: McpServerUpsertInput): McpServerConfig | null {
-  const id = sanitize(input.id);
+  const id = slugify(input.id);
   const name = input.name?.trim() || id;
   if (input.transport === "http") {
     const url = input.url.trim();
@@ -257,14 +258,4 @@ function trialConfig(input: McpServerUpsertInput): McpServerConfig | null {
     env: input.env ?? {},
     cwd: input.cwd ?? null,
   };
-}
-
-function sanitize(raw: string): string {
-  return (
-    String(raw ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "server"
-  );
 }

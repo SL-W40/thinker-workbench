@@ -16,6 +16,7 @@ import {
 } from "./exportBundle";
 import { sessionJsonlPath } from "./sessionJsonl";
 import { listSessionSpans, listSessions } from "./traceDb";
+import { resolveWorkspaceIdForSession } from "./workspaceTraceDb";
 
 export type ExportSessionResult = { ok: true; path: string } | { ok: false; error: string };
 
@@ -29,15 +30,22 @@ export {
 
 function collectFromDisk(sessionId: string): BuildExportBundleInput {
   const general = getGeneralSettings();
-  const spans = listSessionSpans(sessionId);
-  const sessionSummary =
-    listSessions({ limit: 500 }).find((s) => s.sessionId === sessionId) ?? null;
   const chat = getSessionWithMessages(sessionId);
-  const workspaceId = chat?.session.workspaceId ?? sessionSummary?.workspaceId;
+  // Trace 分库后必须先定位工作区，否则 span 与 payload 都取不到
+  const workspaceId =
+    chat?.session.workspaceId ??
+    resolveWorkspaceIdForSession(sessionId) ??
+    listSessions({ limit: 500 }).find((s) => s.sessionId === sessionId)?.workspaceId ??
+    null;
+  const spans = workspaceId ? listSessionSpans(workspaceId, sessionId) : [];
+  const sessionSummary =
+    listSessions({ limit: 500, workspaceId: workspaceId ?? undefined }).find(
+      (s) => s.sessionId === sessionId,
+    ) ?? null;
   const ws = workspaceId ? getWorkspace(workspaceId) : null;
   let payloadsJsonl = "";
   try {
-    const p = sessionJsonlPath(sessionId);
+    const p = workspaceId ? sessionJsonlPath(workspaceId, sessionId) : "";
     if (fs.existsSync(p)) payloadsJsonl = fs.readFileSync(p, "utf8");
   } catch {
     payloadsJsonl = "";

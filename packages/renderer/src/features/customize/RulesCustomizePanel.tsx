@@ -3,7 +3,7 @@
  */
 import type { CustomizeScope, RuleListItem, WorkspaceRecord } from "@thinker-workbench/shared";
 import { useMemo, useState } from "react";
-import { useT } from "../../i18n/useI18n";
+import { useT } from "../../ui/i18n/useI18n";
 import { type MdListRow, MdResourcePanel } from "./MdResourcePanel";
 import { buildScopeGroups, customizeScopeKey, sameCustomizeScope } from "./scopeHelpers";
 import { useLoadWhen } from "./useLoadWhen";

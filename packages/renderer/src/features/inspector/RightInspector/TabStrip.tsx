@@ -4,16 +4,16 @@
 
 import { ContextMenu } from "@thinker-workbench/design/react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import {
   BrowserStartIcon,
+  FileGlyph,
   FileStartIcon,
   GitIcon,
   SubagentStartIcon,
   TerminalStartIcon,
-} from "../icons";
+} from "../../../ui/icons";
 import type { StageTab } from "../types";
-import { langBadge } from "./tabs";
 
 type Props = {
   tabs: StageTab[];
@@ -81,7 +81,9 @@ export function TabStrip({
           }
         >
           {tab.kind === "file" ? (
-            <span className="agent-inspector__lang">{langBadge(tab.path)}</span>
+            <span className="agent-inspector__tab-ico">
+              <FileGlyph name={tab.path ?? tab.title} />
+            </span>
           ) : tab.kind === "changes" ? (
             <span className="agent-inspector__tab-ico">
               <GitIcon />

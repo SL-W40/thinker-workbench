@@ -11,7 +11,7 @@ import {
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
 import { useEffect, useRef, useState } from "react";
-import { getShortcutsSettings, SHORTCUTS_SETTINGS_CHANGED } from "../../bridge/thinker";
+import { getShortcutsSettings, SHORTCUTS_SETTINGS_CHANGED } from "../../platform/ipc/thinker";
 import { isShortcutRecording } from "./recordingGate";
 
 /** 返回 `false` 表示未处理（勿 preventDefault），便于 Escape 在空闲时放行；`void` 即「已处理 / 走默认」。 */

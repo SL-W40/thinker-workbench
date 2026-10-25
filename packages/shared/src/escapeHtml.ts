@@ -1,6 +1,6 @@
 /**
  * HTML 元字符转义：供拼接 innerHTML / `data:text/html` 等场景安全插入不可信文本。
- * renderer（ChangesPane）与 desktop（overlayHtml）原先各写一份，现收敛于此作为单一实现。
+ * renderer（ChangesPane）与原 desktop 蒙层原先各写一份，现收敛于此作为单一实现。
  */
 
 /**

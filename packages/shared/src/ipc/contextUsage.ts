@@ -27,6 +27,11 @@ export type ContextUsageSnapshot = {
   /** 各分段之和。 */
   used: number;
   segments: ContextUsageSegment[];
+  /**
+   * 估算失败原因码（utility 未就绪 / 超时 / 组装异常等）。
+   * 存在时数值不可信，UI 应显示「不可用」而不是 0，避免用 0 冒充「没占用」。
+   */
+  error?: string;
 };
 
 /** 默认上下文窗口（未配置 model.contextWindow 时）。 */
@@ -48,11 +53,22 @@ export type ContextUsageRequest = {
   contextPaths?: string[];
 };
 
-/** 空快照（utility 未就绪等）。 */
+/** 估算失败原因码；UI 与日志据此区分「真的 0」与「没算出来」。 */
+export type ContextUsageErrorCode =
+  | "utility_not_ready"
+  | "utility_timeout"
+  | "bridge_missing"
+  | "assemble_failed";
+
+/**
+ * 空快照（utility 未就绪 / 超时 / 组装异常等）。
+ * 带 error 时表示数值不可信，UI 显示「不可用」。
+ */
 export function emptyContextUsageSnapshot(
   limit: number = DEFAULT_CONTEXT_WINDOW,
+  error?: ContextUsageErrorCode | string,
 ): ContextUsageSnapshot {
-  return {
+  const snapshot: ContextUsageSnapshot = {
     limit,
     used: 0,
     segments: [
@@ -65,4 +81,6 @@ export function emptyContextUsageSnapshot(
       { id: "conversation", tokens: 0 },
     ],
   };
+  if (error) snapshot.error = error;
+  return snapshot;
 }

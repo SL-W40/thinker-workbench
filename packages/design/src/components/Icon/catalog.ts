@@ -20,6 +20,7 @@ import {
   DatabaseIcon,
   DebugModeIcon,
   DownloadIcon,
+  EyeIcon,
   FilterIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -44,6 +45,7 @@ import {
   SidebarLeftIcon,
   SidebarRightIcon,
   StopIcon,
+  ThinkingIcon,
   TrashIcon,
 } from "./icons";
 
@@ -72,6 +74,7 @@ export const DESIGN_ICONS: DesignIconEntry[] = [
   { name: "DatabaseIcon", Icon: DatabaseIcon },
   { name: "DebugModeIcon", Icon: DebugModeIcon },
   { name: "DownloadIcon", Icon: DownloadIcon },
+  { name: "EyeIcon", Icon: EyeIcon },
   { name: "FilterIcon", Icon: FilterIcon },
   { name: "FolderIcon", Icon: FolderIcon },
   { name: "FolderPlusIcon", Icon: FolderPlusIcon },
@@ -96,6 +99,7 @@ export const DESIGN_ICONS: DesignIconEntry[] = [
   { name: "SidebarLeftIcon", Icon: SidebarLeftIcon },
   { name: "SidebarRightIcon", Icon: SidebarRightIcon },
   { name: "StopIcon", Icon: StopIcon },
+  { name: "ThinkingIcon", Icon: ThinkingIcon },
   { name: "TrashIcon", Icon: TrashIcon },
 ];
 

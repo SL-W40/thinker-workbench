@@ -2,6 +2,8 @@
  * 右侧 inspector UI 状态（按工作空间）持久化到 localStorage。
  * 不含未命名草稿与编辑器正文。
  */
+
+import { planTabKey } from "./RightInspector/tabs";
 import {
   BROWSER_TAB_KEY,
   CHANGES_TAB_KEY,
@@ -18,7 +20,16 @@ export type StoredInspectorTab =
   | { kind: "files" }
   | { kind: "terminal" }
   | { kind: "browser" }
+  /** 计划文档（虚拟文档，重启后靠会话活跃计划补内容）。 */
+  | { kind: "plan"; planId: string }
   | { kind: "file"; path: string };
+
+/**
+ * Changes 面板上次用哪种方式提交（模式不再做成可见控件，藏在「提交」菜单里）：
+ * - ai：把「建分支 / 提交 / 推送 / 开 PR」交给 agent 办
+ * - manual：自己填说明，直接调 git
+ */
+export type ChangesCommitMode = "ai" | "manual";
 
 export type StoredInspectorUi = {
   tabs: StoredInspectorTab[];
@@ -28,6 +39,8 @@ export type StoredInspectorUi = {
   filesListWidth: number;
   changesListForced: boolean | null;
   changesListWidth: number;
+  /** Changes 面板上次用哪种方式提交；manual 时重开直接展开输入框。 */
+  changesCommitMode: ChangesCommitMode;
   openDirs: string[];
   /** 内置浏览器最后地址（重启后还原）。 */
   browserUrl: string;
@@ -40,9 +53,15 @@ const DEFAULTS: StoredInspectorUi = {
   filesListWidth: FILE_LIST_WIDTH.default,
   changesListForced: null,
   changesListWidth: FILE_LIST_WIDTH.default,
+  // 默认 AI 代办：与整合前的顶部主按钮定位一致
+  changesCommitMode: "ai",
   openDirs: [],
   browserUrl: "",
 };
+
+function isChangesCommitMode(value: unknown): value is ChangesCommitMode {
+  return value === "ai" || value === "manual";
+}
 
 function storageKey(workspaceId: string): string {
   return `${STORAGE_KEY}.${workspaceId}`;
@@ -50,10 +69,11 @@ function storageKey(workspaceId: string): string {
 
 function isStoredTab(value: unknown): value is StoredInspectorTab {
   if (!value || typeof value !== "object") return false;
-  const v = value as { kind?: unknown; path?: unknown };
+  const v = value as { kind?: unknown; path?: unknown; planId?: unknown };
   if (v.kind === "changes" || v.kind === "files" || v.kind === "terminal" || v.kind === "browser") {
     return true;
   }
+  if (v.kind === "plan") return typeof v.planId === "string" && v.planId.length > 0;
   return v.kind === "file" && typeof v.path === "string" && v.path.length > 0;
 }
 
@@ -82,6 +102,9 @@ export function loadInspectorUi(workspaceId: string | null): StoredInspectorUi {
         typeof parsed.changesListWidth === "number"
           ? clampFileListWidth(parsed.changesListWidth)
           : FILE_LIST_WIDTH.default,
+      changesCommitMode: isChangesCommitMode(parsed.changesCommitMode)
+        ? parsed.changesCommitMode
+        : DEFAULTS.changesCommitMode,
       openDirs,
       browserUrl: typeof parsed.browserUrl === "string" ? parsed.browserUrl : "",
     };
@@ -90,11 +113,8 @@ export function loadInspectorUi(workspaceId: string | null): StoredInspectorUi {
   }
 }
 
-/** 合并写回（保留未出现在 patch 中的字段）。 */
-export function patchInspectorUi(
-  workspaceId: string | null,
-  patch: Partial<StoredInspectorUi>,
-): void {
+/** 同步落盘一次（保留未出现在 patch 中的字段）。 */
+function writeInspectorUi(workspaceId: string | null, patch: Partial<StoredInspectorUi>): void {
   if (!workspaceId) return;
   try {
     const prev = loadInspectorUi(workspaceId);
@@ -118,6 +138,45 @@ export function patchInspectorUi(
   }
 }
 
+/**
+ * 待写的 patch，按 workspaceId 合并；同一 workspace 的连续改动只留最后一次合并结果。
+ */
+const pendingPatches = new Map<string, Partial<StoredInspectorUi>>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 把攒下的 patch 立刻写完（防抖窗口内最后一次改动由它兜底）。 */
+export function flushInspectorUi(): void {
+  if (flushTimer !== null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  for (const [workspaceId, patch] of pendingPatches) {
+    writeInspectorUi(workspaceId, patch);
+  }
+  pendingPatches.clear();
+}
+
+/**
+ * 合并写回（保留未出现在 patch 中的字段）。
+ *
+ * 落盘防抖：切 tab、展开目录、拖宽度会连续触发多次写入，而每次写都是
+ * getItem + parse + stringify（全量 tabs）+ setItem 的同步阻塞主线程。
+ * 200ms 合并成一次，关窗 / 隐藏页面时由 flushInspectorUi 补写。
+ */
+export function patchInspectorUi(
+  workspaceId: string | null,
+  patch: Partial<StoredInspectorUi>,
+): void {
+  if (!workspaceId) return;
+  pendingPatches.set(workspaceId, { ...pendingPatches.get(workspaceId), ...patch });
+  if (flushTimer === null) flushTimer = setTimeout(flushInspectorUi, 200);
+}
+
+// 关窗 / 切走前补写，避免最后一次改动落在防抖窗口里丢失
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushInspectorUi);
+}
+
 /** 运行时 StageTab → 可序列化片段（跳过未命名草稿）。 */
 export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
   const out: StoredInspectorTab[] = [];
@@ -126,6 +185,7 @@ export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
     else if (tab.kind === "files") out.push({ kind: "files" });
     else if (tab.kind === "terminal") out.push({ kind: "terminal" });
     else if (tab.kind === "browser") out.push({ kind: "browser" });
+    else if (tab.kind === "plan" && tab.planId) out.push({ kind: "plan", planId: tab.planId });
     else if (tab.kind === "file" && tab.path && !tab.key.startsWith("draft:")) {
       out.push({ kind: "file", path: tab.path });
     }
@@ -136,7 +196,7 @@ export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
 /** 序列化片段 → StageTab（标题由调用方按 i18n 填）。 */
 export function hydrateTabs(
   stored: StoredInspectorTab[],
-  titles: { changes: string; files: string; terminal: string; browser: string },
+  titles: { changes: string; files: string; terminal: string; browser: string; plan: string },
 ): StageTab[] {
   const out: StageTab[] = [];
   const seen = new Set<string>();
@@ -157,6 +217,11 @@ export function hydrateTabs(
       if (seen.has(BROWSER_TAB_KEY)) continue;
       seen.add(BROWSER_TAB_KEY);
       out.push({ key: BROWSER_TAB_KEY, kind: "browser", title: titles.browser });
+    } else if (item.kind === "plan") {
+      const key = planTabKey(item.planId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ key, kind: "plan", title: titles.plan, planId: item.planId });
     } else {
       const key = `file:${item.path}`;
       if (seen.has(key)) continue;

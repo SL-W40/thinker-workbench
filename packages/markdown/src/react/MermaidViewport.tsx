@@ -18,6 +18,30 @@ const ZOOM_STEP = 1.15;
 /** 新旧两帧叠放的淡入淡出时长；与 .tw-md-mermaid-layer 动画保持一致。 */
 export const MERMAID_FADE_MS = 180;
 
+/** 缩放锚点：缩放后把该内容点拉回记录的屏幕坐标，实现「以指针为中心缩放」。 */
+export type ZoomAnchor = {
+  /** 锚点在 SVG 内容中的归一化位置（0~1）。 */
+  fx: number;
+  fy: number;
+  /** 锚点当前的屏幕坐标（clientX / clientY）。 */
+  px: number;
+  py: number;
+};
+
+/**
+ * 锚点归位所需的平移增量：直接叠加到当前 pan 上。
+ * SVG 尺寸变化会连带改变它的布局位置，缩放后锚点会漂移，这里算出把它拉回的位移。
+ */
+export function panDeltaForAnchor(
+  rect: { left: number; top: number; width: number; height: number },
+  anchor: ZoomAnchor,
+): { dx: number; dy: number } {
+  return {
+    dx: anchor.px - (rect.left + anchor.fx * rect.width),
+    dy: anchor.py - (rect.top + anchor.fy * rect.height),
+  };
+}
+
 export type MermaidIntrinsicInfo = {
   /** SVG 自身坐标系宽高（未缩放）。 */
   w: number;
@@ -120,6 +144,40 @@ export function MermaidViewport({
   const sizeCallbackRef = useRef(onIntrinsicSize);
   sizeCallbackRef.current = onIntrinsicSize;
   const prevSvgRef = useRef(svgHtml);
+  /** 待归位的缩放锚点（指针 / 双指中点）。 */
+  const anchorRef = useRef<ZoomAnchor | null>(null);
+  /** 已请求但尚未落到 DOM 的缩放值；连续滚轮时作为下一次的基数，保证手势累加。 */
+  const pendingZoomRef = useRef<number | null>(null);
+  /** 双指手势上次请求到的缩放值，用于跳过被上下限夹住的重复请求。 */
+  const lastPinchZoomRef = useRef<number | null>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
+  /**
+   * 以 (clientX, clientY) 处的内容点为不动点缩放到 next；
+   * next 与 base 相同（被上下限夹住）时不排期，避免留下不会生效的锚点。
+   * 返回是否真的发起了缩放。
+   */
+  const zoomToAt = useCallback(
+    (next: number, base: number, clientX: number, clientY: number): boolean => {
+      if (next === base) return false;
+      const svg = canvasRef.current?.querySelector("svg");
+      const rect = svg?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+      anchorRef.current = {
+        fx: (clientX - rect.left) / rect.width,
+        fy: (clientY - rect.top) / rect.height,
+        px: clientX,
+        py: clientY,
+      };
+      pendingZoomRef.current = next;
+      setZoomRef.current(next);
+      return true;
+    },
+    [],
+  );
+  const zoomToAtRef = useRef(zoomToAt);
+  zoomToAtRef.current = zoomToAt;
 
   /**
    * 淡出层拿到的是原始 SVG 字符串（只有 mermaid 给的初始尺寸），
@@ -173,6 +231,17 @@ export function MermaidViewport({
     svg.style.width = `${w}px`;
     svg.style.height = `${h}px`;
     svg.style.maxWidth = "none";
+
+    // 锚点归位：缩放刚改过尺寸与布局，用平移把指针下的内容点拉回原处（以指针为中心缩放）
+    const pending = pendingZoomRef.current;
+    pendingZoomRef.current = null;
+    const anchor = anchorRef.current;
+    anchorRef.current = null;
+    // 只在缩放确按请求生效时归位；被外部改掉或没生效就丢弃，避免拿过期锚点乱跳
+    if (anchor && pending !== null && Math.abs(zoom - pending) < 1e-6) {
+      const { dx, dy } = panDeltaForAnchor(svg.getBoundingClientRect(), anchor);
+      if (dx !== 0 || dy !== 0) setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+    }
   }, [svgHtml, zoom, maxHeightPx]);
 
   // 触控板捏合会发 ctrl+wheel；需非 passive 才能 preventDefault
@@ -183,7 +252,9 @@ export function MermaidViewport({
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-      setZoomRef.current((z) => z * factor);
+      // 有在途请求时以它为基数：同一帧内的连续滚轮才会逐级累加而不是互相抵消
+      const base = pendingZoomRef.current ?? zoomRef.current;
+      zoomToAtRef.current(clampZoom(base * factor), base, e.clientX, e.clientY);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -217,6 +288,7 @@ export function MermaidViewport({
   const onTouchStart = (e: React.TouchEvent) => {
     const a = e.touches[0];
     const b = e.touches[1];
+    lastPinchZoomRef.current = null;
     if (!a || !b || e.touches.length !== 2) {
       pinchRef.current = null;
       return;
@@ -233,11 +305,17 @@ export function MermaidViewport({
     e.preventDefault();
     const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     const ratio = distance / Math.max(1, pinchRef.current.distance);
-    setZoom(pinchRef.current.zoom * ratio);
+    const next = clampZoom(pinchRef.current.zoom * ratio);
+    // 双指中点作为不动点；基数取上次请求值，被上下限夹住时跳过
+    const base = lastPinchZoomRef.current ?? pinchRef.current.zoom;
+    if (zoomToAtRef.current(next, base, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2)) {
+      lastPinchZoomRef.current = next;
+    }
   };
 
   const onTouchEnd = () => {
     pinchRef.current = null;
+    lastPinchZoomRef.current = null;
   };
 
   const onDoubleClick = () => {

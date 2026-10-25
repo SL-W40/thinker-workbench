@@ -1,0 +1,160 @@
+// 流式渲染 chrome：进度条、状态行、脉冲与 source 标注。
+// Markdown 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+// Token 约定见 packages/markdown/src/themes/tokens.ts。
+
+// —— 流式外壳 ——
+.tw-md-stream {
+  margin: 16px 0;
+  border: 1px solid var(--md-border);
+  border-radius: 14px;
+  background: var(--md-panel);
+  overflow: hidden;
+  box-shadow: 0 1px 0 var(--md-shadow-soft);
+
+  &--live {
+    border-color: color-mix(in srgb, var(--md-accent) 42%, var(--md-border));
+    box-shadow:
+      0 0 0 1px var(--md-stream-glow),
+      0 8px 28px -18px var(--md-stream-glow);
+    animation: tw-md-stream-breathe 2.4s ease-in-out infinite;
+  }
+
+  &--error {
+    border-color: color-mix(in srgb, var(--md-danger) 45%, var(--md-border));
+  }
+
+  /* 代码块外壳与 pre 同色，避免顶栏浅 / 正文深两截 */
+  &--code {
+    background: var(--md-pre-bg);
+  }
+
+  &--code .tw-md-stream-bar {
+    background: var(--md-pre-bg);
+    border-bottom-color: var(--md-border);
+  }
+
+  &--code .tw-md-stream-body {
+    background: var(--md-pre-bg);
+  }
+
+  &--code .tw-md-pre {
+    margin: 0;
+    border-radius: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  &--pending .tw-md-pre {
+    margin: 0;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--md-fg) 2.5%, var(--md-panel));
+    color: var(--md-fg);
+  }
+
+  /* 表格外壳：滚动交给内部 wrap，避免顶栏被横向拖走 */
+  &--table .tw-md-stream-body {
+    overflow: hidden;
+  }
+
+  &--table .tw-md-table-wrap {
+    margin: 0;
+    max-width: 100%;
+  }
+
+}
+
+.tw-md-stream-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--md-border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-accent) 8%, var(--md-panel)) 0%,
+    var(--md-panel) 100%
+  );
+}
+
+.tw-md-stream-label {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-fg-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tw-md-stream-bar-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.tw-md-stream-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--md-accent);
+}
+
+.tw-md-stream-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--md-accent);
+  box-shadow: 0 0 0 0 var(--md-stream-glow);
+  animation: tw-md-pulse 1.4s ease-out infinite;
+}
+
+.tw-md-stream-body {
+  min-width: 0;
+}
+
+.tw-md-stream-footer {
+  border-top: 1px dashed color-mix(in srgb, var(--md-accent) 28%, var(--md-border));
+  background: color-mix(in srgb, var(--md-fg) 3%, var(--md-panel));
+}
+
+.tw-md-stream-source {
+  margin: 0;
+  padding: 10px 12px 12px;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--md-font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--md-fg-muted);
+  max-height: 152px;
+  overflow: auto;
+}
+
+/* 流式期间图一帧比一帧大：尺寸变化做短过渡，避免每帧「跳一下」 */
+.tw-md-stream--live .tw-md-mermaid-canvas svg {
+  transition: width 180ms ease, height 180ms ease;
+}
+
+@keyframes tw-md-stream-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px var(--md-stream-glow),
+      0 8px 28px -18px var(--md-stream-glow);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--md-accent) 28%, transparent),
+      0 10px 32px -16px var(--md-stream-glow);
+  }
+}
+

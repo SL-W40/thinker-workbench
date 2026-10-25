@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useResizeDrag } from "../../ui/hooks/useResizeDrag";
 
 export const FILE_LIST_WIDTH = {
   default: 260,
@@ -22,48 +23,28 @@ export function clampFileListWidth(n: number): number {
 
 export function useFileListWidth(initial: number = FILE_LIST_WIDTH.default, _resetKey?: string) {
   const [width, setWidth] = useState<number>(() => clampFileListWidth(initial));
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
-  const widthRef = useRef(width);
-  widthRef.current = width;
 
   // 切换工作空间 / 外部恢复时重同步宽度
   useEffect(() => {
     setWidth(clampFileListWidth(initial));
   }, [initial]);
 
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
-      // 侧栏在右侧：向左拖 → 变宽。
-      setWidth(clampFileListWidth(d.startW + (d.startX - e.clientX)));
-    };
-    const onUp = () => {
-      if (!dragRef.current) return;
-      dragRef.current = null;
-      setDragging(false);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, []);
+  // 侧栏在右侧：向左拖 -> 变宽。走 useResizeDrag 按帧合并，避免每次 move 都 setState。
+  const { dragging, onPointerDown } = useResizeDrag({
+    width,
+    project: (startWidth, delta) => startWidth - delta,
+    clamp: clampFileListWidth,
+    onResize: setWidth,
+  });
 
-  const onResizePointerDown = useCallback((e: ReactPointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragRef.current = { startX: e.clientX, startW: widthRef.current };
-    setDragging(true);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  }, []);
+  const onResizePointerDown = useCallback(
+    (e: ReactPointerEvent) => {
+      // 手柄在面板内部，阻止冒泡以免触发行的选中 / 拖拽
+      e.stopPropagation();
+      onPointerDown(e);
+    },
+    [onPointerDown],
+  );
 
   return { width, dragging, onResizePointerDown };
 }
@@ -110,7 +91,12 @@ export function useFileListOpen(
     apply(paneEl.getBoundingClientRect().width);
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width;
-      if (typeof w === "number") apply(w);
+      if (typeof w !== "number") return;
+      // 拖拽跨过断点时别在拖拽途中开合：那是一次整块挂载 / 卸载 + 大范围重排。
+      // 松手后宽度会再变一次（预览值落到 state），RO 自然会在那时补上判定。
+      // is-resizing 由 useChatPanels 在起手 / 松手时加删，现在只用于这一处的推迟。
+      if (paneEl.closest(".chat-shell.is-resizing")) return;
+      apply(w);
     });
     ro.observe(paneEl);
     return () => ro.disconnect();

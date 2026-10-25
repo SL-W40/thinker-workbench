@@ -7,7 +7,14 @@ import os from "node:os";
 import path from "node:path";
 import type { WorkspaceNode } from "@thinker-workbench/shared";
 import { afterEach, beforeEach, describe, it } from "vitest";
-import { listTree, readWorkspaceFile } from "../../src/workspace/fs";
+import {
+  createWorkspaceDir,
+  deleteWorkspacePath,
+  listTree,
+  readWorkspaceFile,
+  renameWorkspacePath,
+  workspaceAbsPath,
+} from "../../src/workspace/fs";
 
 describe("readWorkspaceFile", () => {
   let root: string;
@@ -89,5 +96,80 @@ describe("listTree", () => {
     } finally {
       delete proc.noAsar;
     }
+  });
+});
+
+describe("工作空间写操作", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-ws-write-"));
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it("新建目录会递归创建父级", () => {
+    createWorkspaceDir(root, "a/b/c");
+    assert.equal(fs.statSync(path.join(root, "a/b/c")).isDirectory(), true);
+  });
+
+  it("重复新建同名目录报错，不静默复用", () => {
+    createWorkspaceDir(root, "dup");
+    assert.throws(() => createWorkspaceDir(root, "dup"), /Already exists/);
+  });
+
+  it("新建目录拒绝越界路径", () => {
+    assert.throws(() => createWorkspaceDir(root, "../escape"), /escapes workspace/);
+  });
+
+  it("重命名文件", () => {
+    fs.writeFileSync(path.join(root, "a.txt"), "x");
+    renameWorkspacePath(root, "a.txt", "b.txt");
+    assert.equal(fs.existsSync(path.join(root, "a.txt")), false);
+    assert.equal(fs.readFileSync(path.join(root, "b.txt"), "utf8"), "x");
+  });
+
+  it("重命名目标已存在时拒绝覆盖", () => {
+    fs.writeFileSync(path.join(root, "a.txt"), "x");
+    fs.writeFileSync(path.join(root, "b.txt"), "y");
+    assert.throws(() => renameWorkspacePath(root, "a.txt", "b.txt"), /Already exists/);
+    assert.equal(fs.readFileSync(path.join(root, "b.txt"), "utf8"), "y");
+  });
+
+  it("重命名源不存在时报错", () => {
+    assert.throws(() => renameWorkspacePath(root, "nope.txt", "b.txt"), /Not found/);
+  });
+
+  it("重命名拒绝越界目标", () => {
+    fs.writeFileSync(path.join(root, "a.txt"), "x");
+    assert.throws(() => renameWorkspacePath(root, "a.txt", "../moved.txt"), /escapes workspace/);
+  });
+
+  it("删除目录是递归的", () => {
+    createWorkspaceDir(root, "dir/inner");
+    fs.writeFileSync(path.join(root, "dir/inner/x.txt"), "x");
+    deleteWorkspacePath(root, "dir");
+    assert.equal(fs.existsSync(path.join(root, "dir")), false);
+  });
+
+  it("拒绝删除工作空间根", () => {
+    assert.throws(() => deleteWorkspacePath(root, "."), /workspace root/);
+    assert.throws(() => deleteWorkspacePath(root, ""), /workspace root/);
+  });
+
+  it("删除不存在的路径是幂等的", () => {
+    deleteWorkspacePath(root, "gone.txt");
+    assert.equal(fs.existsSync(path.join(root, "gone.txt")), false);
+  });
+
+  it("workspaceAbsPath 返回绝对路径并拦住越界", () => {
+    assert.equal(workspaceAbsPath(root, "a.txt"), path.join(path.resolve(root), "a.txt"));
+    assert.throws(() => workspaceAbsPath(root, "../x"), /escapes workspace/);
   });
 });

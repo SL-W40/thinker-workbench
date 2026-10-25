@@ -2,7 +2,7 @@
  * SSE 流式读取与非流式消息解析。
  */
 import { isRecord } from "@thinker-workbench/shared";
-import type { ChatCompletionResult, ChatToolCall, ChatUsage } from "../types";
+import type { ChatCompletionResult, ChatToolCall, ChatToolCallDelta, ChatUsage } from "../types";
 import { extractReasoningPiece, parseUsage } from "./messages";
 
 /** 让出一轮事件循环，保证流式过程中 IPC / 取消能被处理。 */
@@ -19,12 +19,14 @@ type StreamToolCallAcc = {
 
 /**
  * 读取 SSE 流：解析 data: 行，累积 content 与 tool_calls，
- * 每个文本片断回调 onToken；tool_call 静默拼装到结束。
+ * 每个文本片断回调 onToken；tool_call 参数片段在拼装的同时回调 onToolCallDelta
+ *（未提供则静默拼装到结束）。
  */
 export async function readChatSse(
   body: ReadableStream<Uint8Array>,
   onToken: ((text: string, channel?: "reply" | "thinking") => void) | undefined,
   signal: AbortSignal,
+  onToolCallDelta?: (delta: ChatToolCallDelta) => void,
 ): Promise<ChatCompletionResult> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -110,8 +112,18 @@ export async function readChatSse(
           const prev = toolAcc.get(index) ?? { id: "", name: "", arguments: "" };
           if (tc.id) prev.id = tc.id;
           if (tc.function?.name) prev.name += tc.function.name;
-          if (typeof tc.function?.arguments === "string") prev.arguments += tc.function.arguments;
+          const argsChunk = typeof tc.function?.arguments === "string" ? tc.function.arguments : "";
+          if (argsChunk) prev.arguments += argsChunk;
           toolAcc.set(index, prev);
+          // 参数增量先给订阅方（名字可能尚未完整，由订阅方按前缀判断）
+          if (onToolCallDelta && (argsChunk || tc.function?.name)) {
+            onToolCallDelta({
+              index,
+              ...(prev.id ? { id: prev.id } : {}),
+              name: prev.name,
+              argsChunk,
+            });
+          }
         }
       }
 

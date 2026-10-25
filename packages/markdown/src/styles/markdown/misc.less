@@ -1,0 +1,47 @@
+// 杂项：图片失败兜底与流式光标。
+// Markdown 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+// Token 约定见 packages/markdown/src/themes/tokens.ts。
+
+.tw-md-img-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px dashed var(--md-border);
+  border-radius: 8px;
+  color: var(--md-fg-muted);
+  font-size: 14px;
+  background: color-mix(in srgb, var(--md-fg) 3%, var(--md-panel));
+}
+
+/* 流式光标：细竖线，贴近文本插入点，避免色块闪烁 */
+.tw-md-caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 0.95em;
+  margin-left: 1px;
+  vertical-align: -0.12em;
+  background: color-mix(in srgb, var(--md-fg) 58%, transparent);
+  border-radius: 1px;
+  animation: tw-md-caret-blink 1.1s ease-in-out infinite;
+}
+
+.tw-md-caret--after-table {
+  display: block;
+  margin: 6px 0 0 2px;
+}
+
+@keyframes tw-md-caret-blink {
+  0%,
+  42% {
+    opacity: 1;
+  }
+  50%,
+  92% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+

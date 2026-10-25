@@ -95,7 +95,7 @@ Desktop (ipcMain) ── SQLite / settings / FS IPC
 | 契约 | `shared` | IPC channel、命令、事件 |
 | 可观测 | 本机自建 | 设置 → 数据开关。控制台内类 LangSmith 的 run 树 / 瀑布 / 入参出参。无需 Docker 或云账号。 |
 
-默认图：`packages/engine/src/graph/` 中 LangGraph `START → agent ⇄ tools → END`。Checkpoint 为 SqliteSaver（`<dataDir>/checkpoints/langgraph.sqlite`）。文件工具作用在 **工作区根目录**，不是 monorepo cwd。UI 优先用 `@thinker-workbench/design/react`；应用内目录页 `#/components`。
+默认图：`packages/engine/src/graph/` 中 LangGraph `START → agent ⇄ tools → END`。Checkpoint 为 SqliteSaver（`<dataDir>/workspaces/<id>/checkpoints/langgraph.sqlite`）。文件工具作用在 **工作区根目录**，不是 monorepo cwd。UI 优先用 `@thinker-workbench/design/react`；应用内目录页 `#/components`。
 
 构建产物在各包 `artifacts/`（已 gitignore）。冷启动缺产物时由 `scripts/dev-prepare.mjs` 准备。
 
@@ -109,25 +109,57 @@ API Key 经 Electron `safeStorage` 加密，钥匙串条目名为 **Thinker Work
 
 默认根目录：**`~/.thinker`**（`general.dataDir`）。权威 `settings.json` 在该根下；自定义 `dataDir` 时仍会在 `~/.thinker/settings.json` 留镜像，以便下次启动找到它。
 
-| 路径 | 内容 |
-|---|---|
-| `settings.json` | 设置（模型密钥、偏好、`dataDir`） |
-| `state/catalog.db` | 工作区元数据 |
-| `state/session.json` | UI / 窗口会话 |
-| `checkpoints/` | Agent 恢复检查点 |
-| `workspaces/<id>/chat.db` | 按工作区的聊天 |
-| `logs/` | SQLite 日志分片 |
-| `skills/`、`mcps/`、`rules/` | 全局 skills / MCP / rules |
-| `workspace/` | 默认磁盘工作区（在引导用的 `~/.thinker` 下） |
+路径只在 `packages/shared/src/dataLayout.ts` 声明一次（desktop 与 engine 共用）：每条记录包含相对路径 + 分类（`config` / `state` / `workspace` / `content` / `cache`）+ 清理策略，迁移清单、清理任务与测试断言都由这张表派生。
 
-更换根目录会把历史 **复制** 到新文件夹（旧根保留），并始终在该处写入 `settings.json`。旧版 Electron `userData/checkpoints` 会在启动时迁到 `<dataDir>/checkpoints`。
+| 路径 | 分类 | 内容 |
+|---|---|---|
+| `settings.json` | config | 设置（模型密钥、偏好、`dataDir`） |
+| `state/catalog.db` | state | 工作区元数据 |
+| `state/session.json` | state | UI / 窗口会话 |
+| `workspaces/<id>/chat.db` | workspace | 按工作区的聊天 |
+| `workspaces/<id>/images/`、`attachments/` | workspace | 聊天附图 / 外部文件附件 |
+| `workspaces/<id>/shell-output/` | workspace | 终端大输出 spill |
+| `workspaces/<id>/checkpoints/` | workspace | Agent 恢复检查点 |
+| `workspaces/<id>/memory.sqlite` | workspace | 会话记忆 |
+| `workspaces/<id>/trace/` | workspace | Trace 索引库 + 会话载荷 jsonl |
+| `workspaces/ws_default/project/` | content | 内置默认工作区根（id 固定） |
+| `customize/{rules,skills,agents,mcps}/` | content | 全局 rules / skills / subagents / MCP |
+| `cache/browser-screenshots/`、`cache/computer/images/` | cache | 可再生截图（按天数 + 总大小清理） |
+
+删除工作区会整目录带走 `workspaces/<id>/`（聊天、附图、附件、检查点、trace、记忆）。默认工作区（`ws_default`）不可删除，只能清空会话。
+
+更换根目录会把历史 **复制** 到新文件夹（旧根保留），并始终在该处写入 `settings.json`。
+
+## 检查点：分支与回退
+
+一个 **检查点（Checkpoint）** = 一轮 agent run 的完整可恢复状态，包含两层：
+
+| 层 | 存储 | 归谁写 | 恢复执行者 |
+|---|---|---|---|
+| 对话态 | `workspaces/<id>/checkpoints/langgraph.sqlite` + `threads.json` | engine（LangGraph SqliteSaver） | engine（resume，可带 `checkpoint_id` 从中间 superstep 续跑） |
+| 文件态（跟踪） | `workspaces/<id>/checkpoints/files/<runId>/` | engine（文件工具写入前捕获前像） | desktop（写回工作区，临时文件 + rename） |
+| 文件态（git 兜底） | git 临时 ref（`git stash create`） | desktop（run 开始时） | desktop（先 git 后前像） |
+
+**轮（turn）** = 一条用户消息 + 其助手回复 = 一个 agent run。时间线按轮聚合（prompt、模型、token、耗时、状态、工具数、文件徽章），每轮可展开 superstep 快照并从中点续跑。
+
+| 操作 | 语义 | 破坏性 |
+|---|---|---|
+| **分叉（Fork）** | 复制前 N 轮到新会话（新 thread），原会话原样保留 | 非破坏 |
+| **撤销（Undo）** | 恢复该轮文件快照 + 回退对话到该轮之前 | 破坏式，需键入「撤销」确认 |
+| **对比（Compare）** | 同源两分支逐轮对齐（文本行级 + 用量差 + 汇总） | 只读 |
+
+覆盖范围（**默认组合，非 git 仓库时 UI 明示**）：文件工具（`write_file` / `edit_file` / `delete_file`）写入前捕获前像；git 仓库额外用全量 ref 兜底 shell / MCP 造成的改动。单文件 > 5MB、`.git/` 内、符号链接一律跳过并在 manifest 记 `skipped`。
+
+保留策略（三者取严，任一超限即从最旧开始清理）：每工作区 30 个 run、14 天、256MB、单文件 5MB。**永不清理**：正在运行的 run、会话待恢复的 run、每个会话最近 1 个 run。对话态快照的删除经 engine 子进程执行（desktop 直删会因 Windows 文件锁静默失败）；文件前像为纯数据文件，由 desktop 直删。
+
+入口：右侧检查器标签条的「+」菜单 → 打开「时间线」标签；面板内每轮行的「⋯」菜单可撤销 / 分叉，表头的「对比分支」按钮做同源对比。保留阈值**尚未接入设置页**，需要时在 DevTools 控制台调 `window.thinker.checkpoints.getRetention()` / `setRetention(...)` / `pruneNow()`。
 
 ## Rules、Skills、输入框
 
 | 类型 | 查找顺序（后者覆盖同名） |
 |---|---|
-| **Rules** | `<dataDir>/rules/` → `<workspace>/.thinker/rules/` |
-| **Skills** | `<dataDir>/skills/` → `<workspace>/.thinker/skills/` |
+| **Rules** | `<dataDir>/customize/rules/` → `<workspace>/.thinker/rules/` |
+| **Skills** | `<dataDir>/customize/skills/` → `<workspace>/.thinker/skills/` |
 
 Rules：`.md` / `.mdc` / `.txt`。Skills：目录 + `SKILL.md`（YAML frontmatter）。
 
@@ -140,7 +172,7 @@ Rules：`.md` / `.mdc` / `.txt`。Skills：目录 + `SKILL.md`（YAML frontmatte
 
 **设置 → MCP**。合并顺序（同 `id` 后者覆盖）：
 
-1. `<dataDir>/mcps/*.json`
+1. `<dataDir>/customize/mcps/*.json`
 2. `<workspace>/.thinker/mcps/*.json`
 3. 可选从 `mcp.json` 导入（`mcpServers` map）
 

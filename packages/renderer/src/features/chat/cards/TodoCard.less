@@ -1,0 +1,105 @@
+/* 待办卡片（时间线内 todo 调用）：读 / 写徽标 + 动作 + 条目数 + 受影响条目 */
+
+.todo-card {
+  --todo-surface: color-mix(in srgb, var(--panel, #fff) 92%, var(--bg, transparent));
+  --todo-line: color-mix(in srgb, var(--line, #e4e0d8) 88%, transparent);
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--todo-line);
+  border-radius: 10px;
+  background: var(--todo-surface);
+}
+
+.todo-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.todo-card__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.todo-card__tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.todo-card__action {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.todo-card__count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.todo-card__status {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.2;
+
+  &.is-err {
+    color: var(--tw-danger, var(--danger, #c0392b));
+  }
+}
+
+/* 快照列表：与输入框上方的待办条同一套行语言，只是定格不动 */
+.todo-card__list {
+  margin-top: 2px;
+}
+
+/* 受影响条目：一行到两行，超出省略 */
+.todo-card__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.todo-card__item {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: color-mix(in srgb, var(--muted) 85%, var(--ink));
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.is-more {
+    background: transparent;
+    color: var(--muted);
+  }
+}

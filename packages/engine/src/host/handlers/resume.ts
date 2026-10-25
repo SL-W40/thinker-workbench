@@ -40,7 +40,7 @@ export async function onResume(ctx: HostContext, message: UtilityResume): Promis
     if (message.workspaceRoot) {
       setWorkspaceRoot(message.workspaceRoot, { name: message.command.workspaceName });
     }
-    const runtime = ctx.ensureRuntime();
+    const runtime = ctx.ensureRuntime(message.checkpointDir);
     const root = message.workspaceRoot?.trim() || "";
     const emit = bindRuntimeEmitter(
       (e) => runtime.events.emit(e),
@@ -56,6 +56,7 @@ export async function onResume(ctx: HostContext, message: UtilityResume): Promis
           workspaceRoot: root,
           workspaceName: message.command.workspaceName,
           dataDir: message.dataDir,
+          workspaceId: message.workspaceId,
           chatMode: message.chatMode,
           workspaceAccess: message.workspaceAccess,
           allowAiDeleteFiles: message.allowAiDeleteFiles,
@@ -68,6 +69,8 @@ export async function onResume(ctx: HostContext, message: UtilityResume): Promis
           catalog: message.catalog,
           selection: message.selection,
           limits,
+          // 续跑同样播种会话待办
+          todos: message.sessionTodos,
           emit,
         })
       : undefined;

@@ -29,6 +29,7 @@ import { handleAgentAttention } from "../notify/agentAttention";
 import { handleHitlAgentEvent, respondHitl } from "../notify/hitlNotify";
 import type { AgentBridge } from "../utility/AgentBridge";
 import { flushPendingMcpReload } from "./mcpHandlers";
+import { normalizeContextPaths } from "./normalize";
 import { broadcastThreadsChanged } from "./workspacesHandlers";
 
 /**
@@ -255,11 +256,7 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
   });
 
   ipcMain.handle(IpcChannels.contextUsage, async (_evt, payload?: ContextUsageRequest) => {
-    const contextPaths = Array.isArray(payload?.contextPaths)
-      ? payload.contextPaths.filter(
-          (p): p is string => typeof p === "string" && p.trim().length > 0,
-        )
-      : undefined;
+    const contextPaths = normalizeContextPaths(payload?.contextPaths);
     let workspaceRoot: string | undefined;
     if (payload?.workspaceRoot?.trim()) {
       try {

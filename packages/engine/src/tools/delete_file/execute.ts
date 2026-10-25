@@ -4,7 +4,9 @@
  * 普通文件在体积允许时把正文放进 ui.restoreContent，供时间线「恢复」。
  */
 import { readFile, rm, stat } from "node:fs/promises";
+import { captureBeforeImage } from "../../checkpoint/fileSnapshot";
 import { getAllowAiDeleteFiles } from "../../workspace";
+import { withPathLock } from "../shared/pathLock";
 import { resolveWorkspacePath, toWorkspaceRelative } from "../shared/paths";
 import { throwIfAborted } from "../shared/walk";
 import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
@@ -23,6 +25,7 @@ function asBool(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
+/** 参数入口：删除也是一种写操作，同样走路径锁。 */
 export async function deleteFileTool(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
   throwIfAborted(ctx.signal, "Delete file");
   if (!getAllowAiDeleteFiles()) {
@@ -35,6 +38,16 @@ export async function deleteFileTool(args: ToolArgs, ctx: ToolContext): Promise<
   if (!rel) {
     throw new Error("delete_file requires parameters.path (workspace-relative).");
   }
+  return withPathLock(ctx.workspaceRoot, rel, () => deleteFileInner(args, ctx));
+}
+
+/** 真正的删除实现（拿到路径锁之后才执行）。 */
+async function deleteFileInner(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
+  throwIfAborted(ctx.signal, "Delete file");
+  const rel = asString(args.path)?.trim();
+  if (!rel) {
+    throw new Error("delete_file requires parameters.path (workspace-relative).");
+  }
 
   const recursive = asBool(args.recursive, false);
   const target = resolveWorkspacePath(ctx.workspaceRoot, rel, { access: "write" });
@@ -43,6 +56,9 @@ export async function deleteFileTool(args: ToolArgs, ctx: ToolContext): Promise<
   if (target === ctx.workspaceRoot) {
     throw new Error("delete_file cannot remove the workspace root.");
   }
+
+  // 删除前留下 before-image（幂等；失败不影响删除本身）
+  await captureBeforeImage(ctx.workspaceRoot, pathLabel);
 
   let info: Awaited<ReturnType<typeof stat>>;
   try {
@@ -84,6 +100,7 @@ export async function deleteFileTool(args: ToolArgs, ctx: ToolContext): Promise<
     ui: {
       path: pathLabel,
       ...(restoreContent !== undefined ? { restoreContent } : {}),
+      resultPathKinds: [kind === "directory" ? "dir" : "file"],
     },
   };
 }

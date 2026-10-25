@@ -9,6 +9,8 @@ export type AskUserQuestion = {
   id: string;
   prompt: string;
   options: AskUserOption[];
+  /** 是否必答；false 时用户可以跳过（UI 提供「跳过」）。 */
+  required: boolean;
 };
 
 export type AskUserAnswer = {
@@ -49,7 +51,9 @@ function parseQuestion(value: unknown, index: number): AskUserQuestion {
       throw new Error(`questions[${index}] has duplicate option id "${opt.id}".`);
     ids.add(opt.id);
   }
-  return { id, prompt, options };
+  // 缺省必答：模型不写 required 时按必答处理
+  const required = row?.required !== false;
+  return { id, prompt, options, required };
 }
 
 /** 从工具参数取出 1–4 道题。questions 可以是数组，或 JSON 数组字符串。 */
@@ -97,13 +101,14 @@ function answerRows(value: unknown): AskUserAnswer[] {
   return out;
 }
 
-/** 从 HITL values.answers 读答复。每题必须有选项或非空自定义回复。 */
+/** 从 HITL values.answers 读答复。必答题必须有选项或非空自定义回复；选答题可缺。 */
 export function parseAskUserAnswers(
   questions: AskUserQuestion[],
   values: Record<string, unknown> | undefined,
 ): AskUserAnswer[] {
   const byId = new Map(answerRows(values?.answers).map((row) => [row.id, row]));
-  return questions.map((q) => {
+  const out: AskUserAnswer[] = [];
+  for (const q of questions) {
     const row = byId.get(q.id);
     const option = row?.optionId ? q.options.find((opt) => opt.id === row.optionId) : undefined;
     const text = row?.text?.trim() ?? "";
@@ -111,14 +116,17 @@ export function parseAskUserAnswers(
       throw new Error(`Question "${q.id}" has unknown option "${row.optionId}".`);
     }
     if (!option && !text) {
+      // 选答题没答就跳过，不写进结果；必答题才算错误
+      if (!q.required) continue;
       throw new Error(`Question "${q.id}" needs a selected option or a custom reply.`);
     }
-    return {
+    out.push({
       id: q.id,
       ...(option ? { optionId: option.id } : {}),
       ...(text ? { text } : {}),
-    };
-  });
+    });
+  }
+  return out;
 }
 
 /** 给模型的答复正文。自定义回复非空时写在 answer 行，选项另起一行。 */
@@ -141,7 +149,8 @@ export function formatAskUserResult(
       } else if (option) {
         lines.push(`answer: ${option.label}`);
       } else {
-        lines.push("answer: (none)");
+        // 选答题被跳过：明确告知模型，避免它自己脑补
+        lines.push("answer: (skipped)");
       }
       return lines.join("\n");
     })

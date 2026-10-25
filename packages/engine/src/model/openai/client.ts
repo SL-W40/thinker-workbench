@@ -20,6 +20,7 @@ import type {
   ChatModel,
   ChatRequest,
   ChatToolCall,
+  ChatToolCallDelta,
   OpenAIModelOptions,
 } from "../types";
 import {
@@ -46,7 +47,9 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
     async chat(request: ChatRequest, signal: AbortSignal): Promise<ChatCompletionResult> {
       const system = request.system ?? buildSystemPrompt(getAiLocale(), getAllowEmoji());
       const onToken = request.onToken;
-      const streaming = typeof onToken === "function";
+      const onToolCallDelta = request.onToolCallDelta;
+      // 只订阅参数增量也要走流式请求
+      const streaming = typeof onToken === "function" || typeof onToolCallDelta === "function";
       const body: Record<string, unknown> = {
         model,
         stream: streaming,
@@ -80,6 +83,13 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
                 onToken(text, channel);
               }
             : undefined;
+        // 参数增量一旦落地也算「已吐内容」：重试会造成半截 JSON 与重复卡片
+        const trackToolDelta = onToolCallDelta
+          ? (delta: ChatToolCallDelta) => {
+              if (delta.argsChunk) emittedTokens = true;
+              onToolCallDelta(delta);
+            }
+          : undefined;
 
         try {
           let res: Response;
@@ -139,6 +149,15 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
                 trackToken?.(result.content, "reply");
                 await yieldEventLoop();
               }
+              // 网关忽略流式：整段参数一次性下发，保持与流式一致的订阅语义
+              for (const [index, call] of result.toolCalls.entries()) {
+                trackToolDelta?.({
+                  index,
+                  id: call.id,
+                  name: call.function.name,
+                  argsChunk: call.function.arguments,
+                });
+              }
               if (!result.content.trim() && result.toolCalls.length === 0) {
                 throw new Error("OpenAI response missing content and tool calls.");
               }
@@ -150,7 +169,7 @@ export function createOpenAIModel(options: OpenAIModelOptions): ChatModel {
             }
             if (!res.body) throw new Error("OpenAI stream missing body.");
             try {
-              const result = await readChatSse(res.body, trackToken, signal);
+              const result = await readChatSse(res.body, trackToken, signal, trackToolDelta);
               if (!result.content.trim() && result.toolCalls.length === 0) {
                 throw new Error("OpenAI stream produced empty content and no tool calls.");
               }

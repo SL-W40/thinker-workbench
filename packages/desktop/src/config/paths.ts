@@ -6,6 +6,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { DEFAULT_WORKSPACE_ID, dataPath } from "@thinker-workbench/shared";
 import { app } from "electron";
 import {
   type AppPaths,
@@ -15,11 +16,7 @@ import {
   readAppLayoutFile,
 } from "../packaging/appLayout";
 import { getGeneralSettings } from "./settingsStore";
-import {
-  bootstrapThinkerDir,
-  resolveDataDir,
-  resolveLogDir as resolveLogDirUnderData,
-} from "./thinkerHome";
+import { resolveDataDir } from "./thinkerHome";
 
 /** 缓存：同进程内 layout 不变。 */
 let cachedPaths: AppPaths | null = null;
@@ -66,44 +63,69 @@ export function getAgentEntryPath(): string {
   return resolveAppPaths().engineEntry;
 }
 
-/** 用户数据下的 checkpoint 目录。 */
-export function getCheckpointDir(): string {
-  return path.join(app.getPath("userData"), "checkpoints");
-}
-
 /** 当前数据根（可读配置；默认 `~/.thinker`）。 */
 export function getDataDir(): string {
   return resolveDataDir(getGeneralSettings().dataDir);
 }
 
-/** 日志目录（固定 `<dataDir>/logs`，SQLite 按条数分片）。 */
-export function getLogDir(): string {
-  return resolveLogDirUnderData(getDataDir());
+/** 工作空间数据根：`<dataDir>/workspaces`。 */
+export function getWorkspacesRoot(): string {
+  return dataPath(getDataDir(), "workspacesRoot");
 }
 
 /** 工作空间数据目录：`<dataDir>/workspaces/<id>`。 */
 export function getWorkspaceDataDir(workspaceId: string): string {
-  return path.join(getDataDir(), "workspaces", workspaceId);
+  return dataPath(getDataDir(), "wsData", { workspaceId });
 }
 
 /** 工作空间聊天库路径。 */
 export function getWorkspaceChatDbPath(workspaceId: string): string {
-  return path.join(getWorkspaceDataDir(workspaceId), "chat.db");
+  return dataPath(getDataDir(), "wsChatDb", { workspaceId });
 }
 
 /** 工作空间用户附图目录：`<dataDir>/workspaces/<id>/images`。 */
 export function getWorkspaceImagesDir(workspaceId: string): string {
-  return path.join(getWorkspaceDataDir(workspaceId), "images");
+  return dataPath(getDataDir(), "wsImages", { workspaceId });
+}
+
+/** 工作空间文件附件目录：`<dataDir>/workspaces/<id>/attachments`。 */
+export function getWorkspaceAttachmentsDir(workspaceId: string): string {
+  return dataPath(getDataDir(), "wsAttachments", { workspaceId });
+}
+
+/** 工作空间运行检查点目录：`<dataDir>/workspaces/<id>/checkpoints`。 */
+export function getWorkspaceCheckpointDir(workspaceId: string): string {
+  return dataPath(getDataDir(), "wsCheckpoints", { workspaceId });
+}
+
+/** 工作空间 Trace 根目录：`<dataDir>/workspaces/<id>/trace`。 */
+export function getWorkspaceTraceDir(workspaceId: string): string {
+  return dataPath(getDataDir(), "wsTrace", { workspaceId });
+}
+
+/** 工作空间 Trace 索引库。 */
+export function getWorkspaceTraceDbPath(workspaceId: string): string {
+  return dataPath(getDataDir(), "wsTraceDb", { workspaceId });
+}
+
+/** 工作空间 Trace 载荷目录（sessions jsonl）。 */
+export function getWorkspaceTraceSessionsDir(workspaceId: string): string {
+  return dataPath(getDataDir(), "wsTraceSessions", { workspaceId });
+}
+
+/** 工作空间会话记忆库。 */
+export function getWorkspaceMemoryDbPath(workspaceId: string): string {
+  return dataPath(getDataDir(), "wsMemory", { workspaceId });
 }
 
 /** 全局目录库（工作空间元数据 + app_kv）。 */
 export function getCatalogDbPath(): string {
-  return path.join(getDataDir(), "catalog.db");
+  return dataPath(getDataDir(), "catalogDb");
 }
 
-/** 会话 Trace 根目录（trace.db + sessions jsonl）。 */
-export function getTraceDir(): string {
-  return path.join(getDataDir(), "trace");
+/** 窗口会话文件：`<dataDir>/state/session.json`。 */
+export function getSessionFilePath(): string {
+  return dataPath(getDataDir(), "sessionFile");
 }
 
 /** 打包内置 skills 资源目录；不存在时返回 null。 */
@@ -133,11 +155,34 @@ export function getBundledCustomizeDir(kind: "rules" | "agents" | "mcps"): strin
 }
 
 /**
- * 首次空目录时默认工作空间根：`~/.thinker/workspace`（固定在引导根下）。
- * 可删除；删光后不会自动再创建，除非换到空的 dataDir。
+ * 内置默认工作空间的磁盘根：`<dataDir>/workspaces/ws_default/project`。
+ * id 固定，随 dataDir 走；不可删除，只能清空会话。
  */
 export function getDefaultWorkspaceRoot(): string {
-  return path.join(bootstrapThinkerDir(), "workspace");
+  return dataPath(getDataDir(), "wsProject", { workspaceId: DEFAULT_WORKSPACE_ID });
+}
+
+/**
+ * 全局 Customize 目录：`<dataDir>/customize/<kind>`。
+ * 工作区级 Customize 仍在 `<工作区根>/.thinker/<kind>`。
+ */
+const CUSTOMIZE_KEYS = {
+  rules: "customRules",
+  skills: "customSkills",
+  agents: "customAgents",
+  mcps: "customMcps",
+} as const;
+
+export function getCustomizeDir(kind: "rules" | "skills" | "agents" | "mcps"): string {
+  return dataPath(getDataDir(), CUSTOMIZE_KEYS[kind]);
+}
+
+/** 缓存目录：`<dataDir>/cache/<name>`（可再生，按保留策略清理）。 */
+export function getCacheDir(name: "browser-screenshots" | "computer-images"): string {
+  return dataPath(
+    getDataDir(),
+    name === "browser-screenshots" ? "cacheBrowserScreenshots" : "cacheComputerImages",
+  );
 }
 
 /** 应用渲染入口 `index.html`（打包态为 payload 内文件；开发窗口通常走 Vite URL）。 */

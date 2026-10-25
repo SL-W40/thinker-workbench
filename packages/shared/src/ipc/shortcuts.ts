@@ -15,7 +15,8 @@ export type ShortcutId =
   | "openConsole"
   | "goChat"
   | "navBack"
-  | "navForward";
+  | "navForward"
+  | "palette";
 
 /** 设置页分组（列表分区标题用）。 */
 export type ShortcutGroup = "window" | "chat" | "panels" | "navigation";
@@ -100,6 +101,12 @@ export const SHORTCUT_CATALOG: ShortcutInfo[] = [
     title: "Forward",
     description: "Go forward in the in-app page stack.",
   },
+  {
+    id: "palette",
+    group: "navigation",
+    title: "Command palette",
+    description: "Jump to any chat, file, setting, or command.",
+  },
 ];
 
 /**
@@ -120,6 +127,7 @@ export function getDefaultShortcuts(platform: string = processPlatform()): Short
     toggleRightPanel: mac ? "Mod+Alt+B" : "Mod+Shift+B",
     navBack: mac ? "Mod+[" : "Alt+ArrowLeft",
     navForward: mac ? "Mod+]" : "Alt+ArrowRight",
+    palette: "Mod+K",
   };
 }
 

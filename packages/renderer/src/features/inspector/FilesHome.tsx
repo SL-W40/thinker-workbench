@@ -3,7 +3,8 @@
  */
 import { Button, Input } from "@thinker-workbench/design/react";
 import { useMemo, useState } from "react";
-import { useT } from "../../i18n/useI18n";
+import { useT } from "../../ui/i18n/useI18n";
+import { FileGlyph } from "../../ui/icons";
 
 type Props = {
   recents: string[];
@@ -22,19 +23,6 @@ function dirName(path: string) {
   const norm = path.replace(/\\/g, "/");
   const i = norm.lastIndexOf("/");
   return i > 0 ? norm.slice(0, i).replace(/\//g, "\\") : "";
-}
-
-function fileBadge(path: string): { label: string; color: string } {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "js" || ext === "cjs" || ext === "mjs") return { label: "JS", color: "#c6a132" };
-  if (ext === "ts") return { label: "TS", color: "#3178c6" };
-  if (ext === "tsx") return { label: "TSX", color: "#3178c6" };
-  if (ext === "jsx") return { label: "JSX", color: "#c6a132" };
-  if (ext === "css") return { label: "CSS", color: "#563d7c" };
-  if (ext === "json") return { label: "{ }", color: "#8b8b4a" };
-  if (ext === "md") return { label: "MD", color: "#6a737d" };
-  if (ext === "gitignore") return { label: "GIT", color: "#f05033" };
-  return { label: (ext || "FILE").slice(0, 4).toUpperCase(), color: "#888" };
 }
 
 function fuzzyMatch(query: string, target: string): boolean {
@@ -149,13 +137,12 @@ export function FilesHome({ recents, fileCandidates = [], onOpenFile, onNewFile 
       ) : (
         <ul className="files-home__list">
           {rows.map((path) => {
-            const badge = fileBadge(path);
             const folder = dirName(path);
             return (
               <li key={path}>
                 <button type="button" className="files-home__row" onClick={() => onOpenFile(path)}>
-                  <span className="files-home__badge" style={{ color: badge.color }} aria-hidden>
-                    {badge.label}
+                  <span className="files-home__badge" aria-hidden>
+                    <FileGlyph name={path} />
                   </span>
                   <span className="files-home__name">{baseName(path)}</span>
                   {folder ? <span className="files-home__path">{folder}</span> : null}

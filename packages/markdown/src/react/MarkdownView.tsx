@@ -1,34 +1,34 @@
 /**
- * Markdown React 渲染入口：解析 AST 并输出 `.tw-md` 文章树。
+ * Markdown 渲染根组件：一层 STABLE 的文档外壳（主题 / 链接点击上下文 / 脚注 registry）+ 块序列渲染。
+ *
+ * 原 530 行里的大部分已按渲染职责外移：`InlineView`（行内序列与图片）、
+ * `PendingBlocks`（流式软预览）、`MarkdownCaret`（光标判定与本体）；
+ * 本文件留下需要互相递归的 `Blocks` ↔ `BlockView`，以及根组件本身。
  */
-// biome-ignore-all lint/suspicious/noArrayIndexKey: 渲染不可变的 Markdown AST，节点没有稳定 id 且永远不会重排，index 即稳定 key
-import {
-  type CSSProperties,
-  createContext,
-  type MouseEvent,
-  type ReactNode,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useMemo, useState } from "react";
+import { parseFrontmatter } from "../frontmatter";
 import { parseMarkdownDocument } from "../parse/blocks";
-import { sanitizeImageSrc, sanitizeUrl } from "../parse/url";
 import { parseMarkdownStreaming } from "../stream";
 import { resolveTheme } from "../themes";
 import type { MarkdownThemeInput } from "../themes/types";
 import type { AlertKind, BlockNode, FootnoteDef, InlineNode, ListItem } from "../types";
 import { CodeBlock } from "./CodeBlock";
+import { createFnRegistry, FootnoteRefContext, InlineView } from "./InlineView";
 import {
   MarkdownLinkClickContext,
   type MarkdownLinkClickHandler,
   useMarkdownLinkClick,
 } from "./LinkClickContext";
+import { Caret, ownsLiveCaret } from "./MarkdownCaret";
 import { MathView } from "./MathView";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { PendingBlock } from "./PendingBlocks";
 import { StreamChrome } from "./StreamChrome";
 import { TableBlock } from "./TableBlock";
 import { MarkdownThemeProvider } from "./ThemeContext";
 
+// biome-ignore-all lint/suspicious/noArrayIndexKey: AST 渲染以位置作 key
 export type MarkdownViewProps = {
   /** Markdown 源文本。 */
   markdown: string;
@@ -46,6 +46,11 @@ export type MarkdownViewProps = {
    * 未提供时保持默认导航。
    */
   onLinkClick?: MarkdownLinkClickHandler;
+  /**
+   * 渲染在文章最底部的附加区块（如文档元数据 / 待办列表）。
+   * 本包不解释其语义，由业务层组装后传入，避免把领域概念耦合进渲染器。
+   */
+  footer?: ReactNode;
 };
 
 const ALERT_LABEL: Record<AlertKind, string> = {
@@ -55,164 +60,6 @@ const ALERT_LABEL: Record<AlertKind, string> = {
   warning: "Warning",
   caution: "Caution",
 };
-
-type FnRegistry = { next: (id: string) => string };
-
-const FootnoteRefContext = createContext<FnRegistry | null>(null);
-
-function createFnRegistry(): FnRegistry {
-  const counts = new Map<string, number>();
-  return {
-    next(id: string) {
-      const n = counts.get(id) ?? 0;
-      counts.set(id, n + 1);
-      const enc = encodeURIComponent(id);
-      return n === 0 ? `fnref-${enc}` : `fnref-${enc}-${n}`;
-    },
-  };
-}
-
-function ownsLiveCaret(node: BlockNode): boolean {
-  if (node.type === "pending") return true;
-  if (
-    (node.type === "code" ||
-      node.type === "diagram" ||
-      node.type === "math" ||
-      node.type === "table") &&
-    node.incomplete
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function Caret() {
-  return <span className="tw-md-caret" aria-hidden="true" />;
-}
-
-function useLinkClickHandler() {
-  const onLinkClick = useMarkdownLinkClick();
-  return (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!onLinkClick) return;
-    const handled = onLinkClick(href);
-    if (handled) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-  };
-}
-
-function InlineView({ nodes }: { nodes: InlineNode[] }): ReactNode {
-  const onAnchorClick = useLinkClickHandler();
-  const fnRefs = useContext(FootnoteRefContext);
-  return nodes.map((node, index) => {
-    switch (node.type) {
-      case "text":
-        return <span key={index}>{node.value}</span>;
-      case "code":
-        return <code key={index}>{node.value}</code>;
-      case "kbd":
-        return <kbd key={index}>{node.value}</kbd>;
-      case "strong":
-        return (
-          <strong key={index}>
-            <InlineView nodes={node.children} />
-          </strong>
-        );
-      case "emphasis":
-        return (
-          <em key={index}>
-            <InlineView nodes={node.children} />
-          </em>
-        );
-      case "strike":
-        return (
-          <del key={index}>
-            <InlineView nodes={node.children} />
-          </del>
-        );
-      case "mark":
-        return (
-          <mark key={index}>
-            <InlineView nodes={node.children} />
-          </mark>
-        );
-      case "sub":
-        return (
-          <sub key={index}>
-            <InlineView nodes={node.children} />
-          </sub>
-        );
-      case "sup":
-        return (
-          <sup key={index}>
-            <InlineView nodes={node.children} />
-          </sup>
-        );
-      case "underline":
-        return (
-          <u key={index}>
-            <InlineView nodes={node.children} />
-          </u>
-        );
-      case "link": {
-        const href = sanitizeUrl(node.href);
-        if (!href) {
-          return (
-            <span key={index}>
-              <InlineView nodes={node.children} />
-            </span>
-          );
-        }
-        return (
-          <a key={index} href={href} title={node.title} onClick={onAnchorClick(href)}>
-            <InlineView nodes={node.children} />
-          </a>
-        );
-      }
-      case "autolink": {
-        const href = sanitizeUrl(node.href);
-        if (!href) return <span key={index}>{node.text}</span>;
-        return (
-          <a key={index} href={href} onClick={onAnchorClick(href)}>
-            {node.text}
-          </a>
-        );
-      }
-      case "image":
-        return <MdImage key={index} src={node.src} alt={node.alt} title={node.title} />;
-      case "footnoteRef": {
-        const refId = fnRefs?.next(node.id) ?? `fnref-${encodeURIComponent(node.id)}`;
-        return (
-          <sup key={index} className="tw-md-fn-ref">
-            <a href={`#fn-${encodeURIComponent(node.id)}`} id={refId}>
-              {node.id}
-            </a>
-          </sup>
-        );
-      }
-      case "math":
-        return <MathView key={index} value={node.value} />;
-      case "break":
-        return <br key={index} />;
-      default:
-        return null;
-    }
-  });
-}
-
-function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
-  const [failed, setFailed] = useState(false);
-  const safeSrc = sanitizeImageSrc(src);
-  if (failed || !safeSrc) {
-    return (
-      <span className="tw-md-img-fallback" role="img" aria-label={alt || "image"}>
-        {alt || "image"}
-      </span>
-    );
-  }
-  return <img src={safeSrc} alt={alt} title={title} onError={() => setFailed(true)} />;
-}
 
 function Blocks({
   nodes,
@@ -255,67 +102,6 @@ function ListItemView({ item, caret = false }: { item: ListItem; caret?: boolean
       {body}
       {tail}
     </li>
-  );
-}
-
-/** 尚未凑齐分隔行的管道表：按行软预览成表格（无导出，仅流式预览）。 */
-function PendingTable({ value }: { value: string }) {
-  const rows = value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("|"))
-    .map((line) =>
-      line
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map((c) => c.trim()),
-    );
-  if (rows.length === 0) {
-    return (
-      <p className="tw-md-pending-line">
-        <span>{value || " "}</span>
-        <span className="tw-md-caret" aria-hidden="true" />
-      </p>
-    );
-  }
-  const colCount = Math.max(...rows.map((r) => r.length), 1);
-  const zh =
-    typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("zh");
-  return (
-    <StreamChrome kind="table" label={zh ? "表格" : "Table"} status="streaming">
-      <div className="tw-md-table-wrap tw-md-table-wrap--streaming">
-        <table className="tw-md-table--streaming">
-          <tbody>
-            {rows.map((row, rIndex) => {
-              const last = rIndex === rows.length - 1;
-              return (
-                <tr key={rIndex} className={last ? "tw-md-table-row--live" : undefined}>
-                  {Array.from({ length: colCount }, (_, cIndex) => (
-                    <td key={cIndex}>
-                      {row[cIndex] ?? ""}
-                      {last && cIndex === colCount - 1 ? (
-                        <span className="tw-md-caret" aria-hidden="true" />
-                      ) : null}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </StreamChrome>
-  );
-}
-
-function PendingBlock({ kind, value }: { kind: string; value: string }) {
-  if (kind === "table") return <PendingTable value={value} />;
-  return (
-    <p className="tw-md-pending-line">
-      <span className="tw-md-pending-text">{value || " "}</span>
-      <span className="tw-md-caret" aria-hidden="true" />
-    </p>
   );
 }
 
@@ -476,14 +262,17 @@ export function MarkdownView({
   className,
   streaming = false,
   onLinkClick,
+  footer,
 }: MarkdownViewProps) {
   const resolved = resolveTheme(theme);
   const doc = useMemo(() => {
+    // 前置元数据（frontmatter）是文档元数据，不参与正文渲染
+    const source = parseFrontmatter(markdown).body;
     if (streaming) {
-      const r = parseMarkdownStreaming(markdown);
+      const r = parseMarkdownStreaming(source);
       return { blocks: r.blocks, footnotes: r.footnotes };
     }
-    return parseMarkdownDocument(markdown);
+    return parseMarkdownDocument(source);
   }, [markdown, streaming]);
   const style = resolved.vars as CSSProperties;
 
@@ -513,6 +302,7 @@ export function MarkdownView({
             )}
             <Footnotes footnotes={doc.footnotes} />
           </FootnoteRefContext.Provider>
+          {footer ? <footer className="tw-md-footer">{footer}</footer> : null}
         </article>
       </MarkdownLinkClickContext.Provider>
     </MarkdownThemeProvider>

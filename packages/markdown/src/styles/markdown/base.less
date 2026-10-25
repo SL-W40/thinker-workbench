@@ -1,0 +1,309 @@
+// 基础排版：标题层级、段落、列表、引用、行内共识色。
+// Markdown 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+// Token 约定见 packages/markdown/src/themes/tokens.ts。
+
+// 样式只消费 CSS 自定义属性——经 MarkdownTheme.vars / 宿主 CSS 注入。
+.tw-md {
+  color: var(--md-fg);
+  background: var(--md-bg);
+  font-family: var(--md-font);
+  line-height: 1.65;
+  width: 100%;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--md-font);
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--md-fg);
+    scroll-margin-top: 88px;
+  }
+
+  h1 {
+    font-size: 30px;
+    margin: 0 0 16px;
+  }
+
+  h2 {
+    font-size: 22px;
+    margin: 32px 0 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--md-border);
+  }
+
+  h3 {
+    font-size: 18px;
+    margin: 22px 0 8px;
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-size: 16px;
+    margin: 19px 0 6px;
+  }
+
+  p,
+  li {
+    color: var(--md-fg);
+  }
+
+  /* 有序 / 无序列表：关掉系统 marker，用 accent 自定义记号 */
+  ul,
+  ol {
+    list-style: none;
+    margin: 11px 0;
+    padding: 0;
+  }
+
+  li {
+    position: relative;
+    margin: 4px 0;
+    padding-left: 22px;
+  }
+
+  li > ul,
+  li > ol {
+    margin: 4px 0 3px;
+  }
+
+  li > p {
+    margin: 4px 0;
+  }
+
+  li > p:first-child {
+    margin-top: 0;
+  }
+
+  li > p:last-child {
+    margin-bottom: 0;
+  }
+
+  ul:not(.tw-md-task) > li::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 0.72em;
+    width: 0.4em;
+    height: 0.4em;
+    border-radius: 2px;
+    background: var(--md-accent);
+    opacity: 0.88;
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  ul:not(.tw-md-task) ul > li::before {
+    width: 0.32em;
+    height: 0.32em;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--md-accent);
+    opacity: 0.78;
+    transform: translateY(-50%);
+  }
+
+  ol {
+    counter-reset: tw-md-ol;
+  }
+
+  ol > li {
+    counter-increment: tw-md-ol;
+    padding-left: 28px;
+    position: relative;
+  }
+
+  ol > li::before {
+    content: counter(tw-md-ol);
+    position: absolute;
+    left: 0;
+    top: 1.35em;
+    transform: translateY(-50%);
+    box-sizing: border-box;
+    min-width: 1.35em;
+    height: 1.35em;
+    padding: 0 0.24em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--md-font-mono);
+    font-size: 0.68em;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    color: var(--md-accent);
+    /* 实底 + 不透明描边，避免混入低 alpha 的 --md-border 后边框发虚/消失 */
+    background: color-mix(in srgb, var(--md-panel) 92%, var(--md-accent));
+    border: 1.5px solid color-mix(in srgb, var(--md-accent) 58%, transparent);
+    border-radius: 6px;
+  }
+
+  a {
+    color: var(--md-accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+    text-decoration-color: color-mix(in srgb, var(--md-accent) 55%, transparent);
+
+    &:hover {
+      color: color-mix(in srgb, var(--md-accent) 82%, var(--md-fg));
+      text-decoration-color: var(--md-accent);
+    }
+  }
+
+  mark {
+    background: color-mix(in srgb, var(--md-accent) 22%, transparent);
+    color: inherit;
+    padding: 0.05em 0.28em;
+    border-radius: 4px;
+  }
+
+  u {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.16em;
+  }
+
+  sub,
+  sup {
+    font-size: 0.75em;
+    line-height: 0;
+  }
+
+  kbd {
+    font-family: var(--md-font-mono);
+    font-size: 0.85em;
+    padding: 0.12em 0.4em;
+    border: 1px solid var(--md-border);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--md-fg) 4%, var(--md-panel));
+    box-shadow: 0 1px 0 var(--md-shadow-soft);
+  }
+
+  blockquote {
+    margin: 16px 0;
+    padding: 12px 16px;
+    border-left: 3px solid var(--md-accent);
+    background: var(--md-blockquote-bg);
+    color: var(--md-fg-muted);
+  }
+
+  blockquote.tw-md-alert--note {
+    border-left-color: var(--md-accent);
+  }
+
+  blockquote.tw-md-alert--tip {
+    border-left-color: color-mix(in srgb, var(--md-accent) 45%, #2f9e6b);
+  }
+
+  blockquote.tw-md-alert--important {
+    border-left-color: color-mix(in srgb, var(--md-accent) 35%, #7c5cbf);
+  }
+
+  blockquote.tw-md-alert--warning {
+    border-left-color: color-mix(in srgb, var(--md-danger) 40%, #d4a017);
+  }
+
+  blockquote.tw-md-alert--caution {
+    border-left-color: var(--md-danger);
+  }
+
+  .tw-md-alert-title {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--md-fg);
+  }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--md-border);
+    margin: 24px 0;
+  }
+
+  :not(pre) > code {
+    background: var(--md-code-bg);
+    color: var(--md-code-fg);
+    padding: 0.12em 0.35em;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-family: var(--md-font-mono);
+  }
+
+  /* max-content：列按内容撑开；min-width:100%：窄表仍铺满容器 */
+  table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+    background: var(--md-panel);
+  }
+
+  th,
+  td {
+    border: 1px solid var(--md-border);
+    padding: 9px 11px;
+    vertical-align: top;
+    /* 避免被压成极窄列；超长内容由外层横向滚动承接 */
+    white-space: nowrap;
+  }
+
+  th {
+    background: var(--md-table-head);
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+  }
+}
+
+.tw-md--streaming > :last-child {
+  animation: tw-md-arrive 0.35s ease-out;
+}
+
+@keyframes tw-md-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--md-stream-glow);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes tw-md-arrive {
+  from {
+    opacity: 0.35;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-md-stream--live,
+  .tw-md-stream-pulse,
+  .tw-md-caret,
+  .tw-md--streaming > :last-child,
+  .tw-md-mermaid-layer,
+  .tw-md-mermaid-layer--out,
+  .tw-md-mermaid-skeleton {
+    animation: none;
+  }
+
+  /* 换帧直接替换，高度与尺寸也不做过渡 */
+  .tw-md-mermaid-viewport,
+  .tw-md-stream--live .tw-md-mermaid-canvas svg {
+    transition: none;
+  }
+}
+

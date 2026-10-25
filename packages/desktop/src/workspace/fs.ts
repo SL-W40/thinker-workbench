@@ -205,6 +205,59 @@ function readWorkspaceFileInner(root: string, relPath: string): WorkspaceFile {
   };
 }
 
+/** 相对路径规范化：去 BOM 无关，只为统一分隔符与前导 ./。 */
+function normalizeRel(relPath: string): string {
+  return (relPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+/** 新建目录；父目录不存在时递归创建，已存在则报错（不静默复用）。 */
+export function createWorkspaceDir(root: string, relPath: string): void {
+  withoutAsar(() => {
+    const rel = normalizeRel(relPath);
+    if (!rel || rel === ".") throw new Error("Invalid directory path.");
+    const abs = assertInside(root, path.join(root, rel));
+    if (fs.existsSync(abs)) throw new Error(`Already exists: ${rel}`);
+    fs.mkdirSync(abs, { recursive: true });
+  });
+}
+
+/** 重命名或同工作空间内移动；目标已存在则拒绝，避免覆盖用户文件。 */
+export function renameWorkspacePath(root: string, fromRel: string, toRel: string): void {
+  withoutAsar(() => {
+    const from = normalizeRel(fromRel);
+    const to = normalizeRel(toRel);
+    if (!from || !to || from === "." || to === ".") throw new Error("Invalid path.");
+    if (from === to) return;
+    const absFrom = assertInside(root, path.join(root, from));
+    const absTo = assertInside(root, path.join(root, to));
+    if (!fs.existsSync(absFrom)) throw new Error(`Not found: ${from}`);
+    if (fs.existsSync(absTo)) throw new Error(`Already exists: ${to}`);
+    fs.mkdirSync(path.dirname(absTo), { recursive: true });
+    fs.renameSync(absFrom, absTo);
+  });
+}
+
+/**
+ * 直接删除文件或目录（递归）。
+ * IPC 层会优先尝试系统回收站，只有在回收站不可用时才回落到这里的硬删除。
+ */
+export function deleteWorkspacePath(root: string, relPath: string): void {
+  withoutAsar(() => {
+    const rel = normalizeRel(relPath);
+    if (!rel || rel === ".") throw new Error("Refusing to delete workspace root.");
+    const abs = assertInside(root, path.join(root, rel));
+    if (!fs.existsSync(abs)) return;
+    fs.rmSync(abs, { recursive: true, force: true });
+  });
+}
+
+/** 工作空间内的绝对路径（供 IPC 层传给系统 shell 使用）；越界即抛错。 */
+export function workspaceAbsPath(root: string, relPath: string): string {
+  const rel = normalizeRel(relPath);
+  if (!rel || rel === ".") return path.resolve(root);
+  return assertInside(root, path.join(root, rel));
+}
+
 /** 写入工作空间内文本文件（父目录不存在则创建）；始终 UTF-8，无 BOM。 */
 export function writeWorkspaceFile(root: string, relPath: string, content: string): void {
   withoutAsar(() => writeWorkspaceFileInner(root, relPath, content));

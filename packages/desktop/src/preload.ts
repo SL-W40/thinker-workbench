@@ -11,10 +11,11 @@ import {
   type AgentRunCommand,
   type AttentionPreviewKind,
   type AuxPageId,
-  type BrowserBounds,
   type BrowserEvent,
+  type BrowserViewport,
   type ChatMessage,
   type ChatMode,
+  type ChatTodo,
   type ContextUsageRequest,
   type CustomizeScope,
   type DataDirChangeRequest,
@@ -43,6 +44,7 @@ import {
   type TraceListSessionsQuery,
   type TraceStartSpanRequest,
   type UiSessionSnapshot,
+  type UpdateState,
   type WindowRole,
   type WorkspaceCreateInput,
 } from "@thinker-workbench/shared";
@@ -107,6 +109,12 @@ const api: ThinkerApi = {
       ipcRenderer.invoke(IpcChannels.settingsGetSessionChatMode, sessionId),
     setSessionChatMode: (sessionId: string, chatMode: ChatMode) =>
       ipcRenderer.invoke(IpcChannels.settingsSetSessionChatMode, sessionId, chatMode),
+    onSessionChatModeChanged(cb) {
+      const handler = (_evt: unknown, change: { sessionId: string; chatMode: ChatMode }) =>
+        cb(change);
+      ipcRenderer.on(IpcChannels.settingsSessionChatModeChanged, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.settingsSessionChatModeChanged, handler);
+    },
     getShortcuts: () => ipcRenderer.invoke(IpcChannels.settingsGetShortcuts),
     setShortcuts: (patch: Partial<ShortcutsMap>) =>
       ipcRenderer.invoke(IpcChannels.settingsSetShortcuts, patch),
@@ -204,6 +212,8 @@ const api: ThinkerApi = {
     removeSession: (sessionId) => ipcRenderer.invoke(IpcChannels.chatSessionsRemove, sessionId),
     saveMessages: (sessionId, messages: ChatMessage[]) =>
       ipcRenderer.invoke(IpcChannels.chatSessionsSaveMessages, { sessionId, messages }),
+    setSessionTodos: (sessionId, todos: ChatTodo[]) =>
+      ipcRenderer.invoke(IpcChannels.chatSessionsSetTodos, { sessionId, todos }),
     saveChatImage: (workspaceId, input) =>
       ipcRenderer.invoke(IpcChannels.chatImagesSave, {
         workspaceId,
@@ -241,6 +251,9 @@ const api: ThinkerApi = {
       ipcRenderer.on(IpcChannels.threadsChanged, handler);
       return () => ipcRenderer.removeListener(IpcChannels.threadsChanged, handler);
     },
+    search: (input) => ipcRenderer.invoke(IpcChannels.chatSessionsSearch, input),
+    exportSession: (input) => ipcRenderer.invoke(IpcChannels.chatSessionsExport, input),
+    importSession: (input) => ipcRenderer.invoke(IpcChannels.chatSessionsImport, input),
   },
   workspaceFs: {
     tree: (workspaceId: string) => ipcRenderer.invoke(IpcChannels.workspaceFsTree, workspaceId),
@@ -253,6 +266,14 @@ const api: ThinkerApi = {
     gitFileDiff: (workspaceId: string, path: string, full?: boolean) =>
       ipcRenderer.invoke(IpcChannels.workspaceGitDiff, { workspaceId, path, full }),
     gitInit: (workspaceId: string) => ipcRenderer.invoke(IpcChannels.workspaceGitInit, workspaceId),
+    mkdir: (workspaceId: string, path: string) =>
+      ipcRenderer.invoke(IpcChannels.workspaceFsMkdir, { workspaceId, path }),
+    rename: (workspaceId: string, from: string, to: string) =>
+      ipcRenderer.invoke(IpcChannels.workspaceFsRename, { workspaceId, from, to }),
+    remove: (workspaceId: string, path: string) =>
+      ipcRenderer.invoke(IpcChannels.workspaceFsRemove, { workspaceId, path }),
+    reveal: (workspaceId: string, path: string) =>
+      ipcRenderer.invoke(IpcChannels.workspaceFsReveal, { workspaceId, path }),
   },
   terminal: {
     listSessions: () => ipcRenderer.invoke(IpcChannels.terminalList),
@@ -275,7 +296,11 @@ const api: ThinkerApi = {
     goBack: () => ipcRenderer.invoke(IpcChannels.browserGoBack),
     goForward: () => ipcRenderer.invoke(IpcChannels.browserGoForward),
     reload: () => ipcRenderer.invoke(IpcChannels.browserReload),
-    setBounds: (bounds: BrowserBounds) => ipcRenderer.invoke(IpcChannels.browserSetBounds, bounds),
+    attachWebview: (webContentsId: number, viewport: BrowserViewport) =>
+      ipcRenderer.invoke(IpcChannels.browserAttachWebview, webContentsId, viewport),
+    detachWebview: () => ipcRenderer.invoke(IpcChannels.browserDetachWebview),
+    setViewport: (viewport: BrowserViewport) =>
+      ipcRenderer.invoke(IpcChannels.browserSetViewport, viewport),
     setVisible: (visible: boolean) => ipcRenderer.invoke(IpcChannels.browserSetVisible, visible),
     takeControl: () => ipcRenderer.invoke(IpcChannels.browserTakeControl),
     readScreenshot: (absolutePath: string) =>
@@ -344,6 +369,42 @@ const api: ThinkerApi = {
       const handler = (_evt: unknown, status: McpServerRuntimeStatus) => cb(status);
       ipcRenderer.on(IpcChannels.mcpStatus, handler);
       return () => ipcRenderer.removeListener(IpcChannels.mcpStatus, handler);
+    },
+  },
+  git: {
+    stage: (workspaceId, paths) =>
+      ipcRenderer.invoke(IpcChannels.workspaceGitStage, { workspaceId, paths }),
+    unstage: (workspaceId, paths) =>
+      ipcRenderer.invoke(IpcChannels.workspaceGitUnstage, { workspaceId, paths }),
+    discard: (workspaceId, paths) =>
+      ipcRenderer.invoke(IpcChannels.workspaceGitDiscard, { workspaceId, paths }),
+    commit: (input) => ipcRenderer.invoke(IpcChannels.workspaceGitCommit, input),
+    checkout: (input) => ipcRenderer.invoke(IpcChannels.workspaceGitCheckout, input),
+    branchList: (workspaceId) =>
+      ipcRenderer.invoke(IpcChannels.workspaceGitBranchList, workspaceId),
+    push: (input) => ipcRenderer.invoke(IpcChannels.workspaceGitPush, input),
+    pull: (input) => ipcRenderer.invoke(IpcChannels.workspaceGitPull, input),
+    stashPush: (input) => ipcRenderer.invoke(IpcChannels.workspaceGitStashPush, input),
+    stashPop: (input) => ipcRenderer.invoke(IpcChannels.workspaceGitStashPop, input),
+  },
+  checkpoints: {
+    getRetention: (workspaceId) =>
+      ipcRenderer.invoke(IpcChannels.checkpointsRetentionGet, workspaceId),
+    setRetention: (workspaceId, patch) =>
+      ipcRenderer.invoke(IpcChannels.checkpointsRetentionSet, { workspaceId, patch }),
+    getStats: (workspaceId) => ipcRenderer.invoke(IpcChannels.checkpointsStats, workspaceId),
+    pruneNow: (workspaceId) => ipcRenderer.invoke(IpcChannels.checkpointsPruneNow, workspaceId),
+    applyDisposition: (input) => ipcRenderer.invoke(IpcChannels.changesDisposition, input),
+  },
+  update: {
+    getState: () => ipcRenderer.invoke(IpcChannels.appUpdateState),
+    check: () => ipcRenderer.invoke(IpcChannels.appUpdateCheck),
+    download: () => ipcRenderer.invoke(IpcChannels.appUpdateDownload),
+    install: () => ipcRenderer.invoke(IpcChannels.appUpdateInstall),
+    onState(cb) {
+      const handler = (_evt: unknown, state: UpdateState) => cb(state);
+      ipcRenderer.on(IpcChannels.appUpdateEvent, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.appUpdateEvent, handler);
     },
   },
   respondHitl(response: HitlResponse) {

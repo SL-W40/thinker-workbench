@@ -1,10 +1,8 @@
 /**
  * 基础浅色 markdown 主题——黑白灰极简。
  */
+import { MONO_STACK, SANS_STACK } from "./fonts";
 import type { MarkdownTheme } from "./types";
-
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
-const MONO = 'ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace';
 
 /** 基础浅色——高对比黑白。 */
 export const lightTheme: MarkdownTheme = {
@@ -27,8 +25,8 @@ export const lightTheme: MarkdownTheme = {
     "--md-danger-bg": "rgba(176, 0, 32, 0.08)",
     "--md-shadow-soft": "rgba(0, 0, 0, 0.08)",
     "--md-stream-glow": "rgba(0, 0, 0, 0.08)",
-    "--md-font-mono": MONO,
-    "--md-font": SANS,
+    "--md-font-mono": MONO_STACK,
+    "--md-font": SANS_STACK,
     "--md-hl-keyword": "#111111",
     "--md-hl-string": "#1a7f37",
     "--md-hl-number": "#b00020",

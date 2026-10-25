@@ -6,6 +6,7 @@
  */
 import { app, ipcMain, nativeImage, nativeTheme } from "electron";
 import { runLedger } from "./agent/runLedger";
+import { runCacheRetention } from "./cache/purgeCacheDirs";
 import { APP_NAME, APP_USER_MODEL_ID } from "./config/appIdentity";
 import { reloadSessionAfterDataDirChange } from "./config/dataDirMigrate";
 import { getAppIconPath } from "./config/paths";
@@ -16,14 +17,15 @@ import { backfillRunDurations } from "./db/runDurationBackfill";
 import { closeThinkerDb, openCatalogDb } from "./db/thinkerDb";
 import { ensureDefaultWorkspace, healRunningSessions } from "./db/workspacesStore";
 import { registerIpc } from "./ipc/register";
+import { initUpdateModule } from "./ipc/updateHandlers";
 import { broadcastThreadsChanged } from "./ipc/workspacesHandlers";
-import { closeLogsDb } from "./log/logsDb";
-import { pruneExpiredLogs } from "./log/retention";
 import { configureDesktopLog } from "./log/setup";
 import { ensureWindowsToastShortcut } from "./notify/windowsToastShortcut";
 import { applyContentSecurityPolicy } from "./security/csp";
 import { ensureBundledSkills } from "./skills/ensureBundledSkills";
 import { terminalSessionManager } from "./terminal/TerminalSessionManager";
+import { pruneTraceStore } from "./trace/pruneTraceSessions";
+import { closeAllTraceDbs } from "./trace/workspaceTraceDb";
 import { pushAgentHello, startAgentProcess } from "./utility/startAgentProcess";
 import { createWindow, syncWindowBackgroundFromSettings } from "./window/createWindow";
 import { startDevParentWatch } from "./window/devParentWatch";
@@ -110,10 +112,11 @@ app.whenReady().then(() => {
   // 开发态：包装进程被强杀时随父进程退出，避免孤儿占锁
   startDevParentWatch();
   configureDesktopLog();
-  pruneExpiredLogs(getGeneralSettings().logRetentionDays);
+  // 可再生缓存按保留策略清一次（截图等派生数据）
   try {
+    runCacheRetention();
   } catch {
-    /* Trace 清理失败不拖垮启动 */
+    /* ignore */
   }
   // 跟随系统主题：OS 深浅色变化时同步原生窗口底色
   nativeTheme.on("updated", () => {
@@ -124,6 +127,8 @@ app.whenReady().then(() => {
   const agent = startAgentProcess();
   stopAgentProcess = agent.stop;
   const { bridge } = agent;
+  // 更新模块：dev 构建内部自动禁用，任何失败都不阻断启动
+  initUpdateModule();
   // 须在 createWindow 之前注册 IPC，以便首帧同步恢复 session
   registerIpc(ipcMain, bridge, {
     onGeneralSaved: () => {
@@ -131,18 +136,7 @@ app.whenReady().then(() => {
       syncWindowBackgroundFromSettings();
       // 日志策略（开关 / 保留天数 / 截断）即时生效；dataDir 不走此回调切换
       configureDesktopLog();
-      pruneExpiredLogs(getGeneralSettings().logRetentionDays);
-      try {
-      } catch {
-        /* ignore */
-      }
-      try {
-        const { browserSessionManager } =
-          require("./browser/BrowserSessionManager") as typeof import("./browser/BrowserSessionManager");
-        void browserSessionManager.refreshOverlayTheme();
-      } catch {
-        /* ignore */
-      }
+      // 蒙层现在是渲染层 DOM（<webview> 之上），配色随主题自动跟随，无需刷新
       try {
         pushAgentHello(bridge);
       } catch {
@@ -175,11 +169,6 @@ app.whenReady().then(() => {
       }
       reloadSessionAfterDataDirChange();
       configureDesktopLog();
-      pruneExpiredLogs(getGeneralSettings().logRetentionDays);
-      try {
-      } catch {
-        /* ignore */
-      }
       try {
         pushAgentHello(bridge);
       } catch {
@@ -197,15 +186,16 @@ app.whenReady().then(() => {
   startDevToolsPrefsBridge();
   syncTrayFromSettings();
 
-  // 每天再扫一次过期日志与 Trace
+  // 每天再扫一次可再生缓存（截图）、过期 Trace 与文件检查点
   setInterval(
     () => {
       try {
-        pruneExpiredLogs(getGeneralSettings().logRetentionDays);
+        runCacheRetention();
       } catch {
         /* 清理失败不拖垮主进程 */
       }
       try {
+        pruneTraceStore();
       } catch {
         /* ignore */
       }
@@ -243,6 +233,11 @@ app.on("before-quit", () => {
   } catch {
     /* ignore */
   }
-  closeLogsDb();
+  try {
+    runCacheRetention();
+  } catch {
+    /* ignore */
+  }
+  closeAllTraceDbs();
   closeThinkerDb();
 });

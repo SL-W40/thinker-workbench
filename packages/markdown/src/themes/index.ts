@@ -9,6 +9,8 @@ import { lightTheme } from "./light";
 import { notesTheme } from "./notes";
 import type { MarkdownTheme, MarkdownThemeInput } from "./types";
 
+/** 字体栈常量：UI / 正文无衬线栈与代码等宽栈，避免各主题各自抄一份、改的时候漏改。 */
+export { MONO_STACK, SANS_STACK } from "./fonts";
 export {
   type MarkdownThemeVars,
   MD_TOKEN_KEYS,

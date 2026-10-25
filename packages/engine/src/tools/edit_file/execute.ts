@@ -2,7 +2,9 @@
  * edit_file 实现：在已有文件中做精确字符串替换。
  */
 import { readFile, writeFile } from "node:fs/promises";
+import { captureBeforeImage } from "../../checkpoint/fileSnapshot";
 import { buildUnifiedDiff } from "../shared/diff";
+import { withPathLock } from "../shared/pathLock";
 import { resolveWorkspacePath, toWorkspaceRelative } from "../shared/paths";
 import { throwIfAborted } from "../shared/walk";
 import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
@@ -18,7 +20,18 @@ function asBool(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
+/** 参数入口：先拿路径锁再编辑，避免并行 run 写同一文件互相覆盖。 */
 export async function editFileTool(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
+  throwIfAborted(ctx.signal, "Edit file");
+  const rel = asString(args.path)?.trim();
+  if (!rel) {
+    throw new Error("edit_file requires parameters.path (workspace-relative).");
+  }
+  return withPathLock(ctx.workspaceRoot, rel, () => editFileInner(args, ctx));
+}
+
+/** 真正的编辑实现（拿到路径锁之后才执行）。 */
+async function editFileInner(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
   throwIfAborted(ctx.signal, "Edit file");
   const rel = asString(args.path)?.trim();
   if (!rel) {
@@ -39,6 +52,8 @@ export async function editFileTool(args: ToolArgs, ctx: ToolContext): Promise<To
   const replaceAll = asBool(args.replace_all, false);
   const target = resolveWorkspacePath(ctx.workspaceRoot, rel, { access: "write" });
   const before = await readFile(target, "utf8");
+  // 首改前留下 before-image（幂等；失败不影响编辑本身）
+  await captureBeforeImage(ctx.workspaceRoot, toWorkspaceRelative(ctx.workspaceRoot, target));
   throwIfAborted(ctx.signal, "Edit file");
 
   const count = before.split(oldString).length - 1;

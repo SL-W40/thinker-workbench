@@ -10,6 +10,7 @@ import { getMcpManager } from "../mcp/McpManager";
 import { type AgentRuntime, createAgentRuntime } from "../runtime/AgentRuntime";
 import { handleBrowserEvent } from "./browserClient";
 import { applyMcpServers } from "./configApply";
+import { handleGitResult } from "./gitClient";
 import { onCancel, onCancelTask } from "./handlers/cancel";
 import { onCheckpointClear } from "./handlers/checkpoint";
 import { onContextUsage } from "./handlers/contextUsage";
@@ -21,14 +22,20 @@ import { getParentPort, postToParent } from "./port";
 import { handlePtyEvent } from "./ptyClient";
 
 export class UtilityHost {
-  private runtime: AgentRuntime | null = null;
+  /** 按 checkpointDir 缓存的 runtime：目录即工作区，互不干扰。 */
+  private readonly runtimes = new Map<string, AgentRuntime>();
   /** 处理器共用依赖（懒创建 runtime / 取消）。 */
   private readonly ctx: HostContext;
 
   constructor() {
     this.ctx = {
       ensureRuntime: (checkpointDir?: string) => this.ensureRuntime(checkpointDir),
-      cancel: (runId: string) => this.runtime?.cancel(runId),
+      listRuntimes: () => [...this.runtimes.values()],
+      cancel: (runId: string) => {
+        for (const runtime of this.runtimes.values()) {
+          runtime.cancel(runId);
+        }
+      },
     };
   }
 
@@ -55,17 +62,19 @@ export class UtilityHost {
   }
 
   /**
-   * 懒创建唯一 AgentRuntime，并把事件总线接到 parentPort。
-   * checkpointDir 仅在首次创建时生效。
+   * 懒创建 AgentRuntime，并把事件总线接到 parentPort。
+   * 按 checkpointDir 缓存：目录由 run / resume 按工作区下发，故可多工作区并存。
    */
   private ensureRuntime(checkpointDir?: string): AgentRuntime {
-    if (!this.runtime) {
-      this.runtime = createAgentRuntime({ checkpointDir });
-      this.runtime.events.subscribe((event) => {
-        postToParent({ channel: "utility", kind: "event", event });
-      });
-    }
-    return this.runtime;
+    const key = checkpointDir?.trim() || "";
+    const existing = this.runtimes.get(key);
+    if (existing) return existing;
+    const runtime = createAgentRuntime({ checkpointDir: key || undefined });
+    runtime.events.subscribe((event) => {
+      postToParent({ channel: "utility", kind: "event", event });
+    });
+    this.runtimes.set(key, runtime);
+    return runtime;
   }
 
   private async onMessage(message: UtilityToChild): Promise<void> {
@@ -91,6 +100,9 @@ export class UtilityHost {
         return;
       case "browserEvent":
         handleBrowserEvent(message);
+        return;
+      case "gitResult":
+        handleGitResult(message);
         return;
       case "hitlResult":
         resolveHitl(message.response);

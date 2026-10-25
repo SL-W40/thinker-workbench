@@ -80,8 +80,20 @@ export function registerSettingsHandlers(
   );
   ipcMain.handle(
     IpcChannels.settingsSetSessionChatMode,
-    (_evt, sessionId: string, chatMode: ChatMode) =>
-      setSessionChatMode(typeof sessionId === "string" ? sessionId : "", chatMode ?? "agent"),
+    (evt, sessionId: string, chatMode: ChatMode) => {
+      const id = typeof sessionId === "string" ? sessionId : "";
+      const saved = setSessionChatMode(id, chatMode ?? "agent");
+      // 同一会话可能有多处模式选择器（输入框 + 消息气泡）：向其它窗口广播同步
+      const senderId = evt.sender.id;
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (w.isDestroyed() || w.webContents.id === senderId) continue;
+        w.webContents.send(IpcChannels.settingsSessionChatModeChanged, {
+          sessionId: id,
+          chatMode: saved,
+        });
+      }
+      return saved;
+    },
   );
   ipcMain.handle(IpcChannels.settingsGetShortcuts, () => getShortcutsSettings());
   ipcMain.handle(IpcChannels.settingsSetShortcuts, (_evt, patch: Partial<ShortcutsMap>) => {

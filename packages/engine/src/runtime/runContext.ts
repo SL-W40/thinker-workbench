@@ -5,6 +5,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   ChatMode,
+  ChatTodo,
   ModelCatalog,
   ModelSelection,
   ModelUsage,
@@ -26,6 +27,8 @@ export type RunContext = {
   workspaceName?: string;
   /** 本 run 的数据目录（记忆 SQLite 等落盘处）。 */
   dataDir?: string;
+  /** 本 run 的工作空间 id（记忆库按工作区落盘，与 Trace / checkpoint 一致）。 */
+  workspaceId?: string;
   /** 记忆仓库（会话抽取记忆持久化）；未注入时记忆退化为仅运行时。 */
   memoryRepository?: MemoryRepository;
   chatMode: ChatMode;
@@ -55,6 +58,12 @@ export type RunContext = {
   /** 本 run 派生的后台 Task id。 */
   taskIds: Set<string>;
   /**
+   * 本 run 已通过 tool_search 装载的 MCP 工具名。
+   * 延迟模式下它们会在后续轮次常驻进 body.tools；
+   * 由 tools 节点同步到图状态通道，以便 resume 后仍然展开。
+   */
+  loadedToolNames: Set<string>;
+  /**
    * 当前模型/工具轮次（主图 GraphState.step 或子代理 childTurn）。
    * 供 Trace span attrs.turn；可变，在每轮调用前 setRunTurn。
    */
@@ -65,11 +74,62 @@ export type RunContext = {
    */
   freshUserTurn: boolean;
   /**
+   * 会话待办的本轮镜像：run 开始时由会话记录播种，run 内由 `todo` / 计划工具读写。
+   * 真值在会话记录（chat_sessions.todos_json），本轮只维护内存副本并靠事件回传。
+   */
+  todos: ChatTodo[];
+  /**
+   * 计划是否「拥有」会话待办：create_plan 选了「保留独立」时置 false，
+   * 此后 update_plan 不再覆写会话待办（计划与会话各有一份）。
+   */
+  planOwnsTodos: boolean;
+  /**
    * 工具开工前落盘 callId（供 resume 防重放）。
    * 由 AgentRuntime.runLoop 绑定；无 ALS / 测试可不设。
    */
   markToolCallStarted?: (callId: string) => Promise<void>;
 };
+
+/** 读取本轮会话待办镜像（不在 run 内为空列表）。 */
+export function getRunTodos(): ChatTodo[] {
+  return als.getStore()?.todos ?? [];
+}
+
+/**
+ * 登记本 run 已装载的 MCP 工具名（tool_search 命中后调用）。
+ * 不在 run 内静默跳过——延迟装载只对 run 生效。
+ */
+export function addLoadedToolNames(names: readonly string[]): void {
+  const ctx = als.getStore();
+  if (!ctx) return;
+  for (const raw of names) {
+    const name = typeof raw === "string" ? raw.trim() : "";
+    if (name) ctx.loadedToolNames.add(name);
+  }
+}
+
+/** 本 run 已装载工具名快照；不在 run 内为空数组。 */
+export function getLoadedToolNames(): string[] {
+  const set = als.getStore()?.loadedToolNames;
+  return set ? [...set] : [];
+}
+
+/** 全量写回本轮会话待办镜像。 */
+export function setRunTodos(todos: readonly ChatTodo[]): void {
+  const ctx = als.getStore();
+  if (ctx) ctx.todos = [...todos];
+}
+
+/** 标记计划是否拥有会话待办（create_plan 选「保留独立」时置 false）。 */
+export function setPlanOwnsTodos(owns: boolean): void {
+  const ctx = als.getStore();
+  if (ctx) ctx.planOwnsTodos = owns;
+}
+
+/** 计划是否拥有会话待办；不在 run 内按 true（默认同步）。 */
+export function planOwnsTodos(): boolean {
+  return als.getStore()?.planOwnsTodos ?? true;
+}
 
 /** 调用当前 run 的开工落盘钩子（无钩子则 no-op）。 */
 export async function markToolCallStarted(callId: string): Promise<void> {

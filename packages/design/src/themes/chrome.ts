@@ -4,8 +4,6 @@
  */
 
 export type NotesChromeInput = {
-  /** 纸面横线色。 */
-  paperRule: string;
   /** 纸面页边距色。 */
   paperMargin: string;
   /** 纸面光晕。 */
@@ -45,7 +43,6 @@ export type NotesChromeInput = {
 /** 把笔记外壳输入展开成 CSS 变量键值。 */
 export function notesChrome(c: NotesChromeInput): Record<string, string> {
   return {
-    "--paper-rule": c.paperRule,
     "--paper-margin": c.paperMargin,
     "--paper-glow": c.paperGlow,
     "--titlebar-bg": c.titlebarBg,

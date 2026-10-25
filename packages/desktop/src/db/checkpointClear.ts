@@ -1,7 +1,7 @@
 /**
  * 主进程侧线程 checkpoint 清理 / 窥探。
  *
- * 真实 checkpoint 由 engine 子进程内的 SqliteSaver 持有（`<checkpointDir>/langgraph.sqlite`），
+ * 真实 checkpoint 由 engine 子进程内的 SqliteSaver 持有（`<工作区>/checkpoints/langgraph.sqlite`），
  * 线程键为 run 级 `threadId::run:runId`，登记表落盘在 `<checkpointDir>/threads.json`
  * （engine 侧 tmp+rename 原子写，主进程可安全读取）。
  *
@@ -12,7 +12,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getCheckpointDir } from "../config/paths";
+import { getWorkspaceCheckpointDir } from "../config/paths";
 
 /** checkpoint 清理通道（engine 子进程执行真实删除）；由 AgentBridge 启动时注入。 */
 export type CheckpointClearTransport = (threadId: string) => Promise<boolean>;
@@ -24,20 +24,20 @@ export function setCheckpointClearTransport(transport: CheckpointClearTransport)
   clearTransport = transport;
 }
 
-function threadsIndexFile(): string {
-  return path.join(getCheckpointDir(), "threads.json");
+function threadsIndexFile(workspaceId: string): string {
+  return path.join(getWorkspaceCheckpointDir(workspaceId), "threads.json");
 }
 
 /** 遗留 FileCheckpointer 产物路径（改版前约定）。 */
-function legacyCheckpointFile(threadId: string): string {
+function legacyCheckpointFile(workspaceId: string, threadId: string): string {
   const safe = threadId.replace(/[^a-zA-Z0-9._-]/g, "_");
-  return path.join(getCheckpointDir(), `${safe}.json`);
+  return path.join(getWorkspaceCheckpointDir(workspaceId), `${safe}.json`);
 }
 
 /** 读取 engine 侧线程登记表；缺失/损坏返回空表。 */
-function readThreadsIndex(): Record<string, string> {
+function readThreadsIndex(workspaceId: string): Record<string, string> {
   try {
-    const parsed = JSON.parse(fs.readFileSync(threadsIndexFile(), "utf8")) as unknown;
+    const parsed = JSON.parse(fs.readFileSync(threadsIndexFile(workspaceId), "utf8")) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return parsed as Record<string, string>;
   } catch {
@@ -50,15 +50,16 @@ function readThreadsIndex(): Record<string, string> {
  * 优先看登记表（run 级键），再看遗留 `.json`（改版前产物）。
  */
 export function peekThreadCheckpoint(
+  workspaceId: string,
   threadId: string,
 ): { threadId: string; nodeId: string } | null {
-  const index = readThreadsIndex();
+  const index = readThreadsIndex(workspaceId);
   if (typeof index[threadId] === "string" && index[threadId]) {
     return { threadId, nodeId: "resume" };
   }
   // 遗留文件兜底（改版前 FileCheckpointer 产物）
   try {
-    const raw = fs.readFileSync(legacyCheckpointFile(threadId), "utf8");
+    const raw = fs.readFileSync(legacyCheckpointFile(workspaceId, threadId), "utf8");
     const parsed = JSON.parse(raw) as {
       threadId?: string;
       nodeId?: string;
@@ -76,12 +77,12 @@ export function peekThreadCheckpoint(
 }
 
 /** 从登记表摘除该线程（直接改写 threads.json；engine 侧随后也会清理同一项）。 */
-function removeFromThreadsIndex(threadId: string): void {
-  const index = readThreadsIndex();
+function removeFromThreadsIndex(workspaceId: string, threadId: string): void {
+  const index = readThreadsIndex(workspaceId);
   if (!(threadId in index)) return;
   delete index[threadId];
   try {
-    const file = threadsIndexFile();
+    const file = threadsIndexFile(workspaceId);
     const tmp = `${file}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(index, null, 2), "utf8");
     fs.renameSync(tmp, file);
@@ -91,16 +92,16 @@ function removeFromThreadsIndex(threadId: string): void {
 }
 
 /** 删除指定 thread 的遗留 checkpoint JSON（若不存在则忽略）。 */
-export function clearThreadCheckpoint(threadId: string): void {
+export function clearThreadCheckpoint(workspaceId: string, threadId: string): void {
   // 1) 同步清本地可见产物：遗留 .json + 登记表项
-  const legacy = legacyCheckpointFile(threadId);
+  const legacy = legacyCheckpointFile(workspaceId, threadId);
   try {
     fs.unlinkSync(legacy);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code !== "ENOENT") throw err;
   }
-  removeFromThreadsIndex(threadId);
+  removeFromThreadsIndex(workspaceId, threadId);
   // 2) 异步请 engine 删真实存储（SqliteSaver 内的 run 级键）；不可用则留孤儿，无碍功能
   const transport = clearTransport;
   if (transport) {

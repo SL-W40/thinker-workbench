@@ -1,10 +1,8 @@
 /**
  * 护眼创意主题——柔和灰绿纸面，降低长时间阅读刺眼感。
  */
+import { MONO_STACK, SANS_STACK } from "./fonts";
 import type { MarkdownTheme } from "./types";
-
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
-const MONO = 'ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace';
 
 /** 护眼——柔和灰绿。 */
 export const eyecareTheme: MarkdownTheme = {
@@ -27,8 +25,8 @@ export const eyecareTheme: MarkdownTheme = {
     "--md-danger-bg": "rgba(155, 59, 46, 0.1)",
     "--md-shadow-soft": "rgba(47, 58, 44, 0.08)",
     "--md-stream-glow": "rgba(79, 111, 82, 0.22)",
-    "--md-font-mono": MONO,
-    "--md-font": SANS,
+    "--md-font-mono": MONO_STACK,
+    "--md-font": SANS_STACK,
     "--md-hl-keyword": "#3d5a40",
     "--md-hl-string": "#1a7f37",
     "--md-hl-number": "#9b3b2e",

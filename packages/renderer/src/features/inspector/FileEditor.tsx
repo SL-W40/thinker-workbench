@@ -4,8 +4,10 @@
  */
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import { useDesignTheme } from "@thinker-workbench/design/react";
-import { useEffect, useRef, useState } from "react";
+import type * as Monaco from "monaco-editor";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./monacoSetup";
+import { useStableCallback } from "../../ui/hooks/useStableCallback";
 import { applyMonacoTheme, readMonacoFontFamily, TW_MONACO_THEME } from "./monacoTheme";
 
 export type FileEditorProps = {
@@ -128,16 +130,71 @@ export function FileEditor({
     saveRef.current = onSave;
   });
 
-  const handleMount: OnMount = (editor, monaco) => {
-    applyMonacoTheme(monaco, colorScheme);
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      saveRef.current?.();
-    });
-    // Ctrl+Space 显式触发补全
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => {
-      void editor.getAction("editor.action.triggerSuggest")?.run();
-    });
-  };
+  const handleMount = useCallback<OnMount>(
+    (editor, monaco) => {
+      applyMonacoTheme(monaco, colorScheme);
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        saveRef.current?.();
+      });
+      // Ctrl+Space 显式触发补全
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => {
+        void editor.getAction("editor.action.triggerSuggest")?.run();
+      });
+    },
+    [colorScheme],
+  );
+
+  const handleChange = useStableCallback((next: string | undefined) => {
+    onChange?.(next ?? "");
+  });
+
+  // options 每次渲染新建对象会让 Editor 每次都 updateOptions 一遍，这里按依赖项记忆化。
+  const options = useMemo<Monaco.editor.IStandaloneEditorConstructionOptions>(
+    () => ({
+      readOnly: !!readOnly,
+      contextmenu: false,
+      fontFamily: type.fontFamily,
+      fontSize: type.fontSize,
+      fontLigatures: false,
+      // 当前行高亮含 gutter，与编辑区通栏同色
+      renderLineHighlight: "all",
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      // 语法提示：补全 / 参数提示 / 悬停说明 / 波浪线
+      quickSuggestions: { other: true, comments: false, strings: true },
+      suggestOnTriggerCharacters: true,
+      acceptSuggestionOnCommitCharacter: true,
+      acceptSuggestionOnEnter: "on",
+      tabCompletion: "on",
+      wordBasedSuggestions: "currentDocument",
+      parameterHints: { enabled: true },
+      hover: { enabled: readOnly ? ("off" as const) : ("on" as const), delay: 300 },
+      renderValidationDecorations: readOnly ? ("off" as const) : ("on" as const),
+      wordWrap: "on",
+      automaticLayout: true,
+      // 补全 / 悬停用 fixed，避免被右侧面板 overflow:hidden 裁切
+      fixedOverflowWidgets: true,
+      padding: { top: 12 },
+      scrollbar: {
+        vertical: "auto",
+        horizontal: "auto",
+        // 与全局细滚动条（--scrollbar-size: 7px）对齐；否则编辑区比
+        // 预览区多占 7px，切换「编辑 / 预览」时内容宽度会跳变
+        verticalScrollbarSize: 7,
+        horizontalScrollbarSize: 7,
+        arrowSize: 0,
+        useShadows: false,
+        verticalHasArrows: false,
+        horizontalHasArrows: false,
+        verticalSliderSize: 6,
+        horizontalSliderSize: 6,
+      },
+      overviewRulerLanes: 0,
+      hideCursorInOverviewRuler: true,
+      overviewRulerBorder: false,
+    }),
+    [readOnly, type.fontFamily, type.fontSize],
+  );
 
   return (
     <div className="editor-wrap">
@@ -148,52 +205,12 @@ export function FileEditor({
           language={lang}
           value={value}
           path={monacoPath}
+          // 切文件时保留旧 model：默认会 dispose，切回来要重建 model 并重新 tokenize
+          keepCurrentModel
           onMount={handleMount}
           loading={<div className="editor-wrap__loading" aria-busy="true" />}
-          options={{
-            readOnly: !!readOnly,
-            contextmenu: false,
-            fontFamily: type.fontFamily,
-            fontSize: type.fontSize,
-            fontLigatures: false,
-            // 当前行高亮含 gutter，与编辑区通栏同色
-            renderLineHighlight: "all",
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            // 语法提示：补全 / 参数提示 / 悬停说明 / 波浪线
-            quickSuggestions: { other: true, comments: false, strings: true },
-            suggestOnTriggerCharacters: true,
-            acceptSuggestionOnCommitCharacter: true,
-            acceptSuggestionOnEnter: "on",
-            tabCompletion: "on",
-            wordBasedSuggestions: "currentDocument",
-            parameterHints: { enabled: true },
-            hover: { enabled: true, delay: 300 },
-            renderValidationDecorations: readOnly ? "off" : "on",
-            wordWrap: "on",
-            automaticLayout: true,
-            // 补全 / 悬停用 fixed，避免被右侧面板 overflow:hidden 裁切
-            fixedOverflowWidgets: true,
-            padding: { top: 12 },
-            scrollbar: {
-              vertical: "auto",
-              horizontal: "auto",
-              // 与全局细滚动条（--scrollbar-size: 7px）对齐；否则编辑区比
-              // 预览区多占 7px，切换「编辑 / 预览」时内容宽度会跳变
-              verticalScrollbarSize: 7,
-              horizontalScrollbarSize: 7,
-              arrowSize: 0,
-              useShadows: false,
-              verticalHasArrows: false,
-              horizontalHasArrows: false,
-              verticalSliderSize: 6,
-              horizontalSliderSize: 6,
-            },
-            overviewRulerLanes: 0,
-            hideCursorInOverviewRuler: true,
-            overviewRulerBorder: false,
-          }}
-          onChange={(v: string | undefined) => onChange?.(v ?? "")}
+          options={options}
+          onChange={handleChange}
         />
       </div>
     </div>

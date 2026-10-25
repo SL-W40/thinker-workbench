@@ -12,8 +12,8 @@ import {
   type SubagentUpsertInput,
 } from "@thinker-workbench/shared";
 import { listWorkspaces } from "../db/workspacesStore";
+import { ensureDir, resolveWritableRoot } from "./customizeRoots";
 import { metaBool, metaString, sanitizeKebabName, serializeFrontmatter } from "./frontmatter";
-import { ensureDir, resolveWritableRoot } from "./paths";
 
 type ScanRoot = {
   root: string;

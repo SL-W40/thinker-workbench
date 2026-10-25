@@ -5,11 +5,26 @@
   --panel: var(--bg-elev, var(--bg));
   --panel-alt: var(--panel-muted, var(--bg-elev, var(--bg)));
   --border: var(--line);
+  /* 墨色透明度阶梯：hover / 分隔 / 边框都从这里取，随主题自动翻转 */
+  --ink-04: color-mix(in srgb, var(--ink) 4%, transparent);
   --ink-05: color-mix(in srgb, var(--ink) 5%, transparent);
+  --ink-06: color-mix(in srgb, var(--ink) 6%, transparent);
   --ink-07: color-mix(in srgb, var(--ink) 7%, transparent);
   --ink-08: color-mix(in srgb, var(--ink) 8%, transparent);
+  --ink-10: color-mix(in srgb, var(--ink) 10%, transparent);
+  --ink-12: color-mix(in srgb, var(--ink) 12%, transparent);
+  --ink-15: color-mix(in srgb, var(--ink) 15%, transparent);
+  /* 语义别名：全部基于上面的阶梯，故无需再写暗色覆写块 */
+  --hover: var(--ink-05);
+  --active: var(--ink-08);
+  --border-strong: var(--ink-15);
+  --focus: var(--accent-ring, var(--accent));
+  --danger-soft: color-mix(in srgb, var(--danger, #b00020) 12%, transparent);
+  --ease: ease;
   --success: #2f8a4e;
   --tk-font-base: 13px;
+  --tk-font-sm: 12px;
+  --tk-font-xs: 11px;
   --tk-editor-font-size: 13px;
 }
 
@@ -130,23 +145,14 @@
   color: var(--text);
 }
 
-.tree-dir.is-selected .tree-chev,
-.tree-file.is-selected .tree-ico {
+.tree-dir.is-selected .tree-chev {
   color: var(--muted);
 }
 
+/* 文件 / 文件夹图标自带配色（material），这里只管布局，不再着色 */
 .tree-ico {
-  color: var(--muted);
   display: inline-flex;
   flex-shrink: 0;
-}
-
-.tree-ico--open {
-  color: #b08d3e;
-}
-
-.tree-file:hover .tree-ico {
-  color: var(--muted);
 }
 
 /* ---------------- 上下文菜单 ---------------- */
@@ -622,6 +628,28 @@
   background: var(--panel);
 }
 
+/*
+ * 保活的 pane（changes / terminal / files）：切走后常驻，靠 visibility 隐藏而不是卸载。
+ * 这里不能用 display:none —— 容器尺寸归零会同时踩三个坑：xterm 把 0 列发给 PTY、
+ * 文件列表宽度被判定为 0 而重置用户设置、Changes 的 IntersectionObserver 判定全部离屏
+ * 导致 diff 被卸载后重拉。改成 absolute 铺满 + visibility 保留布局盒。
+ */
+.agent-inspector__pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-inspector__pane[hidden] {
+  display: flex !important;
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* 子代理时间线：头部固定，正文纵向滚动、宽度自适应无横滚 */
 .agent-subagent-pane {
   flex: 1;
@@ -844,8 +872,7 @@
 .agent-files__tree {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 2px 4px 10px;
+  overflow: hidden;
 }
 
 .agent-files__editor {
@@ -856,6 +883,19 @@
   overflow: hidden;
   position: relative;
   background: var(--panel);
+}
+
+/* Monaco 宿主：常驻不卸载（每次重建都要新起一个 web worker），
+ * 非代码文件时靠 hidden 隐藏，重新显示由 automaticLayout 自愈尺寸。 */
+.agent-files__monaco[hidden] {
+  display: none !important;
+}
+
+.agent-files__monaco {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Markdown 文件查看器：头部三点菜单 + 编辑 / 预览切换 */
@@ -1205,9 +1245,12 @@
   overflow: hidden;
 }
 
-.changes-pane__main .changes-pane__list {
+/* 虚拟列表：滚动交给这层，ul 只负责撑总高；行在 ul 里绝对定位 */
+.changes-pane__main .changes-pane__scroller {
   flex: 1;
   min-height: 0;
+  overflow: auto;
+  padding: 6px;
 }
 
 .changes-pane__icon-btn.is-on {
@@ -1336,11 +1379,57 @@
   color: var(--muted);
 }
 
+/* 滚动交给内部 .tree-scroller（虚拟列表自己管滚动条），外层只负责占位 */
 .changes-filelist__tree {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.tree-scroller {
+  height: 100%;
+  min-height: 0;
   overflow: auto;
   padding: 2px 4px 10px;
+}
+
+/* 行在这里绝对定位（虚拟列表），靠这个容器撑出总高与定位参照 */
+.tree-rows {
+  position: relative;
+}
+
+/* 拖放移动：源行淡出，落点描边 */
+.tree-file.is-dragging,
+.tree-dir.is-dragging {
+  opacity: 0.4;
+}
+
+.tree-dir.is-drop-target {
+  background: var(--panel-alt);
+  box-shadow: inset 0 0 0 1px var(--accent, #2f6fed);
+  color: var(--text);
+}
+
+/* 拖到树容器空白处 = 移到工作空间根；撑满容器，短树也有空白可落 */
+.tree-root-drop {
+  min-height: 100%;
+}
+
+.tree-root-drop.is-drop-target {
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--accent, #2f6fed);
+}
+
+/* 新建 / 重命名 / 删除失败时的行内提示（留在弹窗里，不打断操作） */
+.file-tree-action-error {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger, #dc2626);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .changes-filelist__dir-row,
@@ -1389,8 +1478,8 @@
 .changes-filelist__file-ico {
   display: inline-flex;
   flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .changes-filelist__file-name {
@@ -1465,7 +1554,10 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
-  flex: 1 1 140px;
+  /* basis auto：分支名占多少就报多少，装不下时让整组按钮折到第二行 */
+  flex: 1 1 auto;
+  /* 组内不折行：未提交 / 分支名 / 行数三件套永远在同一行 */
+  flex-wrap: nowrap;
   overflow: hidden;
   font-size: 12px;
   font-weight: 400;
@@ -1503,8 +1595,23 @@
   color: var(--danger);
 }
 
-.changes-pane__branch {
+/*
+ * 未提交 / 分支名 / +/− 行数整块绑在一起：
+ * meta 允许折行后，唯一断点落在「这块 ↔ 提交按钮」。
+ * 块内压缩时先裁分支名（它的 ellipsis），数字与「未提交」都不掉队。
+ */
+.changes-pane__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 不撑开：撑开会把 +/− 推到按钮旁边，行数就离分支名太远了 */
+.changes-pane__branch {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1514,92 +1621,77 @@
   margin-left: 2px;
 }
 
+/*
+ * 头部提交入口：`[提交 | ⌄]` 分裂按钮，跟着分支名排在 meta 行末尾。
+ * 主按钮与 chev 同底色、中间一条发丝线 —— chev 单独浮着会像掉了个箭头。
+ */
+.changes-commit {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.changes-commit__main {
+  flex: 0 0 auto;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.changes-commit__chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--tw-accent-ink, #1b1917) 18%, transparent);
+  border-radius: 0 var(--tw-radius-control, 10px) var(--tw-radius-control, 10px) 0;
+  background: var(--tw-accent-strong, var(--accent-strong));
+  color: var(--tw-accent-ink, var(--accent-ink, var(--panel)));
+  cursor: pointer;
+}
+
+.changes-commit__chev:hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.changes-commit__chev:focus-visible {
+  outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+  outline-offset: 1px;
+}
+
+.changes-commit__chev:disabled {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+
+/*
+ * 提交按钮 + 视图/刷新/收起图标是一整组：宽度不够时一起折到第二行，
+ * 组内始终一行、靠右对齐，按钮和图标之间不会留出空档。
+ */
 .changes-pane__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
   position: relative;
-  flex: 0 1 auto;
+  /* 不参与收缩：面板再窄也保持原尺寸，宽度缺口全由分支名承担 */
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   margin-left: auto;
 }
 
-.changes-pane__view-wrap,
-.changes-pane__cta-split {
+.changes-pane__view-wrap {
   position: relative;
   display: inline-flex;
   align-items: stretch;
   min-width: 0;
-}
-
-.changes-pane__cta-split {
-  border-radius: 999px;
-  overflow: visible;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: min(100%, 220px);
-}
-
-/* 实心 CTA：对齐 design Button primary（accent-strong + accent-ink） */
-.changes-pane__cta {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  height: 28px;
-  padding: 0 12px 0 14px;
-  border: none;
-  border-radius: 999px 0 0 999px;
-  background: var(--tw-accent-strong, var(--accent-strong, var(--text)));
-  color: var(--tw-accent-ink, var(--accent-ink, var(--panel)));
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.changes-pane__cta-chev-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-left: 1px solid
-    color-mix(
-      in srgb,
-      var(--tw-accent-ink, var(--accent-ink, #fff)) 22%,
-      transparent
-    );
-  border-radius: 0 999px 999px 0;
-  background: var(--tw-accent-strong, var(--accent-strong, var(--text)));
-  color: var(--tw-accent-ink, var(--accent-ink, var(--panel)));
-  cursor: pointer;
-}
-
-/* soft 洗色是给幽灵按钮的；实心 CTA 整组提亮，避免半边变色 */
-.changes-pane__cta-split:hover .changes-pane__cta:not(:disabled),
-.changes-pane__cta-split:hover .changes-pane__cta-chev-btn:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.changes-pane__cta:disabled,
-.changes-pane__cta-chev-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-  filter: none;
-}
-
-.changes-pane__cta-chev {
-  display: inline-flex;
-  opacity: 0.85;
-  margin-left: 2px;
 }
 
 .changes-pane__icon-btn {
@@ -1679,8 +1771,24 @@
   z-index: 1200;
 }
 
-.changes-pane__menu--cta {
+/* 装整套提交动作的宽菜单 */
+.changes-pane__menu--wide {
   min-width: 240px;
+}
+
+/* 菜单分组标题：11px 弱化小字，点不动，只做分区说明 */
+.changes-pane__menu-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: default;
+}
+
+.changes-pane__menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line, var(--tw-border));
+  opacity: 0.7;
 }
 
 .changes-pane__menu-item {
@@ -1701,6 +1809,11 @@
 
 .changes-pane__menu-item:hover:not(:disabled) {
   background: var(--panel-alt);
+}
+
+/* 破坏性动作（全部回滚）在菜单里染成警示色 */
+.changes-pane__menu-item--danger {
+  color: var(--danger);
 }
 
 .changes-pane__menu-item:disabled {
@@ -1740,16 +1853,16 @@
 }
 
 .changes-pane__list {
+  position: relative;
   list-style: none;
   margin: 0;
-  padding: 6px;
-  overflow: auto;
-  flex: 1;
+  padding: 0;
   min-height: 0;
 }
 
-.changes-pane__item + .changes-pane__item {
-  margin-top: 2px;
+/* 行是绝对定位的（虚拟列表），行间距得算进行高，故用下内边距而不是 margin */
+.changes-pane__item {
+  padding-bottom: 2px;
 }
 
 .changes-pane__file-row {
@@ -1793,8 +1906,8 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .changes-pane__file-ico,
@@ -1802,8 +1915,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .changes-pane__chev {
@@ -2125,6 +2238,55 @@
 .changes-pane__status {
   color: var(--muted);
   text-transform: capitalize;
+}
+
+/* 手动提交表单：只在「⋯」菜单选过才出现，是一块独立区块，底部留一条分隔线 */
+.changes-dispose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--tw-border-subtle, rgba(128, 128, 128, 0.18));
+}
+
+.changes-dispose__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  /* 面板窄时整组换行，而不是把「取消」压到输入框边上 */
+  flex-wrap: wrap;
+}
+
+.changes-dispose__row > .tw-btn {
+  flex: 0 0 auto;
+}
+
+.changes-dispose__message {
+  /* 给输入框一个可用下限：低于这个宽度就换行，别缩成一条缝 */
+  flex: 1 1 132px;
+  min-width: 0;
+}
+
+.changes-dispose__notice {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--tw-fg-muted, #8a8478);
+}
+
+.changes-dispose__notice {
+  color: var(--tw-success, #3d6b4f);
+}
+
+.changes-pane__dispose {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.changes-pane__copy-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .changes-pane__error {

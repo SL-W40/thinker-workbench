@@ -2,11 +2,9 @@
  * 右侧 inspector：子代理时间线 tab（头部固定，正文可滚、贴底跟随）。
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getSubagentStep, subscribeSubagentSteps } from "../../bridge/subagent";
-import { useT } from "../../i18n/useI18n";
-import { SubagentSessionView } from "../chat/SubagentSessionView";
-import { subagentDisplayTitle } from "../chat/subagentTitle";
-import { useStickToBottomScroll } from "../chat/useStickToBottomScroll";
+import { getSubagentStep, subscribeSubagentSteps } from "../../platform/ipc/subagent";
+import { useT } from "../../ui/i18n/useI18n";
+import { SubagentSessionView, subagentDisplayTitle, useStickToBottomScroll } from "../chat";
 
 type Props = {
   taskId: string;

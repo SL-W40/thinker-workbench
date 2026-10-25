@@ -10,7 +10,7 @@ import {
 } from "@thinker-workbench/design/react";
 import type { ShellProfile, TerminalSession } from "@thinker-workbench/shared";
 import { useRef, useState } from "react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 
 type Props = {
   sessions: TerminalSession[];

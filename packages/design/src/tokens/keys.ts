@@ -7,10 +7,14 @@
 export const UI_TOKEN_KEYS = [
   "--tw-bg",
   "--tw-bg-elev",
+  "--tw-bg-subtle",
+  "--tw-bg-muted",
   "--tw-fg",
   "--tw-fg-muted",
   "--tw-border",
+  "--tw-border-subtle",
   "--tw-panel",
+  "--tw-panel-solid",
   "--tw-accent",
   "--tw-accent-strong",
   "--tw-accent-ink",
@@ -18,9 +22,12 @@ export const UI_TOKEN_KEYS = [
   "--tw-accent-ring",
   "--tw-danger",
   "--tw-danger-bg",
+  "--tw-success",
   "--tw-code-bg",
   "--tw-placeholder",
   "--tw-hover",
+  "--tw-surface-2",
+  "--tw-surface-hover",
   "--tw-font-body",
   /** 解析后的 UI 正文字体（与 body 一致）。 */
   "--tw-font-ui",
@@ -40,7 +47,16 @@ export type UiThemeVars = Partial<Record<UiTokenKey, string>> & Record<string, s
 export const LEGACY_UI_ALIASES: Record<string, UiTokenKey> = {
   "--bg": "--tw-bg",
   "--bg-elev": "--tw-bg-elev",
+  "--bg-soft": "--tw-bg",
+  "--bg-subtle": "--tw-bg-subtle",
+  "--fg": "--tw-fg",
+  "--fg-muted": "--tw-fg-muted",
   "--ink": "--tw-fg",
+  /**
+   * `--ink-muted` 与 `--muted` 同义，但早期 Less 里只有写法没有定义。
+   * 缺失时会退到写死的浅色暖灰 fallback，在深色主题下对比度不足。
+   */
+  "--ink-muted": "--tw-fg-muted",
   "--muted": "--tw-fg-muted",
   "--line": "--tw-border",
   "--panel": "--tw-panel",
@@ -54,6 +70,8 @@ export const LEGACY_UI_ALIASES: Record<string, UiTokenKey> = {
   "--placeholder": "--tw-placeholder",
   "--hover-wash": "--tw-hover",
   "--font-body": "--tw-font-body",
+  "--font-mono": "--tw-font-mono",
+  "--font-ui": "--tw-font-ui",
   "--mono": "--tw-font-mono",
   "--font": "--tw-font-ui",
   "--display": "--tw-font-ui",

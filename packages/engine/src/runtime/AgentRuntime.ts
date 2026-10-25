@@ -89,9 +89,9 @@ export class AgentRuntime {
     const graph = await this.ensureGraph();
     const threadId = command.threadId.trim();
     const runId = command.runId?.trim() || createRunId();
-    // 线程键为 run 级：从登记表找回被中断 run 的 runKey
-    const threadKey = lookupRunKey(this.checkpointDir, threadId);
-    if (!threadKey) throw new Error("No checkpoint to resume.");
+    // 线程键为 run 级：从登记表找回被中断 run 的 runKey；
+    // 登记缺失（旧版本遗留 / 内存 checkpointer）时回退纯 threadId，由后续快照校验兜底。
+    const threadKey = lookupRunKey(this.checkpointDir, threadId) ?? threadId;
     const config = { configurable: { thread_id: threadKey } };
 
     const snapshot = await graph.getState(config);
@@ -328,7 +328,13 @@ export class AgentRuntime {
               ? { images: m.images }
               : {}),
           }));
-        const state = initialState(message, history, command.contextPaths, images, command.attachments);
+        const state = initialState(
+          message,
+          history,
+          command.contextPaths,
+          images,
+          command.attachments,
+        );
         // 线程键为 run 级：历史以本 run 的 initialState（chat.db history）为单一来源，
         // append reducer 不再跨 run 累积；开工先登记，覆盖崩溃后 resume 定位
         const runKey = runKeyFor(threadId, runId);

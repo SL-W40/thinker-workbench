@@ -54,6 +54,7 @@ export function initialState(
     reply: "",
     pendingToolCalls: [],
     startedToolCallIds: [],
+    loadedToolNames: [],
     contextPaths: contextPaths?.length ? contextPaths : undefined,
     attachments: attachments?.length ? attachments : undefined,
     messagesOverride: [],
@@ -66,12 +67,17 @@ export function normalizeGraphState(raw: GraphState | (Partial<GraphState> & obj
   const started = Array.isArray((raw as GraphState).startedToolCallIds)
     ? (raw as GraphState).startedToolCallIds.filter((id) => typeof id === "string" && id.trim())
     : [];
+  // 旧快照没有该通道，缺省为空集合（延迟层会按需重新装载）
+  const loaded = Array.isArray((raw as GraphState).loadedToolNames)
+    ? (raw as GraphState).loadedToolNames.filter((name) => typeof name === "string" && name.trim())
+    : [];
   return {
     message: typeof raw.message === "string" ? raw.message : "",
     messages: Array.isArray(raw.messages) ? raw.messages : [],
     reply: typeof raw.reply === "string" ? raw.reply : "",
     pendingToolCalls: Array.isArray(raw.pendingToolCalls) ? raw.pendingToolCalls : [],
     startedToolCallIds: started,
+    loadedToolNames: loaded,
     contextPaths:
       Array.isArray(raw.contextPaths) && raw.contextPaths.length ? raw.contextPaths : undefined,
     attachments:

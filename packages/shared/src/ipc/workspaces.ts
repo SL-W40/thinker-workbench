@@ -2,6 +2,7 @@
  * 工作空间 / 聊天会话元数据与桌面 API 面。
  * 侧栏由 SQLite 权威数据驱动；`ThreadMeta` 经 `agent:listThreads` 下发。
  */
+import type { ChatTodo } from "../protocol/todo";
 
 /**
  * 会话运行状态（侧栏圆点 / Resume）。
@@ -30,6 +31,8 @@ export type WorkspaceRecord = {
 export type WorkspaceCreateInput = {
   rootPath: string;
   name?: string;
+  /** 指定 id（仅内置默认工作空间用固定 id，普通工作空间留空走随机生成）。 */
+  id?: string;
 };
 
 /** 侧栏会话列表项（`agent:listThreads` 返回）。 */
@@ -65,6 +68,11 @@ export type ChatSessionRecord = {
   createdAt: number;
   /** 末条消息时间（无消息则为会话创建时间）。 */
   updatedAt: number;
+  /**
+   * 会话待办：会话级状态，独立于计划。
+   * 由 `todo` 工具维护；计划产出待办时复用同一份（全量替换，幂等）。
+   */
+  todos: ChatTodo[];
 };
 
 /** 持久化 UI 消息行。 */
@@ -92,6 +100,99 @@ export type MoveSessionInput = {
   sortOrder?: number;
 };
 
+/** 会话导出格式。 */
+export type ChatExportFormat = "markdown" | "json";
+
+/** 会话导出入参。 */
+export type ChatExportInput = {
+  sessionId: string;
+  format: ChatExportFormat;
+  /**
+   * 导出为文件时的目标路径（由主进程的系统保存对话框取得）。
+   * 省略则返回内容字符串，由调用方自行处置（如预览）。
+   */
+  targetPath?: string;
+};
+
+/** 会话导出结果。 */
+export type ChatExportResult = {
+  ok: boolean;
+  format: ChatExportFormat;
+  /** 保存路径（成功且给了 targetPath 时有值）。 */
+  path?: string;
+  /** 未落盘时的导出内容（便于 UI 预览或自行保存）。 */
+  content?: string;
+  fileName?: string;
+  error?: string;
+};
+
+/** 会话导入入参。 */
+export type ChatImportInput = {
+  workspaceId: string;
+  /** JSON 导出串；省略时由主进程弹系统打开框并读取所选文件。 */
+  content?: string;
+  /** 导入会话的标题覆盖；省略用导出里的标题。 */
+  title?: string;
+};
+
+/** 会话导入结果。 */
+export type ChatImportResult = {
+  ok: boolean;
+  /** 新建会话的 id（始终新建，不覆盖既有会话）。 */
+  sessionId?: string;
+  title?: string;
+  /** 导入的消息条数。 */
+  messageCount?: number;
+  error?: string;
+};
+
+/** 会话导出文件版本号；导入时校验，不认识的版本直接拒绝。 */
+export const CHAT_EXPORT_VERSION = 1;
+
+/** 全文检索入参。 */
+export type ChatSearchInput = {
+  /** 检索关键词；空串返回空结果。 */
+  query: string;
+  /** 限定工作空间；省略表示全部工作空间。 */
+  workspaceId?: string;
+  /** 返回条数上限。 */
+  limit?: number;
+};
+
+/** 单条检索命中。 */
+export type SearchHit = {
+  sessionId: string;
+  threadId: string;
+  workspaceId: string;
+  /** 会话标题（命中标题时的排序权重更高）。 */
+  title: string;
+  /** 命中的消息序号（从 0 起）；未命中正文时为 null。 */
+  messageIndex: number | null;
+  /** 命中消息的角色。 */
+  role: string | null;
+  /** 命中的消息时间；未命中正文时为会话更新时间。 */
+  createdAt: number;
+  /** 命中片段（纯文本，已去掉换行空白压缩；含 `<mark>` 等标记）。 */
+  snippet: string;
+  /** 片段内命中区间（相对 snippet 的字符下标）；未定位到时为 null。 */
+  snippetMatch: { from: number; to: number } | null;
+  /** 是否为标题命中。 */
+  titleMatch: boolean;
+};
+
+/** 全文检索结果。 */
+export type ChatSearchResult = {
+  ok: boolean;
+  hits: SearchHit[];
+  /** 是否因上限截断。 */
+  truncated: boolean;
+  error?: string;
+};
+
+/** 检索结果的默认上限与硬上限（避免大库一次拉爆）。 */
+export const DEFAULT_SEARCH_LIMIT = 30;
+export const MAX_SEARCH_LIMIT = 100;
+
 /** Preload 暴露的工作空间 / 会话 API。 */
 export type ThinkerWorkspacesApi = {
   list(): Promise<WorkspaceRecord[]>;
@@ -117,6 +218,8 @@ export type ThinkerWorkspacesApi = {
   reorderSessions(workspaceId: string, input: ReorderInput): Promise<void>;
   moveSession(input: MoveSessionInput): Promise<ChatSessionRecord>;
   removeSession(sessionId: string): Promise<void>;
+  /** 全量写回会话待办（会话级状态，独立于计划）。 */
+  setSessionTodos(sessionId: string, todos: ChatTodo[]): Promise<ChatSessionRecord>;
   saveMessages(
     sessionId: string,
     messages: import("../protocol/message").ChatMessage[],
@@ -146,21 +249,15 @@ export type ThinkerWorkspacesApi = {
   readAttachment(
     workspaceId: string,
     id: string,
-  ): Promise<
-    | {
-        name: string;
-        size: number;
-        mime: string;
-        dataUrl?: string | null;
-        text?: string | null;
-      }
-    | null
-  >;
+  ): Promise<{
+    name: string;
+    size: number;
+    mime: string;
+    dataUrl?: string | null;
+    text?: string | null;
+  } | null>;
   /** 读取工作空间内某文件经解析层抽取的纯文本（用于文档悬停预览）。 */
-  parseWorkspaceFileText(
-    workspaceId: string,
-    path: string,
-  ): Promise<{ text: string } | null>;
+  parseWorkspaceFileText(workspaceId: string, path: string): Promise<{ text: string } | null>;
   setActiveSession(sessionId: string | null): Promise<void>;
   getActiveSessionId(): Promise<string | null>;
   getLastWorkspaceId(): Promise<string | null>;
@@ -169,4 +266,10 @@ export type ThinkerWorkspacesApi = {
   setCollapsedWorkspaceIds(ids: string[]): Promise<void>;
   /** 会话 / 线程列表变更广播。 */
   onThreadsChanged(cb: () => void): () => void;
+  /** 跨会话全文检索（SQLite FTS5）。 */
+  search(input: ChatSearchInput): Promise<ChatSearchResult>;
+  /** 导出单个会话为 Markdown / JSON 文件。 */
+  exportSession(input: ChatExportInput): Promise<ChatExportResult>;
+  /** 导入会话 JSON，落为指定工作区的新会话。 */
+  importSession(input: ChatImportInput): Promise<ChatImportResult>;
 };

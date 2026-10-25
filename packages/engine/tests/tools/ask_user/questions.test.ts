@@ -53,6 +53,48 @@ describe("parseAskUserQuestions", () => {
   });
 });
 
+describe("选答题（required: false）", () => {
+  const questions = parseAskUserQuestions({
+    questions: [
+      { id: "must", prompt: "Which file?", options: [{ label: "A" }, { label: "B" }] },
+      {
+        id: "maybe",
+        prompt: "Any preference?",
+        options: [{ label: "Fast" }, { label: "Fancy" }],
+        required: false,
+      },
+    ],
+  });
+
+  it("未写 required 的题按必答解析", () => {
+    assert.equal(questions[0]?.required, true);
+    assert.equal(questions[1]?.required, false);
+  });
+
+  it("选答题没答就跳过，不进结果", () => {
+    const answers = parseAskUserAnswers(questions, {
+      answers: [{ id: "must", optionId: "opt_1" }],
+    });
+    assert.equal(answers.length, 1);
+    assert.equal(answers[0]?.id, "must");
+  });
+
+  it("必答题没答仍然报错", () => {
+    assert.throws(
+      () => parseAskUserAnswers(questions, { answers: [{ id: "maybe", optionId: "opt_1" }] }),
+      /custom reply/,
+    );
+  });
+
+  it("排版里把跳过的题标成 skipped", () => {
+    const answers = parseAskUserAnswers(questions, {
+      answers: [{ id: "must", optionId: "opt_1" }],
+    });
+    const text = formatAskUserResult(questions, answers);
+    assert.match(text, /answer: \(skipped\)/);
+  });
+});
+
 describe("formatAskUserResult", () => {
   const questions = parseAskUserQuestions({
     questions: [

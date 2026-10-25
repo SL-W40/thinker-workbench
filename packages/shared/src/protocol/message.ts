@@ -3,7 +3,10 @@
  * 描述 UI / renderer 侧展示的一条对话消息形状（与 agent 运行结果解耦）。
  */
 
+import type { ChatMode } from "../ipc/chatMode";
 import type { ModelUsage } from "../ipc/events";
+// 类型循环（todo.ts 也引用 ChatPlanTodo）仅用于类型层面，编译后不存在
+import type { ChatTimelineTodoHint } from "./todo";
 
 /** 消息角色：用户、助手或系统。 */
 export type Role = "user" | "assistant" | "system";
@@ -72,6 +75,10 @@ export type ChatTimelineToolStep = {
   exitCode?: number | null;
   /** 是否因 block_until 超时而转后台。 */
   backgrounded?: boolean;
+  /** `todo` 工具：动作与受影响条目（区分读 / 写）。 */
+  todo?: ChatTimelineTodoHint;
+  /** `update_plan` 工具：这次更新动了哪几步（一行说清「更新了啥」）。 */
+  planUpdate?: ChatPlanUpdateHint;
   /**
    * 等待 HITL 审批时挂在 shell 步骤上（如 shell_approval）。
    * 用户选择后清除；拒绝时步骤以失败结束。
@@ -93,6 +100,21 @@ export type ChatTimelineToolStep = {
     purpose?: string;
   };
   /**
+   * request_mode_switch：等用户确认切换 ChatMode 时挂在步骤上。
+   * 与 hitl 分开存，`resolvedAction` 记下用户选了切换还是保持，答复后卡片转只读。
+   */
+  modeSwitch?: {
+    hitlId: string;
+    /** 要切到的模式。 */
+    targetMode: ChatMode;
+    /** 发起时的模式。 */
+    currentMode: ChatMode;
+    /** 模型给出的切换理由。 */
+    reason?: string;
+    /** 用户答复：switch / stay（缺省表示还没答）。 */
+    resolvedAction?: string;
+  };
+  /**
    * ask_user 澄清题。答复写入 answers 后卡片只读。
    * 与 hitl 分开存，避免会话收束时把已答内容清掉。
    */
@@ -102,6 +124,8 @@ export type ChatTimelineToolStep = {
       id: string;
       prompt: string;
       options: Array<{ id: string; label: string }>;
+      /** 是否必答；缺省（或 true）必答，false 时 UI 允许跳过。 */
+      required?: boolean;
     }>;
     answers?: Array<{
       id: string;
@@ -229,6 +253,68 @@ export type ChatAttachmentRef = {
   kind: AttachmentKind;
 };
 
+/** 计划完成状态。 */
+export type ChatPlanStatus = "draft" | "ready" | "building" | "done";
+
+/** 单条待办的状态。 */
+export type ChatPlanTodoStatus = "pending" | "in_progress" | "done";
+
+/** 计划里的一条待办。 */
+export type ChatPlanTodo = {
+  /** 稳定 id（执行时按 id 定位更新，不要按下标）。 */
+  id: string;
+  /** 待办描述。 */
+  label: string;
+  /** 完成状态。 */
+  status: ChatPlanTodoStatus;
+};
+
+/**
+ * `update_plan` 单次调用的变更摘要。
+ *
+ * 计划列表是全量替换，光看「更新计划」看不出改了哪：这里给进度 + 逐项变化
+ * （文案已截断、每类最多几条，供时间线一行展示）。
+ */
+export type ChatPlanUpdateHint = {
+  /** 更新后的步骤总数。 */
+  total: number;
+  /** 其中已完成的数量。 */
+  done: number;
+  /** 本次变为完成的步骤文案。 */
+  completed?: string[];
+  /** 本次新增的步骤文案。 */
+  added?: string[];
+  /** 本次删除的步骤文案。 */
+  removed?: string[];
+  /** 本次从完成退回未完成的步骤文案。 */
+  reopened?: string[];
+};
+
+/**
+ * 计划文档（plan.md）的结构化内容，是权威数据源。
+ *
+ * 默认不落用户工作空间，随会话快照持久化；
+ * plan.md 文本只是它的渲染投影，消费端不反解文本取真值。
+ */
+export type ChatPlan = {
+  /** 计划 id（稳定，供右侧面板虚拟标签寻址）。 */
+  id: string;
+  /** 计划标题（由 create_plan 工具给出；缺省由 UI 兜底）。 */
+  title?: string;
+  /** 计划简述（卡片上一句话说明要做什么）。 */
+  description?: string;
+  /** 计划完成状态。 */
+  status: ChatPlanStatus;
+  /** 待办列表（数组顺序即展示顺序）。 */
+  todos: ChatPlanTodo[];
+  /** 计划全文（由 create_plan 工具给出的 markdown 正文）。 */
+  markdown: string;
+  /** 创建时间（Unix ms）。 */
+  createdAt?: number;
+  /** 最近更新时间（Unix ms）。 */
+  updatedAt?: number;
+};
+
 /** 单条聊天消息（序列化友好，可写入会话快照）。 */
 export type ChatMessage = {
   /** 消息唯一 id。 */
@@ -237,6 +323,11 @@ export type ChatMessage = {
   role: Role;
   /** 正文文本。 */
   text: string;
+  /**
+   * 本轮产出的计划文档（仅 assistant；plan 模式生成，执行阶段增量更新）。
+   * 会话级活跃计划取「最后一条带 plan 的消息」，新计划自然覆盖旧计划。
+   */
+  plan?: ChatPlan;
   /** 用户附图（仅 user；全部保留，不截断）。 */
   images?: ChatImageRef[];
   /** 外部附件引用（仅 user；工作空间外文件，经 @file:<id> 引用）。 */

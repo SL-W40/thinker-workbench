@@ -10,8 +10,8 @@ import {
   type AppFontScale,
 } from "@thinker-workbench/shared";
 import { useMemo } from "react";
-import { useI18n } from "../../i18n/useI18n";
-import { applyUiFontScale } from "../../theme/fontScale";
+import { applyUiFontScale } from "../../platform/appearance/fontScale";
+import { useI18n } from "../../ui/i18n/useI18n";
 import { aiLocaleLabel, localeLabel } from "./generalLabels";
 import { ThemePicker } from "./ThemePicker";
 import { useGeneralSettings } from "./useGeneralSettings";

@@ -17,9 +17,9 @@ import {
   DEFAULT_APP_THEME,
 } from "@thinker-workbench/shared";
 import { useId, useMemo, useState } from "react";
-import { applyDataDirChange, pickDirectory, setGeneralSettings } from "../../bridge/thinker";
-import { useI18n } from "../../i18n/useI18n";
-import { useAppearance } from "../../theme/useAppearance";
+import { useAppearance } from "../../platform/appearance/useAppearance";
+import { applyDataDirChange, pickDirectory, setGeneralSettings } from "../../platform/ipc/thinker";
+import { useI18n } from "../../ui/i18n/useI18n";
 import { ThemePicker } from "../settings/ThemePicker";
 
 type Step = 1 | 2;

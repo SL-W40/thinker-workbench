@@ -1,11 +1,12 @@
 /**
  * 打开 catalog.db 与各工作空间 chat.db（better-sqlite3 + WAL）。
- * 布局：`<dataDir>/catalog.db`、`<dataDir>/workspaces/<id>/chat.db`。
+ * 布局：`<dataDir>/state/catalog.db`、`<dataDir>/workspaces/<id>/chat.db`。
  */
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { getCatalogDbPath, getWorkspaceChatDbPath, getWorkspaceDataDir } from "../config/paths";
+import { ensureSearchIndex } from "./messagesSearch";
 import {
   CATALOG_SCHEMA_SQL,
   CATALOG_SCHEMA_VERSION,
@@ -25,6 +26,21 @@ function dbLog(message: string, meta?: Record<string, unknown>): void {
 let catalog: Database.Database | null = null;
 let catalogPath: string | null = null;
 const workspaceDbs = new Map<string, Database.Database>();
+
+/**
+ * 幂等补列：`CREATE TABLE IF NOT EXISTS` 不会给已存在的表加新列，
+ * 老库升级缺的列（如会话待办）在这里逐列补上；已存在则直接跳过。
+ */
+function ensureColumn(
+  instance: Database.Database,
+  table: string,
+  column: string,
+  ddl: string,
+): void {
+  const cols = instance.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: unknown }>;
+  if (cols.some((col) => col.name === column)) return;
+  instance.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
 
 function migrateVersion(instance: Database.Database, version: number): void {
   const row = instance.prepare("SELECT value FROM schema_meta WHERE key = 'version'").get() as
@@ -87,6 +103,14 @@ export function openWorkspaceChatDb(workspaceId: string): Database.Database {
   instance.pragma("journal_mode = WAL");
   instance.pragma("foreign_keys = ON");
   instance.exec(CHAT_SCHEMA_SQL);
+  // 会话待办列（老库缺列时补上）
+  ensureColumn(instance, "chat_sessions", "todos_json", "todos_json TEXT");
+  // 全文检索虚拟表（FTS5 缺失时不拖垮打开流程）
+  try {
+    ensureSearchIndex(instance);
+  } catch {
+    /* ensureSearchIndex 内部已兜底 */
+  }
   migrateVersion(instance, CHAT_SCHEMA_VERSION);
   workspaceDbs.set(workspaceId, instance);
   return instance;

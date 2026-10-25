@@ -11,7 +11,7 @@ import {
   Switch,
 } from "@thinker-workbench/design/react";
 import { MODEL_TAGS, type ModelTag } from "@thinker-workbench/shared";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import type { ModelForm, ProviderDraft } from "./drafts";
 
 type Props = {

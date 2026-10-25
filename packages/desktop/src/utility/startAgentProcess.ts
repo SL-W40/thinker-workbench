@@ -1,13 +1,14 @@
 /**
  * 启动 Agent utilityProcess 并挂接 AgentBridge。
  *
- * fork `packages/engine` 入口；spawn 后发送 hello（checkpoint、model、aiLocale、日志策略）；
+ * fork `packages/engine` 入口；spawn 后发送 hello（model、aiLocale、日志策略）；
+ * checkpoint 目录随 run / resume 按工作区下发（一个 engine 进程可服务多个工作区）。
  * 异常退出时按 run 回收主进程 PTY，再带退避自动重启并重发 hello。
  */
 import { buildRuntimeSettings, type UtilityHello } from "@thinker-workbench/shared";
 import { utilityProcess } from "electron";
 import { runLedger } from "../agent/runLedger";
-import { getAgentEntryPath, getCheckpointDir, getDataDir } from "../config/paths";
+import { getAgentEntryPath, getDataDir } from "../config/paths";
 import { getGeneralSettings, getModelCatalogSnapshot } from "../config/settingsStore";
 import { listAgents } from "../customize/agentsStore";
 import { setCheckpointClearTransport } from "../db/checkpointClear";
@@ -38,7 +39,6 @@ export function buildAgentHello(): UtilityHello {
   return {
     channel: "utility",
     kind: "hello",
-    checkpointDir: getCheckpointDir(),
     catalog,
     selection: catalog.selection,
     workspaceRoot: activeRoot ?? undefined,

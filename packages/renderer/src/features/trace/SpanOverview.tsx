@@ -2,7 +2,7 @@
  * Trace 详情顶部：节点、身份和用量放在一张卡片里。
  */
 import type { TraceSpanRecord } from "@thinker-workbench/shared";
-import { useI18n } from "../../i18n/useI18n";
+import { useI18n } from "../../ui/i18n/useI18n";
 import { callTreeLabel } from "./callTreeModel";
 import { buildSpanOverview, type OverviewNames, outcomeLabel } from "./overviewModel";
 

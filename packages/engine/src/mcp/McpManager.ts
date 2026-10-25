@@ -15,6 +15,7 @@ import type {
 } from "@thinker-workbench/shared";
 import { getLimit } from "../config/runtimeLimits";
 import type { ChatToolDefinition } from "../model/types";
+import { invalidateToolsCache } from "../tools/cache";
 import type { ToolArgs, ToolResult } from "../tools/types";
 import { COMPUTER_MCP_ID, COMPUTER_MCP_NAME, callComputerTool, computerToolDefs } from "./computer";
 import { mcpToolName, parseMcpToolName, sanitizeMcpPart } from "./names";
@@ -130,6 +131,9 @@ export class McpManager {
       await this.stopOne(id);
       await this.startOne({ ...cfg, id });
     }
+
+    // 工具集合可能已变（指纹随之变）；显式清空避免任何陈旧 schema 被复用
+    invalidateToolsCache();
   }
 
   async stopAll(): Promise<void> {
@@ -248,6 +252,21 @@ export class McpManager {
       }
     }
     return out;
+  }
+
+  /**
+   * MCP 工具集合指纹（配置键 + 工具名），供工具 schema 缓存失效判定。
+   * server 启停 / 工具列表变化时指纹随之变化。
+   */
+  toolsFingerprint(): string {
+    return [...this.sessions.keys()]
+      .sort()
+      .map((id) => {
+        const s = this.sessions.get(id);
+        if (!s) return id;
+        return `${id}:${configKey(s.config)}:${s.tools.map((t) => t.name).join(",")}`;
+      })
+      .join("|");
   }
 
   /** 调用 MCP 工具。 */

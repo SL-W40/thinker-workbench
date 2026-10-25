@@ -15,7 +15,12 @@ import {
   type ShortcutsMap,
 } from "@thinker-workbench/shared";
 import { parseDiskFile, toDiskPayload, writeSettingsFile } from "./diskMappers";
-import { bootstrapSettingsPath, peekDataDirFromBootstrap, samePath, settingsPath } from "./paths";
+import {
+  bootstrapSettingsPath,
+  peekDataDirFromBootstrap,
+  samePath,
+  settingsPath,
+} from "./filePaths";
 import { ensureSecretsUnlocked } from "./secrets";
 import { getCachedSettings, type StoredSettings, setCachedSettings } from "./state";
 

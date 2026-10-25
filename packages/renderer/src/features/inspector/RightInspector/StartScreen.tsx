@@ -2,8 +2,8 @@
  * RightInspector 起始磁贴（无标签时展示）。
  */
 import type { GitStatus } from "@thinker-workbench/shared";
-import { useT } from "../../../i18n/useI18n";
-import { BrowserStartIcon, FileStartIcon, GitIcon, TerminalStartIcon } from "../icons";
+import { useT } from "../../../ui/i18n/useI18n";
+import { BrowserStartIcon, FileStartIcon, GitIcon, TerminalStartIcon } from "../../../ui/icons";
 
 type Props = {
   totals: GitStatus["totals"] | undefined;

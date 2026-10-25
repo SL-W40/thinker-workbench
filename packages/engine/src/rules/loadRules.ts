@@ -8,6 +8,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { dataPath } from "@thinker-workbench/shared";
 
 const RULE_EXTS = new Set([".md", ".mdc", ".txt"]);
 
@@ -71,7 +72,7 @@ export function loadRules(
 
   const roots: Array<{ label: string; root: string }> = [];
   if (dataDir?.trim()) {
-    roots.push({ label: "global", root: path.join(dataDir.trim(), "rules") });
+    roots.push({ label: "global", root: dataPath(dataDir.trim(), "customRules") });
   }
   if (workspaceRoot?.trim()) {
     const ws = workspaceRoot.trim();

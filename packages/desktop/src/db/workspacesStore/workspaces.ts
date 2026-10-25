@@ -5,12 +5,14 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   createWorkspaceId,
+  DEFAULT_WORKSPACE_ID,
   type ReorderInput,
   type WorkspaceCreateInput,
   type WorkspaceRecord,
 } from "@thinker-workbench/shared";
 import { getDefaultWorkspaceRoot } from "../../config/paths";
 import { getGeneralSettings } from "../../config/settingsStore";
+import { closeTraceDb } from "../../trace/workspaceTraceDb";
 import { destroyWorkspaceChatDb, openWorkspaceChatDb } from "../thinkerDb";
 import { catalog, type WsRow } from "./db";
 import { getKv, getLastWorkspaceId, KV_ACTIVE, setKv, setLastWorkspaceId } from "./kv";
@@ -42,23 +44,28 @@ export function listWorkspaces(): WorkspaceRecord[] {
 }
 
 /**
- * 确保内置默认工作空间存在（根目录 `~/.thinker/workspace`）。
+ * 确保内置默认工作空间存在（固定 id，根目录 `<dataDir>/workspaces/ws_default/project`）。
  * 默认空间不可删除，仅可清空会话；缺失时会补建（即使已有其它工作空间）。
  */
 export function ensureDefaultWorkspace(): WorkspaceRecord | null {
   const rootPath = path.resolve(getDefaultWorkspaceRoot());
-  const existing = catalog()
-    .prepare("SELECT * FROM workspaces WHERE root_path = ?")
-    .get(rootPath) as import("./db").WsRow | undefined;
+  // 先按固定 id 命中；老数据可能 id 不同但根相同，再按根路径兜底。
+  const byId = getWorkspace(DEFAULT_WORKSPACE_ID);
+  const byRoot = byId
+    ? null
+    : (catalog().prepare("SELECT * FROM workspaces WHERE root_path = ?").get(rootPath) as
+        | WsRow
+        | undefined);
+  const existing = byId ?? (byRoot ? mapWorkspace(byRoot) : null);
   if (existing) {
     openWorkspaceChatDb(existing.id);
     if (!getLastWorkspaceId()) setLastWorkspaceId(existing.id);
-    return mapWorkspace(existing);
+    return existing;
   }
 
   fs.mkdirSync(rootPath, { recursive: true });
   const name = getGeneralSettings().uiLocale === "zh" ? "默认工作空间" : "Default workspace";
-  const created = createWorkspace({ rootPath, name });
+  const created = createWorkspace({ rootPath, name, id: DEFAULT_WORKSPACE_ID });
   if (!getLastWorkspaceId()) setLastWorkspaceId(created.id);
   return created;
 }
@@ -83,8 +90,17 @@ export function createWorkspace(input: WorkspaceCreateInput): WorkspaceRecord {
     return mapWorkspace(existing);
   }
 
+  const requestedId = input.id?.trim();
+  if (requestedId) {
+    const byId = getWorkspace(requestedId);
+    if (byId) {
+      openWorkspaceChatDb(byId.id);
+      return byId;
+    }
+  }
+
   const now = Date.now();
-  const id = createWorkspaceId();
+  const id = requestedId || createWorkspaceId();
   const name = (input.name?.trim() || path.basename(rootPath) || "Workspace").slice(0, 120);
   const sortOrder = nextWorkspaceSortOrder();
   catalog()
@@ -142,6 +158,8 @@ export function removeWorkspace(id: string): void {
   }
   const r = catalog().prepare("DELETE FROM workspaces WHERE id = ?").run(id);
   if (r.changes === 0) throw new Error("Workspace not found.");
+  // Trace 库与记忆库也在该目录下：先关句柄，否则 Windows 上文件被锁、目录删不掉
+  closeTraceDb(id);
   destroyWorkspaceChatDb(id);
   const active = getKv(KV_ACTIVE);
   if (active && !lookupIndexBySession(active)) setKv(KV_ACTIVE, "");

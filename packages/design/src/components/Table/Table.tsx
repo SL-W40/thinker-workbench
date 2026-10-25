@@ -377,24 +377,6 @@ function TableCell({
   );
 }
 
-/** 数组重排辅助：将 `fromIndex` 项移到 `toIndex`。 */
-export function reorderTableRows<T>(list: readonly T[], fromIndex: number, toIndex: number): T[] {
-  if (
-    fromIndex === toIndex ||
-    fromIndex < 0 ||
-    toIndex < 0 ||
-    fromIndex >= list.length ||
-    toIndex >= list.length
-  ) {
-    return [...list];
-  }
-  const next = [...list];
-  const [item] = next.splice(fromIndex, 1);
-  if (item === undefined) return [...list];
-  next.splice(toIndex, 0, item);
-  return next;
-}
-
 export const Table = Object.assign(TableRoot, {
   Head: TableHead,
   Body: TableBody,

@@ -11,7 +11,7 @@ import type {
   RuleUpsertInput,
 } from "@thinker-workbench/shared";
 import { listWorkspaces } from "../db/workspacesStore";
-import { ensureDir, resolveWritableRoot } from "./paths";
+import { ensureDir, resolveWritableRoot } from "./customizeRoots";
 
 type ScanRoot = {
   root: string;

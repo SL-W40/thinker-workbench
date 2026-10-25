@@ -3,13 +3,15 @@
  * 与 SessionRunStatus 的 cancelled / crashed 无关；等人期间 run 保持 running。
  */
 
-/** HITL 种类；shell 审批 / 写入确认 / 密钥输入 + 澄清与选择。 */
+/** HITL 种类；shell 审批 / 写入确认 / 密钥输入 + 澄清 / 选择 / 模式切换。 */
 export type HitlKind =
   | "shell_approval"
   | "shell_write_approval"
   | "shell_secret_input"
   | "clarify"
-  | "choice";
+  | "choice"
+  /** 模型请求切换会话 ChatMode（如 Plan → Agent），等用户点按钮。 */
+  | "mode_switch";
 
 /** 介入卡上的操作按钮。 */
 export type HitlAction = {

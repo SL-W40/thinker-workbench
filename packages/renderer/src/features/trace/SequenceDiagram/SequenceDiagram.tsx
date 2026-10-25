@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import { arrowEndpoints } from "./arrows";
 import {
   buildMessages,

@@ -8,24 +8,30 @@ import {
   type TraceListSessionsQuery,
   type TraceStartSpanRequest,
 } from "@thinker-workbench/shared";
-import { BrowserWindow, ipcMain } from "electron";
+import { BrowserWindow, type IpcMain } from "electron";
 import { markSessionArtifactsPurged } from "../db/sessionArtifacts";
 import { exportSessionZip } from "../trace/exportSessionZip";
 import { readPayload, removeSessionJsonl } from "../trace/sessionJsonl";
 import { deleteSession, listSessionSpans, listSessions } from "../trace/traceDb";
+import { resolveWorkspaceIdForSession } from "../trace/workspaceTraceDb";
 import { handleEndSpan, handleStartSpan } from "../trace/writeSpan";
 
-export function registerTraceHandlers(): void {
+/** 与其它 handler 保持一致：由 registerIpc 注入 ipcMain，不在模块里直接抓 Electron 单例。 */
+export function registerTraceHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(IpcChannels.traceListSessions, (_e, query?: TraceListSessionsQuery) =>
     listSessions(query ?? {}),
   );
   ipcMain.handle(IpcChannels.traceGetSessionSpans, (_e, sessionId: string) => {
-    if (typeof sessionId !== "string" || !sessionId.trim()) return [];
-    return listSessionSpans(sessionId.trim());
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) return [];
+    const workspaceId = resolveWorkspaceIdForSession(id);
+    return workspaceId ? listSessionSpans(workspaceId, id) : [];
   });
   ipcMain.handle(IpcChannels.traceGetPayload, (_e, sessionId: string, payloadId: string) => {
     if (typeof sessionId !== "string" || typeof payloadId !== "string") return null;
-    return readPayload(sessionId.trim(), payloadId.trim());
+    const id = sessionId.trim();
+    const workspaceId = resolveWorkspaceIdForSession(id);
+    return workspaceId ? readPayload(workspaceId, id, payloadId.trim()) : null;
   });
   ipcMain.handle(IpcChannels.traceStartSpan, (_e, req: TraceStartSpanRequest) =>
     handleStartSpan(req),
@@ -37,8 +43,10 @@ export function registerTraceHandlers(): void {
     const id = typeof sessionId === "string" ? sessionId.trim() : "";
     if (!id) return;
     markSessionArtifactsPurged(id);
-    deleteSession(id);
-    removeSessionJsonl(id);
+    const workspaceId = resolveWorkspaceIdForSession(id);
+    if (!workspaceId) return;
+    deleteSession(workspaceId, id);
+    removeSessionJsonl(workspaceId, id);
   });
   ipcMain.handle(IpcChannels.traceExportSession, async (evt, sessionId: string) => {
     const win = BrowserWindow.fromWebContents(evt.sender);

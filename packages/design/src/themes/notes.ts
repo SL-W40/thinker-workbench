@@ -1,11 +1,10 @@
 /**
  * Notes 创意主题——暖色笔记纸面（原 paper / light）。
  */
-import { notesTheme as mdNotes } from "@thinker-workbench/markdown";
+import { notesTheme as mdNotes, SANS_STACK } from "@thinker-workbench/markdown";
 import { notesChrome } from "./chrome";
 import type { DesignTheme } from "./types";
 
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdNotes.vars["--md-font-mono"] ?? "";
 
 /** Notes——暖色笔记纸面。 */
@@ -29,13 +28,12 @@ export const notesTheme: DesignTheme = {
     "--tw-code-bg": "#efe2cc",
     "--tw-placeholder": "rgba(107, 83, 68, 0.7)",
     "--tw-hover": "rgba(42, 34, 24, 0.06)",
-    "--tw-font-body": SANS,
+    "--tw-font-body": SANS_STACK,
     "--tw-font-mono": MONO,
     "--tw-radius": "14px",
     "--tw-radius-control": "10px",
     "--tw-shadow-soft": "rgba(90, 70, 50, 0.06)",
     ...notesChrome({
-      paperRule: "rgba(120, 90, 60, 0.12)",
       paperMargin: "rgba(180, 120, 90, 0.14)",
       paperGlow: "rgba(196, 165, 116, 0.2)",
       titlebarBg: "rgba(244, 235, 224, 0.92)",

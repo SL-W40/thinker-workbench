@@ -1,10 +1,8 @@
 /**
  * Aurora 创意主题——深蓝夜空 + 青绿极光。
  */
+import { MONO_STACK, SANS_STACK } from "./fonts";
 import type { MarkdownTheme } from "./types";
-
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
-const MONO = 'ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace';
 
 /** Aurora——深蓝夜空 + 青绿极光。 */
 export const auroraTheme: MarkdownTheme = {
@@ -26,8 +24,8 @@ export const auroraTheme: MarkdownTheme = {
     "--md-danger-bg": "rgba(251, 113, 133, 0.12)",
     "--md-shadow-soft": "rgba(0, 0, 0, 0.35)",
     "--md-stream-glow": "rgba(94, 234, 212, 0.22)",
-    "--md-font-mono": MONO,
-    "--md-font": SANS,
+    "--md-font-mono": MONO_STACK,
+    "--md-font": SANS_STACK,
     "--md-hl-keyword": "#5eead4",
     "--md-hl-string": "#a5b4fc",
     "--md-hl-number": "#f9a8d4",

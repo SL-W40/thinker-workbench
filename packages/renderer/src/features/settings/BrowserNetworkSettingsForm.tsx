@@ -3,8 +3,8 @@
 import { Select, Switch } from "@thinker-workbench/design/react";
 import { HTTP_COMPATIBILITY_MODES, type HttpCompatibilityMode } from "@thinker-workbench/shared";
 import { useEffect, useMemo, useState } from "react";
-import { browserGetState, onBrowserEvent } from "../../bridge/browser";
-import { useI18n } from "../../i18n/useI18n";
+import { browserGetState, onBrowserEvent } from "../../platform/ipc/browser";
+import { useI18n } from "../../ui/i18n/useI18n";
 import { useGeneralSettings } from "./useGeneralSettings";
 
 type Props = {

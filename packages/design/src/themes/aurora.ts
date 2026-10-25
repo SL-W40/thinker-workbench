@@ -1,11 +1,10 @@
 /**
  * Aurora 创意主题——深蓝夜空 + 青绿极光。
  */
-import { auroraTheme as mdAurora } from "@thinker-workbench/markdown";
+import { auroraTheme as mdAurora, SANS_STACK } from "@thinker-workbench/markdown";
 import { notesChrome } from "./chrome";
 import type { DesignTheme } from "./types";
 
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdAurora.vars["--md-font-mono"] ?? "";
 
 /** Aurora——深蓝夜空 + 青绿极光。 */
@@ -29,13 +28,12 @@ export const auroraTheme: DesignTheme = {
     "--tw-code-bg": "#1a2438",
     "--tw-placeholder": "rgba(138, 168, 176, 0.7)",
     "--tw-hover": "rgba(232, 244, 242, 0.06)",
-    "--tw-font-body": SANS,
+    "--tw-font-body": SANS_STACK,
     "--tw-font-mono": MONO,
     "--tw-radius": "14px",
     "--tw-radius-control": "10px",
     "--tw-shadow-soft": "rgba(0, 0, 0, 0.35)",
     ...notesChrome({
-      paperRule: "rgba(94, 234, 212, 0.08)",
       paperMargin: "rgba(167, 139, 250, 0.12)",
       paperGlow: "rgba(94, 234, 212, 0.1)",
       titlebarBg: "rgba(11, 18, 32, 0.94)",

@@ -73,6 +73,9 @@ export function isToolAllowedForChatMode(
     return true;
   }
 
+  // 模式切换只能由主 agent 向用户发起：只读子代理不该改动会话模式
+  if (toolName === "request_mode_switch") return !childReadonly;
+
   if (childReadonly || mode === "ask" || mode === "plan") {
     if (WRITE_TOOLS.has(toolName)) return false;
     if (SHELL_TOOLS.has(toolName)) return false;
@@ -95,21 +98,28 @@ export function buildChatModeAddendum(mode: ChatMode = getChatMode()): string {
     case "plan":
       return [
         "## Chat mode: Plan",
-        "Produce a concrete plan: goals, steps, risks, and how to verify.",
+        "You MUST call the `create_plan` tool to deliver the plan.",
+        "Pass: title, a one-line description, status (a finished plan is `ready`), the full todo list (id / label / status), and the complete plan body as the `markdown` argument.",
+        "Emit those arguments in the order above (title first, markdown last): the Plan card streams in as you generate, so the user sees it fill up.",
+        "Never write the plan as markdown text in your reply — the tool arguments are the single source of truth and the plan is rendered as a Plan card.",
+        "The plan's todos become the session todo list; if unfinished todos exist, the user is asked whether to merge, discard, or keep them separate before the plan lands.",
+        "In the message body, write ONLY a brief summary of the approach.",
         "Do not edit files or run shell/browser tools in this mode.",
-        "End by asking whether to switch to Agent mode to implement.",
+        "When the user wants the plan implemented (or asks for any write action), call `request_mode_switch` with target `agent` instead of only telling them to switch modes in text.",
       ].join("\n");
     case "debug":
       return [
         "## Chat mode: Debug",
         "Reproduce → gather evidence → identify root cause → apply a minimal fix.",
         "Prefer reading logs and failing tests before large edits.",
+        "Use the `todo` tool to track the reproduction / fix / verification steps; no plan document is required.",
       ].join("\n");
     case "ask":
       return [
         "## Chat mode: Ask",
         "Answer questions and explain code. Do not modify the repository.",
         "Read-only tools only; never write files or run mutating shell commands.",
+        "If the user asks for changes in the repo, call `request_mode_switch` with target `agent` instead of refusing or telling them to switch manually.",
       ].join("\n");
     case "multitask":
       return [
@@ -124,6 +134,7 @@ export function buildChatModeAddendum(mode: ChatMode = getChatMode()): string {
       return [
         "## Chat mode: Agent",
         "Complete the user's request end-to-end using available tools.",
+        "Track multi-step work with the `todo` tool (add / update / complete / remove) so the user sees live progress above the composer; no plan document is required.",
         "For parallel subagents: Task with await=false, then task_await before relying on their output.",
         "Use task_cancel to drop one background Task without cancelling the whole run.",
       ].join("\n");

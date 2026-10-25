@@ -1,0 +1,20 @@
+# 发布配置：从基础配置继承，仅把 publish 换成 GitHub Releases。
+#
+# 用法（本地目CI 需带 GH_TOKEN）：
+#   npm run pack:desktop:release        # 全平台
+#   npm run pack:desktop:release:win    # 仅 Windows
+#   npm run pack:desktop:release:mac    # 仅 macOS
+#
+# 注意：仓库默认的 electron-builder.yml 保持 `publish: null`，
+# 保证没有 GH_TOKEN 的 CI（拉取安装包的流水线）依然能出包；
+# 只有本文件走发布。基础配置有结构性改动时，请同步检查本文件。
+extends: ./electron-builder.yml
+
+publish:
+  provider: github
+  owner: ${env.GH_OWNER}
+  repo: ${env.GH_REPO}
+  releaseType: release
+  publishAutoUpdate: true
+
+# Auto-update 需要 raw.githubusercontent 可达；私有仓库请加 private: true 并配 GH_TOKEN

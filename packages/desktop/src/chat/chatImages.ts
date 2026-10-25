@@ -4,7 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { type ChatImageRef, createId } from "@thinker-workbench/shared";
+import { type ChatImageRef, chatImageAllowed, createId } from "@thinker-workbench/shared";
 import { nativeImage } from "electron";
 import { getDataDir, getWorkspaceImagesDir } from "../config/paths";
 import { getWorkspace } from "../db/workspacesStore";
@@ -57,12 +57,12 @@ function normalizeMime(raw: string): string {
  */
 export function resolveAllowedChatImagePath(imagePath: string): string | null {
   const resolved = path.resolve(imagePath);
-  const workspacesRoot = path.resolve(getDataDir(), "workspaces");
-  const rel = path.relative(workspacesRoot, resolved);
+  const { workspacesRoot, workspaceKinds } = chatImageAllowed(getDataDir());
+  const rel = path.relative(path.resolve(workspacesRoot), resolved);
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
   const parts = rel.split(path.sep);
   // workspaces/<id>/images/<file>
-  if (parts.length < 3 || parts[1] !== "images") return null;
+  if (parts.length < 3 || !workspaceKinds.includes(parts[1] ?? "")) return null;
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return null;
   return resolved;
 }

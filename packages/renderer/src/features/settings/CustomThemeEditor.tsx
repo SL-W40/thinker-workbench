@@ -14,8 +14,8 @@ import {
 import { MD_TOKEN_KEYS } from "@thinker-workbench/markdown";
 import type { CustomThemeRecord } from "@thinker-workbench/shared";
 import { useEffect, useMemo, useState } from "react";
-import { useT } from "../../i18n/useI18n";
-import { useAppearance } from "../../theme/useAppearance";
+import { useAppearance } from "../../platform/appearance/useAppearance";
+import { useT } from "../../ui/i18n/useI18n";
 import { cloneCustomThemeRecord, looksLikeColor, toColorInputValue } from "./customThemeUtils";
 import "./CustomThemeEditor.less";
 

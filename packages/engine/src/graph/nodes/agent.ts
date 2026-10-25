@@ -28,6 +28,7 @@ import { createContextBudgetFromRuntime } from "../../memory/tokenBudget";
 import { chatWithFailover } from "../../model/catalog";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
 import type { ChatMessage } from "../../model/types";
+import { createPlanDraftStream } from "../../plan/planDraftStream";
 import { getRunContext, getRunTurn, getRunUsage, setRunTurn } from "../../runtime/runContext";
 import { getRunEmitter, getRunIds } from "../../runtime/runEmit";
 import { getAgentTraceContext } from "../../trace/emit";
@@ -35,7 +36,7 @@ import type { AgentGraphState, AgentGraphUpdate } from "../annotation";
 
 const PROJECT_MEMORY_TTL = 30_000;
 
-// --- 跨轮缓存（按 runId / dataDir）---
+// --- 跨轮缓存（按 runId / dataDir + workspaceId）---
 const repoCache = new Map<string, MemoryRepository>();
 const sessionServiceCache = new Map<string, SessionMemoryServiceImpl>();
 const autoCompactorCache = new Map<string, AutoCompactor>();
@@ -45,11 +46,12 @@ function countToolMessages(messages: ChatMessage[]): number {
   return messages.filter((m) => m.role === "tool").length;
 }
 
-async function getOrCreateRepo(dataDir?: string): Promise<MemoryRepository> {
-  const key = dataDir ?? "__none__";
+async function getOrCreateRepo(dataDir?: string, workspaceId?: string): Promise<MemoryRepository> {
+  // 记忆库按工作区落盘，故缓存键必须带上 workspaceId
+  const key = `${dataDir ?? "__none__"}::${workspaceId ?? "__none__"}`;
   const cached = repoCache.get(key);
   if (cached) return cached;
-  const repo = await createSqliteMemoryRepository(dataDir);
+  const repo = await createSqliteMemoryRepository(dataDir, workspaceId);
   repoCache.set(key, repo);
   return repo;
 }
@@ -111,7 +113,7 @@ export async function agent(
   const chatFn = createChatFnFromRuntime();
 
   // 1) 加载记忆；新用户消息首轮剥离历史任务摘要（话题切换防护，防答非所问）
-  const repo = await getOrCreateRepo(ctx?.dataDir);
+  const repo = await getOrCreateRepo(ctx?.dataDir, ctx?.workspaceId);
   const sessionMemoryRaw = sessionId ? await repo.load(sessionId, "session") : null;
   const sessionMemoryText = sessionMemoryRaw
     ? presentSessionMemory(sessionMemoryRaw, {
@@ -158,11 +160,16 @@ export async function agent(
     attachments: state.attachments,
     projectMemory: projectMemoryText || undefined,
     sessionMemory: sessionMemoryText || undefined,
+    // 延迟加载：把已通过 tool_search 装载的 MCP 工具名交给装配层展开
+    loadedToolNames: state.loadedToolNames,
   });
 
   // 尚无 reasoning 正文时用 planning；有 thinking token 后再由 UI 升为 Thinking
   emit({ type: "status", status: "planning" });
   setRunTurn(turn);
+
+  // create_plan 的参数很长：边生成边把草稿推给 UI，卡片随计划一起长出来
+  const planDraft = createPlanDraftStream({ emit, sessionId });
 
   const result = await chatWithFailover(
     {
@@ -173,6 +180,7 @@ export async function agent(
       onToken: (text, channel) => {
         emit({ type: "token", text, channel: channel ?? "reply" });
       },
+      onToolCallDelta: planDraft.onToolCallDelta,
     },
     signal,
   );

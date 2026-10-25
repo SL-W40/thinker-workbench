@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "vitest";
 import { loadFileRecents, pushFileRecent } from "../../../src/features/inspector/fileRecents";
 import {
+  flushInspectorUi,
   hydrateTabs,
   loadInspectorUi,
   patchInspectorUi,
@@ -65,7 +66,7 @@ describe("inspector ui", () => {
 
     const hydrated = hydrateTabs(
       [{ kind: "changes" }, { kind: "changes" }, { kind: "file", path: "src/a.ts" }],
-      { changes: "变更", files: "文件", terminal: "终端", browser: "浏览器" },
+      { changes: "变更", files: "文件", terminal: "终端", browser: "浏览器", plan: "计划" },
     );
     assert.equal(hydrated.length, 2);
     assert.equal(hydrated[1]?.title, "a.ts");
@@ -73,6 +74,8 @@ describe("inspector ui", () => {
 
     assert.equal(loadInspectorUi(null).tabs.length, 0);
     patchInspectorUi("ws", { filesListWidth: 10, activeKey: "changes", tabs: [{ kind: "files" }] });
+    // 落盘是防抖的（避免切 tab / 拖宽度时连续同步写），断言前先冲刷
+    flushInspectorUi();
     const loaded = loadInspectorUi("ws");
     assert.equal(loaded.filesListWidth, 180);
     assert.equal(loaded.activeKey, "changes");
@@ -85,9 +88,11 @@ describe("inspector ui", () => {
   it("浏览器地址可持久化与还原；损坏值回退空串", () => {
     assert.equal(loadInspectorUi("ws").browserUrl, "");
     patchInspectorUi("ws", { browserUrl: "https://example.com/docs" });
+    flushInspectorUi();
     assert.equal(loadInspectorUi("ws").browserUrl, "https://example.com/docs");
     // 合并写回不清掉其它字段
     patchInspectorUi("ws", { openDirs: ["src"] });
+    flushInspectorUi();
     assert.equal(loadInspectorUi("ws").browserUrl, "https://example.com/docs");
 
     localStorage.setItem(

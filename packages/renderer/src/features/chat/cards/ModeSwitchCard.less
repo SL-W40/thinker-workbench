@@ -1,0 +1,89 @@
+/* 模式切换卡片（时间线内 request_mode_switch）：一句标题 + 理由 + 保持/切换 */
+
+.mode-switch {
+  --mode-switch-line: color-mix(in srgb, var(--line, #e4e0d8) 72%, transparent);
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 9px 11px 8px;
+  border: 1px solid var(--mode-switch-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, #fff) 55%, transparent);
+}
+
+.mode-switch__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 标题即决定：切换到 X 模式？ —— 待答时加重，答完退成一句历史记录 */
+.mode-switch__title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink, #1b1b1f);
+  overflow-wrap: anywhere;
+}
+
+/* 已答复：不再是待办，降到与正文同级（绿色只留给那个对勾） */
+.mode-switch.is-done .mode-switch__title {
+  font-weight: 500;
+  color: var(--ink-muted, var(--muted));
+}
+
+.mode-switch__check {
+  display: inline-flex;
+  align-self: center;
+  color: var(--tw-success, var(--success, #2f9e5f));
+}
+
+/* 模式流转做弱化注脚，不与标题争视线 */
+.mode-switch__path {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--ink-muted, var(--muted)) 90%, transparent);
+  white-space: nowrap;
+}
+
+.mode-switch__body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted, var(--muted));
+  overflow-wrap: anywhere;
+}
+
+.mode-switch__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.mode-switch__buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.mode-switch__error {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--tw-danger, var(--danger, #c0392b));
+}

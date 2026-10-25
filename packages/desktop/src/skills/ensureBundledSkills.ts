@@ -1,10 +1,10 @@
 /**
- * 把应用内置 skills（resources/skills）同步到 dataDir/skills。
+ * 把应用内置 skills（resources/skills）同步到 `<dataDir>/customize/skills`。
  * 内置同名目录每次启动覆盖，保证产品文案与发现路径约定一致。
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getBundledSkillsDir, getDataDir } from "../config/paths";
+import { getBundledSkillsDir, getCustomizeDir } from "../config/paths";
 
 /** 递归复制目录。 */
 function copyDir(src: string, dest: string): void {
@@ -26,7 +26,7 @@ export function ensureBundledSkills(): string[] {
   const bundled = getBundledSkillsDir();
   if (!bundled || !fs.existsSync(bundled)) return [];
 
-  const destRoot = path.join(getDataDir(), "skills");
+  const destRoot = getCustomizeDir("skills");
   fs.mkdirSync(destRoot, { recursive: true });
 
   const installed: string[] = [];

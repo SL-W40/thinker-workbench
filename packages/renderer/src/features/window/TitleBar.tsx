@@ -18,9 +18,9 @@ import {
 } from "@thinker-workbench/design/react";
 import { processPlatform, type WindowRole } from "@thinker-workbench/shared";
 import { useEffect, useState } from "react";
-import { brandGlyphSrc } from "../../brand/logo";
-import { windowApi } from "../../bridge/thinker";
-import { useT } from "../../i18n/useI18n";
+import { brandGlyphSrc } from "../../platform/branding";
+import { windowApi } from "../../platform/ipc/thinker";
+import { useT } from "../../ui/i18n/useI18n";
 import type { PageId } from "../nav/usePageStack";
 import { TOOL_TAB_IDS, type ToolTabId, toolTabIcon, toolTabLabel } from "../tools/ToolsPane";
 import "../tools/tools.less";

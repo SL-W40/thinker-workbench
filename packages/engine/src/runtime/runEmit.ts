@@ -9,6 +9,9 @@ import type {
   AgentModelHealthEvent,
   AgentModelSwitchEvent,
   AgentSubagentEvent,
+  ChatPlanStatus,
+  ChatPlanTodo,
+  ChatTodo,
   HitlKind,
   HitlRequest,
   HitlResponse,
@@ -36,6 +39,8 @@ export type RunEmitEvent =
       restoreContent?: string;
       resultPaths?: string[];
       resultPathKinds?: import("@thinker-workbench/shared").ChatTimelineResultPathKind[];
+      /** `todo` 工具：动作与受影响条目（区分读 / 写）。 */
+      todo?: import("@thinker-workbench/shared").ChatTimelineTodoHint;
     }
   | {
       type: "usage";
@@ -68,6 +73,33 @@ export type RunEmitEvent =
       before?: number;
       after?: number;
       truncated?: number;
+    }
+  | {
+      type: "plan";
+      /**
+       * `drafting`：create_plan 参数流式中的草稿；
+       * `created`：新计划覆盖会话活跃计划；`updated`：执行阶段更新状态 / 待办。
+       */
+      phase: "drafting" | "created" | "updated";
+      /** 计划 id，与 ChatPlan.id 对齐。 */
+      planId: string;
+      /** 草稿阶段挂到对应工具调用的 id。 */
+      callId?: string;
+      /** 计划标题；`updated` 时可省略（沿用既有标题）。 */
+      title?: string;
+      /** 计划简述；`updated` 时可省略（沿用既有简述）。 */
+      description?: string;
+      status: ChatPlanStatus;
+      /** 全量待办列表（幂等替换）。 */
+      todos: ChatPlanTodo[];
+      markdown?: string;
+    }
+  | {
+      type: "todo";
+      /** 全量会话待办（幂等替换）。 */
+      todos: ChatTodo[];
+      /** 触发来源，供时间线给出不同文案。 */
+      origin?: "todo" | "create_plan" | "update_plan";
     };
 
 export type RunEmitter = (event: RunEmitEvent) => void;
@@ -115,6 +147,7 @@ export function toAgentEvent(base: AgentEventBase, event: RunEmitEvent): AgentEv
         restoreContent: event.restoreContent,
         resultPaths: event.resultPaths,
         resultPathKinds: event.resultPathKinds,
+        todo: event.todo,
       };
     case "usage":
       return { ...base, type: "usage", usage: event.usage };
@@ -136,6 +169,26 @@ export function toAgentEvent(base: AgentEventBase, event: RunEmitEvent): AgentEv
       return { ...base, ...event, type: "subagent" };
     case "memory":
       return { ...base, ...event, type: "memory" };
+    case "plan":
+      return {
+        ...base,
+        type: "plan",
+        phase: event.phase,
+        planId: event.planId,
+        ...(event.callId ? { callId: event.callId } : {}),
+        ...(event.title !== undefined ? { title: event.title } : {}),
+        ...(event.description !== undefined ? { description: event.description } : {}),
+        status: event.status,
+        todos: event.todos,
+        ...(event.markdown !== undefined ? { markdown: event.markdown } : {}),
+      };
+    case "todo":
+      return {
+        ...base,
+        type: "todo",
+        todos: event.todos,
+        ...(event.origin ? { origin: event.origin } : {}),
+      };
   }
 }
 
@@ -156,7 +209,13 @@ export function bindRuntimeEmitter(
   };
   return (event) => {
     const stamped = toAgentEvent({ ...base, ts: Date.now() }, event);
-    const writer = getWriter();
+    let writer: ReturnType<typeof getWriter>;
+    try {
+      writer = getWriter();
+    } catch {
+      // 不在 LangGraph 节点上下文（无 AsyncLocalStorage）：回退到 EventBus
+      writer = undefined;
+    }
     if (writer) {
       writer(stamped);
       return;

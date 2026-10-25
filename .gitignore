@@ -11,6 +11,7 @@ packages/desktop/.stage/
 /release-out/
 .DS_Store
 *.log
+*.tsbuildinfo
 .env
 .env.*
 package-lock.json

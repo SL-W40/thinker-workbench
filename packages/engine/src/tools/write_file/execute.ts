@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { captureBeforeImage } from "../../checkpoint/fileSnapshot";
 import { buildUnifiedDiff } from "../shared/diff";
 import {
   detectEol,
@@ -14,6 +15,7 @@ import {
   resolveRangeInFile,
   splitLines,
 } from "../shared/lines";
+import { withPathLock } from "../shared/pathLock";
 import { resolveWorkspacePath, toWorkspaceRelative } from "../shared/paths";
 import { throwIfAborted } from "../shared/walk";
 import type { ToolArgs, ToolContext, ToolExecuteResult } from "../types";
@@ -23,6 +25,17 @@ function asString(value: unknown): string | undefined {
 }
 
 export async function writeFileTool(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
+  throwIfAborted(ctx.signal, "Write file");
+  const rel = asString(args.path)?.trim();
+  if (!rel) {
+    throw new Error("write_file requires parameters.path (workspace-relative).");
+  }
+  // 写同一路径串行化：并行 run 之间不会互相覆盖（详见 tools/shared/pathLock）
+  return withPathLock(ctx.workspaceRoot, rel, () => writeFileInner(args, ctx));
+}
+
+/** 真正的写入实现（拿到路径锁之后才执行）。 */
+async function writeFileInner(args: ToolArgs, ctx: ToolContext): Promise<ToolExecuteResult> {
   throwIfAborted(ctx.signal, "Write file");
   const rel = asString(args.path)?.trim();
   if (!rel) {
@@ -42,6 +55,8 @@ export async function writeFileTool(args: ToolArgs, ctx: ToolContext): Promise<T
   if (existed) {
     before = await readFile(target, "utf8");
   }
+  // 首写前留下 before-image（幂等；失败不影响写入本身）
+  await captureBeforeImage(ctx.workspaceRoot, pathLabel);
 
   let after: string;
   let range: LineRange | null = null;

@@ -51,10 +51,19 @@ function ruleFg(hex: string): string {
  * 按当前 document 上的主题 token 定义并激活 `tw-theme`。
  * 语法着色优先 `--md-hl-*`（浅/深色同一套映射）。
  */
+/**
+ * 已经应用到 Monaco 的色系。
+ * applyMonacoTheme 要读约 20 次 getComputedStyle，再 defineTheme + setTheme ——
+ * 后者会触发全编辑器 re-tokenize。编辑器每次挂载都会调它，同色系时整段跳过。
+ */
+let appliedScheme: "light" | "dark" | null = null;
+
 export function applyMonacoTheme(
   monaco: typeof Monaco,
   colorScheme: "light" | "dark" = "light",
 ): void {
+  // Monaco 与主题定义都是全局单例，同一色系重复应用没有意义，只会白白 re-tokenize
+  if (appliedScheme === colorScheme) return;
   const dark = colorScheme === "dark";
   const bg = readColor("--tw-bg-elev", dark ? "#1e1e1e" : "#ffffff");
   const fg = readColor("--tw-fg", dark ? "#d4d4d4" : "#1e1e1e");
@@ -163,6 +172,7 @@ export function applyMonacoTheme(
     },
   });
   monaco.editor.setTheme(TW_MONACO_THEME);
+  appliedScheme = colorScheme;
 }
 
 /** 读取主题等宽字体；拼上稳定回退。 */

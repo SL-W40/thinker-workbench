@@ -17,8 +17,7 @@
       "default": "./artifacts/react/index.js"
     },
     "./styles.less": "./src/styles/design.less",
-    "./controls.less": "./src/styles/controls.less",
-    "./notes.less": "../markdown/src/styles/notes.less"
+    "./controls.less": "./src/styles/controls.less"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

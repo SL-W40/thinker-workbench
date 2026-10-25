@@ -8,11 +8,13 @@ export {
   getActiveSessionId,
   getActiveWorkspaceRoot,
   getCollapsedWorkspaceIds,
+  getKv,
   getLastWorkspaceId,
   getSessionChatMode,
   getSessionModelSelection,
   setActiveSessionId,
   setCollapsedWorkspaceIds,
+  setKv,
   setLastWorkspaceId,
   setSessionChatMode,
   setSessionModelSelection,
@@ -36,6 +38,7 @@ export {
   resyncSessionActivityTimes,
   setSessionPinned,
   setSessionRunStatus,
+  setSessionTodos,
   upsertSessionForRun,
 } from "./sessions";
 export {

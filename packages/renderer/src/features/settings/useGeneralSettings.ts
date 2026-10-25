@@ -9,7 +9,8 @@ import {
   type ShellProfile,
 } from "@thinker-workbench/shared";
 import { useEffect, useRef, useState } from "react";
-import { listShellProfiles } from "../../bridge/terminal";
+import { useAppearance } from "../../platform/appearance/useAppearance";
+import { listShellProfiles } from "../../platform/ipc/terminal";
 import {
   applyDataDirChange,
   GENERAL_SETTINGS_CHANGED,
@@ -19,9 +20,8 @@ import {
   previewAttention,
   previewDataDirChange,
   setGeneralSettings,
-} from "../../bridge/thinker";
-import { useI18n } from "../../i18n/useI18n";
-import { useAppearance } from "../../theme/useAppearance";
+} from "../../platform/ipc/thinker";
+import { useI18n } from "../../ui/i18n/useI18n";
 
 export type UseGeneralSettingsResult = {
   available: boolean;

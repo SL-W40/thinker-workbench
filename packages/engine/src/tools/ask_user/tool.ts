@@ -26,6 +26,15 @@ export const askUserToolSpec = defineTool({
           properties: {
             id: { type: "string", description: "Stable id for this question." },
             prompt: { type: "string", description: "The question, in the user's language." },
+            /**
+             * 是否必答；缺省 true。
+             * 有合理默认值、答不答都能继续的问题设 false —— UI 会给出「跳过」。
+             */
+            required: {
+              type: "boolean",
+              description:
+                "Default true. Set false only when the question has a sane default and can be skipped.",
+            },
             options: {
               type: "array",
               description: "Optional enumerable choices (2–5).",

@@ -33,8 +33,8 @@ import {
   mcpUpsert,
   onMcpStatus,
   pickDirectory,
-} from "../../../bridge/thinker";
-import { useT } from "../../../i18n/useI18n";
+} from "../../../platform/ipc/thinker";
+import { useT } from "../../../ui/i18n/useI18n";
 import { ScopeGroupSection } from "../../customize/ScopeGroupSection";
 import { buildScopeGroups, customizeScopeKey } from "../../customize/scopeHelpers";
 import "../McpSettingsForm.less";

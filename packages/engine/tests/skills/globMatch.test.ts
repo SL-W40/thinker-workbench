@@ -29,7 +29,7 @@ describe("loadSkills paths", () => {
 
   function writeSkill(pathsLine: string): void {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tw-skill-glob-"));
-    const dir = path.join(tmp, "skills", "ts-skill");
+    const dir = path.join(tmp, "customize", "skills", "ts-skill");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, "SKILL.md"),

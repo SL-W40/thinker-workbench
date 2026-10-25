@@ -1,11 +1,10 @@
 /**
  * 基础深色主题——黑白灰极简（夜间）。
  */
-import { darkTheme as mdDark } from "@thinker-workbench/markdown";
+import { darkTheme as mdDark, SANS_STACK } from "@thinker-workbench/markdown";
 import { notesChrome } from "./chrome";
 import type { DesignTheme } from "./types";
 
-const SANS = '"Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif';
 const MONO = mdDark.vars["--md-font-mono"] ?? "";
 
 /** 基础深色——黑白灰极简。 */
@@ -29,13 +28,12 @@ export const darkTheme: DesignTheme = {
     "--tw-code-bg": "#242424",
     "--tw-placeholder": "rgba(255, 255, 255, 0.4)",
     "--tw-hover": "rgba(255, 255, 255, 0.06)",
-    "--tw-font-body": SANS,
+    "--tw-font-body": SANS_STACK,
     "--tw-font-mono": MONO,
     "--tw-radius": "10px",
     "--tw-radius-control": "8px",
     "--tw-shadow-soft": "rgba(0, 0, 0, 0.35)",
     ...notesChrome({
-      paperRule: "rgba(255, 255, 255, 0.06)",
       paperMargin: "rgba(255, 255, 255, 0.04)",
       paperGlow: "transparent",
       titlebarBg: "rgba(17, 17, 17, 0.94)",

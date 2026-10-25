@@ -16,7 +16,7 @@ import {
 } from "@thinker-workbench/design/react";
 import type { TraceRunType, TraceSpanRecord } from "@thinker-workbench/shared";
 import { type ComponentType, Fragment, type ReactNode, useMemo, useState } from "react";
-import { useT } from "../../i18n/useI18n";
+import { useT } from "../../ui/i18n/useI18n";
 import {
   buildCallTreeRows,
   type CallTreeRow,

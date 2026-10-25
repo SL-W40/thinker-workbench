@@ -85,6 +85,16 @@ describe("imageParts", () => {
   it("allowed path 与目录外路径", () => {
     assert.equal(isAllowedChatImagePath(imagePath, dataDir), true);
     assert.equal(isAllowedChatImagePath(path.join(dataDir, "other.png"), dataDir), false);
+    // computer 截图白名单已迁到 cache/computer/images
+    const shotDir = path.join(dataDir, "cache", "computer", "images");
+    fs.mkdirSync(shotDir, { recursive: true });
+    const shot = path.join(shotDir, "shot.png");
+    fs.writeFileSync(shot, "x");
+    assert.equal(isAllowedChatImagePath(shot, dataDir), true);
+    assert.equal(
+      isAllowedChatImagePath(path.join(dataDir, "computer", "images", "old.png"), dataDir),
+      false,
+    );
   });
 
   it("toApiMessages 编码 data URL；缺失文件变文本", () => {

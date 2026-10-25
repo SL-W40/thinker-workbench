@@ -4,35 +4,37 @@
  * 浮动菜单见 ./floatingMenu，限流/高亮队列见 ./highlightQueue。
  */
 import { Button, EmptyState } from "@thinker-workbench/design/react";
-import type { GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
-import { useT } from "../../../i18n/useI18n";
-import { IconChevron, IconPanelHide, MI } from "../icons";
+import type { ChangeDispositionKind, GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
+import {
+  type CSSProperties,
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { applyChangeDisposition } from "../../../platform/ipc/checkpoints";
+import { useStableCallback } from "../../../ui/hooks/useStableCallback";
+import { useVirtualRows } from "../../../ui/hooks/useVirtualRows";
+import { useT } from "../../../ui/i18n/useI18n";
+import { IconPanelHide, MI } from "../../../ui/icons";
 import { loadInspectorUi, patchInspectorUi } from "../inspectorUi";
 import { FILE_LIST_AUTO_PANE_MIN, useFileListOpen, useFileListWidth } from "../useFileListPanel";
 import "../inspector.less";
-import { type BulkExpand, ChangedFileRow, ChangesFileList } from "./ChangedFileList";
+import type { ChangesPromptActionId } from "./actions";
+import { ChangedFileRow, ChangesFileList } from "./ChangedFileList";
 import { sortChangedFiles } from "./diffText";
-import { PortalMenu, useFloatingMenuCoords } from "./floatingMenu";
+import { PortalMenu } from "./floatingMenu";
+import { ManualCommitForm } from "./ManualCommitForm";
+import { SubmitActions } from "./SubmitActions";
+import { useDisposeAll } from "./useDisposeAll";
+import { usePortalMenu } from "./usePortalMenu";
 
-export type ChangesPromptActionId =
-  | "createBranchAndCommit"
-  | "createBranchCommitAndPush"
-  | "createBranch"
-  | "commitAndPush"
-  | "commit"
-  | "commitAndCreatePr";
-
-export const CHANGES_ACTION_PROMPTS: Record<ChangesPromptActionId, string> = {
-  createBranchAndCommit:
-    "Create a new branch and commit the current changes with an appropriate message.",
-  createBranchCommitAndPush:
-    "Create a new branch, commit the current changes, and push to the remote.",
-  createBranch: "Create a new branch for the current uncommitted changes.",
-  commitAndPush: "Commit the current changes with an appropriate message and push to the remote.",
-  commit: "Commit the current changes with an appropriate message.",
-  commitAndCreatePr: "Commit the current changes and open a pull request.",
-};
+export type { ChangesPromptActionId } from "./actions";
+// 动作定义搬到了 ./actions（提交按钮的下拉与菜单都要用），转发导出保持上层导入路径不变
+export { CHANGES_ACTION_PROMPTS } from "./actions";
 
 type Props = {
   workspaceId?: string | null;
@@ -47,15 +49,11 @@ type Props = {
   onSendAction: (action: ChangesPromptActionId) => void;
 };
 
-const CTA_MENU_ACTIONS: ChangesPromptActionId[] = [
-  "createBranchCommitAndPush",
-  "createBranch",
-  "commitAndPush",
-  "commit",
-  "commitAndCreatePr",
-];
-
-export function ChangesPane({
+/**
+ * memo：面板内含 diff 列表与浮动菜单，RightInspector 的 30+ state 任一变化不该让它整棵重渲染。
+ * 前提是上层传进来的回调引用稳定（RightInspector 里已用 useStableCallback 包过）。
+ */
+export const ChangesPane = memo(function ChangesPane({
   workspaceId,
   status,
   loading,
@@ -67,18 +65,24 @@ export function ChangesPane({
   onSendAction,
 }: Props) {
   const t = useT();
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const [ctaMenuOpen, setCtaMenuOpen] = useState(false);
+  const viewMenu = usePortalMenu(200);
   const [wordWrap, setWordWrap] = useState(false);
   const [focusPath, setFocusPath] = useState<string | null>(null);
-  const [expandTick, setExpandTick] = useState(0);
-  const [bulkExpand, setBulkExpand] = useState<BulkExpand>({ gen: 0, open: false });
-  const viewWrapRef = useRef<HTMLDivElement>(null);
-  const ctaSplitRef = useRef<HTMLDivElement>(null);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
-  const ctaMenuRef = useRef<HTMLDivElement>(null);
-  const viewMenuCoords = useFloatingMenuCoords(viewMenuOpen, viewWrapRef, 200);
-  const ctaMenuCoords = useFloatingMenuCoords(ctaMenuOpen, ctaSplitRef, 240);
+  /**
+   * 手动提交表单是否展开。常态只有头部一个「提交」按钮，
+   * 其余动作全在「⋯」菜单里；选了手动提交才长出这块表单。
+   * 按工作空间记住：习惯自己写说明的人不想到菜单里再点一次。
+   */
+  const [manual, setManual] = useState(
+    () => loadInspectorUi(workspaceId ?? null).changesCommitMode === "manual",
+  );
+  /**
+   * 展开 diff 的文件；放在面板而不是行内，因为主列表做了虚拟化 ——
+   * 行滚出窗口就卸载，行内 state 会把展开状态一起丢掉。
+   */
+  const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(() => new Set());
+  /** 行级处置进行中（同一时刻只允许一个，避免并发改同一批快照）。 */
+  const [disposing, setDisposing] = useState<string | null>(null);
 
   const restoredUi = useMemo(() => loadInspectorUi(workspaceId ?? null), [workspaceId]);
   const skipPersist = useRef(true);
@@ -110,79 +114,93 @@ export function ChangesPane({
     });
   }, [workspaceId, listForced, listWidth]);
 
+  /**
+   * 手动提交展开态按工作空间记住。只在用户切换时写 —— 挂载时写会把
+   * skipPersist 挡掉的默认值又写回去（列表宽度那套是同一个道理）。
+   */
+  function setManualMode(next: boolean) {
+    setManual(next);
+    if (workspaceId) patchInspectorUi(workspaceId, { changesCommitMode: next ? "manual" : "ai" });
+  }
+
   const files = useMemo(() => sortChangedFiles(status?.files ?? []), [status?.files]);
   const noChanges = !status?.isRepo || files.length === 0;
+  /** 批量处置（全部回滚 / 全部采纳）：入口在「⋯」菜单，状态留在面板层。 */
+  const dispose = useDisposeAll({
+    workspaceId,
+    paths: files.map((f) => f.path),
+    onChanged: onRefresh,
+  });
   const totals = status?.totals ?? { added: 0, removed: 0 };
   const changedPaths = useMemo(() => new Set(files.map((f) => f.path)), [files]);
+
+  /** 主列表虚拟化：几百个改动文件也只有视口内十几行在 DOM 里。 */
+  const list = useVirtualRows({
+    count: files.length,
+    estimate: 30,
+    // 按路径缓存行高：同一个文件展开 / 折叠后高度不同，滚回来不用重新量
+    getKey: (i) => files[i]?.path ?? String(i),
+  });
+
+  // 定位样式按 rows 缓存：每次渲染都新建对象会击穿行上的 memo
+  const rowStyles = useMemo<CSSProperties[]>(
+    () =>
+      list.rows.map(({ offset }) => ({
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        transform: `translateY(${offset}px)`,
+      })),
+    [list.rows],
+  );
+
+  const toggleOpen = useCallback((path: string) => {
+    setOpenPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
 
   function focusFromSidebar(path: string) {
     // 改动文件：聚焦主区 diff；未改动文件：直接在编辑器打开
     if (changedPaths.has(path)) {
       setFocusPath(path);
-      setExpandTick((n) => n + 1);
+      setOpenPaths((prev) => (prev.has(path) ? prev : new Set(prev).add(path)));
+      const index = files.findIndex((f) => f.path === path);
+      if (index >= 0) list.scrollToIndex(index);
     } else {
       onOpenFile(path);
     }
   }
 
-  function sendAction(id: ChangesPromptActionId) {
-    setCtaMenuOpen(false);
-    setViewMenuOpen(false);
-    onSendAction(id);
-  }
+  /**
+   * 单文件处置：成功后刷新 Git 状态，让面板立刻反映改动消失。
+   * 包一层稳定引用：行是 memo 的，每次渲染新建函数会让十几行全部重渲染。
+   */
+  const disposeFile = useStableCallback((kind: ChangeDispositionKind, path: string) => {
+    void disposeFileImpl(kind, path);
+  });
 
-  useEffect(() => {
-    if (!viewMenuOpen && !ctaMenuOpen) return;
-    const onPointer = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        viewWrapRef.current?.contains(target) ||
-        ctaSplitRef.current?.contains(target) ||
-        viewMenuRef.current?.contains(target) ||
-        ctaMenuRef.current?.contains(target)
-      ) {
+  async function disposeFileImpl(kind: ChangeDispositionKind, path: string) {
+    if (!workspaceId || disposing) return;
+    setDisposing(path);
+    try {
+      const res = await applyChangeDisposition({ workspaceId, kind, paths: [path] });
+      const item = res.items[0];
+      if (item?.ok) {
+        onRefresh();
         return;
       }
-      setViewMenuOpen(false);
-      setCtaMenuOpen(false);
-    };
-    // capture：避免中间层 stopPropagation 导致关不
-    window.addEventListener("mousedown", onPointer, true);
-    return () => window.removeEventListener("mousedown", onPointer, true);
-  }, [viewMenuOpen, ctaMenuOpen]);
-
-  // 聊天页 keep-alive（hidden）时 portal 菜单仍挂在 body，切页时主动关掉
-  useEffect(() => {
-    if (!viewMenuOpen && !ctaMenuOpen) return;
-    const triggers = [viewWrapRef.current, ctaSplitRef.current].filter(
-      (el): el is HTMLDivElement => el != null,
-    );
-    if (triggers.length === 0) return;
-
-    const close = () => {
-      setViewMenuOpen(false);
-      setCtaMenuOpen(false);
-    };
-    const closeIfHidden = () => {
-      if (triggers.some((el) => !el.isConnected || el.closest("[hidden]"))) close();
-    };
-
-    const mo = new MutationObserver(closeIfHidden);
-    for (const trigger of triggers) {
-      let node: Element | null = trigger;
-      while (node) {
-        mo.observe(node, { attributes: true, attributeFilter: ["hidden"] });
-        node = node.parentElement;
-      }
+      window.alert(
+        `${kind === "revert" ? t("inspector.changes.revertFile") : t("inspector.changes.keepFile")}：${item?.error ?? res.error ?? t("inspector.changes.disposeFailed")}`,
+      );
+    } finally {
+      setDisposing(null);
     }
-    window.addEventListener("hashchange", close);
-    closeIfHidden();
-
-    return () => {
-      mo.disconnect();
-      window.removeEventListener("hashchange", close);
-    };
-  }, [viewMenuOpen, ctaMenuOpen]);
+  }
 
   if (!status && loading) {
     return (
@@ -231,6 +249,31 @@ export function ChangesPane({
             </Button>
           }
         />
+        {/* 真实报错（找不到可执行文件的路径 / spawn 错误）比笼统提示更有诊断价值 */}
+        {status.detail ? <div className="changes-pane__error">{status.detail}</div> : null}
+        {error ? <div className="changes-pane__error">{error}</div> : null}
+      </div>
+    );
+  }
+
+  // git 命令本身失败（区别于「没装」与「不是仓库」）：不要误导用户去初始化仓库
+  if (status && status.reason === "git_error") {
+    return (
+      <div className="changes-pane changes-pane--empty">
+        <EmptyState
+          title={t("inspector.changes.errorTitle")}
+          description={t("inspector.changes.gitErrorBody")}
+          action={
+            <Button
+              variant="primary"
+              className="changes-pane__primary"
+              onClick={() => void onRefresh()}
+            >
+              {t("inspector.refresh")}
+            </Button>
+          }
+        />
+        {status.detail ? <div className="changes-pane__error">{status.detail}</div> : null}
         {error ? <div className="changes-pane__error">{error}</div> : null}
       </div>
     );
@@ -279,29 +322,40 @@ export function ChangesPane({
                 />
               </svg>
             </span>
-            <span className="changes-pane__section">{t("inspector.changes.uncommitted")}</span>
-            {(totals.added > 0 || totals.removed > 0) && (
-              <span className="changes-pane__totals">
-                <span className="changes-pane__add">+{totals.added}</span>
-                <span className="changes-pane__del">−{totals.removed}</span>
+            {/* 未提交 / 分支名 / +/− 行数绑成一整块：这三部分永不互相折行 */}
+            <span className="changes-pane__title">
+              <span className="changes-pane__section">{t("inspector.changes.uncommitted")}</span>
+              <span className="changes-pane__branch" title={status?.branch ?? ""}>
+                {status?.branch ?? "HEAD"}
               </span>
-            )}
-            <span className="changes-pane__branch" title={status?.branch ?? ""}>
-              {status?.branch ?? "HEAD"}
+              {(totals.added > 0 || totals.removed > 0) && (
+                <span className="changes-pane__totals">
+                  <span className="changes-pane__add">+{totals.added}</span>
+                  <span className="changes-pane__del">−{totals.removed}</span>
+                </span>
+              )}
             </span>
           </div>
+          {/* 提交按钮与右侧图标同属一组：宽度不够时整组一起折到第二行，中间不留空档 */}
           <div className="changes-pane__actions">
-            <div className="changes-pane__view-wrap" ref={viewWrapRef}>
+            {manual ? null : (
+              <SubmitActions
+                disabled={noChanges}
+                onSendAction={onSendAction}
+                onManual={() => setManualMode(true)}
+                disposeBusy={dispose.busy}
+                onRevertAll={dispose.revertAll}
+                onKeepAll={dispose.keepAll}
+              />
+            )}
+            <div className="changes-pane__view-wrap" ref={viewMenu.wrapRef}>
               <button
                 type="button"
                 className="changes-pane__icon-btn changes-pane__icon-btn--more"
                 aria-label={t("inspector.changes.viewOptions")}
                 title={t("inspector.changes.viewOptions")}
-                aria-expanded={viewMenuOpen}
-                onClick={() => {
-                  setCtaMenuOpen(false);
-                  setViewMenuOpen((v) => !v);
-                }}
+                aria-expanded={viewMenu.open}
+                onClick={viewMenu.toggle}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <circle cx="3.5" cy="8" r="1.15" fill="currentColor" />
@@ -309,7 +363,7 @@ export function ChangesPane({
                   <circle cx="12.5" cy="8" r="1.15" fill="currentColor" />
                 </svg>
               </button>
-              <PortalMenu open={viewMenuOpen} coords={viewMenuCoords} menuRef={viewMenuRef}>
+              <PortalMenu open={viewMenu.open} coords={viewMenu.coords} menuRef={viewMenu.menuRef}>
                 <button
                   type="button"
                   className="changes-pane__menu-item changes-pane__menu-item--toggle"
@@ -326,10 +380,8 @@ export function ChangesPane({
                   role="menuitem"
                   disabled={noChanges}
                   onClick={() => {
-                    setViewMenuOpen(false);
-                    startTransition(() =>
-                      setBulkExpand((prev) => ({ gen: prev.gen + 1, open: true })),
-                    );
+                    viewMenu.close();
+                    startTransition(() => setOpenPaths(new Set(files.map((f) => f.path))));
                   }}
                 >
                   {t("inspector.changes.expandAll")}
@@ -340,58 +392,12 @@ export function ChangesPane({
                   role="menuitem"
                   disabled={noChanges}
                   onClick={() => {
-                    setViewMenuOpen(false);
-                    startTransition(() =>
-                      setBulkExpand((prev) => ({ gen: prev.gen + 1, open: false })),
-                    );
+                    viewMenu.close();
+                    startTransition(() => setOpenPaths(new Set()));
                   }}
                 >
                   {t("inspector.changes.collapseAll")}
                 </button>
-              </PortalMenu>
-            </div>
-
-            <div className="changes-pane__cta-split" ref={ctaSplitRef}>
-              <button
-                type="button"
-                className="changes-pane__cta"
-                disabled={noChanges}
-                onClick={() => sendAction("createBranchAndCommit")}
-              >
-                {t("inspector.changes.cta.createBranchAndCommit")}
-              </button>
-              <button
-                type="button"
-                className="changes-pane__cta-chev-btn"
-                disabled={noChanges}
-                aria-label={t("inspector.changes.moreActions")}
-                aria-expanded={ctaMenuOpen}
-                title={t("inspector.changes.moreActions")}
-                onClick={() => {
-                  setViewMenuOpen(false);
-                  setCtaMenuOpen((v) => !v);
-                }}
-              >
-                <IconChevron open />
-              </button>
-              <PortalMenu
-                open={ctaMenuOpen}
-                coords={ctaMenuCoords}
-                menuRef={ctaMenuRef}
-                className="changes-pane__menu--cta"
-              >
-                {CTA_MENU_ACTIONS.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="changes-pane__menu-item"
-                    role="menuitem"
-                    disabled={noChanges}
-                    onClick={() => sendAction(id)}
-                  >
-                    {t(`inspector.changes.cta.${id}` as "inspector.changes.cta.commit")}
-                  </button>
-                ))}
               </PortalMenu>
             </div>
 
@@ -419,6 +425,18 @@ export function ChangesPane({
       </div>
 
       {error ? <div className="changes-pane__error">{error}</div> : null}
+      {dispose.error ? <div className="changes-pane__error">{dispose.error}</div> : null}
+      {dispose.notice ? <div className="changes-dispose__notice">{dispose.notice}</div> : null}
+
+      {/* 手动提交表单只在菜单里选过才出现；提交完没有改动了自然收掉 */}
+      {manual && workspaceId && !noChanges ? (
+        <ManualCommitForm
+          workspaceId={workspaceId}
+          onChanged={onRefresh}
+          onClose={() => setManualMode(false)}
+          busy={dispose.busy}
+        />
+      ) : null}
 
       {noChanges ? (
         <div className="changes-pane__empty-body">
@@ -430,42 +448,59 @@ export function ChangesPane({
       ) : (
         <div className="changes-pane__body">
           <div className="changes-pane__main">
-            <ul className="changes-pane__list">
-              {files.map((f) =>
-                workspaceId ? (
-                  <ChangedFileRow
-                    key={f.path}
-                    workspaceId={workspaceId}
-                    path={f.path}
-                    added={f.added}
-                    removed={f.removed}
-                    status={f.status}
-                    onOpenFile={onOpenFile}
-                    expandToken={focusPath === f.path ? expandTick : 0}
-                    bulk={bulkExpand}
-                    wordWrap={wordWrap}
-                  />
-                ) : (
-                  <li key={f.path} className="changes-pane__item">
-                    <div className="changes-pane__file-row">
-                      <button
-                        type="button"
-                        className="changes-pane__file-name"
-                        onClick={() => onOpenFile(f.path)}
-                      >
-                        {f.path}
-                      </button>
-                      <span className="changes-pane__file-stats">
-                        {f.added > 0 ? <span className="changes-pane__add">+{f.added}</span> : null}
-                        {f.removed > 0 ? (
-                          <span className="changes-pane__del">−{f.removed}</span>
-                        ) : null}
-                      </span>
-                    </div>
-                  </li>
-                ),
-              )}
-            </ul>
+            {/* 滚动容器与列表分离：ul 只负责撑总高，行用 translateY 定位 */}
+            <div className="changes-pane__scroller" ref={list.scrollRef}>
+              <ul className="changes-pane__list" style={{ height: list.contentHeight }}>
+                {list.rows.map((row, i) => {
+                  const { index } = row;
+                  const f = files[index];
+                  const style = rowStyles[i];
+                  return workspaceId ? (
+                    <ChangedFileRow
+                      key={f.path}
+                      workspaceId={workspaceId}
+                      path={f.path}
+                      added={f.added}
+                      removed={f.removed}
+                      status={f.status}
+                      onOpenFile={onOpenFile}
+                      open={openPaths.has(f.path)}
+                      onToggleOpen={toggleOpen}
+                      wordWrap={wordWrap}
+                      onDispose={disposeFile}
+                      disposeBusy={disposing === f.path}
+                      measureRef={list.measureRef(index)}
+                      style={style}
+                    />
+                  ) : (
+                    <li
+                      key={f.path}
+                      className="changes-pane__item"
+                      ref={list.measureRef(index)}
+                      style={style}
+                    >
+                      <div className="changes-pane__file-row">
+                        <button
+                          type="button"
+                          className="changes-pane__file-name"
+                          onClick={() => onOpenFile(f.path)}
+                        >
+                          {f.path}
+                        </button>
+                        <span className="changes-pane__file-stats">
+                          {f.added > 0 ? (
+                            <span className="changes-pane__add">+{f.added}</span>
+                          ) : null}
+                          {f.removed > 0 ? (
+                            <span className="changes-pane__del">−{f.removed}</span>
+                          ) : null}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
           {listOpen ? (
             <ChangesFileList
@@ -474,6 +509,8 @@ export function ChangesPane({
               selectedPath={focusPath}
               onSelect={focusFromSidebar}
               onOpenFile={onOpenFile}
+              workspaceId={workspaceId ?? ""}
+              onChanged={onRefresh}
               width={listWidth}
               dragging={listDragging}
               onResizePointerDown={onResizePointerDown}
@@ -483,4 +520,4 @@ export function ChangesPane({
       )}
     </div>
   );
-}
+});

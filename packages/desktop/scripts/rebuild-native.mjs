@@ -5,6 +5,7 @@
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,5 +72,42 @@ if ((result.status ?? 1) !== 0) {
       "再 pnpm --filter @thinker-workbench/desktop run rebuild:native。",
   );
 }
+
+/**
+ * `--build-from-source` 只产出 .node，不带 conpty 运行时
+ * （conpty.dll + OpenConsole.exe 只在 prebuilds/<platform>-<arch>/conpty 里）。
+ * 缺了它们 PTY 只能走非 DLL 模式，而那条路每次 kill() 都会 fork
+ * conpty_console_list_agent 去 AttachConsole(shellPid)，失败时子进程直接抛
+ * `Error: AttachConsole failed` 崩掉、日志刷屏。把运行时补到 conpty.node 旁边，
+ * spawnPty 才能用上 DLL 模式。
+ */
+function copyConptyRuntime() {
+  if (platform !== "win32") return;
+  let nodePtyDir;
+  try {
+    const require = createRequire(import.meta.url);
+    // 走符号链接的真实路径，写入 .pnpm 里的实际目录
+    nodePtyDir = path.dirname(fs.realpathSync(path.dirname(require.resolve("node-pty"))));
+  } catch {
+    console.log("[rebuild-native] 未找到 node-pty，跳过 conpty 运行时拷贝。");
+    return;
+  }
+
+  const from = path.join(nodePtyDir, "prebuilds", `${platform}-${arch}`, "conpty");
+  if (!fs.existsSync(from)) return;
+
+  for (const config of ["Release", "Debug"]) {
+    const to = path.join(nodePtyDir, "build", config, "conpty");
+    // 没有对应 .node 就不必拷（node-pty 不会从这里加载）
+    if (!fs.existsSync(path.join(nodePtyDir, "build", config, "conpty.node"))) continue;
+    fs.mkdirSync(to, { recursive: true });
+    for (const file of fs.readdirSync(from)) {
+      fs.copyFileSync(path.join(from, file), path.join(to, file));
+    }
+    console.log(`[rebuild-native] conpty 运行时已就位: ${path.relative(root, to)}`);
+  }
+}
+
+copyConptyRuntime();
 
 process.exit(result.status ?? 1);

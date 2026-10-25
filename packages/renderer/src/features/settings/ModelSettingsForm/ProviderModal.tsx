@@ -2,7 +2,7 @@
  * Provider 新增 / 编辑模态框。
  */
 import { Button, Field, Input, Modal } from "@thinker-workbench/design/react";
-import { useT } from "../../../i18n/useI18n";
+import { useT } from "../../../ui/i18n/useI18n";
 import type { ProviderForm } from "./drafts";
 
 type Props = {

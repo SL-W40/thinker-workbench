@@ -5,13 +5,14 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { parseFile } from "@thinker-workbench/file-parsers";
 import {
   type AttachmentKind,
   type ChatAttachmentRef,
+  chatImageAllowed,
   createId,
 } from "@thinker-workbench/shared";
-import { parseFile } from "@thinker-workbench/file-parsers";
-import { getDataDir, getWorkspaceDataDir } from "../config/paths";
+import { getDataDir, getWorkspaceAttachmentsDir as workspaceAttachmentsDir } from "../config/paths";
 import { getWorkspace } from "../db/workspacesStore";
 
 /** 原始输入体积上限（拒绝过大源文件）。 */
@@ -20,8 +21,22 @@ const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 8 * 1024 * 1024;
 
 const DOC_EXTS = new Set([
-  "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-  "txt", "md", "markdown", "csv", "json", "xml", "html", "htm", "log",
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "json",
+  "xml",
+  "html",
+  "htm",
+  "log",
 ]);
 
 function extOf(name: string): string {
@@ -43,7 +58,7 @@ function inferKind(mime: string, ext: string): AttachmentKind {
 
 /** 外部附件目录：`<dataDir>/workspaces/<id>/attachments`。 */
 export function getWorkspaceAttachmentsDir(workspaceId: string): string {
-  return path.join(getWorkspaceDataDir(workspaceId), "attachments");
+  return workspaceAttachmentsDir(workspaceId);
 }
 
 /**
@@ -51,8 +66,8 @@ export function getWorkspaceAttachmentsDir(workspaceId: string): string {
  */
 export function resolveAllowedAttachmentPath(attachmentPath: string): string | null {
   const resolved = path.resolve(attachmentPath);
-  const workspacesRoot = path.resolve(getDataDir(), "workspaces");
-  const rel = path.relative(workspacesRoot, resolved);
+  const { workspacesRoot } = chatImageAllowed(getDataDir());
+  const rel = path.relative(path.resolve(workspacesRoot), resolved);
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
   const parts = rel.split(path.sep);
   // workspaces/<id>/attachments/<file>
@@ -84,10 +99,7 @@ export function saveAttachment(
   const filePath = path.join(dir, ext ? `${id}.${ext}` : id);
   fs.writeFileSync(filePath, source);
   // 元数据侧车，保留原始文件名（落盘文件名只含 id）
-  fs.writeFileSync(
-    path.join(dir, `${id}.json`),
-    JSON.stringify({ name, mime }),
-  );
+  fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({ name, mime }));
 
   return {
     id,
@@ -103,7 +115,13 @@ export function saveAttachment(
 export async function readAttachment(
   workspaceId: string,
   id: string,
-): Promise<{ name: string; size: number; mime: string; dataUrl?: string | null; text?: string | null } | null> {
+): Promise<{
+  name: string;
+  size: number;
+  mime: string;
+  dataUrl?: string | null;
+  text?: string | null;
+} | null> {
   const dir = getWorkspaceAttachmentsDir(workspaceId);
   if (!fs.existsSync(dir)) return null;
   const metaPath = path.join(dir, `${id}.json`);
@@ -121,7 +139,13 @@ export async function readAttachment(
   if (!resolved) return null;
 
   const buf = fs.readFileSync(resolved);
-  const result: { name: string; size: number; mime: string; dataUrl?: string | null; text?: string | null } = {
+  const result: {
+    name: string;
+    size: number;
+    mime: string;
+    dataUrl?: string | null;
+    text?: string | null;
+  } = {
     name: meta.name,
     size: buf.byteLength,
     mime: meta.mime,
@@ -129,9 +153,10 @@ export async function readAttachment(
 
   const kind = inferKind(meta.mime, extOf(dataFile));
   if (kind === "image") {
-    result.dataUrl = buf.byteLength <= MAX_PREVIEW_BYTES
-      ? `data:${meta.mime};base64,${buf.toString("base64")}`
-      : null;
+    result.dataUrl =
+      buf.byteLength <= MAX_PREVIEW_BYTES
+        ? `data:${meta.mime};base64,${buf.toString("base64")}`
+        : null;
   } else {
     const parsed = await parseFile({ bytes: buf, mime: meta.mime, name: dataFile });
     result.text = parsed.text ?? null;

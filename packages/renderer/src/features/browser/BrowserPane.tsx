@@ -1,5 +1,8 @@
 /**
- * 右侧 Browser 面板：地址栏 + 视口洞（WebContentsView 由主进程叠加）。
+ * 右侧 Browser 面板：地址栏 + <webview> 承载的页面 + AI 锁定蒙层。
+ *
+ * 页面是 DOM 里的 <webview>（不是主进程叠加的原生视图），所以蒙层、菜单、
+ * 弹窗这些应用内 UI 都能正常压在它上面；主进程只借 webContents id 做自动化。
  */
 import {
   ChevronLeftIcon,
@@ -9,19 +12,21 @@ import {
   Input,
   RestartIcon,
 } from "@thinker-workbench/design/react";
-import { type BrowserState, browserUrlsEqual } from "@thinker-workbench/shared";
-import { useEffect, useRef, useState } from "react";
+import { BROWSER_PARTITION, type BrowserState, browserUrlsEqual } from "@thinker-workbench/shared";
+import { memo, useEffect, useRef, useState } from "react";
 import {
+  browserAttachWebview,
+  browserDetachWebview,
   browserGetState,
   browserGoBack,
   browserGoForward,
   browserNavigate,
   browserReload,
-  browserSetBounds,
+  browserSetViewport,
   browserSetVisible,
   onBrowserEvent,
-} from "../../bridge/browser";
-import { useT } from "../../i18n/useI18n";
+} from "../../platform/ipc/browser";
+import { useT } from "../../ui/i18n/useI18n";
 import { patchInspectorUi } from "../inspector/inspectorUi";
 import "./BrowserPane.less";
 
@@ -47,14 +52,15 @@ const EMPTY_STATE: BrowserState = {
   viewportHeight: 0,
 };
 
-export function BrowserPane({
+/** memo：webview 挂载成本高，顶层 state 变化不该让它重渲染。 */
+export const BrowserPane = memo(function BrowserPane({
   active = true,
   pendingUrl = null,
   onPendingUrlConsumed,
   workspaceId = null,
 }: Props) {
   const t = useT();
-  const viewportRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BrowserState>(EMPTY_STATE);
   const [urlDraft, setUrlDraft] = useState("");
   const available = Boolean(window.thinker?.browser);
@@ -84,7 +90,7 @@ export function BrowserPane({
     patchInspectorUi(workspaceId, { browserUrl: url });
   }, [available, workspaceId, state.url]);
 
-  // 激活时显示 view，并同步 bounds
+  // 面板激活与否：告诉主进程「视口在不在」
   useEffect(() => {
     if (!available) return;
     void browserSetVisible(active);
@@ -93,34 +99,42 @@ export function BrowserPane({
     };
   }, [active, available]);
 
+  // <webview> 生命周期：挂载后把 webContents id 交主进程，卸载时收回
   useEffect(() => {
     if (!available || !active) return;
-    const el = viewportRef.current;
-    if (!el) return;
+    const host = hostRef.current;
+    if (!host) return;
 
-    let raf = 0;
-    const publish = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const rect = el.getBoundingClientRect();
-        void browserSetBounds({
-          x: rect.left,
-          y: rect.top,
-          width: rect.width,
-          height: rect.height,
-        });
-      });
+    const webview = document.createElement("webview");
+    webview.setAttribute("partition", BROWSER_PARTITION);
+    // 必须带初始 src：不带 src 的 <webview> 不会创建 guest（dom-ready 永不触发，
+    // 主进程也就拿不到 webContents id）。about:blank 起步，地址由主进程 loadURL 驱动。
+    webview.setAttribute("src", "about:blank");
+    webview.className = "browser-pane__webview";
+    host.appendChild(webview);
+
+    const measure = () => {
+      const rect = host.getBoundingClientRect();
+      return { width: Math.round(rect.width), height: Math.round(rect.height) };
     };
 
-    publish();
-    const ro = new ResizeObserver(publish);
-    ro.observe(el);
-    window.addEventListener("resize", publish);
+    // dom-ready 时 id 才可用；之后主进程即可对它做导航 / 求值 / 截图
+    const onReady = () => {
+      const withId = webview as unknown as { getWebContentsId?: () => number };
+      const id = withId.getWebContentsId?.();
+      if (typeof id !== "number") return;
+      void browserAttachWebview(id, measure());
+    };
+    webview.addEventListener("dom-ready", onReady);
+
+    const ro = new ResizeObserver(() => void browserSetViewport(measure()));
+    ro.observe(host);
+
     return () => {
-      cancelAnimationFrame(raf);
       ro.disconnect();
-      window.removeEventListener("resize", publish);
-      void browserSetBounds({ x: 0, y: 0, width: 0, height: 0 });
+      webview.removeEventListener("dom-ready", onReady);
+      void browserDetachWebview();
+      webview.remove();
     };
   }, [active, available]);
 
@@ -201,7 +215,16 @@ export function BrowserPane({
         {state.locked ? <span className="browser-pane__badge">{t("browser.aiBadge")}</span> : null}
         {state.loading ? <span className="browser-pane__badge">{t("browser.loading")}</span> : null}
       </div>
-      <div className="browser-pane__viewport" ref={viewportRef}>
+      <div className="browser-pane__viewport">
+        {/* 页面本体：<webview> 由上面 effect 创建并挂进来（React 不管它） */}
+        <div className="browser-pane__host" ref={hostRef} />
+        {/* AI 锁定：只是两层字，压在 <webview> 之上挡住输入 */}
+        {state.locked ? (
+          <div className="browser-pane__overlay">
+            <div className="browser-pane__overlay-title">{t("browser.aiOverlayTitle")}</div>
+            <p className="browser-pane__overlay-hint">{t("browser.aiOverlayHint")}</p>
+          </div>
+        ) : null}
         {blank && active ? (
           <div className="browser-pane__placeholder">
             <p className="browser-pane__hint">{t("browser.emptyHint")}</p>
@@ -210,4 +233,4 @@ export function BrowserPane({
       </div>
     </div>
   );
-}
+});

@@ -34,13 +34,17 @@ describe("shared protocol helpers", () => {
     assert.equal(isAuxPageId("chat"), false);
   });
 
-  it("空上下文快照五个分段都是 0", () => {
+  it("空上下文快照各分段都是 0", () => {
     const snap = emptyContextUsageSnapshot(1000);
     assert.equal(snap.limit, 1000);
     assert.equal(snap.used, 0);
     assert.deepEqual(
       snap.segments.map((s) => s.id),
-      ["system", "tools", "rules", "skills", "contextFiles", "conversation"],
+      ["system", "tools", "rules", "skills", "contextFiles", "memory", "conversation"],
+    );
+    assert.deepEqual(
+      snap.segments.map((s) => s.tokens),
+      [0, 0, 0, 0, 0, 0, 0],
     );
   });
 });

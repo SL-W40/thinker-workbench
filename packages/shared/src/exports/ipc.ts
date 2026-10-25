@@ -1,0 +1,446 @@
+// 由 shared/src/index.ts 拆分而来：导出面与拆分前完全一致。
+
+export type {
+  SubagentDefinition,
+  SubagentListResult,
+  SubagentUpsertInput,
+  ThinkerAgentsApi,
+} from "../ipc/agents";
+export type {
+  BrowserEvent,
+  BrowserScreenshotPreview,
+  BrowserState,
+  BrowserViewport,
+  ThinkerBrowserApi,
+} from "../ipc/browser";
+export { BROWSER_PARTITION } from "../ipc/browser";
+export { type IpcChannel, IpcChannels } from "../ipc/channels";
+export type { ChatMode } from "../ipc/chatMode";
+
+export {
+  CHAT_MODES,
+  DEFAULT_CHAT_MODE,
+  isChatMode,
+  normalizeChatMode,
+} from "../ipc/chatMode";
+export type {
+  ChangeDispositionInput,
+  ChangeDispositionKind,
+  ChangeDispositionResult,
+  ChangeItemResult,
+  ChangeRevertStrategy,
+  CheckpointPruneResult,
+  CheckpointRetention,
+  CheckpointStats,
+  ThinkerCheckpointsApi,
+} from "../ipc/checkpoints";
+export {
+  CHECKPOINT_RETENTION_RANGES,
+  DEFAULT_CHECKPOINT_RETENTION,
+  normalizeCheckpointRetention,
+} from "../ipc/checkpoints";
+export type {
+  AgentCancelCommand,
+  AgentCancelTaskCommand,
+  AgentHistoryMessage,
+  AgentResumeCommand,
+  AgentRunCommand,
+} from "../ipc/commands";
+export type {
+  ContextUsageErrorCode,
+  ContextUsageRequest,
+  ContextUsageSegment,
+  ContextUsageSegmentId,
+  ContextUsageSnapshot,
+} from "../ipc/contextUsage";
+export {
+  DEFAULT_CONTEXT_WINDOW,
+  emptyContextUsageSnapshot,
+} from "../ipc/contextUsage";
+export type {
+  CustomizeScope,
+  CustomizeSource,
+} from "../ipc/customize";
+export {
+  customizeScopeKey,
+  normalizeCustomizeScope,
+} from "../ipc/customize";
+export type {
+  CustomThemeExport,
+  CustomThemeMermaid,
+  CustomThemeRecord,
+  CustomThemeSnapshot,
+} from "../ipc/customTheme";
+export {
+  CUSTOM_THEME_FORMAT,
+  CUSTOM_THEME_ID_PREFIX,
+  createCustomThemeId,
+  isCustomThemeId,
+  MAX_CUSTOM_THEMES,
+  normalizeCustomThemeSnapshot,
+  normalizeCustomThemes,
+  parseCustomThemeExport,
+  toCustomThemeExport,
+} from "../ipc/customTheme";
+export type {
+  DataDirChangePreview,
+  DataDirChangeRequest,
+  DataDirChangeResult,
+  DataDirMigrateItem,
+  DataDirMigrateProgress,
+  DataDirPaths,
+} from "../ipc/dataDir";
+export type {
+  AgentDoneEvent,
+  AgentErrorCode,
+  AgentErrorEvent,
+  AgentEvent,
+  AgentEventBase,
+  AgentHitlEvent,
+  AgentModelHealthEvent,
+  AgentModelSwitchEvent,
+  AgentPlanEvent,
+  AgentStatusEvent,
+  AgentSubagentEvent,
+  AgentTokenEvent,
+  AgentToolEvent,
+  AgentUsageEvent,
+  ModelUsage,
+  SubagentChildEvent,
+  SubagentTimelineEntry,
+} from "../ipc/events";
+export type {
+  AppFontScale,
+  AppThemeBaseId,
+  AppThemeCreativeId,
+  AppThemeId,
+  AppVisualThemeId,
+  AttentionPreviewKind,
+  BuiltinAppThemeId,
+  GeneralSettings,
+  HttpCompatibilityMode,
+  ShellApprovalMode,
+  ThinkerGeneralApi,
+  WorkspaceAccess,
+} from "../ipc/general";
+export {
+  APP_FONT_SCALE_IDS,
+  APP_THEME_BASE_IDS,
+  APP_THEME_CREATIVE_IDS,
+  APP_THEME_IDS,
+  DEFAULT_APP_FONT_SCALE,
+  DEFAULT_APP_THEME,
+  DEFAULT_CONTEXT_FILES_MAX_FILE_BYTES,
+  DEFAULT_CONTEXT_FILES_MAX_TOTAL_BYTES,
+  DEFAULT_DELETE_FILE_RESTORE_TTL_DAYS,
+  DEFAULT_GENERAL_SETTINGS,
+  DEFAULT_HTTP_COMPATIBILITY_MODE,
+  DEFAULT_MAX_AGENT_STEPS,
+  DEFAULT_MAX_PARALLEL_RUNS,
+  DEFAULT_MAX_QUEUED_RUNS,
+  DEFAULT_MAX_SUBAGENT_STEPS,
+  DEFAULT_MCP_CALL_TIMEOUT_MS,
+  DEFAULT_MCP_CONNECT_TIMEOUT_MS,
+  DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
+  DEFAULT_MODEL_RETRY_MAX_ATTEMPTS,
+  DEFAULT_QUEUE_TIMEOUT_MIN,
+  DEFAULT_READ_FILE_MAX_CHARS,
+  DEFAULT_SHELL_ALLOWLIST,
+  DEFAULT_SHELL_APPROVAL_MODE,
+  DEFAULT_SHELL_BLOCK_UNTIL_MS,
+  DEFAULT_SHELL_BLOCKLIST,
+  DEFAULT_SHELL_OUTPUT_CAP,
+  DEFAULT_TOOL_CALL_MIN_GAP_MS,
+  DEFAULT_WORKSPACE_ACCESS,
+  DELETE_FILE_RESTORE_TTL_DAY_OPTIONS,
+  HTTP_COMPATIBILITY_MODES,
+  isBuiltinAppTheme,
+  isShellTokenBlocked,
+  LOG_RETENTION_DAY_OPTIONS,
+  MAX_AGENT_STEPS_RANGE,
+  MAX_PARALLEL_RUNS_OPTIONS,
+  MAX_QUEUED_RUNS_OPTIONS,
+  normalizeAppFontScale,
+  normalizeAppTheme,
+  normalizeContextFilesMaxFileBytes,
+  normalizeContextFilesMaxTotalBytes,
+  normalizeDefaultShellBlockUntilMs,
+  normalizeDeleteFileRestoreTtlDays,
+  normalizeGeneral,
+  normalizeHttpCompatibilityMode,
+  normalizeIntInRange,
+  normalizeMaxAgentSteps,
+  normalizeMaxParallelRuns,
+  normalizeMaxQueuedRuns,
+  normalizeMaxSubagentSteps,
+  normalizeMcpCallTimeoutMs,
+  normalizeMcpConnectTimeoutMs,
+  normalizeModelRetryBaseDelayMs,
+  normalizeModelRetryMaxAttempts,
+  normalizeOptionalPath,
+  normalizeQueueTimeoutMin,
+  normalizeReadFileDefaultMaxChars,
+  normalizeShellAllowlist,
+  normalizeShellApprovalMode,
+  normalizeShellBlocklist,
+  normalizeShellOutputCap,
+  normalizeShellProfileId,
+  normalizeToolCallMinGapMs,
+  normalizeUiTheme,
+  normalizeWorkspaceAccess,
+  QUEUE_TIMEOUT_MIN_OPTIONS,
+  resolveVisualThemeId,
+  SHELL_APPROVAL_MODES,
+  shellAllowlistWithoutBlocked,
+  shellCommandBaseToken,
+  shellCommandsToAllowlist,
+  shellWhitelistTokens,
+  TOOL_CALL_MIN_GAP_MS_RANGE,
+  WORKSPACE_ACCESS_OPTIONS,
+} from "../ipc/general";
+export type {
+  GitBranch,
+  GitCheckoutInput,
+  GitCommitInput,
+  GitCommitResult,
+  GitMutationCode,
+  GitMutationResult,
+  GitPathsInput,
+  GitPullInput,
+  GitPushInput,
+  GitStashEntry,
+  GitStashInput,
+  GitStashResult,
+  ThinkerGitApi,
+} from "../ipc/git";
+export {
+  classifyMutationFailure,
+  failMutation,
+  okMutation,
+} from "../ipc/git";
+export type { HitlAction, HitlKind, HitlRequest, HitlResponse } from "../ipc/hitl";
+export type { AiLocale, AppLocale } from "../ipc/locale";
+export {
+  AI_LOCALES,
+  APP_LOCALES,
+  DEFAULT_AI_LOCALE,
+  DEFAULT_APP_LOCALE,
+  isAiLocale,
+  isAppLocale,
+  normalizeAiLocale,
+  normalizeAppLocale,
+} from "../ipc/locale";
+export type { LogLevel, LogRecord, LogSource } from "../ipc/log";
+export type {
+  McpImportConflict,
+  McpListResult,
+  McpServerConfig,
+  McpServerRuntimeState,
+  McpServerRuntimeStatus,
+  McpServerUpsertInput,
+  McpToolSummary,
+  McpTransport,
+  ThinkerMcpApi,
+} from "../ipc/mcp";
+export {
+  BUILTIN_COMPUTER_MCP_ID,
+  BUILTIN_COMPUTER_MCP_NAME,
+} from "../ipc/mcp";
+export type {
+  RuleListItem,
+  RuleListResult,
+  RuleUpsertInput,
+  ThinkerRulesApi,
+} from "../ipc/rules";
+export type {
+  PageStackSnapshot,
+  ThinkerSessionApi,
+  UiSessionSnapshot,
+} from "../ipc/session";
+export type {
+  ModelCatalog,
+  ModelCatalogPatch,
+  ModelCatalogPublic,
+  ModelEntry,
+  ModelHealth,
+  ModelProbeRequest,
+  ModelProbeResult,
+  ModelProvider,
+  ModelProviderPublic,
+  ModelSelection,
+  ModelSettings,
+  ModelSwitchReason,
+  ModelTag,
+  ThinkerSettingsApi,
+  UnlockModelSecretsRequest,
+  UnlockModelSecretsResult,
+} from "../ipc/settings";
+export {
+  apiKeyHint,
+  buildModelCandidates,
+  classifyModelSwitchReason,
+  emptyModelCatalog,
+  MODEL_TAGS,
+  normalizeModelSelection,
+  normalizeModelTags,
+  resolveModelSettings,
+  routeModelTag,
+  toPublicModelCatalog,
+} from "../ipc/settings";
+export type {
+  ShortcutGroup,
+  ShortcutId,
+  ShortcutInfo,
+  ShortcutsMap,
+  ThinkerShortcutsApi,
+} from "../ipc/shortcuts";
+export {
+  acceleratorFromKeyboardEvent,
+  DEFAULT_SHORTCUTS,
+  findShortcutConflict,
+  formatAcceleratorLabel,
+  getDefaultShortcuts,
+  MAIN_PROCESS_SHORTCUTS,
+  matchAccelerator,
+  normalizeAccelerator,
+  normalizeShortcuts,
+  processPlatform,
+  SHORTCUT_CATALOG,
+  SHORTCUT_GROUPS,
+} from "../ipc/shortcuts";
+export type {
+  SkillListItem,
+  SkillListResult,
+  SkillUpsertInput,
+  ThinkerSkillsApi,
+} from "../ipc/skills";
+export type {
+  ShellProfile,
+  ShellWakeReason,
+  TerminalEvent,
+  TerminalSession,
+  TerminalSessionStatus,
+  ThinkerTerminalApi,
+} from "../ipc/terminal";
+export type {
+  LogFileInfo,
+  LogsQuery,
+  LogsResponse,
+  ThinkerToolsApi,
+  TraceSummary,
+} from "../ipc/tools";
+export type {
+  ThinkerTraceApi,
+  TraceCaptureBinary,
+  TraceEndSpanRequest,
+  TraceListSessionsQuery,
+  TracePayloadRecord,
+  TracePayloadSide,
+  TraceRunType,
+  TraceSessionSummary,
+  TraceSettings,
+  TraceSource,
+  TraceSpanMessage,
+  TraceSpanRecord,
+  TraceSpanStartMessage,
+  TraceSpanStatus,
+  TraceStartSpanRequest,
+} from "../ipc/trace";
+export {
+  DEFAULT_TRACE_MAX_FIELD_BYTES,
+  DEFAULT_TRACE_MAX_HISTORY_MESSAGES,
+  DEFAULT_TRACE_MAX_MESSAGE_CHARS,
+  DEFAULT_TRACE_MAX_PAYLOAD_BYTES,
+  DEFAULT_TRACE_MAX_SESSIONS,
+  DEFAULT_TRACE_MAX_TOTAL_BYTES,
+  DEFAULT_TRACE_REDACT_KEYS,
+  DEFAULT_TRACE_RETENTION_DAYS,
+  DEFAULT_TRACE_SETTINGS,
+  normalizeTraceRunType,
+  normalizeTraceSettings,
+  TRACE_RUN_TYPES,
+} from "../ipc/trace";
+export type {
+  ThinkerUpdateApi,
+  UpdatePhase,
+  UpdateReleaseInfo,
+  UpdateState,
+} from "../ipc/update";
+export {
+  clampUpdatePercent,
+  emptyUpdateState,
+} from "../ipc/update";
+export type {
+  BrowserRequestAction,
+  GitRequestAction,
+  GitResultPhase,
+  PtyExecMode,
+  PtyRequestAction,
+  PtyShellOutcome,
+  PtyWakeReason,
+  RuntimeSettingsSnapshot,
+  UtilityBrowserEvent,
+  UtilityBrowserRequest,
+  UtilityCancel,
+  UtilityCancelTask,
+  UtilityCheckpointClear,
+  UtilityCheckpointClearResult,
+  UtilityContextUsage,
+  UtilityContextUsageResult,
+  UtilityCrashNotice,
+  UtilityEventMessage,
+  UtilityGitRequest,
+  UtilityGitResult,
+  UtilityHello,
+  UtilityHitlRequestMessage,
+  UtilityHitlResult,
+  UtilityLogMessage,
+  UtilityMcpReload,
+  UtilityMcpStatus,
+  UtilityPtyEvent,
+  UtilityPtyRequest,
+  UtilityReady,
+  UtilityResume,
+  UtilityRun,
+  UtilityRuntimeSettings,
+  UtilityToChild,
+  UtilityToParent,
+} from "../ipc/utility";
+export { buildRuntimeSettings } from "../ipc/utilityPayload";
+export type { AuxPageId, ThinkerWindowApi, WindowRole } from "../ipc/window";
+export { AUX_PAGE_IDS, isAuxPageId } from "../ipc/window";
+export type {
+  GitChangedFile,
+  GitFileDiff,
+  GitStatus,
+  GitStatusReason,
+  ThinkerWorkspaceFsApi,
+  WorkspaceFile,
+  WorkspaceMediaKind,
+  WorkspaceNode,
+} from "../ipc/workspaceFs";
+export type {
+  ChatExportFormat,
+  ChatExportInput,
+  ChatExportResult,
+  ChatImportInput,
+  ChatImportResult,
+  ChatMessageRow,
+  ChatSearchInput,
+  ChatSearchResult,
+  ChatSessionRecord,
+  MoveSessionInput,
+  ReorderInput,
+  SearchHit,
+  SessionRunStatus,
+  ThinkerWorkspacesApi,
+  ThreadMeta,
+  WorkspaceCreateInput,
+  WorkspaceRecord,
+} from "../ipc/workspaces";
+export {
+  CHAT_EXPORT_VERSION,
+  DEFAULT_SEARCH_LIMIT,
+  MAX_SEARCH_LIMIT,
+} from "../ipc/workspaces";
+export type { ChatPlanStatus, ChatPlanTodo, ChatPlanUpdateHint } from "../protocol/message";
