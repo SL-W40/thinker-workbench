@@ -290,16 +290,19 @@ function truncateGitOutput(text: string, maxChars: number): { output: string; tr
   };
 }
 
+/** Git 状态失败原因 → 给模型看的英文短语（与 UI 文案同源的分类，不回传 stderr）。 */
+const GIT_REASON_TEXT: Partial<Record<GitStatus["reason"], string>> = {
+  not_a_repo: "not a git repository",
+  git_not_found: "git not installed",
+  cwd_missing: "workspace folder missing",
+  timeout: "git timed out",
+  git_error: "git unavailable",
+};
+
 /** 把 GitStatus 压成模型友好的文本（含分支、ahead/behind、变更文件与增删行数）。 */
 export function formatGitStatus(status: GitStatus): string {
   if (!status.isRepo) {
-    const reason =
-      status.reason === "not_a_repo"
-        ? "not a git repository"
-        : status.reason === "git_not_found"
-          ? "git not installed"
-          : "git unavailable";
-    return `Repository status unavailable: ${reason}`;
+    return `Repository status unavailable: ${GIT_REASON_TEXT[status.reason] ?? "git unavailable"}`;
   }
   const lines: string[] = [];
   lines.push(

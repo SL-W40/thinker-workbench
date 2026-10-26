@@ -1,0 +1,146 @@
+/* Slider 样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+
+.tw-slider {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  /* 轨道高（竖 profil）/ 拇指尺寸随 size 变化 */
+  --tw-slider-track: 6px;
+  --tw-slider-thumb: 16px;
+}
+
+.tw-slider--sm {
+  --tw-slider-track: 4px;
+  --tw-slider-thumb: 13px;
+}
+
+/* —— 原生 range 控制：外观全部自绘 —— */
+.tw-slider__control {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  display: block;
+  grid-column: 1;
+  width: 100%;
+  height: var(--tw-slider-thumb, 16px);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  /* Chromium / Electron：轨道用渐变做已选进度的填充 */
+  &::-webkit-slider-runnable-track {
+    box-sizing: border-box;
+    height: var(--tw-slider-track, 6px);
+    border-radius: 999px;
+    background: linear-gradient(
+      to right,
+      var(--tw-accent-strong, var(--accent-strong)) 0
+        calc(var(--tw-slider-progress, 0) * 100%),
+      color-mix(in srgb, var(--tw-fg, var(--ink)) 12%, transparent)
+        calc(var(--tw-slider-progress, 0) * 100%) 100%
+    );
+  }
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    width: var(--tw-slider-thumb, 16px);
+    height: var(--tw-slider-thumb, 16px);
+    border: 1.5px solid var(--tw-border, var(--line));
+    border-radius: 50%;
+    background: var(--tw-bg-elev, var(--bg-elev));
+    box-shadow: 0 1px 3px var(--tw-shadow-soft, rgb(0 0 0 / 22%));
+    /* range 的 thumb 相对 track 垂直居中：(track - thumb) / 2 */
+    margin-top: calc((var(--tw-slider-track, 6px) - var(--tw-slider-thumb, 16px)) / 2);
+    transition: transform 0.12s ease, border-color 0.12s ease;
+  }
+
+  &:hover:not(:disabled)::-webkit-slider-thumb {
+    border-color: var(--tw-accent, var(--accent));
+  }
+
+  &:active:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.1);
+    border-color: var(--tw-accent-strong, var(--accent-strong));
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+
+  &:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--tw-accent-ring, var(--accent-ring));
+    outline-offset: 2px;
+  }
+
+  /* Firefox 兜底（文档站 / 外部浏览器预览） */
+  &::-moz-range-track {
+    height: var(--tw-slider-track, 6px);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tw-fg, var(--ink)) 12%, transparent);
+  }
+
+  &::-moz-range-progress {
+    height: var(--tw-slider-track, 6px);
+    border-radius: 999px;
+    background: var(--tw-accent-strong, var(--accent-strong));
+  }
+
+  &::-moz-range-thumb {
+    box-sizing: border-box;
+    width: var(--tw-slider-thumb, 16px);
+    height: var(--tw-slider-thumb, 16px);
+    border: 1.5px solid var(--tw-border, var(--line));
+    border-radius: 50%;
+    background: var(--tw-bg-elev, var(--bg-elev));
+    box-shadow: 0 1px 3px var(--tw-shadow-soft, rgb(0 0 0 / 22%));
+  }
+}
+
+/* —— 刻度点：让用户看出可选档位密度 —— */
+.tw-slider.has-ticks {
+  grid-template-rows: auto auto;
+  row-gap: 5px;
+}
+
+/*
+ * 刻度点：纯背景平铺画出、`--tw-slider-ticks` 个点均匀落在轨道宽度上
+ * （含两端），不额外生成 DOM。
+ */
+.tw-slider__ticks {
+  grid-column: 1;
+  height: 2px;
+  padding: 0 calc(var(--tw-slider-thumb, 16px) / 2);
+  background-clip: content-box;
+  background-repeat: repeat-x;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in srgb, var(--tw-fg, var(--ink)) 30%, transparent) 1px,
+    transparent 0
+  );
+  /* 平铺单元宽 = 内容宽 × 点距比例，值由组件按 `--tw-slider-tick-step` 注入 */
+  background-size: calc(100% * var(--tw-slider-tick-step, 0.1)) 100%;
+  pointer-events: none;
+}
+
+/* —— 数值输出 —— */
+.tw-slider__value {
+  grid-column: 2;
+  min-width: 44px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--tw-fg-muted, var(--muted));
+  user-select: none;
+}

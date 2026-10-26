@@ -7,6 +7,15 @@ export const en = {
     name: "Thinker Workbench",
     tagline: "Local-first AI workbench",
   },
+  /** Cross-section wording shared by dialogs and toasts. */
+  common: {
+    cancel: "Cancel",
+    confirm: "Confirm",
+    /** Toast close button (icon-only). */
+    dismiss: "Dismiss notification",
+    /** Accessible name of the toast region. */
+    notifications: "Notifications",
+  },
   workspaces: {
     title: "Workspaces",
     filterPlaceholder: "Filter workspaces and chats…",
@@ -90,6 +99,7 @@ export const en = {
     groupSession: "Sessions",
     groupFile: "Files",
     groupSetting: "Settings",
+    hints: "↑↓ Navigate · ↵ Open · Esc Close",
     newChat: "New chat",
     focusComposer: "Focus composer",
     openSettings: "Open settings",
@@ -330,6 +340,8 @@ export const en = {
       checkboxDesc: "Labeled multi-select option.",
       radio: "RadioGroup",
       radioDesc: "Exclusive options in a group.",
+      slider: "Slider",
+      sliderDesc: "Drag to pick a value on a stepped track (with optional ticks).",
       badge: "Badge",
       badgeDesc: "Small status chips.",
       kbd: "Kbd",
@@ -396,6 +408,8 @@ export const en = {
       badgeAccent: "Accent",
       badgeSuccess: "Success",
       badgeDanger: "Danger",
+      slider: "Volume",
+      sliderDisabled: "Disabled slider",
       tableName: "Name",
       tableStatus: "Status",
       tableAction: "Action",
@@ -1150,10 +1164,7 @@ export const en = {
       },
       uiFontScale: {
         title: "Interface text size",
-        description: "Scale text and controls across the app.",
-        small: "Small",
-        medium: "Medium",
-        large: "Large",
+        description: "Drag to scale text and controls across the app.",
       },
       uiLocale: {
         title: "Interface language",
@@ -1369,6 +1380,7 @@ export const en = {
         maxFileBytes: "Per-file snapshot cap (MB)",
         usage: "Current usage: {runs} runs / {bytes} MB",
         pruneNow: "Prune now",
+        pruneTitle: "Prune snapshots?",
         pruneConfirm: "Prune snapshots using the current thresholds? This cannot be undone.",
         pruned: "Pruned {runs} runs",
         pruneFailed: "Pruning failed",
@@ -1401,6 +1413,7 @@ export const en = {
         check: "Check for updates",
         download: "Download update",
         install: "Install and restart",
+        installTitle: "Install the update?",
         installConfirm: "Install the update and restart the app now?",
       },
     },
@@ -1615,12 +1628,24 @@ export const en = {
       gitMissingTitle: "Git is not available",
       gitMissingBody:
         "Install Git and make sure the git command is on your PATH, then restart Thinker.",
-      gitErrorBody: "The git command failed. Refresh to retry; the error is shown below.",
+      gitErrorBody: "Git couldn’t read this workspace. Refresh to try again.",
       notRepoTitle: "Use a Git repository to track changes",
       notRepoBody:
         "This workspace is not a Git repository yet. Initialize one here, or open a folder that already has Git.",
       initRepo: "Initialize Repository",
       initFailed: "git init failed.",
+      /** 工作空间目录已被移走 / 删除。 */
+      cwdMissingTitle: "Workspace folder is missing",
+      cwdMissingBody:
+        "This workspace folder no longer exists on disk. Reopen it from its new location, or open another folder.",
+      /** git 子进程超时。 */
+      timeoutTitle: "Git timed out",
+      timeoutBody:
+        "Git did not respond in time. Very large repositories can be slow on the first run — refresh to try again.",
+      /** 弱化入口：原始报错不直接铺在面板上，点开才看。 */
+      viewDetails: "View error details",
+      detailsTitle: "Error details",
+      detailsClose: "Close",
       cleanTitle: "No Changes Yet",
       cleanBody: "Changes made on this branch will appear here",
       detached: "HEAD",
@@ -1658,6 +1683,8 @@ export const en = {
       cancel: "Cancel",
       revertFile: "Revert this file",
       keepFile: "Keep this file",
+      revertAllTitle: "Revert all changes",
+      keepAllTitle: "Keep all changes",
       revertAll: "Revert all",
       keepAll: "Keep all",
       confirmRevertAll: "Revert every changed file? This cannot be undone.",

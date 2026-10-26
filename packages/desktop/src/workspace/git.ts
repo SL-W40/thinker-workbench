@@ -10,7 +10,6 @@ import fs from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import type {
   GitChangedFile,
   GitFileDiff,
@@ -20,12 +19,18 @@ import type {
 import { desktopLog } from "../log/setup";
 import { augmentPathEnv } from "../terminal/shellEnv";
 
-const execFileAsync = promisify(execFile);
 const gitLog = desktopLog("git");
 
 type GitResult =
   | { ok: true; stdout: string }
-  | { ok: false; code: number; stderr: string; notFound: boolean };
+  | {
+      ok: false;
+      code: number;
+      stderr: string;
+      notFound: boolean;
+      /** 工作空间目录已被移走 / 删除（区别于「没装 git」）。 */
+      cwdMissing?: boolean;
+    };
 
 /** 执行结果类型：写操作模块需要它来构造回执。 */
 export type GitExecResult = GitResult;
@@ -127,49 +132,93 @@ export async function runGit(cwd: string, args: string[], timeoutMs?: number): P
   return timeoutMs === undefined ? git(cwd, args) : git(cwd, args, timeoutMs);
 }
 
+/**
+ * 子进程固定 C locale：git 的报错文案恒为英文。
+ * 否则中文 / 日文系统上 stderr 是「致命错误：不是 Git 仓库…」，
+ * 下面那些基于英文子串的判定（`not a git repository` 等）会全部失配。
+ */
+function gitEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, LC_ALL: "C", LANG: "C", LANGUAGE: "" };
+}
+
+/** Node 的报错 message 会带一行 `Command failed: git ...` 命令回显，去掉它。 */
+function stripCommandEcho(message: string): string {
+  return message.replace(/^Command failed:[^\n]*\n?/, "").trim();
+}
+
+type RawGitResult =
+  | { ok: true; stdout: string }
+  | { ok: false; code: number | string; stderr: string; killed: boolean };
+
+/**
+ * 执行 git 并拿到**真正的 stderr**。
+ * `promisify(execFile)` 抛出的错误对象在 Node 22 上只有 `code/killed/signal/cmd`
+ * （没有 stdout/stderr），只能自己包回调，否则失败分类拿不到 git 原文。
+ */
+function execGit(
+  binary: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+): Promise<RawGitResult> {
+  return new Promise((resolve) => {
+    execFile(
+      binary,
+      args,
+      {
+        cwd,
+        maxBuffer: 8 * 1024 * 1024,
+        windowsHide: true,
+        timeout: timeoutMs,
+        env: gitEnv(),
+      },
+      (err, stdout, stderr) => {
+        if (!err) {
+          resolve({ ok: true, stdout: stdout.toString() });
+          return;
+        }
+        const e = err as { code?: number | string; killed?: boolean; message?: string };
+        resolve({
+          ok: false,
+          code: typeof e.code === "number" ? e.code : (e.code ?? 1),
+          stderr: String(stderr ?? "").trim() || stripCommandEcho(String(e.message ?? "")),
+          killed: Boolean(e.killed),
+        });
+      },
+    );
+  });
+}
+
 async function git(cwd: string, args: string[], timeoutMs = 20_000): Promise<GitResult> {
   const binary = resolveGitBinary() ?? "git";
-  try {
-    const { stdout } = await execFileAsync(binary, args, {
-      cwd,
-      maxBuffer: 8 * 1024 * 1024,
-      windowsHide: true,
-      timeout: timeoutMs,
-    });
-    return { ok: true, stdout: stdout.toString() };
-  } catch (err) {
-    const e = err as {
-      code?: number | string;
-      killed?: boolean;
-      stderr?: Buffer | string;
-      stdout?: Buffer | string;
-      message?: string;
-    };
-    const stderr = String(e.stderr ?? e.stdout ?? e.message ?? err);
-    if (e.killed || /TIMEDOUT|timeout/i.test(stderr) || e.code === "ETIMEDOUT") {
-      return { ok: false, code: 124, stderr: stderr || "git timed out", notFound: false };
-    }
-    // ENOENT 还可能来自 cwd 不存在（工作空间目录被移走/删除），不能一律算「没装 Git」
-    const cwdMissing = !isDirectory(cwd);
-    const notFound = e.code === "ENOENT" && !cwdMissing;
-    // 非仓库 / 无 upstream 等是常态失败，只在真异常时留痕，避免轮询刷日志
-    if (notFound || cwdMissing) {
-      gitLog.warn("git 调用失败", {
-        binary,
-        cwd,
-        args: args.join(" "),
-        code: e.code,
-        cwdMissing,
-        stderr: stderr.slice(0, 500),
-      });
-    }
-    return {
-      ok: false,
-      code: typeof e.code === "number" ? e.code : notFound ? 127 : 1,
-      stderr: cwdMissing ? `工作空间目录不存在：${cwd}` : stderr,
-      notFound,
-    };
+  // ENOENT 还可能来自 cwd 不存在（工作空间目录被移走/删除），不能一律算「没装 Git」
+  const cwdMissing = !isDirectory(cwd);
+  const raw = await execGit(binary, args, cwd, timeoutMs);
+  if (raw.ok) return { ok: true, stdout: raw.stdout };
+
+  const stderr = raw.stderr;
+  if (raw.killed || /TIMEDOUT|timeout/i.test(stderr) || raw.code === "ETIMEDOUT") {
+    return { ok: false, code: 124, stderr: stderr || "git timed out", notFound: false, cwdMissing };
   }
+  const notFound = raw.code === "ENOENT" && !cwdMissing;
+  // 非仓库 / 无 upstream 等是常态失败，只在真异常时留痕，避免轮询刷日志
+  if (notFound || cwdMissing) {
+    gitLog.warn("git 调用失败", {
+      binary,
+      cwd,
+      args: args.join(" "),
+      code: raw.code,
+      cwdMissing,
+      stderr: stderr.slice(0, 500),
+    });
+  }
+  return {
+    ok: false,
+    code: typeof raw.code === "number" ? raw.code : notFound ? 127 : 1,
+    stderr: cwdMissing ? `workspace directory missing: ${cwd}` : stderr,
+    notFound,
+    cwdMissing,
+  };
 }
 
 function parseNumstat(stdout: string): Map<string, { added: number; removed: number }> {
@@ -303,12 +352,23 @@ function emptyStatus(reason: GitStatusReason, gitAvailable: boolean, detail?: st
   };
 }
 
+/**
+ * 非仓库判定。子进程已固定 C locale，正常是英文 `not a git repository`；
+ * 保留中文兜底，防止个别打包的 git 忽略 locale 环境变量。
+ */
+function isNotRepo(stderr: string): boolean {
+  return /not a git repository/i.test(stderr) || /不是\s*Git\s*仓库/i.test(stderr);
+}
+
 /** 工作区 Git 状态。 */
 export async function getGitStatus(cwd: string): Promise<GitStatus> {
   const rev = await git(cwd, ["rev-parse", "--is-inside-work-tree"]);
   if (!rev.ok) {
+    // 分类优先于细节：认出来的失败不回传 stderr，UI 直接给对应文案
     if (rev.notFound) return emptyStatus("git_not_found", false, rev.stderr);
-    if (/not a git repository/i.test(rev.stderr)) return emptyStatus("not_a_repo", true);
+    if (rev.cwdMissing) return emptyStatus("cwd_missing", true, rev.stderr);
+    if (rev.code === 124) return emptyStatus("timeout", true, rev.stderr);
+    if (isNotRepo(rev.stderr)) return emptyStatus("not_a_repo", true);
     return emptyStatus("git_error", true, rev.stderr);
   }
   if (rev.stdout.trim() !== "true") return emptyStatus("not_a_repo", true);
@@ -339,7 +399,7 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
 
   const porcelain = await git(cwd, ["status", "--porcelain=1", "-uall"], 30_000);
   if (!porcelain.ok && porcelain.code === 124) {
-    return emptyStatus("git_error", true, porcelain.stderr);
+    return emptyStatus("timeout", true, porcelain.stderr);
   }
   const files: GitChangedFile[] = [];
   if (porcelain.ok) {

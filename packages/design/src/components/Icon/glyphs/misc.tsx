@@ -39,6 +39,16 @@ export const PaletteIcon = createIcon(
 
 /** 通知铃铛。 */
 
+/** 搜索 / 放大镜（命令面板、过滤框）。 */
+export const SearchIcon = createIcon(
+  "SearchIcon",
+  <>
+    <circle cx="7.1" cy="7.1" r="4.2" />
+    <path d="M10.35 10.35 13.2 13.2" />
+  </>,
+  VB,
+);
+
 /** 快捷键 / 键盘。 */
 export const KeyboardIcon = createIcon(
   "KeyboardIcon",

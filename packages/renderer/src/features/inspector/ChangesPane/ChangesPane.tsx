@@ -3,7 +3,7 @@
  * diff 解析见 ./diffText，渲染组件见 ./FileDiff 与 ./ChangedFileList，
  * 浮动菜单见 ./floatingMenu，限流/高亮队列见 ./highlightQueue。
  */
-import { Button, EmptyState } from "@thinker-workbench/design/react";
+import { ConfirmDialog, EmptyState, useToast } from "@thinker-workbench/design/react";
 import type { ChangeDispositionKind, GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
 import {
   type CSSProperties,
@@ -25,6 +25,7 @@ import { FILE_LIST_AUTO_PANE_MIN, useFileListOpen, useFileListWidth } from "../u
 import "../inspector.less";
 import type { ChangesPromptActionId } from "./actions";
 import { ChangedFileRow, ChangesFileList } from "./ChangedFileList";
+import { ChangesErrorState } from "./ChangesErrorState";
 import { sortChangedFiles } from "./diffText";
 import { PortalMenu } from "./floatingMenu";
 import { ManualCommitForm } from "./ManualCommitForm";
@@ -65,6 +66,7 @@ export const ChangesPane = memo(function ChangesPane({
   onSendAction,
 }: Props) {
   const t = useT();
+  const toast = useToast();
   const viewMenu = usePortalMenu(200);
   const [wordWrap, setWordWrap] = useState(false);
   const [focusPath, setFocusPath] = useState<string | null>(null);
@@ -194,9 +196,11 @@ export const ChangesPane = memo(function ChangesPane({
         onRefresh();
         return;
       }
-      window.alert(
-        `${kind === "revert" ? t("inspector.changes.revertFile") : t("inspector.changes.keepFile")}：${item?.error ?? res.error ?? t("inspector.changes.disposeFailed")}`,
-      );
+      toast.danger({
+        title:
+          kind === "revert" ? t("inspector.changes.revertFile") : t("inspector.changes.keepFile"),
+        description: item?.error ?? res.error ?? t("inspector.changes.disposeFailed"),
+      });
     } finally {
       setDisposing(null);
     }
@@ -215,88 +219,25 @@ export const ChangesPane = memo(function ChangesPane({
 
   if (!status && error) {
     return (
-      <div className="changes-pane changes-pane--empty">
-        <EmptyState
-          title={t("inspector.changes.errorTitle")}
-          description={error}
-          action={
-            <Button
-              variant="primary"
-              className="changes-pane__primary"
-              onClick={() => void onRefresh()}
-            >
-              {t("inspector.refresh")}
-            </Button>
-          }
-        />
-      </div>
+      <ChangesErrorState
+        status={null}
+        error={error}
+        onRefresh={onRefresh}
+        onInitRepo={onInitRepo}
+      />
     );
   }
 
-  if (status && status.gitAvailable === false) {
+  // 其余失败（没装 git / 目录没了 / 超时 / git 报错 / 还没初始化）统一走分类文案，
+  // 原始报错只在详情弹窗里出现，不再直接铺在面板上
+  if (status && (!status.isRepo || status.gitAvailable === false)) {
     return (
-      <div className="changes-pane changes-pane--empty">
-        <EmptyState
-          title={t("inspector.changes.gitMissingTitle")}
-          description={t("inspector.changes.gitMissingBody")}
-          action={
-            <Button
-              variant="primary"
-              className="changes-pane__primary"
-              onClick={() => void onRefresh()}
-            >
-              {t("inspector.refresh")}
-            </Button>
-          }
-        />
-        {/* 真实报错（找不到可执行文件的路径 / spawn 错误）比笼统提示更有诊断价值 */}
-        {status.detail ? <div className="changes-pane__error">{status.detail}</div> : null}
-        {error ? <div className="changes-pane__error">{error}</div> : null}
-      </div>
-    );
-  }
-
-  // git 命令本身失败（区别于「没装」与「不是仓库」）：不要误导用户去初始化仓库
-  if (status && status.reason === "git_error") {
-    return (
-      <div className="changes-pane changes-pane--empty">
-        <EmptyState
-          title={t("inspector.changes.errorTitle")}
-          description={t("inspector.changes.gitErrorBody")}
-          action={
-            <Button
-              variant="primary"
-              className="changes-pane__primary"
-              onClick={() => void onRefresh()}
-            >
-              {t("inspector.refresh")}
-            </Button>
-          }
-        />
-        {status.detail ? <div className="changes-pane__error">{status.detail}</div> : null}
-        {error ? <div className="changes-pane__error">{error}</div> : null}
-      </div>
-    );
-  }
-
-  if (status && !status.isRepo) {
-    return (
-      <div className="changes-pane changes-pane--empty">
-        <EmptyState
-          title={t("inspector.changes.notRepoTitle")}
-          description={t("inspector.changes.notRepoBody")}
-          action={
-            <Button
-              variant="primary"
-              className="changes-pane__primary"
-              onClick={() => void onInitRepo()}
-            >
-              {t("inspector.changes.initRepo")}
-            </Button>
-          }
-        />
-        {error ? <div className="changes-pane__error">{error}</div> : null}
-      </div>
+      <ChangesErrorState
+        status={status}
+        error={error}
+        onRefresh={onRefresh}
+        onInitRepo={onInitRepo}
+      />
     );
   }
 
@@ -518,6 +459,19 @@ export const ChangesPane = memo(function ChangesPane({
           ) : null}
         </div>
       )}
+
+      {/* 批量处置二次确认：不可逆，走 danger 语气 */}
+      <ConfirmDialog
+        open={dispose.pending !== null}
+        title={dispose.pending?.title}
+        description={dispose.pending?.description}
+        confirmLabel={dispose.pending?.confirmLabel ?? t("common.confirm")}
+        cancelLabel={t("inspector.changes.cancel")}
+        tone="danger"
+        busy={dispose.busy}
+        onConfirm={dispose.confirmPending}
+        onCancel={dispose.cancelPending}
+      />
     </div>
   );
 });

@@ -125,7 +125,9 @@ export type {
   WorkspaceAccess,
 } from "../ipc/general";
 export {
-  APP_FONT_SCALE_IDS,
+  APP_FONT_SCALE_MAX,
+  APP_FONT_SCALE_MIN,
+  APP_FONT_SCALE_STEP,
   APP_THEME_BASE_IDS,
   APP_THEME_CREATIVE_IDS,
   APP_THEME_IDS,

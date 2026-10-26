@@ -193,9 +193,14 @@ export function Bubble({
   // 耗时只认引擎写下的值；缺失就是「未知」，由展示层画「—」，不从时间线反推
   const durationMs =
     view.durationMs != null && Number.isFinite(view.durationMs) ? view.durationMs : undefined;
+  // traceId 在发送时即写入消息，但缺 key 等秒失败场景不会产生任何 span：
+  // 只有确实有模型用量或工具 / 子代理活动（即 trace 里会有内容）才展示 Trace 胶囊
+  const hasTraceActivity =
+    usage != null || timeline.some((s) => s.kind === "tool" || s.kind === "subagent");
+  const traceId = view.traceId != null && hasTraceActivity ? view.traceId : null;
   // 仅在完成 / 停止后展示；流式活跃中不显示 Tokens / 耗时 / Trace
   const showUsage =
-    role === "assistant" && !live && (usage != null || durationMs != null || Boolean(view.traceId));
+    role === "assistant" && !live && (usage != null || durationMs != null || traceId != null);
   const editFileRef = useRef<HTMLInputElement | null>(null);
   /** 系统文件框会让编辑区失焦；选图期间不要退出编辑。 */
   const pickingEditFileRef = useRef(false);
@@ -411,7 +416,7 @@ export function Bubble({
             runStartedAt={null}
             busy={false}
             variant="message"
-            traceId={view.traceId}
+            traceId={traceId}
             onOpenTrace={onOpenTrace}
             showCopy={showCopy}
             copied={copied}

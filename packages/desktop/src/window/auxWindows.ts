@@ -16,6 +16,7 @@ import { getGeneralSettings, getShortcutsSettings } from "../config/settingsStor
 import { isShortcutRecording } from "../config/shortcutRecording";
 import { syncBrowserWindowChrome, windowChromeOptions } from "./chromeOptions";
 import { windowMinSize } from "./defaultBounds";
+import { applyMacEditCommand } from "./menu";
 import { windowBackgroundForTheme } from "./themeBackground";
 import { waitForRenderer } from "./waitForRenderer";
 import { registerAuxWindow, roleForWebContents, unregisterContents } from "./windowRoles";
@@ -137,6 +138,7 @@ function createAuxWindow(page: AuxPageId): BrowserWindow {
   win.webContents.on("before-input-event", (event, input) => {
     // 录制快捷键时把按键留给渲染进程，勿触发 reload
     if (isShortcutRecording(win.webContents.id)) return;
+    if (!win.isDestroyed() && applyMacEditCommand(event, input, win.webContents)) return;
     const shortcuts = getShortcutsSettings();
     if (matchAccelerator(input, shortcuts.reload)) {
       event.preventDefault();

@@ -14,6 +14,11 @@ export { Checkbox, type CheckboxProps } from "../components/Checkbox/Checkbox";
 export { Chip, type ChipProps, type ChipTone } from "../components/Chip/Chip";
 export { ChoiceCard, type ChoiceCardProps } from "../components/ChoiceCard/ChoiceCard";
 export {
+  ConfirmDialog,
+  type ConfirmDialogProps,
+  type ConfirmDialogTone,
+} from "../components/ConfirmDialog/ConfirmDialog";
+export {
   ContextMenu,
   type ContextMenuItemProps,
   type ContextMenuProps,
@@ -23,6 +28,7 @@ export { EmptyState, type EmptyStateProps } from "../components/EmptyState/Empty
 export { Field, type FieldProps } from "../components/Field/Field";
 export {
   AgentModeIcon,
+  AlertTriangleIcon,
   AskModeIcon,
   BellIcon,
   CheckIcon,
@@ -65,6 +71,7 @@ export {
   PlusIcon,
   RestartIcon,
   RestoreIcon,
+  SearchIcon,
   SettingsIcon,
   ShieldIcon,
   SidebarLeftIcon,
@@ -113,6 +120,7 @@ export { Separator, type SeparatorProps } from "../components/Separator/Separato
 export { SettingsRow, type SettingsRowProps } from "../components/SettingsRow/SettingsRow";
 export { SideNavItem, type SideNavItemProps } from "../components/SideNavItem/SideNavItem";
 export { Spinner, type SpinnerProps, type SpinnerSize } from "../components/Spinner/Spinner";
+export { Slider, type SliderProps } from "../components/Slider/Slider";
 export { Switch, type SwitchProps } from "../components/Switch/Switch";
 export { reorderTableRows } from "../components/Table/reorderRows";
 export {
@@ -129,6 +137,15 @@ export {
 export { type TabItem, Tabs, type TabsProps, type TabsVariant } from "../components/Tabs/Tabs";
 export { TextArea, type TextAreaProps } from "../components/TextArea/TextArea";
 export { TitleTooltipHost } from "../components/TitleTooltipHost/TitleTooltipHost";
+export {
+  type ToastApi,
+  type ToastOptions,
+  type ToastPlacement,
+  ToastProvider,
+  type ToastProviderProps,
+  type ToastTone,
+  useToast,
+} from "../components/Toast/Toast";
 export type { PopoverAlign, PopoverPlacement } from "../overlay/place";
 export {
   type CustomThemeLike,

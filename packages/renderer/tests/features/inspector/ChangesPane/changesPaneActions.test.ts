@@ -5,7 +5,8 @@
  */
 import assert from "node:assert/strict";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { GitStatus } from "@thinker-workbench/shared";
+import { ToastProvider } from "@thinker-workbench/design/react";
+import type { ChangeDispositionResult, GitStatus } from "@thinker-workbench/shared";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 
@@ -15,7 +16,9 @@ vi.mock("../../../../src/ui/i18n/useI18n", () => ({
 }));
 
 type DisposeInput = { workspaceId: string; kind: "revert" | "keep"; paths: string[] };
-const applyChangeDisposition = vi.fn(async (_input: DisposeInput) => ({ ok: true, items: [] }));
+const applyChangeDisposition = vi.fn(
+  async (_input: DisposeInput): Promise<ChangeDispositionResult> => ({ ok: true, items: [] }),
+);
 vi.mock("../../../../src/platform/ipc/checkpoints", () => ({
   applyChangeDisposition: (input: DisposeInput) => applyChangeDisposition(input),
 }));
@@ -38,6 +41,7 @@ const CANCEL = "inspector.changes.cancel";
 const PLACEHOLDER = "inspector.changes.commitPlaceholder";
 const REVERT_ALL = "inspector.changes.revertAll";
 const KEEP_ALL = "inspector.changes.keepAll";
+const CONFIRM_REVERT_ALL = "inspector.changes.confirmRevertAll";
 const PATHS = ["src/a.ts"];
 
 const STATUS: GitStatus = {
@@ -55,17 +59,22 @@ const STATUS: GitStatus = {
 function renderPane() {
   const onSendAction = vi.fn();
   render(
-    createElement(ChangesPane, {
-      workspaceId: WS,
-      status: STATUS,
-      loading: false,
-      error: null,
-      tree: null,
-      onRefresh: () => {},
-      onInitRepo: () => {},
-      onOpenFile: () => {},
-      onSendAction,
-    }),
+    // 处置失败的反馈走 Toast，需 Provider 提供上下文
+    createElement(
+      ToastProvider,
+      null,
+      createElement(ChangesPane, {
+        workspaceId: WS,
+        status: STATUS,
+        loading: false,
+        error: null,
+        tree: null,
+        onRefresh: () => {},
+        onInitRepo: () => {},
+        onOpenFile: () => {},
+        onSendAction,
+      }),
+    ),
   );
   return { onSendAction };
 }
@@ -156,13 +165,14 @@ describe("Changes 面板提交入口", () => {
     assert.equal(screen.queryByRole("textbox", { name: PLACEHOLDER }), null);
   });
 
-  it("菜单里的批量处置：确认才执行，取消不执行", () => {
+  it("菜单里的批量处置：自定义确认对话框，确认才执行取消不执行", () => {
     renderPane();
-    const confirmSpy = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirmSpy);
     openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: REVERT_ALL }));
-    assert.equal(confirmSpy.mock.calls.length, 1);
+    // 不再调 window.confirm，弹的是 ConfirmDialog
+    assert.ok(screen.getByRole("dialog"));
+    assert.ok(screen.getByText(CONFIRM_REVERT_ALL));
+    fireEvent.click(screen.getByRole("button", { name: REVERT_ALL }));
     assert.deepEqual(applyChangeDisposition.mock.calls[0]?.[0], {
       workspaceId: WS,
       kind: "revert",
@@ -170,10 +180,23 @@ describe("Changes 面板提交入口", () => {
     });
 
     applyChangeDisposition.mockClear();
-    vi.stubGlobal("confirm", () => false);
     openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: KEEP_ALL }));
+    fireEvent.click(screen.getByRole("button", { name: CANCEL }));
     assert.equal(applyChangeDisposition.mock.calls.length, 0);
+  });
+
+  it("批量处置失败：错误留在面板，不弹原生 alert", async () => {
+    applyChangeDisposition.mockImplementationOnce(async () => ({
+      ok: false,
+      error: "",
+      items: [{ path: PATHS[0], ok: false, strategy: "none", error: "boom" }],
+    }));
+    renderPane();
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: REVERT_ALL }));
+    fireEvent.click(screen.getByRole("button", { name: REVERT_ALL }));
+    assert.ok(await screen.findByText(`${PATHS[0]}：boom`));
   });
 
   it("手动态按工作空间记住：重挂载后表单还在", () => {

@@ -27,12 +27,28 @@ export const TITLEBAR_HEIGHT_PX = 44;
 /** 系统按钮区不铺色，标题栏背景直接透出。`#RRGGBBAA`。 */
 const CAPTION_TRANSPARENT = "#00000000";
 
-/** 字体档位对应的 CSS zoom（见 renderer `html[data-tw-font-scale]`）。 */
-const FONT_ZOOM: Record<AppFontScale, number> = {
-  small: 0.875,
-  medium: 1,
-  large: 1.125,
-};
+/**
+ * macOS 标准窗口按钮的 frame 高度（视觉圆直径只有 12px，但按钮矩形是 16px）。
+ * Electron 用 margin.y 作为按钮 frame 的顶边（WindowButtonsProxy: 容器高 =
+ * 按钮高 + 2×margin.y，按钮在容器内居中 → 按钮顶边 = margin.y），
+ * 所以灯中心 = y + 16/2，反推 y 时要减的是 frame 高而不是圆的直径。
+ */
+const TRAFFIC_LIGHT_FRAME_HEIGHT_PX = 16;
+
+/**
+ * macOS 红绿灯位置：按钮组左上角坐标（DIP）。
+ * 渲染层标题栏随字体缩放用 CSS zoom 缩放，内容中心 = 22px × zoom；
+ * 取 y = 22 × zoom − 16/2，灯中心即与标题栏内容中心重合。
+ * 调用方必须传入**当前**缩放倍数，否则会退化成默认 100%（灯就不跟缩放走了）。
+ */
+export function windowButtonPositionForFontScale(fontScale: unknown): {
+  x: number;
+  y: number;
+} {
+  const zoom = normalizeAppFontScale(fontScale, DEFAULT_APP_FONT_SCALE);
+  const center = (TITLEBAR_HEIGHT_PX * zoom) / 2;
+  return { x: 14, y: Math.round(center - TRAFFIC_LIGHT_FRAME_HEIGHT_PX / 2) };
+}
 
 /** 各内置视觉主题对应的原生窗口填充色。 */
 const WINDOW_BG: Record<AppVisualThemeId, string> = {
@@ -148,8 +164,8 @@ export function resolveTitleBarOverlay(args: {
   colorScheme?: "light" | "dark";
   fontScale?: AppFontScale;
 }): TitleBarOverlayPaint {
-  const fontScale = normalizeAppFontScale(args.fontScale, DEFAULT_APP_FONT_SCALE);
-  const height = Math.max(1, Math.round(TITLEBAR_HEIGHT_PX * FONT_ZOOM[fontScale]));
+  const zoom = normalizeAppFontScale(args.fontScale, DEFAULT_APP_FONT_SCALE);
+  const height = Math.max(1, Math.round(TITLEBAR_HEIGHT_PX * zoom));
   const builtin = TITLEBAR_SYMBOL[args.visual as AppVisualThemeId];
   if (builtin) {
     return { color: CAPTION_TRANSPARENT, symbolColor: builtin, height };

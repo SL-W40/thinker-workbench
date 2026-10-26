@@ -4,7 +4,7 @@
  * 只在已打包的应用里可用；dev 构建下显示「开发模式不支持更新」并禁用所有按钮，
  * 避免误导用户。失败原因照实展示（含 GitHub 限速 / 未签名提示等兜底文案）。
  */
-import { Button, Progress } from "@thinker-workbench/design/react";
+import { Button, ConfirmDialog, Progress } from "@thinker-workbench/design/react";
 import { emptyUpdateState, type UpdateState } from "@thinker-workbench/shared";
 import { useEffect, useState } from "react";
 import {
@@ -20,6 +20,8 @@ export function UpdateSection({ active = true }: { active?: boolean }) {
   const { t } = useI18n();
   const [state, setState] = useState<UpdateState>(() => emptyUpdateState("", false));
   const [busy, setBusy] = useState(false);
+  /** 安装会重启应用：先自定义确认，不用 `window.confirm`。 */
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!active) return;
@@ -113,19 +115,24 @@ export function UpdateSection({ active = true }: { active?: boolean }) {
           </Button>
         ) : null}
         {state.phase === "downloaded" ? (
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={busy}
-            onClick={() => {
-              if (window.confirm(t("settings.general.update.installConfirm")))
-                void run(installUpdate);
-            }}
-          >
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => setConfirmOpen(true)}>
             {t("settings.general.update.install")}
           </Button>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title={t("settings.general.update.installTitle")}
+        description={t("settings.general.update.installConfirm")}
+        confirmLabel={t("settings.general.update.install")}
+        cancelLabel={t("common.cancel")}
+        busy={busy}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          void run(installUpdate);
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </section>
   );
 }

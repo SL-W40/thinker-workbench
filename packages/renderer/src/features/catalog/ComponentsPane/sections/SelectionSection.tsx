@@ -11,6 +11,7 @@ import {
   SegmentedControl,
   Select,
   SideNavItem,
+  Slider,
   Switch,
 } from "@thinker-workbench/design/react";
 import { useT } from "../../../../ui/i18n/useI18n";
@@ -27,6 +28,8 @@ type Props = {
   onSegmentChange: (value: string) => void;
   radio: string;
   onRadioChange: (value: string) => void;
+  slider: number;
+  onSliderChange: (value: number) => void;
   choice: string;
   onChoiceChange: (value: string) => void;
   nav: string;
@@ -47,6 +50,8 @@ export function SelectionSection({
   onSegmentChange,
   radio,
   onRadioChange,
+  slider,
+  onSliderChange,
   choice,
   onChoiceChange,
   nav,
@@ -135,6 +140,31 @@ export function SelectionSection({
           ]}
           onChange={onRadioChange}
           aria-label={t("components.demo.radio")}
+        />
+      </DemoCard>
+
+      <DemoCard
+        docId="Slider"
+        titleKey="components.section.slider"
+        descKey="components.section.sliderDesc"
+        onOpenDocs={onOpenDocs}
+      >
+        <Field label={t("components.demo.slider")}>
+          <Slider
+            value={slider}
+            step={10}
+            ticks={11}
+            valueText={`${slider}%`}
+            onChange={onSliderChange}
+            aria-label={t("components.demo.slider")}
+          />
+        </Field>
+        <Slider
+          value={slider}
+          size="sm"
+          disabled
+          aria-label={t("components.demo.sliderDisabled")}
+          onChange={onSliderChange}
         />
       </DemoCard>
 

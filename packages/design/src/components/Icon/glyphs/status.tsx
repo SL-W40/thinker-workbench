@@ -60,6 +60,16 @@ export const CodeIcon = createIcon(
   VB,
 );
 
+/** 警告 / 危险：三角形感叹号（Toast、确认对话框的警示语气）。 */
+export const AlertTriangleIcon = createIcon(
+  "AlertTriangleIcon",
+  <>
+    <path d="M8 2.85 14.15 13H1.85L8 2.85z" />
+    <path d="M8 6.6v2.65M8 11.25h.01" />
+  </>,
+  VB,
+);
+
 /** 信息提示。 */
 export const InfoIcon = createIcon(
   "InfoIcon",

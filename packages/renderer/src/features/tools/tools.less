@@ -157,6 +157,8 @@
   color: inherit;
   font: inherit;
   font-size: 12px;
+  /* 收紧行盒：否则继承的大 line-height 让文字视觉中心下沉，icon 显得偏上 */
+  line-height: 1;
   -webkit-app-region: no-drag;
   app-region: no-drag;
   cursor: pointer !important;

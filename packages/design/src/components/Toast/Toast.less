@@ -1,0 +1,144 @@
+/* Toast 控件样式——颜色来自 ThemeProvider 写入的 CSS token。 */
+/* 层级高于 Modal（8000）：弹窗之上的结果反馈也要看得见。 */
+
+.tw-toast-viewport {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 容器不吃事件，只有卡片本身可点 */
+  pointer-events: none;
+  padding: 20px;
+  box-sizing: border-box;
+  max-width: min(420px, calc(100vw - 32px));
+  font-family: var(--tw-font-ui, var(--font, var(--tw-font-body, var(--font-body))));
+
+  &--bottom-right {
+    right: 0;
+    bottom: 0;
+    align-items: flex-end;
+  }
+
+  &--bottom-center {
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    align-items: center;
+  }
+
+  &--top-right {
+    right: 0;
+    top: 0;
+    align-items: flex-end;
+  }
+
+  &--top-center {
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    align-items: center;
+  }
+}
+
+.tw-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px 10px 12px;
+  border: 1.5px solid var(--tw-border, var(--line));
+  border-radius: var(--tw-radius-control, 10px);
+  background: var(--tw-panel-solid, var(--panel-solid, var(--tw-bg-elev, var(--bg-elev))));
+  color: var(--tw-fg, var(--ink));
+  font-size: 13.5px;
+  line-height: 1.45;
+  box-shadow: 0 12px 30px var(--tw-shadow-soft, rgb(0 0 0 / 14%));
+  animation: tw-toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  &.is-leaving {
+    animation: tw-toast-out 180ms ease both;
+  }
+}
+
+.tw-toast__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--tw-accent, var(--accent));
+}
+
+.tw-toast__content {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.tw-toast__title {
+  font-weight: 600;
+}
+
+.tw-toast__desc {
+  color: var(--tw-fg-muted, var(--muted));
+  overflow-wrap: anywhere;
+}
+
+.tw-toast__action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tw-toast__close {
+  flex-shrink: 0;
+  margin-top: -2px;
+}
+
+/* —— 语气 —— */
+
+.tw-toast--success .tw-toast__icon {
+  color: var(--tw-success, #2f7d52);
+}
+
+.tw-toast--warning .tw-toast__icon {
+  color: #c48a2a;
+}
+
+.tw-toast--danger {
+  border-color: var(--tw-danger, var(--danger));
+
+  .tw-toast__icon {
+    color: var(--tw-danger, var(--danger));
+  }
+}
+
+@keyframes tw-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tw-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-toast,
+  .tw-toast.is-leaving {
+    animation: none;
+  }
+}

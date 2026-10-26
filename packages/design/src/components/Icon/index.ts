@@ -6,6 +6,7 @@ export { DESIGN_ICONS, type DesignIconEntry, listDesignIcons } from "./catalog";
 export { createIcon, Icon, type IconProps, type IconSize } from "./Icon";
 export {
   AgentModeIcon,
+  AlertTriangleIcon,
   AskModeIcon,
   BellIcon,
   CheckIcon,
@@ -41,6 +42,7 @@ export {
   PlusIcon,
   RestartIcon,
   RestoreIcon,
+  SearchIcon,
   SettingsIcon,
   ShieldIcon,
   SidebarLeftIcon,

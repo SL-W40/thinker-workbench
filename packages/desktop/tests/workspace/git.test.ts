@@ -81,9 +81,9 @@ describe("getGitStatus", () => {
     const status = await getGitStatus(missing);
 
     assert.equal(status.gitAvailable, true);
-    assert.notEqual(status.reason, "git_not_found");
+    assert.equal(status.reason, "cwd_missing");
     assert.equal(status.isRepo, false);
-    assert.match(status.detail ?? "", /目录不存在/);
+    assert.match(status.detail ?? "", /workspace directory missing/);
   });
 
   it("非仓库目录不报 git 未安装", async () => {
@@ -92,6 +92,17 @@ describe("getGitStatus", () => {
 
     assert.equal(status.gitAvailable, true);
     assert.notEqual(status.reason, "git_not_found");
+  });
+
+  it("非仓库目录归类为 not_a_repo（git 语言包是中文也要认出来）", async () => {
+    const dir = makeTmpDir("tw-git-plain-reason-");
+    // 子进程固定 C locale，所以这里无论系统语言是中文还是英文，分类都应一致
+    const status = await getGitStatus(dir);
+
+    assert.equal(status.reason, "not_a_repo");
+    assert.equal(status.isRepo, false);
+    // 能归类的失败不回传 stderr：面板只展示映射文案
+    assert.equal(status.detail, undefined);
   });
 
   it("仓库内能列出未跟踪文件", async () => {

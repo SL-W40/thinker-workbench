@@ -1065,19 +1065,24 @@
   flex: 0 0 auto;
 }
 
-.files-home__input,
-.files-home__input:focus,
-.files-home__input:focus-visible {
+/*
+ * 压过 design 的 .tw-input / .tw-input:focus-within（其样式后加载、同特异性会赢），
+ * 内框一律去掉：外框由 .files-home__search 负责（含 ：focus-within 高亮）。
+ */
+.files-home__search .files-home__input,
+.files-home__search .files-home__input:focus,
+.files-home__search .files-home__input:focus-visible,
+.files-home__search .files-home__input:focus-within {
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
   margin: 0;
   padding: 0;
-  border: 0;
-  border-radius: 0;
-  outline: none;
-  box-shadow: none;
-  background: transparent;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
   font: inherit;
   font-size: var(--tk-font-base);
   color: var(--text);
@@ -2296,6 +2301,46 @@
   background: #fff4f0;
   color: #a3442e;
   font-size: 12px;
+}
+
+/* 失败态操作区：主按钮 + 弱化的「查看错误详情」 */
+.changes-pane__failure-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.changes-pane__details-link {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.changes-pane__details-link:hover {
+  color: var(--text);
+}
+
+/* 详情弹窗里的原始报错：等宽、可滚动、可选中复制 */
+.changes-pane__details-text {
+  max-height: 45vh;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border, #d0d0cc);
+  border-radius: 8px;
+  background: var(--panel-2, transparent);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .changes-pane__dialog {

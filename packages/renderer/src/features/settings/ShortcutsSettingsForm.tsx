@@ -2,7 +2,7 @@
  * 设置 → 快捷键：按分组展示可编辑加速键，点击后进入录制模式（捕获 keydown）。
  */
 
-import { Button, Callout, Kbd } from "@thinker-workbench/design/react";
+import { Button, Callout, Kbd, useToast } from "@thinker-workbench/design/react";
 import {
   acceleratorFromKeyboardEvent,
   findShortcutConflict,
@@ -87,15 +87,16 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
   const defaults = useMemo(() => getDefaultShortcuts(), []);
   const [shortcuts, setShortcuts] = useState<ShortcutsMap>(defaults);
   const [recording, setRecording] = useState<ShortcutId | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const toast = useToast();
   const available = Boolean(window.thinker?.settings?.getShortcuts);
 
-  // 录制监听只用 ref，避免 shortcuts/t 变化时拆掉 keydown 监听导致录不上。
+  // 录制监听只用 ref，避免 shortcuts/t/toast 变化时拆掉 keydown 监听导致录不上。
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
   const tRef = useRef(t);
   tRef.current = t;
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   const grouped = useMemo(() => {
     return SHORTCUT_GROUPS.map((group) => ({
@@ -113,7 +114,8 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
         const next = await getShortcutsSettings();
         if (!cancelled) setShortcuts(next);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled) return;
+        toastRef.current.danger({ title: err instanceof Error ? err.message : String(err) });
       }
     })();
     return () => {
@@ -153,13 +155,12 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
       const normalized = normalizeAccelerator(accel);
       const conflict = findShortcutConflict(id, normalized, shortcutsRef.current);
       if (conflict) {
-        setMessage(null);
-        setError(
-          tRef.current("settings.shortcuts.duplicate", {
+        toastRef.current.warning({
+          title: tRef.current("settings.shortcuts.duplicate", {
             action: tRef.current(SHORTCUT_COPY[conflict].titleKey),
             key: formatAcceleratorLabel(normalized),
           }),
-        );
+        });
         return;
       }
 
@@ -168,10 +169,9 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
         try {
           const next = await setShortcutsSettings({ [id]: normalized });
           setShortcuts(next);
-          setMessage(tRef.current("settings.shortcuts.saved"));
-          setError(null);
+          toastRef.current.success({ title: tRef.current("settings.shortcuts.saved") });
         } catch (err) {
-          setError(err instanceof Error ? err.message : String(err));
+          toastRef.current.danger({ title: err instanceof Error ? err.message : String(err) });
         }
       })();
     };
@@ -190,11 +190,10 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
     try {
       const next = await setShortcutsSettings({ ...getDefaultShortcuts() });
       setShortcuts(next);
-      setMessage(t("settings.shortcuts.resetOk"));
-      setError(null);
       setRecording(null);
+      toast.success({ title: t("settings.shortcuts.resetOk") });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast.danger({ title: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -240,8 +239,6 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
                           isRecording ? t("settings.shortcuts.pressKeys") : t(copy.titleKey)
                         }
                         onClick={() => {
-                          setMessage(null);
-                          setError(null);
                           setRecording((prev) => (prev === item.id ? null : item.id));
                         }}
                       >
@@ -256,8 +253,6 @@ export function ShortcutsSettingsForm({ title, description }: Props) {
             </section>
           ))}
           <div className="settings-form-actions">
-            {message ? <p className="settings-ok">{message}</p> : null}
-            {error ? <p className="settings-err">{error}</p> : null}
             {recording ? (
               <p className="settings-note">{t("settings.shortcuts.recordingHint")}</p>
             ) : null}

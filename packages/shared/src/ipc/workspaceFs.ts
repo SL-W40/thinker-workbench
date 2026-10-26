@@ -47,7 +47,21 @@ export type GitChangedFile = {
   removed: number;
 };
 
-export type GitStatusReason = "ok" | "not_a_repo" | "git_not_found" | "git_error";
+/**
+ * Git 状态失败分类：UI 按它选文案，不再直接展示 stderr。
+ * - `not_a_repo`：目录不在仓库里（引导初始化 / 换目录）
+ * - `git_not_found`：PATH 里没有 git
+ * - `cwd_missing`：工作空间目录已被移走 / 删除
+ * - `timeout`：git 子进程超时
+ * - `git_error`：兜底（细节放 `detail`，UI 折叠展示）
+ */
+export type GitStatusReason =
+  | "ok"
+  | "not_a_repo"
+  | "git_not_found"
+  | "cwd_missing"
+  | "timeout"
+  | "git_error";
 
 /** `git status` 摘要。 */
 export type GitStatus = {

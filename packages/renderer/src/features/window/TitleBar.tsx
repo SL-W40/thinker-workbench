@@ -237,6 +237,8 @@ export function TitleBar({
   const onConsole = current === "tools";
   const isAux = role.kind === "aux";
   const platform = processPlatform();
+  // macOS：traffic lights 已承担窗口身份，标题栏不再展示品牌 logo
+  const showBrand = platform !== "darwin";
   useWindowsCaptionInset();
   const titlebarClass = [
     "titlebar",
@@ -254,15 +256,17 @@ export function TitleBar({
     return (
       <header className={titlebarClass}>
         <div className="titlebar-leading">
-          <button
-            type="button"
-            className="mark"
-            title={t("nav.focusMain")}
-            aria-label={t("nav.focusMain")}
-            onClick={() => void api?.focusMain?.()}
-          >
-            <img className="mark-logo" src={glyphSrc} alt="" width={22} height={22} />
-          </button>
+          {showBrand ? (
+            <button
+              type="button"
+              className="mark"
+              title={t("nav.focusMain")}
+              aria-label={t("nav.focusMain")}
+              onClick={() => void api?.focusMain?.()}
+            >
+              <img className="mark-logo" src={glyphSrc} alt="" width={22} height={22} />
+            </button>
+          ) : null}
           {isTools ? (
             <ConsoleTabs
               toolsTab={toolsTab}
@@ -285,15 +289,17 @@ export function TitleBar({
   return (
     <header className={titlebarClass}>
       <div className="titlebar-leading">
-        <button
-          type="button"
-          className="mark"
-          title={t("nav.goHome")}
-          aria-label={t("nav.goHome")}
-          onClick={onGoHome}
-        >
-          <img className="mark-logo" src={glyphSrc} alt="" width={22} height={22} />
-        </button>
+        {showBrand ? (
+          <button
+            type="button"
+            className="mark"
+            title={t("nav.goHome")}
+            aria-label={t("nav.goHome")}
+            onClick={onGoHome}
+          >
+            <img className="mark-logo" src={glyphSrc} alt="" width={22} height={22} />
+          </button>
+        ) : null}
         <ConsoleTabs
           toolsTab={toolsTab}
           active={onConsole}

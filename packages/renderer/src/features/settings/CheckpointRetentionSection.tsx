@@ -4,7 +4,7 @@
  * 四个阈值（轮数 / 天数 / 总字节 / 单文件字节）任一超限即裁剪；
  * running、pending-resume、每会话最新 run 三类永不裁剪（服务端硬保证）。
  */
-import { Button, Field, Input } from "@thinker-workbench/design/react";
+import { Button, ConfirmDialog, Field, Input } from "@thinker-workbench/design/react";
 import {
   CHECKPOINT_RETENTION_RANGES,
   type CheckpointRetention,
@@ -41,6 +41,8 @@ export function CheckpointRetentionSection({ active = true }: { active?: boolean
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 清理不可逆：走自定义确认对话框，不用 `window.confirm`。 */
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // 策略是按工作区存的：先拿到最近使用的工作区
   useEffect(() => {
@@ -190,18 +192,25 @@ export function CheckpointRetentionSection({ active = true }: { active?: boolean
       </div>
 
       <p className="settings-note">{usageText}</p>
-      <Button
-        size="sm"
-        variant="secondary"
-        disabled={busy}
-        onClick={() => {
-          if (window.confirm(t("settings.general.checkpoint.pruneConfirm"))) void prune();
-        }}
-      >
+      <Button size="sm" variant="secondary" disabled={busy} onClick={() => setConfirmOpen(true)}>
         {t("settings.general.checkpoint.pruneNow")}
       </Button>
       {notice ? <p className="settings-note is-ok">{notice}</p> : null}
       {error ? <p className="settings-note is-error">{error}</p> : null}
+      <ConfirmDialog
+        open={confirmOpen}
+        title={t("settings.general.checkpoint.pruneTitle")}
+        description={t("settings.general.checkpoint.pruneConfirm")}
+        confirmLabel={t("settings.general.checkpoint.pruneNow")}
+        cancelLabel={t("common.cancel")}
+        tone="danger"
+        busy={busy}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          void prune();
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </section>
   );
 }

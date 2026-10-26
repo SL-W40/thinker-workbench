@@ -5,10 +5,12 @@
  * - 其它平台：完全无边框，由渲染进程画窗口控件
  */
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
-import { titleBarOverlayForTheme, windowBackgroundForTheme } from "./themeBackground";
-
-/** 与渲染进程 `.titlebar` 高度（44px）对齐的红绿灯位置。 */
-const MAC_TRAFFIC_LIGHT = { x: 14, y: 14 } as const;
+import { getGeneralSettings } from "../config/settingsStore";
+import {
+  titleBarOverlayForTheme,
+  windowBackgroundForTheme,
+  windowButtonPositionForFontScale,
+} from "./themeBackground";
 
 /** 主窗 / 辅助窗共用的原生窗口边框选项。 */
 export function windowChromeOptions(): Pick<
@@ -16,9 +18,10 @@ export function windowChromeOptions(): Pick<
   "frame" | "titleBarStyle" | "titleBarOverlay" | "trafficLightPosition"
 > {
   if (process.platform === "darwin") {
+    const { uiFontScale } = getGeneralSettings();
     return {
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { ...MAC_TRAFFIC_LIGHT },
+      trafficLightPosition: windowButtonPositionForFontScale(uiFontScale),
     };
   }
   if (process.platform === "win32") {
@@ -30,10 +33,17 @@ export function windowChromeOptions(): Pick<
   return { frame: false };
 }
 
-/** 把窗口底色和（Windows）系统按钮区刷成当前主题。 */
+/** 把窗口底色、mac 红绿灯位置和（Windows）系统按钮区刷成当前设置。 */
 export function syncBrowserWindowChrome(target: BrowserWindow): void {
   if (target.isDestroyed()) return;
   target.setBackgroundColor(windowBackgroundForTheme());
+  if (process.platform === "darwin") {
+    // 字体档位改变标题栏高度，灯位跟着重算（macOS 专有实例方法，内部会立即 redraw）
+    target.setWindowButtonPosition(
+      windowButtonPositionForFontScale(getGeneralSettings().uiFontScale),
+    );
+    return;
+  }
   if (process.platform !== "win32") return;
   target.setTitleBarOverlay(titleBarOverlayForTheme());
 }

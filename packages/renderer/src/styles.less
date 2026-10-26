@@ -16,14 +16,10 @@ body,
   margin: 0;
 }
 
-/* 设置 → 外观：界面字体大小档位（样式为 px，用 zoom 整体缩放） */
-html[data-tw-font-scale="small"] {
-  zoom: 0.875;
-}
+/* 设置 → 外观：界面字体缩放（zoom 由 renderer 启动/设置变更时写到 html 内联样式，
+ * 支持 0.8–1.25 之间的任意步进刻度，不再用 CSS 档位枚举） */
 
-html[data-tw-font-scale="large"] {
-  zoom: 1.125;
-}
+
 
 body {
   font-family: var(--font);
@@ -1146,10 +1142,11 @@ code {
   }
 }
 
+/* 字体缩放滑块：堆叠行内占满宽度，但不超过可读宽度 */
 .settings-font-scale {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  margin-top: 2px;
+  align-self: stretch;
+  width: 100%;
+  max-width: 420px;
 }
 
 .settings-shortcut-group {
@@ -1247,11 +1244,21 @@ kbd {
   border-bottom: 1.5px solid var(--line);
   background: var(--titlebar-bg);
   backdrop-filter: blur(10px);
+  /*
+   * 整条标题栏可拖窗（VS Code 等的做法），控件各自 no-drag 摘出来。
+   * macOS 上 drag region 必须覆盖标题栏，其中的 no-drag 控件悬停才会
+   * 恢复 CSS 光标（pointer）；只给中间空白 drag 时 mac 会一直显示箭头。
+   */
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
-/* macOS：左侧留给系统 traffic lights，避免与 logo 重叠 */
+/*
+ * macOS：左侧留给系统 traffic lights（右缘约 72px）。
+ * mac 不显示品牌 logo，首项内容直接接在灯右侧，留 8px 呼吸空隙即可。
+ */
 .titlebar--mac .titlebar-leading {
-  padding-left: 78px;
+  padding-left: 80px;
 }
 
 /* macOS：右侧仅有面板按钮，离窗边留一点空 */

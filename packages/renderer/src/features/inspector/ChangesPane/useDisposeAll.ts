@@ -11,6 +11,14 @@ import { useState } from "react";
 import { applyChangeDisposition } from "../../../platform/ipc/checkpoints";
 import { useT } from "../../../ui/i18n/useI18n";
 
+/** 待确认的批量处置：交给上层渲染确认对话框（不再用 `window.confirm`）。 */
+export type DisposeAllConfirm = {
+  kind: ChangeDispositionKind;
+  title: string;
+  description: string;
+  confirmLabel: string;
+};
+
 type Options = {
   workspaceId?: string | null;
   /** 改动文件路径列表（工作空间相对）。 */
@@ -35,6 +43,8 @@ export function useDisposeAll({ workspaceId, paths, onChanged }: Options) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 二次确认：批量操作不可逆，改为自定义确认对话框。 */
+  const [pending, setPending] = useState<DisposeAllConfirm | null>(null);
 
   async function run(kind: ChangeDispositionKind) {
     if (busy || !workspaceId || paths.length === 0) return;
@@ -60,20 +70,40 @@ export function useDisposeAll({ workspaceId, paths, onChanged }: Options) {
     }
   }
 
-  /** 二次确认：批量操作不可逆。 */
-  function confirmAndRun(label: string, kind: ChangeDispositionKind) {
+  /** 二次确认：批量操作不可逆。只登记待确认项，真正执行在 `confirmPending`。 */
+  function request(kind: ChangeDispositionKind) {
     setError(null);
     setNotice(null);
-    if (!window.confirm(label)) return;
-    void run(kind);
+    setPending(
+      kind === "revert"
+        ? {
+            kind,
+            title: t("inspector.changes.revertAllTitle"),
+            description: t("inspector.changes.confirmRevertAll"),
+            confirmLabel: t("inspector.changes.revertAll"),
+          }
+        : {
+            kind,
+            title: t("inspector.changes.keepAllTitle"),
+            description: t("inspector.changes.confirmKeepAll"),
+            confirmLabel: t("inspector.changes.keepAll"),
+          },
+    );
   }
 
   return {
     busy,
     error,
     notice,
-    revertAll: () => confirmAndRun(t("inspector.changes.confirmRevertAll"), "revert"),
-    keepAll: () => confirmAndRun(t("inspector.changes.confirmKeepAll"), "keep"),
+    pending,
+    confirmPending: () => {
+      const target = pending;
+      setPending(null);
+      if (target) void run(target.kind);
+    },
+    cancelPending: () => setPending(null),
+    revertAll: () => request("revert"),
+    keepAll: () => request("keep"),
     clear: () => {
       setError(null);
       setNotice(null);

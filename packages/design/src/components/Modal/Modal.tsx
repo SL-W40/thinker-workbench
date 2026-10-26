@@ -83,7 +83,10 @@ function ModalRoot({
 
   useEffect(() => {
     if (phase !== "exit" || typeof window === "undefined") return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // jsdom / 无 matchMedia 环境按「有动画」处理：等 animationend 再卸载
+    const reduced =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!reduced) return;
     setPresent(false);
     setPhase(null);

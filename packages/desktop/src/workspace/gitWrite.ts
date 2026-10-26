@@ -49,7 +49,8 @@ export function sanitizeGitPaths(paths: unknown): string[] | null {
 /** 把执行结果转成写操作回执（复用契约层的失败分类）。 */
 function toMutation(res: GitExecResult, fallbackError: string): GitMutationResult {
   if (res.ok) return okMutation();
-  const cwdMissing = /工作空间目录不存在/.test(res.stderr);
+  // 标记比匹配文案可靠：stderr 文案取决于 git 的语言包
+  const cwdMissing = res.cwdMissing === true || /workspace directory missing/i.test(res.stderr);
   const code = classifyMutationFailure({
     notFound: res.notFound,
     code: res.code,

@@ -41,6 +41,8 @@ export function ComponentsPane({ active }: Props) {
   const [choice, setChoice] = useState("a");
   const [nav, setNav] = useState("general");
   const [radio, setRadio] = useState("one");
+  /** Slider 演示值（0–100，带刻度）。*/
+  const [slider, setSlider] = useState(60);
   /** Kbd 录制高亮开关（演示 recording 视觉）。*/
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(42);
@@ -80,6 +82,8 @@ export function ComponentsPane({ active }: Props) {
           onSegmentChange={setSegment}
           radio={radio}
           onRadioChange={setRadio}
+          slider={slider}
+          onSliderChange={setSlider}
           choice={choice}
           onChoiceChange={setChoice}
           nav={nav}
