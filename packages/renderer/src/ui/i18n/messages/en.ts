@@ -22,6 +22,8 @@ export const en = {
     filterToggle: "Filter",
     /** Empty state when local filtering matches nothing. */
     filterNoMatch: "No matching workspace or chat",
+    /** Shown above the workspace list when a startup step failed. */
+    startupIssues: "Startup couldn't finish: {detail}",
     /** Full-text search in flight. */
     searching: "Searching…",
     /** Full-text search returned nothing. */
@@ -1072,8 +1074,6 @@ export const en = {
       fieldTransport: "Transport",
       transportStdio: "stdio",
       transportHttp: "HTTP",
-      builtinComputer: "Computer Control (built-in)",
-      builtinBadge: "Built-in",
       fieldCommand: "Command",
       fieldArgs: "Args",
       fieldEnv: "Environment",
@@ -1161,10 +1161,6 @@ export const en = {
           mermaidVarsHint: "Object of string values merged into Mermaid themeVariables.",
           limitReached: "You can keep at most {n} custom themes.",
         },
-      },
-      uiFontScale: {
-        title: "Interface text size",
-        description: "Drag to scale text and controls across the app.",
       },
       uiLocale: {
         title: "Interface language",
@@ -1604,11 +1600,19 @@ export const en = {
   },
   inspector: {
     sectionsLabel: "Inspector sections",
-    /** Tab bar “+”: open or switch to Changes / Files / Terminal / Browser. */
+    /** Tab bar “+”: open or switch to Changes / Terminal / Browser. */
     addPanel: "Open panel",
+    /** Right-click menu on a tab. */
+    tabs: {
+      menu: "Tab actions",
+      close: "Close",
+      closeOthers: "Close Others",
+      closeRight: "Close to the Right",
+      closeAll: "Close All",
+    },
     section: {
       changes: "Changes",
-      files: "Files",
+      files: "File tree",
       terminal: "Terminal",
       browser: "Browser",
       plan: "Plan",
@@ -1659,10 +1663,7 @@ export const en = {
       unmodifiedLines: "{n} unmodified lines",
       expandDiff: "Expand diff",
       collapseDiff: "Collapse diff",
-      /** Context menu for the changes file tree. */
-      fileMenu: "File actions",
       copyPath: "Copy path",
-      searchFiles: "Search files",
       uncommitted: "Uncommitted",
       viewOptions: "View options",
       wordWrap: "Word Wrap",
@@ -1702,6 +1703,7 @@ export const en = {
     files: {
       treeTitle: "Files",
       emptyTree: "No files",
+      emptyTreeBody: "Files in this workspace will show up here",
       backToTree: "Files",
       dirty: "unsaved",
       readOnly: "Read-only",
@@ -1741,12 +1743,7 @@ export const en = {
       saveAsCancel: "Cancel",
       openSearch: "Search files",
       searchPlaceholder: "Files, Folders...",
-      hideTree: "Hide file list",
-      showTree: "Show file list",
-      hideList: "Hide file list",
-      showList: "Show file list",
-      resizeTree: "Resize file list",
-      /** Context menu for the file tree side panel. */
+      /** Context menu for the file tree. */
       fileMenu: "File actions",
       untitled: "untitled",
       recents: "Recents",

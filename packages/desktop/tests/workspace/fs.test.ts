@@ -77,6 +77,16 @@ describe("listTree", () => {
     }
   });
 
+  it("不把 .stage 构建镜像列进目录树", () => {
+    fs.mkdirSync(path.join(root, ".stage", "app"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".stage", "app", "main.js"), "legacy path");
+    fs.writeFileSync(path.join(root, "src.txt"), "real");
+    const tree = listTree(root);
+    assert.equal(findNode(tree, ".stage"), undefined);
+    assert.equal(findNode(tree, ".stage/app/main.js"), undefined);
+    assert.equal(findNode(tree, "src.txt")?.type, "file");
+  });
+
   it("把 .asar 当成普通文件，而不是归档目录", () => {
     const dir = path.join(root, "release", "win-unpacked", "resources");
     fs.mkdirSync(dir, { recursive: true });

@@ -4,9 +4,14 @@
  *
  * 各 handler 见 ./handlers/，共用配置应用见 ./configApply。
  */
-import type { McpServerConfig, UtilityToChild } from "@thinker-workbench/shared";
+import {
+  isUtilityToChild,
+  type McpServerConfig,
+  type UtilityToChild,
+} from "@thinker-workbench/shared";
 import { resolveHitl } from "../hitl/requestHitl";
 import { getMcpManager } from "../mcp/McpManager";
+import { createMemoryHost } from "../memory/host";
 import { type AgentRuntime, createAgentRuntime } from "../runtime/AgentRuntime";
 import { handleBrowserEvent } from "./browserClient";
 import { applyMcpServers } from "./configApply";
@@ -24,6 +29,8 @@ import { handlePtyEvent } from "./ptyClient";
 export class UtilityHost {
   /** 按 checkpointDir 缓存的 runtime：目录即工作区，互不干扰。 */
   private readonly runtimes = new Map<string, AgentRuntime>();
+  /** 整个 utility 进程共用一份记忆服务，避免每个 run 各开一个 sqlite。 */
+  private readonly memoryHost = createMemoryHost();
   /** 处理器共用依赖（懒创建 runtime / 取消）。 */
   private readonly ctx: HostContext;
 
@@ -51,7 +58,8 @@ export class UtilityHost {
     });
 
     port.on("message", (event) => {
-      void this.onMessage(event.data as UtilityToChild);
+      if (!isUtilityToChild(event.data)) return;
+      void this.onMessage(event.data);
     });
 
     process.once("exit", () => {
@@ -69,7 +77,10 @@ export class UtilityHost {
     const key = checkpointDir?.trim() || "";
     const existing = this.runtimes.get(key);
     if (existing) return existing;
-    const runtime = createAgentRuntime({ checkpointDir: key || undefined });
+    const runtime = createAgentRuntime({
+      checkpointDir: key || undefined,
+      memoryHost: this.memoryHost,
+    });
     runtime.events.subscribe((event) => {
       postToParent({ channel: "utility", kind: "event", event });
     });

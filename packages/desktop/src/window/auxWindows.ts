@@ -18,6 +18,7 @@ import { syncBrowserWindowChrome, windowChromeOptions } from "./chromeOptions";
 import { windowMinSize } from "./defaultBounds";
 import { applyMacEditCommand } from "./menu";
 import { windowBackgroundForTheme } from "./themeBackground";
+import { bindWindowZoom } from "./uiZoom";
 import { waitForRenderer } from "./waitForRenderer";
 import { registerAuxWindow, roleForWebContents, unregisterContents } from "./windowRoles";
 
@@ -129,6 +130,8 @@ function createAuxWindow(page: AuxPageId): BrowserWindow {
       sandbox: true,
     },
   });
+
+  bindWindowZoom(win);
 
   const contentsId = registerAuxWindow(win, slot);
   auxByPage.set(slot, win);

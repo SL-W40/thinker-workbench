@@ -19,6 +19,19 @@ export function planTabKey(planId: string): string {
   return `plan:${planId}`;
 }
 
+/** 浏览器标签键（键形如 browser:<id>，每个标签一份）。 */
+export function browserTabKey(id: string): string {
+  return `browser:${id}`;
+}
+
+/** 新浏览器标签的 id。 */
+export function newBrowserTabId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function baseName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;

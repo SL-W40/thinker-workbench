@@ -1,53 +1,15 @@
 /**
  * 密钥惰性解密：加载 / 公开视图不碰 safeStorage，发消息 / resume / 探测时才解锁。
+ * 密文在 provider.apiKeyEnc 上，不另建旁路表。
  */
-import fs from "node:fs";
-import { isRecord, type UnlockModelSecretsResult } from "@thinker-workbench/shared";
+import type { UnlockModelSecretsResult } from "@thinker-workbench/shared";
 import { decryptSecret } from "../secretCrypto";
-import { bootstrapSettingsPath, settingsPath } from "./filePaths";
 import { loadSettings } from "./settingsStore";
-import { type DiskModelCatalog, type DiskSettings, lastApiKeyEncByProvider } from "./state";
 
-/** 某 provider 是否仍有未解锁（或已存）的密文。 */
+/** 某 provider 是否仍有未解出的密文。 */
 export function hasPendingSecret(providerId: string): boolean {
-  return Boolean(lastApiKeyEncByProvider.get(providerId)?.trim());
-}
-
-/**
- * 从权威 / 引导 settings.json 把 `apiKeyEnc` 补回内存表。
- * 防止缓存与 Map 不同步时按需解锁找不到密文（表现为发消息也不弹钥匙串）。
- */
-function hydrateEncFromDisk(): void {
-  const files = new Set<string>();
-  try {
-    files.add(settingsPath());
-  } catch {
-    /* settingsPath 依赖缓存；忽略 */
-  }
-  try {
-    files.add(bootstrapSettingsPath());
-  } catch {
-    /* ignore */
-  }
-  for (const file of files) {
-    try {
-      if (!fs.existsSync(file)) continue;
-      const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as DiskSettings;
-      if (!isRecord(parsed)) continue;
-      const rawModel = parsed.model;
-      if (!rawModel || typeof rawModel !== "object") continue;
-      const providers = (rawModel as DiskModelCatalog).providers;
-      if (!Array.isArray(providers)) continue;
-      for (const p of providers) {
-        if (!p || typeof p !== "object") continue;
-        const id = typeof p.id === "string" && p.id.trim() ? p.id.trim() : "";
-        const enc = typeof p.apiKeyEnc === "string" ? p.apiKeyEnc.trim() : "";
-        if (id && enc) lastApiKeyEncByProvider.set(id, enc);
-      }
-    } catch (err) {
-      console.error("[settings] hydrateEncFromDisk failed", file, err);
-    }
-  }
+  const provider = loadSettings().model.providers.find((p) => p.id === providerId);
+  return Boolean(provider?.apiKeyEnc.trim()) && !provider?.apiKey.trim();
 }
 
 /**
@@ -58,13 +20,11 @@ function hydrateEncFromDisk(): void {
  */
 export function ensureSecretsUnlocked(force = false): { denied: boolean } {
   const current = loadSettings();
-  hydrateEncFromDisk();
   let denied = false;
   for (const provider of current.model.providers) {
     if (!force && provider.apiKey.trim()) continue;
-    const enc = lastApiKeyEncByProvider.get(provider.id)?.trim();
+    const enc = provider.apiKeyEnc.trim();
     if (!enc) continue;
-    // force：先清空，避免误以为已解锁而跳过系统交互
     if (force) provider.apiKey = "";
     const plain = decryptSecret(enc);
     if (plain?.trim()) {
@@ -83,9 +43,8 @@ export function ensureSecretsUnlocked(force = false): { denied: boolean } {
 
 /** 是否仍有密文尚未解出明文（供 run 前校验）。 */
 export function hasLockedModelSecrets(): boolean {
-  loadSettings();
-  hydrateEncFromDisk();
-  return loadSettings().model.providers.some((p) => !p.apiKey.trim() && hasPendingSecret(p.id));
+  const catalog = loadSettings().model;
+  return catalog.providers.some((p) => !p.apiKey.trim() && Boolean(p.apiKeyEnc.trim()));
 }
 
 /**

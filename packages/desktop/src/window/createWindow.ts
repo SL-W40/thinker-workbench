@@ -24,6 +24,7 @@ import { fitWindowToDisplay, windowMinSize } from "./defaultBounds";
 import { applyMacEditCommand, clearApplicationMenu } from "./menu";
 import { reuseMainWindowIfAlive } from "./reuseMainWindow";
 import { windowBackgroundForTheme } from "./themeBackground";
+import { bindWindowZoom, syncAllWindowZoom } from "./uiZoom";
 import { ensureTrayForHide, shouldHideToTray } from "./tray";
 import { waitForRenderer } from "./waitForRenderer";
 import { registerMainWindow, unregisterContents } from "./windowRoles";
@@ -55,10 +56,11 @@ export function getMainWindow(): BrowserWindow | null {
   return win;
 }
 
-/** 设置 → 外观变更时，同步主窗与辅助窗底色，以及 Windows 系统按钮区。 */
+/** 设置 → 外观变更时，同步底色、系统按钮区，以及 Electron 页面缩放。 */
 export function syncWindowBackgroundFromSettings(): void {
   if (win && !win.isDestroyed()) syncBrowserWindowChrome(win);
   syncAuxWindowBackgrounds();
+  syncAllWindowZoom();
 }
 
 /** 若窗口存在且不可见则 show。 */
@@ -154,6 +156,9 @@ export function createWindow(): BrowserWindow {
   // 再设一次，避免部分 Windows 构建只吃构造参数里的旧缓存路径
   if (!appIcon.isEmpty()) win.setIcon(appIcon);
 
+  // 首屏就按设置缩放，避免先以 100% 画出来再跳
+  bindWindowZoom(win);
+
   const contentsId = registerMainWindow(win);
 
   if (initial.maximized) {
@@ -203,13 +208,13 @@ export function createWindow(): BrowserWindow {
     event.preventDefault();
     const { browserSessionManager } =
       require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
-    void browserSessionManager.navigate(url, { reveal: true });
+    browserSessionManager.openInNewTab(url);
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isAppNavigationUrl(url)) return { action: "allow" };
     const { browserSessionManager } =
       require("../browser/BrowserSessionManager") as typeof import("../browser/BrowserSessionManager");
-    void browserSessionManager.navigate(url, { reveal: true });
+    browserSessionManager.openInNewTab(url);
     return { action: "deny" };
   });
 

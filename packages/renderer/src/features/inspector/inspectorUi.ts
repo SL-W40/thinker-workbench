@@ -3,14 +3,8 @@
  * 不含未命名草稿与编辑器正文。
  */
 
-import { planTabKey } from "./RightInspector/tabs";
-import {
-  BROWSER_TAB_KEY,
-  CHANGES_TAB_KEY,
-  FILES_TAB_KEY,
-  type StageTab,
-  TERMINAL_TAB_KEY,
-} from "./types";
+import { browserTabKey, planTabKey } from "./RightInspector/tabs";
+import { CHANGES_TAB_KEY, FILES_TAB_KEY, type StageTab, TERMINAL_TAB_KEY } from "./types";
 import { clampFileListWidth, FILE_LIST_WIDTH } from "./useFileListPanel";
 
 const STORAGE_KEY = "thinker.inspector.ui.v1";
@@ -19,7 +13,8 @@ export type StoredInspectorTab =
   | { kind: "changes" }
   | { kind: "files" }
   | { kind: "terminal" }
-  | { kind: "browser" }
+  /** 内置浏览器。旧数据没有 id，还原时合成一个 legacy 标签。 */
+  | { kind: "browser"; id?: string; url?: string }
   /** 计划文档（虚拟文档，重启后靠会话活跃计划补内容）。 */
   | { kind: "plan"; planId: string }
   | { kind: "file"; path: string };
@@ -34,11 +29,10 @@ export type ChangesCommitMode = "ai" | "manual";
 export type StoredInspectorUi = {
   tabs: StoredInspectorTab[];
   activeKey: string;
-  /** 文件树侧栏：null 表示跟随自动断点。 */
+  /** 旧版编辑器侧栏开合。侧栏已去掉，字段仍随存储读写。 */
   filesListForced: boolean | null;
+  /** 旧版编辑器侧栏宽度。侧栏已去掉，字段仍随存储读写。 */
   filesListWidth: number;
-  changesListForced: boolean | null;
-  changesListWidth: number;
   /** Changes 面板上次用哪种方式提交；manual 时重开直接展开输入框。 */
   changesCommitMode: ChangesCommitMode;
   openDirs: string[];
@@ -51,8 +45,6 @@ const DEFAULTS: StoredInspectorUi = {
   activeKey: "",
   filesListForced: null,
   filesListWidth: FILE_LIST_WIDTH.default,
-  changesListForced: null,
-  changesListWidth: FILE_LIST_WIDTH.default,
   // 默认 AI 代办：与整合前的顶部主按钮定位一致
   changesCommitMode: "ai",
   openDirs: [],
@@ -70,7 +62,11 @@ function storageKey(workspaceId: string): string {
 function isStoredTab(value: unknown): value is StoredInspectorTab {
   if (!value || typeof value !== "object") return false;
   const v = value as { kind?: unknown; path?: unknown; planId?: unknown };
-  if (v.kind === "changes" || v.kind === "files" || v.kind === "terminal" || v.kind === "browser") {
+  if (v.kind === "changes" || v.kind === "files" || v.kind === "terminal") return true;
+  if (v.kind === "browser") {
+    const browser = v as { id?: unknown; url?: unknown };
+    if (browser.id != null && typeof browser.id !== "string") return false;
+    if (browser.url != null && typeof browser.url !== "string") return false;
     return true;
   }
   if (v.kind === "plan") return typeof v.planId === "string" && v.planId.length > 0;
@@ -95,12 +91,6 @@ export function loadInspectorUi(workspaceId: string | null): StoredInspectorUi {
       filesListWidth:
         typeof parsed.filesListWidth === "number"
           ? clampFileListWidth(parsed.filesListWidth)
-          : FILE_LIST_WIDTH.default,
-      changesListForced:
-        typeof parsed.changesListForced === "boolean" ? parsed.changesListForced : null,
-      changesListWidth:
-        typeof parsed.changesListWidth === "number"
-          ? clampFileListWidth(parsed.changesListWidth)
           : FILE_LIST_WIDTH.default,
       changesCommitMode: isChangesCommitMode(parsed.changesCommitMode)
         ? parsed.changesCommitMode
@@ -127,10 +117,6 @@ function writeInspectorUi(workspaceId: string | null, patch: Partial<StoredInspe
         typeof patch.filesListWidth === "number"
           ? clampFileListWidth(patch.filesListWidth)
           : prev.filesListWidth,
-      changesListWidth:
-        typeof patch.changesListWidth === "number"
-          ? clampFileListWidth(patch.changesListWidth)
-          : prev.changesListWidth,
     };
     localStorage.setItem(storageKey(workspaceId), JSON.stringify(next));
   } catch {
@@ -184,8 +170,13 @@ export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
     if (tab.kind === "changes") out.push({ kind: "changes" });
     else if (tab.kind === "files") out.push({ kind: "files" });
     else if (tab.kind === "terminal") out.push({ kind: "terminal" });
-    else if (tab.kind === "browser") out.push({ kind: "browser" });
-    else if (tab.kind === "plan" && tab.planId) out.push({ kind: "plan", planId: tab.planId });
+    else if (tab.kind === "browser") {
+      out.push({
+        kind: "browser",
+        id: tab.browserId,
+        ...(tab.url ? { url: tab.url } : {}),
+      });
+    } else if (tab.kind === "plan" && tab.planId) out.push({ kind: "plan", planId: tab.planId });
     else if (tab.kind === "file" && tab.path && !tab.key.startsWith("draft:")) {
       out.push({ kind: "file", path: tab.path });
     }
@@ -193,10 +184,21 @@ export function serializeTabs(tabs: StageTab[]): StoredInspectorTab[] {
   return out;
 }
 
+/**
+ * 浏览器标签文案。有文档标题就用标题；空白页、还没拿到 title 时退回「浏览器」。
+ */
+export function browserTabTitle(state: { title: string; url: string }, fallback: string): string {
+  const title = state.title.trim();
+  const url = state.url.trim();
+  if (!title || !url || url === "about:blank" || title === "about:blank") return fallback;
+  return title;
+}
+
 /** 序列化片段 → StageTab（标题由调用方按 i18n 填）。 */
 export function hydrateTabs(
   stored: StoredInspectorTab[],
   titles: { changes: string; files: string; terminal: string; browser: string; plan: string },
+  legacyBrowserUrl = "",
 ): StageTab[] {
   const out: StageTab[] = [];
   const seen = new Set<string>();
@@ -214,9 +216,18 @@ export function hydrateTabs(
       seen.add(TERMINAL_TAB_KEY);
       out.push({ key: TERMINAL_TAB_KEY, kind: "terminal", title: titles.terminal });
     } else if (item.kind === "browser") {
-      if (seen.has(BROWSER_TAB_KEY)) continue;
-      seen.add(BROWSER_TAB_KEY);
-      out.push({ key: BROWSER_TAB_KEY, kind: "browser", title: titles.browser });
+      const id = item.id?.trim() || "legacy";
+      const key = browserTabKey(id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const url = item.url?.trim() || (id === "legacy" ? legacyBrowserUrl.trim() : "");
+      out.push({
+        key,
+        kind: "browser",
+        title: titles.browser,
+        browserId: id,
+        url,
+      });
     } else if (item.kind === "plan") {
       const key = planTabKey(item.planId);
       if (seen.has(key)) continue;
@@ -232,6 +243,14 @@ export function hydrateTabs(
     }
   }
   return out;
+}
+
+/**
+ * 变更面板常驻：列表里没有就插到最前。已有则原样返回，避免无谓换引用。
+ */
+export function pinChangesTab(tabs: StageTab[], title: string): StageTab[] {
+  if (tabs.some((tab) => tab.key === CHANGES_TAB_KEY)) return tabs;
+  return [{ key: CHANGES_TAB_KEY, kind: "changes", title }, ...tabs];
 }
 
 /** 校验 activeKey 是否仍在标签列表中。 */

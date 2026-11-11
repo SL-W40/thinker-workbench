@@ -5,12 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   createId,
-  emptyModelCatalog,
   isRecord,
-  type ModelCatalog,
   type ModelEntry,
   type ModelHealth,
-  type ModelProvider,
   normalizeGeneral,
   normalizeModelSelection,
   normalizeModelTags,
@@ -22,21 +19,19 @@ import {
   type DiskModelEntry,
   type DiskProvider,
   type DiskSettings,
-  lastApiKeyEncByProvider,
+  emptyStoredCatalog,
+  type StoredModelCatalog,
+  type StoredProvider,
   type StoredSettings,
 } from "./state";
 
-function readProviderFromDisk(raw: DiskProvider): ModelProvider {
+function readProviderFromDisk(raw: DiskProvider): StoredProvider {
   const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : createId("prov");
   const label = typeof raw.label === "string" ? raw.label : "Provider";
   const baseUrl = typeof raw.baseUrl === "string" ? raw.baseUrl : "";
-
-  if (typeof raw.apiKeyEnc === "string" && raw.apiKeyEnc.trim()) {
-    const enc = raw.apiKeyEnc.trim();
-    lastApiKeyEncByProvider.set(id, enc);
-  }
-  // 延迟解密：启动只登记密文，真正用钥时再 unlock
-  return { id, label, apiKey: "", baseUrl };
+  const apiKeyEnc = typeof raw.apiKeyEnc === "string" ? raw.apiKeyEnc.trim() : "";
+  // 延迟解密：启动只带上密文，真正用钥时再 unlock
+  return { id, label, apiKey: "", apiKeyEnc, baseUrl };
 }
 
 function readEntryFromDisk(raw: DiskModelEntry, index: number): ModelEntry {
@@ -78,13 +73,13 @@ function readEntryFromDisk(raw: DiskModelEntry, index: number): ModelEntry {
   };
 }
 
-/** 从磁盘 model 段还原内存 ModelCatalog。 */
-function readModelFromDisk(raw: unknown): ModelCatalog {
+/** 从磁盘 model 段还原内存目录（含密文）。 */
+function readModelFromDisk(raw: unknown): StoredModelCatalog {
   if (!raw || typeof raw !== "object") {
-    return emptyModelCatalog();
+    return emptyStoredCatalog();
   }
   const obj = raw as DiskModelCatalog;
-  const providers: ModelProvider[] = (obj.providers ?? []).map((p) =>
+  const providers: StoredProvider[] = (obj.providers ?? []).map((p) =>
     readProviderFromDisk(p ?? {}),
   );
   const models = (obj.models ?? []).map((e, i) => readEntryFromDisk(e ?? {}, i));
@@ -96,24 +91,13 @@ function readModelFromDisk(raw: unknown): ModelCatalog {
   };
 }
 
-function providerToDisk(provider: ModelProvider): DiskProvider {
+function providerToDisk(provider: StoredProvider): DiskProvider {
   const key = provider.apiKey.trim();
   if (!key) {
-    // 明文尚未解锁：保留已有密文，避免主题迁移 / 改通用设置时把钥写丢
-    const pending = lastApiKeyEncByProvider.get(provider.id)?.trim();
-    if (pending) {
-      return {
-        id: provider.id,
-        label: provider.label,
-        apiKeyEnc: pending,
-        baseUrl: provider.baseUrl,
-      };
-    }
-    lastApiKeyEncByProvider.delete(provider.id);
     return {
       id: provider.id,
       label: provider.label,
-      apiKeyEnc: "",
+      apiKeyEnc: provider.apiKeyEnc.trim(),
       baseUrl: provider.baseUrl,
     };
   }
@@ -122,11 +106,11 @@ function providerToDisk(provider: ModelProvider): DiskProvider {
     return {
       id: provider.id,
       label: provider.label,
-      apiKeyEnc: lastApiKeyEncByProvider.get(provider.id) ?? "",
+      apiKeyEnc: provider.apiKeyEnc,
       baseUrl: provider.baseUrl,
     };
   }
-  lastApiKeyEncByProvider.set(provider.id, enc);
+  provider.apiKeyEnc = enc;
   return {
     id: provider.id,
     label: provider.label,
@@ -152,7 +136,7 @@ function entryToDisk(entry: ModelEntry): DiskModelEntry {
 }
 
 /** 将内存 catalog 转为磁盘形态。 */
-function modelToDisk(model: ModelCatalog): DiskModelCatalog {
+function modelToDisk(model: StoredModelCatalog): DiskModelCatalog {
   return {
     providers: model.providers.map(providerToDisk),
     models: model.models.map(entryToDisk),

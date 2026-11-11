@@ -262,8 +262,7 @@ export function healRunningSessions(options?: { preserveQueued?: boolean }): num
         continue;
       }
 
-      const ckpt = peekThreadCheckpoint(ws.id, row.thread_id);
-      if (ckpt) {
+      if (peekThreadCheckpoint(ws.id, row.thread_id)) {
         const dirtyReason = /no pending interrupt|tool_approval/i.test(row.interrupt_reason ?? "");
         const alreadyCrashed = row.run_status === "crashed" && !dirtyReason;
         const alreadyCancelled =

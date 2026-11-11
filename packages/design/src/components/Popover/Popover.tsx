@@ -43,6 +43,8 @@ export type PopoverProps = {
   align?: PopoverAlign;
   /** 与锚点的间距。默认 4。 */
   gap?: number;
+  /** 面板最大高度上限（仍会被视口夹住）。默认 320。 */
+  maxHeight?: number;
   /** 至少与锚点同宽。 */
   matchAnchorWidth?: boolean;
   /** 面板角色。dialog 时带表面样式。 */
@@ -82,6 +84,7 @@ export function Popover({
   placement = "auto",
   align = "start",
   gap = 4,
+  maxHeight,
   matchAnchorWidth = false,
   role,
   "aria-label": ariaLabel,
@@ -112,6 +115,7 @@ export function Popover({
       placement,
       align,
       gap,
+      maxHeightCap: maxHeight,
     });
     setCoords((prev) => {
       if (
@@ -125,7 +129,7 @@ export function Popover({
       }
       return next;
     });
-  }, [open, anchor, anchorRef, placement, align, gap, matchAnchorWidth, coords]);
+  }, [open, anchor, anchorRef, placement, align, gap, maxHeight, matchAnchorWidth, coords]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,6 +145,7 @@ export function Popover({
         placement,
         align,
         gap,
+        maxHeightCap: maxHeight,
       });
       setCoords((prev) => {
         if (
@@ -161,7 +166,7 @@ export function Popover({
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [open, anchor, anchorRef, placement, align, gap, matchAnchorWidth]);
+  }, [open, anchor, anchorRef, placement, align, gap, maxHeight, matchAnchorWidth]);
 
   useEffect(() => {
     if (!open) return;

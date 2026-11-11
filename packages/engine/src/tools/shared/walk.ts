@@ -5,9 +5,10 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 
-/** 遍历时跳过的目录名。 */
+/** 遍历时跳过的目录名。`.stage` 是打包镜像，里面是旧构建副本，不能当源码扫。 */
 export const SKIP_DIR_NAMES = new Set([
   ".git",
+  ".stage",
   ".turbo",
   "node_modules",
   "dist",

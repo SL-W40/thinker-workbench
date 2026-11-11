@@ -95,6 +95,7 @@ export async function onRun(ctx: HostContext, message: UtilityRun): Promise<void
     runId: message.runId,
     threadId: message.threadId,
     sessionId: message.sessionId,
+    memoryHost: runtime.memoryHost,
     workspaceRoot,
     workspaceName,
     dataDir: message.dataDir,

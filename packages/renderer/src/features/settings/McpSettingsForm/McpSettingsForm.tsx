@@ -261,7 +261,6 @@ export function McpSettingsForm({ workspaces }: Props) {
             <ul className="mcp-settings__list">
               {group.rows.map(({ config, status }) => {
                 const scope = config.scope ?? group.scope;
-                const builtin = config.builtin === true;
                 return (
                   <li
                     key={`${customizeScopeKey(scope)}:${config.id}`}
@@ -269,53 +268,45 @@ export function McpSettingsForm({ workspaces }: Props) {
                   >
                     <div className="mcp-settings__top">
                       <div className="mcp-settings__head">
-                        <span className="mcp-settings__name">
-                          {builtin ? t("settings.mcp.builtinComputer") : config.name}
-                        </span>
+                        <span className="mcp-settings__name">{config.name}</span>
                         <span className="mcp-settings__id">{config.id}</span>
-                        {builtin ? (
-                          <Badge variant="accent">{t("settings.mcp.builtinBadge")}</Badge>
-                        ) : (
-                          <Badge variant="neutral">
-                            {config.transport === "http"
-                              ? t("settings.mcp.transportHttp")
-                              : t("settings.mcp.transportStdio")}
-                          </Badge>
-                        )}
+                        <Badge variant="neutral">
+                          {config.transport === "http"
+                            ? t("settings.mcp.transportHttp")
+                            : t("settings.mcp.transportStdio")}
+                        </Badge>
                         <Badge variant={statusVariant(status?.state)}>
                           {status?.state ?? "stopped"}
                           {typeof status?.toolCount === "number" ? ` · ${status.toolCount}` : ""}
                         </Badge>
                       </div>
-                      {builtin ? null : (
-                        <div className="mcp-settings__row-actions">
-                          <Switch
-                            checked={config.enabled}
-                            aria-label={t("settings.mcp.enabled")}
-                            disabled={config.writable === false}
-                            onChange={(checked) => {
-                              void mcpSetEnabled(config.id, checked, scope).then(refresh);
-                            }}
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={config.writable === false}
-                            onClick={() => openEdit(config)}
-                          >
-                            {t("settings.mcp.edit")}
-                          </Button>
-                          <IconButton
-                            size="sm"
-                            variant="ghost"
-                            aria-label={t("settings.mcp.remove")}
-                            disabled={config.writable === false}
-                            onClick={() => setDeleteTarget(config)}
-                          >
-                            <CloseIcon />
-                          </IconButton>
-                        </div>
-                      )}
+                      <div className="mcp-settings__row-actions">
+                        <Switch
+                          checked={config.enabled}
+                          aria-label={t("settings.mcp.enabled")}
+                          disabled={config.writable === false}
+                          onChange={(checked) => {
+                            void mcpSetEnabled(config.id, checked, scope).then(refresh);
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={config.writable === false}
+                          onClick={() => openEdit(config)}
+                        >
+                          {t("settings.mcp.edit")}
+                        </Button>
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          aria-label={t("settings.mcp.remove")}
+                          disabled={config.writable === false}
+                          onClick={() => setDeleteTarget(config)}
+                        >
+                          <CloseIcon />
+                        </IconButton>
+                      </div>
                     </div>
                     {status?.error ? (
                       <span className="mcp-settings__err" title={status.error}>

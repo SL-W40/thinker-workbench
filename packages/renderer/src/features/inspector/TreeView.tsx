@@ -245,6 +245,7 @@ export const TreeView = memo(function TreeView({
             transform: `translateY(${offset}px)`,
             paddingLeft: indent,
           };
+          // 空 title 压掉截断文字的原生浮层；空 data-tw-title 清掉主题浮层留过的旧路径。
           if (node.kind === "dir") {
             const open = openDirs.has(node.path);
             const selected = selectedPaths?.has(node.path) ?? false;
@@ -272,7 +273,8 @@ export const TreeView = memo(function TreeView({
                 onDrop={(e) => handleDropDir(e, node.path)}
                 onClick={(e) => handleClick(node, e)}
                 onContextMenu={(e) => handleContextMenu(node, e)}
-                title={node.path}
+                title=""
+                data-tw-title=""
               >
                 <span className="tree-chev">
                   <IconChevron open={open} />
@@ -280,7 +282,9 @@ export const TreeView = memo(function TreeView({
                 <span className="tree-ico">
                   <IconFolder open={open} name={node.name} />
                 </span>
-                <span className="tree-name">{node.name}</span>
+                <span className="tree-name" title="" data-tw-title="">
+                  {node.name}
+                </span>
               </button>
             );
           }
@@ -305,12 +309,15 @@ export const TreeView = memo(function TreeView({
               onDragEnd={handleDragEnd}
               onClick={(e) => handleClick(node, e)}
               onContextMenu={(e) => handleContextMenu(node, e)}
-              title={node.path}
+              title=""
+              data-tw-title=""
             >
               <span className="tree-ico">
                 <FileGlyph name={node.name} />
               </span>
-              <span className="tree-name">{node.name}</span>
+              <span className="tree-name" title="" data-tw-title="">
+                {node.name}
+              </span>
               {showStats ? (
                 <span className="changes-filelist__stats">
                   {node.added > 0 ? <span className="changes-pane__add">+{node.added}</span> : null}

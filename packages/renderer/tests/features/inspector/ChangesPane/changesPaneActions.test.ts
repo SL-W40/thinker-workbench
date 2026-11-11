@@ -68,7 +68,6 @@ function renderPane() {
         status: STATUS,
         loading: false,
         error: null,
-        tree: null,
         onRefresh: () => {},
         onInitRepo: () => {},
         onOpenFile: () => {},

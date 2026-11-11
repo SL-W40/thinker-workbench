@@ -56,8 +56,8 @@ export function registerBrowserHandlers(ipcMain: IpcMain): void {
     },
   );
 
-  ipcMain.handle(IpcChannels.browserDetachWebview, async () => {
-    browserSessionManager.detachWebview();
+  ipcMain.handle(IpcChannels.browserDetachWebview, async (_evt, webContentsId?: number) => {
+    browserSessionManager.detachWebview(typeof webContentsId === "number" ? webContentsId : undefined);
   });
 
   ipcMain.handle(IpcChannels.browserSetViewport, async (_evt, viewport: BrowserViewport) => {

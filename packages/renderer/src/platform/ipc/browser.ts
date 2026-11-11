@@ -75,11 +75,11 @@ export async function browserAttachWebview(
   await browser.attachWebview(webContentsId, viewport);
 }
 
-/** <webview> 即将卸载。 */
-export async function browserDetachWebview(): Promise<void> {
+/** <webview> 即将卸载或被切走。id 不匹配当前绑定时主进程会忽略。 */
+export async function browserDetachWebview(webContentsId?: number): Promise<void> {
   const browser = api();
   if (!browser?.detachWebview) return;
-  await browser.detachWebview();
+  await browser.detachWebview(webContentsId);
 }
 
 /** 视口尺寸变化。 */

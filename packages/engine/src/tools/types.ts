@@ -30,7 +30,7 @@ export type ToolUiPayload = {
   execMode?: "login" | "direct";
   resultPaths?: string[];
   resultPathKinds?: ChatTimelineResultPathKind[];
-  /** 以 image_ref 进入模型上下文的图片（视觉模型可见；如 computer_screenshot）。 */
+  /** 以 image_ref 进入模型上下文的图片（视觉模型可见）。 */
   modelImages?: string[];
   /** `todo`：本次调用后的待办快照（供时间线卡片定格展示）。 */
   todos?: ChatTodo[];

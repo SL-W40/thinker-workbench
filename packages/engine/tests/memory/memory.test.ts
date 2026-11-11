@@ -16,12 +16,12 @@ import type {
 } from "../../src/memory/repository";
 import { presentSessionMemory, SessionMemoryServiceImpl } from "../../src/memory/sessionMemory";
 import { ContextBudgetImpl, estimateMessageTokens } from "../../src/memory/tokenBudget";
-import type { ChatMessage } from "../../src/model/types";
+import type { ModelMessage } from "../../src/model/types";
 
 // --- helpers ---
 
-function makeMessages(n: number): ChatMessage[] {
-  const out: ChatMessage[] = [{ role: "system", content: "init" }];
+function makeMessages(n: number): ModelMessage[] {
+  const out: ModelMessage[] = [{ role: "system", content: "init" }];
   for (let i = 1; i < n; i++) {
     out.push({ role: "user", content: `message number ${i}` });
   }
@@ -29,8 +29,8 @@ function makeMessages(n: number): ChatMessage[] {
 }
 
 /** 每条消息固定 per 字符，便于把 token 估算推过预算阈值。 */
-function bigMessages(n: number, per = 3000): ChatMessage[] {
-  const out: ChatMessage[] = [{ role: "system", content: "x".repeat(per) }];
+function bigMessages(n: number, per = 3000): ModelMessage[] {
+  const out: ModelMessage[] = [{ role: "system", content: "x".repeat(per) }];
   for (let i = 1; i < n; i++) {
     out.push({ role: "user", content: "x".repeat(per) });
   }
@@ -38,13 +38,13 @@ function bigMessages(n: number, per = 3000): ChatMessage[] {
 }
 
 /** 单条消息、总字符数受控，用于精确验证预算阈值。 */
-function singleCharMessage(total: number): ChatMessage[] {
+function singleCharMessage(total: number): ModelMessage[] {
   return [{ role: "user", content: "x".repeat(total) }];
 }
 
 /** 构造带成对 tool 调用的序列，用于验证安全切分。 */
-function makeToolPairSequence(n: number): ChatMessage[] {
-  const out: ChatMessage[] = [{ role: "system", content: "init" }];
+function makeToolPairSequence(n: number): ModelMessage[] {
+  const out: ModelMessage[] = [{ role: "system", content: "init" }];
   for (let i = 0; i < n; i++) {
     const id = `c${i}`;
     out.push({
@@ -146,7 +146,7 @@ describe("microCompact", () => {
   });
 
   it("对超长单条做字符截断，不破坏其它消息", () => {
-    const msgs: ChatMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "a".repeat(10_000) },
       { role: "user", content: "keep" },
     ];
@@ -163,7 +163,7 @@ describe("microCompact", () => {
 
 describe("ContextBudgetImpl", () => {
   it("estimateMessageTokens 按字符/4 估算，含工具参数", () => {
-    const msgs: ChatMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "abcd" },
       {
         role: "assistant",
@@ -238,7 +238,7 @@ describe("sessionCompact / fullCompact", () => {
 
   it("full 保留当前任务轮：最后一条 user 消息原样在末尾，不进摘要", async () => {
     // 模拟真实场景：历史旧问答 + 当前问题 + 工具轮次
-    const msgs: ChatMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "快速介绍一下这个项目" },
       { role: "assistant", content: "旧回答" },
       { role: "user", content: "我发现这个项目不会输出思考过程了，找下原因" },
@@ -264,7 +264,7 @@ describe("sessionCompact / fullCompact", () => {
   });
 
   it("micro 不丢弃当前任务轮：当前问题离尾部很远也保留", () => {
-    const msgs: ChatMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "快速介绍一下这个项目" },
       { role: "assistant", content: "旧回答" },
       { role: "user", content: "我发现这个项目不会输出思考过程了，找下原因" },
@@ -289,7 +289,7 @@ describe("sessionCompact / fullCompact", () => {
   });
 
   it("session 不丢弃当前任务轮：tail 覆盖最后一条 user 消息", async () => {
-    const msgs: ChatMessage[] = [
+    const msgs: ModelMessage[] = [
       { role: "user", content: "快速介绍一下这个项目" },
       { role: "assistant", content: "旧回答" },
       { role: "user", content: "我发现这个项目不会输出思考过程了，找下原因" },

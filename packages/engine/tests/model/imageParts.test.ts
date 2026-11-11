@@ -18,7 +18,7 @@ import {
   messageToApiContent,
 } from "../../src/model/imageParts";
 import { toApiMessages } from "../../src/model/openai";
-import type { ChatMessage } from "../../src/model/types";
+import type { ModelMessage } from "../../src/model/types";
 
 describe("imageParts", () => {
   let dataDir: string;
@@ -85,20 +85,14 @@ describe("imageParts", () => {
   it("allowed path 与目录外路径", () => {
     assert.equal(isAllowedChatImagePath(imagePath, dataDir), true);
     assert.equal(isAllowedChatImagePath(path.join(dataDir, "other.png"), dataDir), false);
-    // computer 截图白名单已迁到 cache/computer/images
-    const shotDir = path.join(dataDir, "cache", "computer", "images");
-    fs.mkdirSync(shotDir, { recursive: true });
-    const shot = path.join(shotDir, "shot.png");
-    fs.writeFileSync(shot, "x");
-    assert.equal(isAllowedChatImagePath(shot, dataDir), true);
     assert.equal(
-      isAllowedChatImagePath(path.join(dataDir, "computer", "images", "old.png"), dataDir),
+      isAllowedChatImagePath(path.join(dataDir, "cache", "computer", "images", "shot.png"), dataDir),
       false,
     );
   });
 
   it("toApiMessages 编码 data URL；缺失文件变文本", () => {
-    const msg: ChatMessage = {
+    const msg: ModelMessage = {
       role: "user",
       content: buildUserContent("look", [
         { id: "img1", path: imagePath, mime: "image/png", width: 1, height: 1 },

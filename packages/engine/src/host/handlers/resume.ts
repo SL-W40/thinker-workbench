@@ -53,6 +53,7 @@ export async function onResume(ctx: HostContext, message: UtilityResume): Promis
           runId: message.runId,
           threadId,
           sessionId: message.sessionId,
+          memoryHost: runtime.memoryHost,
           workspaceRoot: root,
           workspaceName: message.command.workspaceName,
           dataDir: message.dataDir,

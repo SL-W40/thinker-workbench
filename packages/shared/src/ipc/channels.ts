@@ -25,6 +25,8 @@ export const IpcChannels = {
   logEvent: "log:event",
   /** renderer 上报一条 LogRecord，由主进程写入 app.log。 */
   logRecord: "log:record",
+  /** 读取启动步骤失败记录。 */
+  startupListIssues: "startup:listIssues",
   /** 读取模型设置（返回公开视图）。 */
   settingsGetModel: "settings:getModel",
   /** 写入模型设置补丁。 */

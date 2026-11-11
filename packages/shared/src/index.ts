@@ -9,3 +9,4 @@ export * from "./exports/browser";
 export * from "./exports/core";
 export * from "./exports/ipc";
 export * from "./exports/protocol";
+export * from "./exports/skills";

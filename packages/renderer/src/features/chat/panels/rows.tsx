@@ -175,7 +175,20 @@ export function WorkspaceGroup({
                         : t("chat.queuedUnknown")
                       : undefined
                   }
-                />
+                >
+                  {th.runStatus === "queued" ? (
+                    <svg className="ws-session__queue" viewBox="0 0 14 14" aria-hidden>
+                      <circle
+                        cx="7"
+                        cy="7"
+                        r="3.15"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                  ) : null}
+                </span>
                 <span className="ws-session__title">{th.title}</span>
                 {th.pinned ? (
                   <span className="ws-session__pin" aria-hidden>

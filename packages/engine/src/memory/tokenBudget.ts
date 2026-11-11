@@ -8,7 +8,7 @@
  */
 
 import { getContextWindow } from "../model/openai";
-import type { ChatMessage } from "../model/types";
+import type { ModelMessage } from "../model/types";
 import { getRunUsage } from "../runtime/runContext";
 import type { BudgetLevel, ContextBudget } from "./repository";
 
@@ -32,7 +32,7 @@ export const DEFAULT_BUDGET_THRESHOLDS: BudgetThresholds = {
 const DEFAULT_RESERVE_RATIO = 0.15;
 
 /** 估算消息数组 token 数：字符数 / 4 + 工具调用参数开销。 */
-export function estimateMessageTokens(messages: ChatMessage[]): number {
+export function estimateMessageTokens(messages: ModelMessage[]): number {
   let chars = 0;
   for (const m of messages) {
     if (typeof m.content === "string") {
@@ -71,18 +71,18 @@ export class ContextBudgetImpl implements ContextBudget {
     this.thresholds = { ...DEFAULT_BUDGET_THRESHOLDS, ...(opts.thresholds ?? {}) };
   }
 
-  estimateTokens(messages: ChatMessage[]): number {
+  estimateTokens(messages: ModelMessage[]): number {
     return estimateMessageTokens(messages);
   }
 
   /** 预计占用比例 = (已用输入 + 当前消息估算 + 预留输出) / 窗口。 */
-  ratio(messages: ChatMessage[]): number {
+  ratio(messages: ModelMessage[]): number {
     const projected =
       this.usedInputTokens + this.estimateTokens(messages) + this.reserveOutputTokens;
     return projected / this.contextWindow;
   }
 
-  level(messages: ChatMessage[]): BudgetLevel {
+  level(messages: ModelMessage[]): BudgetLevel {
     const r = this.ratio(messages);
     if (r >= this.thresholds.blocking) return "blocking";
     if (r >= this.thresholds.auto) return "auto";
@@ -90,7 +90,7 @@ export class ContextBudgetImpl implements ContextBudget {
     return "ok";
   }
 
-  shouldCompact(messages: ChatMessage[]): boolean {
+  shouldCompact(messages: ModelMessage[]): boolean {
     const lvl = this.level(messages);
     return lvl === "auto" || lvl === "blocking";
   }

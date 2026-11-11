@@ -156,13 +156,6 @@ export const DATA_LAYOUT = {
     purge: "retention",
     retention: { maxAgeDays: 14, maxBytes: 512 * MB },
   },
-  cacheComputerImages: {
-    rel: "cache/computer/images",
-    kind: "cache",
-    label: "Computer 截图",
-    purge: "retention",
-    retention: { maxAgeDays: 7, maxBytes: 256 * MB },
-  },
 } as const satisfies Record<string, DataEntry>;
 
 export type DataLayoutKey = keyof typeof DATA_LAYOUT;
@@ -207,16 +200,14 @@ export function isCacheEntry(key: DataLayoutKey): boolean {
 
 /**
  * 会话附图允许的根，供 desktop 与 engine 的安全校验共用：
- * `workspaces/<id>/<kind>/<file>`（kind 白名单）与 computer 截图目录。
+ * `workspaces/<id>/<kind>/<file>`（kind 白名单）。
  */
 export function chatImageAllowed(dataDir: string): {
   workspacesRoot: string;
   workspaceKinds: readonly string[];
-  computerImagesDir: string;
 } {
   return {
     workspacesRoot: joinRel(dataDir, "workspaces"),
     workspaceKinds: ["images", "attachments"],
-    computerImagesDir: dataPath(dataDir, "cacheComputerImages"),
   };
 }

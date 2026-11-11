@@ -177,12 +177,10 @@ export function getCustomizeDir(kind: "rules" | "skills" | "agents" | "mcps"): s
   return dataPath(getDataDir(), CUSTOMIZE_KEYS[kind]);
 }
 
-/** 缓存目录：`<dataDir>/cache/<name>`（可再生，按保留策略清理）。 */
-export function getCacheDir(name: "browser-screenshots" | "computer-images"): string {
-  return dataPath(
-    getDataDir(),
-    name === "browser-screenshots" ? "cacheBrowserScreenshots" : "cacheComputerImages",
-  );
+/** 浏览器截图缓存：`<dataDir>/cache/browser-screenshots`。 */
+export function getCacheDir(name: "browser-screenshots"): string {
+  const keys = { "browser-screenshots": "cacheBrowserScreenshots" } as const;
+  return dataPath(getDataDir(), keys[name]);
 }
 
 /** 应用渲染入口 `index.html`（打包态为 payload 内文件；开发窗口通常走 Vite URL）。 */

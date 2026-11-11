@@ -2,13 +2,13 @@
  * 记忆子系统公共契约与类型。
  *
  * 设计原则（见方案）：
- * - 只依赖引擎内部 OpenAI 风格消息（`../model/types` 的 ChatMessage）；
+ * - 只依赖引擎内部 OpenAI 风格消息（`../model/types` 的 ModelMessage）；
  *   绝不 import shared 的 UI ChatMessage。
  * - 持久化与 LLM 都经接口抽象（MemoryRepository / ChatFn），
  *   便于单测用假对象替换，也避免 engine 直接依赖 better-sqlite3。
  */
 
-import type { ChatMessage } from "../model/types";
+import type { ModelMessage } from "../model/types";
 
 /** 记忆种类：项目级（规则/知识）与会话级（抽取要点）。 */
 export type MemoryKind = "project" | "session";
@@ -67,19 +67,19 @@ export interface ContextBudget {
   /** 预留给模型输出的 token。 */
   readonly reserveOutputTokens: number;
   /** 估算给定消息数组的 token 数（内容/工具调用均计）。 */
-  estimateTokens(messages: ChatMessage[]): number;
+  estimateTokens(messages: ModelMessage[]): number;
   /** 占用比例 = (usedInputTokens + estimate(messages) + reserve) / contextWindow。 */
-  ratio(messages: ChatMessage[]): number;
+  ratio(messages: ModelMessage[]): number;
   /** 当前占用等级。 */
-  level(messages: ChatMessage[]): BudgetLevel;
+  level(messages: ModelMessage[]): BudgetLevel;
   /** 是否应触发自动压缩。 */
-  shouldCompact(messages: ChatMessage[]): boolean;
+  shouldCompact(messages: ModelMessage[]): boolean;
 }
 
 /** 每轮后传给 SessionMemoryService 的输入。 */
 export interface SessionMemoryInput {
   /** 本轮后的全部对话消息（引擎内部 OpenAI 风格）。 */
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   /** 累计输入 token（来自 usageLedger）。 */
   cumulativeInputTokens: number;
   /** 上次抽取以来的工具调用次数。 */

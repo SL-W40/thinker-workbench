@@ -22,7 +22,15 @@ function withoutAsar<T>(fn: () => T): T {
   }
 }
 
-const SKIP_NAMES = new Set(["node_modules", ".git", ".DS_Store", "diff-cache", "dist", ".next"]);
+const SKIP_NAMES = new Set([
+  "node_modules",
+  ".git",
+  ".stage",
+  ".DS_Store",
+  "diff-cache",
+  "dist",
+  ".next",
+]);
 
 const TEXT_EXT =
   /\.(ts|tsx|js|jsx|mjs|cjs|json|md|txt|less|css|html|htm|yml|yaml|toml|xml|svg|sh|ps1|py|rs|go|java|kt|swift|c|cc|cpp|h|hpp|cs|sql|graphql|env|ignore|editorconfig|gitignore|npmrc|prettierrc)$/i;

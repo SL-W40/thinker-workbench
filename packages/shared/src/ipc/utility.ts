@@ -237,6 +237,11 @@ export type UtilityCheckpointClear = {
   requestId: string;
   /** 会话线程 id（按其 run 级线程键前缀清理）。 */
   threadId: string;
+  /**
+   * 该工作区的 checkpoint 目录。
+   * 子进程按这个目录打开 SqliteSaver 再删；不在主进程改 threads.json。
+   */
+  checkpointDir?: string;
 };
 
 /** 子进程 → 主进程：checkpoint 清理结果（best-effort，失败带原因）。 */
@@ -451,6 +456,53 @@ export type UtilityCrashNotice = {
   kind: "child-exit";
   code: number | null;
 };
+
+/** 主进程 → 子进程的 kind。守卫与联合类型必须用同一份清单。 */
+export const UTILITY_TO_CHILD_KINDS = [
+  "hello",
+  "run",
+  "cancel",
+  "cancelTask",
+  "resume",
+  "contextUsage",
+  "checkpointClear",
+  "ptyEvent",
+  "browserEvent",
+  "hitlResult",
+  "gitResult",
+  "mcpReload",
+] as const;
+
+/** 子进程 → 主进程的 kind。`child-exit` 由主进程本地构造，不走这条端口。 */
+export const UTILITY_TO_PARENT_KINDS = [
+  "ready",
+  "event",
+  "log",
+  "contextUsageResult",
+  "checkpointClearResult",
+  "ptyRequest",
+  "browserRequest",
+  "hitl",
+  "gitRequest",
+  "mcpStatus",
+  "span",
+] as const;
+
+function isUtilityEnvelope(value: unknown, kinds: readonly string[]): boolean {
+  if (!value || typeof value !== "object") return false;
+  const msg = value as { channel?: unknown; kind?: unknown };
+  return msg.channel === "utility" && typeof msg.kind === "string" && kinds.includes(msg.kind);
+}
+
+/** 主进程收到的 utility 消息。kind 不在清单里的一律丢掉。 */
+export function isUtilityToParent(value: unknown): value is UtilityToParent {
+  return isUtilityEnvelope(value, UTILITY_TO_PARENT_KINDS);
+}
+
+/** 子进程收到的 utility 消息。 */
+export function isUtilityToChild(value: unknown): value is UtilityToChild {
+  return isUtilityEnvelope(value, UTILITY_TO_CHILD_KINDS);
+}
 
 /** 主进程发给 utility 子进程的全部消息。 */
 export type UtilityToChild =

@@ -14,6 +14,7 @@ import type {
   WorkspaceAccess,
 } from "@thinker-workbench/shared";
 import type { RuntimeLimits } from "../config/runtimeLimits";
+import type { MemoryHost } from "../memory/host";
 import type { MemoryRepository } from "../memory/repository";
 import type { RunEmitter } from "./runEmit";
 import { bookUsage, createUsageLedger, type RunUsageLedger } from "./usageLedger";
@@ -31,6 +32,8 @@ export type RunContext = {
   workspaceId?: string;
   /** 记忆仓库（会话抽取记忆持久化）；未注入时记忆退化为仅运行时。 */
   memoryRepository?: MemoryRepository;
+  /** 本进程的记忆服务。图节点从这里取仓库，不自己建缓存。 */
+  memoryHost: MemoryHost;
   chatMode: ChatMode;
   workspaceAccess: WorkspaceAccess;
   allowAiDeleteFiles: boolean;

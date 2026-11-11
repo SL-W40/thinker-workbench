@@ -4,12 +4,12 @@
  * 设计要点：
  * - 页面本身是渲染层的 <webview> 标签（DOM 合成，应用内浮层能压住它），
  *   主进程不建 WebContentsView，只借 webContents id 接管它做自动化
- * - 挂载：面板挂载时渲染层上报 webContents id；切 tab / 关面板即上报卸载
+ * - 挂载：当前浏览器标签上报 webContents id；切走只摘掉这一份绑定，页面留在各自的 webview 里
  * - 自动化需要面板真的打开：未挂载时先 broadcast reveal 并等一会儿挂载，
  *   等不到才报错（离屏截图在 <webview> 下没有意义）
  * - 同 URL 且已落定则跳过 loadURL
  * - 导航中再次 navigate 则 stop 后换目标；动作前等待加载落定
- * - 切 tab 会销毁 guest：记住最后地址，重新挂载且空白时自动还原
+ * - 每个标签保留自己的 webview；自动化只绑定当前标签
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -116,19 +116,18 @@ class BrowserSessionManager {
     this.wc = wc;
     this.binding = this.bind(wc);
     desktopLog("browser").info("webview attached", { webContentsId });
-    // 面板刚挂载但页面空白：把切 tab 前的地址还回去（guest 已被销毁过）
-    const url = wc.getURL();
-    if ((!url || url === BROWSER_ABOUT_BLANK) && this.lastUrl !== BROWSER_ABOUT_BLANK) {
-      const restore = this.lastUrl;
-      void wc.loadURL(restore).catch(() => undefined);
-    }
+    // 每个标签自己的 webview 留着页面；不要把上一个标签的地址灌进新 guest。
     this.emitState();
     this.flushAttachWaiters(wc);
   }
 
-  /** 渲染层 <webview> 即将销毁。 */
-  detachWebview(): void {
+  /**
+   * 渲染层 <webview> 即将销毁或被切走。
+   * 带 id 时只摘掉仍绑定着的那一个，切标签时旧页的 detach 不会拆掉新页。
+   */
+  detachWebview(webContentsId?: number): void {
     const wc = this.liveContents();
+    if (typeof webContentsId === "number" && wc && wc.id !== webContentsId) return;
     if (wc) {
       const url = wc.getURL();
       if (url && url !== BROWSER_ABOUT_BLANK) this.lastUrl = url;
@@ -245,6 +244,17 @@ class BrowserSessionManager {
   /** 等待主文档加载落定（did-stop-loading / fail / 超时）。 */
   private waitForLoadSettle(wc: WebContents, timeoutMs = LOAD_SETTLE_TIMEOUT_MS): Promise<void> {
     return waitForLoadSettle(wc, timeoutMs);
+  }
+
+  /**
+   * 应用窗口里点到的外链：让界面新开一个浏览器标签，不改当前已经打开的页面。
+   * 本地链接按设置可能改走系统浏览器。
+   */
+  openInNewTab(url: string): void {
+    const target = normalizeBrowserUrl(url);
+    if (!target || target === BROWSER_ABOUT_BLANK) return;
+    if (maybeOpenLocalLinkExternally(target)) return;
+    broadcast({ type: "reveal", url: target, newTab: true });
   }
 
   /**

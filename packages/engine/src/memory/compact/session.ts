@@ -6,7 +6,7 @@
  * 当前问题与其后的工具轮次原样保留，摘要只是背景。
  */
 
-import type { ChatMessage } from "../../model/types";
+import type { ModelMessage } from "../../model/types";
 import type { ChatFn } from "../repository";
 import { alignSafeCut, findLastUserStart, renderForModel } from "./shared";
 import type { CompactResult } from "./types";
@@ -18,7 +18,7 @@ const SUMMARY_SYSTEM =
   "Use short bullets. No preamble.";
 
 export async function sessionCompact(
-  messages: ChatMessage[],
+  messages: ModelMessage[],
   chat: ChatFn,
   opts: { keepFirst?: number; keepRecent?: number } = {},
 ): Promise<CompactResult> {
@@ -46,7 +46,7 @@ export async function sessionCompact(
   const middle = messages.slice(headCut, tailCut);
   const digest = renderForModel(middle);
   const summary = (await chat(SUMMARY_SYSTEM, `Conversation to summarize:\n${digest}`)).trim();
-  const summaryMsg: ChatMessage = {
+  const summaryMsg: ModelMessage = {
     role: "user",
     content: `<summary of omitted turns>\n${summary}`,
   };

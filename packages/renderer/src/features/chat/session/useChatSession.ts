@@ -27,6 +27,13 @@ import type { WorkspaceGate } from "../composer/useDraftImages";
 import { settleLoadedMessages } from "../message/messageClock";
 import { QUEUED_WAIT_STEP_ID, withQueuedWait } from "../timeline";
 import { listBusyLiveRuns, markLiveRunStopping } from "./liveRunRegistry";
+import {
+  phaseAfterBusy,
+  phaseAfterResume,
+  sessionBusy,
+  sessionResumeKind,
+  type SessionPhase,
+} from "./sessionPhase";
 import { resumeKindFromRunStatus, TODOS_PERSIST_DELAY_MS } from "./sessionHelpers";
 import { useChatEventStream } from "./useChatEventStream";
 import { useChatMessageEdit } from "./useChatMessageEdit";
@@ -46,7 +53,11 @@ import { useSessionWorkspace } from "./useSessionWorkspace";
 export function useChatSession(visible = true) {
   const t = useT();
   const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<SessionPhase>({ kind: "idle" });
+  const busy = sessionBusy(phase);
+  const setBusy = useCallback((next: boolean) => {
+    setPhase((current) => phaseAfterBusy(current, next));
+  }, []);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | undefined>();
   /** 当前侧栏 / 输入框展示的工作空间（可与活动会话同步）*/
@@ -62,14 +73,12 @@ export function useChatSession(visible = true) {
   const todosPersistTimer = useRef<number | null>(null);
   const todosPersistSession = useRef<string | null>(null);
   const [activeTraceId, setActiveTraceId] = useState<string | null>(null);
-  /** cancelled：仅时间线可续；crashed：输入区也提示检查点续跑*/
-  const [resumeKind, setResumeKind] = useState<null | "cancelled" | "crashed">(null);
+  /** cancelled：仅时间线可续；crashed：输入区也提示检查点续跑。由 phase 派生。 */
+  const resumeKind = sessionResumeKind(phase);
   const canResume = resumeKind != null;
-  const setCanResume = (v: boolean | "cancelled" | "crashed") => {
-    if (v === false) setResumeKind(null);
-    else if (v === true) setResumeKind("cancelled");
-    else setResumeKind(v);
-  };
+  const setCanResume = useCallback((v: boolean | "cancelled" | "crashed") => {
+    setPhase((current) => phaseAfterResume(current, v));
+  }, []);
   const ensureModelSecrets = useEnsureModelSecrets();
   const showModelSecretGate = useShowModelSecretGate();
   const scroller = useRef<HTMLDivElement>(null);

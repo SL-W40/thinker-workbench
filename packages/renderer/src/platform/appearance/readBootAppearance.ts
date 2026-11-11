@@ -6,20 +6,17 @@
  */
 import { type DesignTheme, resolveUiTheme } from "@thinker-workbench/design";
 import {
-  type AppFontScale,
   type AppThemeId,
   type CustomThemeRecord,
   DEFAULT_APP_THEME,
-  normalizeAppFontScale,
   normalizeUiTheme,
 } from "@thinker-workbench/shared";
 
-/** 启动外观：主题 id、字体档位以及已解析的 DesignTheme。 */
+/** 启动外观：主题 id 以及已解析的 DesignTheme。界面缩放由主进程 setZoomFactor 负责。 */
 export type BootAppearance = {
   themeId: AppThemeId;
   theme: DesignTheme;
   customThemes: CustomThemeRecord[];
-  fontScale: AppFontScale;
 };
 
 /** 当前 OS 是否偏好深色。 */
@@ -55,6 +52,5 @@ export function readBootAppearance(): BootAppearance {
     themeId,
     customThemes,
     theme: resolveUiTheme(themeId, customThemes, dark),
-    fontScale: normalizeAppFontScale(sync?.uiFontScale),
   };
 }

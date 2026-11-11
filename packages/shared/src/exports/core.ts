@@ -22,6 +22,7 @@ import type { ThinkerMcpApi } from "../ipc/mcp";
 import type { ThinkerRulesApi } from "../ipc/rules";
 import type { ThinkerSessionApi } from "../ipc/session";
 import type { ThinkerSettingsApi } from "../ipc/settings";
+import type { StartupIssue } from "../ipc/startup";
 import type { ThinkerSkillsApi } from "../ipc/skills";
 import type { ThinkerTerminalApi } from "../ipc/terminal";
 import type { ThinkerToolsApi } from "../ipc/tools";
@@ -138,6 +139,8 @@ export type ThinkerApi = {
   checkpoints?: ThinkerCheckpointsApi;
   /** 桌面自动更新（dev 构建不可用）。 */
   update?: ThinkerUpdateApi;
+  /** 启动时没做成的步骤。空数组表示这次启动是干净的。 */
+  listStartupIssues?(): Promise<StartupIssue[]>;
 };
 export type { DataKind, DataLayoutKey } from "../dataLayout";
 export { chatImageAllowed, DEFAULT_WORKSPACE_ID, dataPath, listDataEntries } from "../dataLayout";

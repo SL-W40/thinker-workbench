@@ -2,7 +2,8 @@
  * 聊天左右侧栏开合与宽度；状态持久化到 localStorage（`tw-chat-panels`）。
  * 根据壳宽动态钳制，避免侧栏把中间聊天区挤没。
  *
- * 三栏宽度以 CSS 变量下发到 `.chat-shell`（`shellVars`），DOM 宽度由变量决定。
+ * 左右栏宽度以 CSS 变量下发到 `.chat-shell`（`shellVars`）。中间列用 flex 吃剩余，
+ * 不把 `--chat-main-width` 钉成定宽，否则页面缩放改壳宽的那一帧会把右栏裁掉。
  * 拖拽期间走 `previewWidth` 直接改变量、不 setState —— 宽度一旦进 React state，
  * 每一帧都会把整棵树（会话列表 / 时间线 / 编辑器 / 文件树）重渲染一遍，
  * 这是拖拽卡顿的根因；改为松手时由 `setLeftWidth` / `setRightWidth` 提交一次。
@@ -36,10 +37,8 @@ const VAR_MAIN = "--chat-main-width";
  * 加在 `.chat-shell` 上的拖拽态标记。
  *
  * 现在只用于两类「拖拽期该停掉的工作」，不再冻结内容宽度：
- * - `.chat-side__body` / `.stage-shell` 加 `contain: layout`，把重排圈在容器内；
- * - `useFileListPanel` 的 ResizeObserver 据此推迟内嵌文件列表的开合，
- *   否则拖过 560px 断点时会在拖拽途中整块挂载 / 卸载。
- * 松手必须清掉，否则后一条会永久失效。
+ * - `.chat-side__body` / `.stage-shell` 加 `contain: layout`，把重排圈在容器内。
+ * 松手必须清掉，否则拖拽态会留在壳上。
  */
 const RESIZING_CLASS = "is-resizing";
 

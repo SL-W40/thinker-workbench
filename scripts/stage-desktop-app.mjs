@@ -3,6 +3,9 @@
  *   packages/desktop/.stage/app      → Shell（main/preload/原生模块）
  *   packages/desktop/.stage/payload  → Payload（renderer/engine/bundled + layout.json）
  *
+ * `.stage` 只是这次组装的输出。运行时和 legacy checkpoint 清理都读 artifacts / 数据目录，
+ * 不读这里；lint 与工作区扫描也显式跳过它，避免把旧构建副本当成源码。
+ *
  * 用法（仓库根）：node scripts/stage-desktop-app.mjs
  * 须先 `pnpm build`，且 desktop 已 rebuild:native。
  */

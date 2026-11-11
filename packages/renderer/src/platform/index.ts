@@ -11,7 +11,6 @@
  * 本层不得反向依赖 ui / features；新加的宿主能力默认放这里，而不是散在 src 根目录。
  */
 export { AppearanceProvider } from "./appearance/AppearanceProvider";
-export { applyUiFontScale } from "./appearance/fontScale";
 export { readBootAppearance } from "./appearance/readBootAppearance";
 export { brandAppIconSrc, brandGlyphSrc } from "./branding";
 export { installBlankRootRecovery } from "./dev";

@@ -12,7 +12,7 @@ import {
   Input,
   RestartIcon,
 } from "@thinker-workbench/design/react";
-import { BROWSER_PARTITION, type BrowserState, browserUrlsEqual } from "@thinker-workbench/shared";
+import { BROWSER_PARTITION, type BrowserState } from "@thinker-workbench/shared";
 import { memo, useEffect, useRef, useState } from "react";
 import {
   browserAttachWebview,
@@ -27,17 +27,13 @@ import {
   onBrowserEvent,
 } from "../../platform/ipc/browser";
 import { useT } from "../../ui/i18n/useI18n";
-import { patchInspectorUi } from "../inspector/inspectorUi";
 import "./BrowserPane.less";
 
 type Props = {
   /** 面板是否为当前激活 tab。*/
   active?: boolean;
-  /** 外部请求导航到的 URL（消费后清空）。*/
-  pendingUrl?: string | null;
-  onPendingUrlConsumed?: () => void;
-  /** 工作空间 id：地址变化写回，供重启后还原。*/
-  workspaceId?: string | null;
+  /** 这个标签打开时要载入的地址；只在首次变为可见时导航一次。*/
+  initialUrl?: string;
 };
 
 const EMPTY_STATE: BrowserState = {
@@ -53,14 +49,13 @@ const EMPTY_STATE: BrowserState = {
 };
 
 /** memo：webview 挂载成本高，顶层 state 变化不该让它重渲染。 */
-export const BrowserPane = memo(function BrowserPane({
-  active = true,
-  pendingUrl = null,
-  onPendingUrlConsumed,
-  workspaceId = null,
-}: Props) {
+export const BrowserPane = memo(function BrowserPane({ active = true, initialUrl = "" }: Props) {
   const t = useT();
   const hostRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const contentsIdRef = useRef<number | null>(null);
+  const bootUrlRef = useRef(initialUrl.trim());
   const [state, setState] = useState<BrowserState>(EMPTY_STATE);
   const [urlDraft, setUrlDraft] = useState("");
   const available = Boolean(window.thinker?.browser);
@@ -68,11 +63,13 @@ export const BrowserPane = memo(function BrowserPane({
   useEffect(() => {
     if (!available) return;
     void browserGetState().then((s) => {
-      if (!s) return;
+      // 后台标签不能吃到当前页的状态，否则一切回来地址栏是别人的
+      if (!activeRef.current || !s) return;
       setState(s);
       if (s.url && s.url !== "about:blank") setUrlDraft(s.url);
     });
     return onBrowserEvent((event) => {
+      if (!activeRef.current) return;
       if (event.type === "state") {
         setState(event.state);
         if (event.state.url && event.state.url !== "about:blank") {
@@ -82,73 +79,87 @@ export const BrowserPane = memo(function BrowserPane({
     });
   }, [available]);
 
-  // 地址变化即落盘（跳过空白页）：重启后还原用
-  useEffect(() => {
-    if (!available || !workspaceId) return;
-    const url = state.url?.trim() ?? "";
-    if (!url || url === "about:blank") return;
-    patchInspectorUi(workspaceId, { browserUrl: url });
-  }, [available, workspaceId, state.url]);
-
-  // 面板激活与否：告诉主进程「视口在不在」
+  // <webview> 跟着标签活着：切到别的标签只是隐藏，不拆掉页面。
   useEffect(() => {
     if (!available) return;
-    void browserSetVisible(active);
-    return () => {
-      void browserSetVisible(false);
-    };
-  }, [active, available]);
-
-  // <webview> 生命周期：挂载后把 webContents id 交主进程，卸载时收回
-  useEffect(() => {
-    if (!available || !active) return;
     const host = hostRef.current;
     if (!host) return;
 
     const webview = document.createElement("webview");
     webview.setAttribute("partition", BROWSER_PARTITION);
-    // 必须带初始 src：不带 src 的 <webview> 不会创建 guest（dom-ready 永不触发，
-    // 主进程也就拿不到 webContents id）。about:blank 起步，地址由主进程 loadURL 驱动。
+    // 必须带初始 src：不带 src 的 <webview> 不会创建 guest（dom-ready 永不触发）。
     webview.setAttribute("src", "about:blank");
     webview.className = "browser-pane__webview";
     host.appendChild(webview);
 
-    const measure = () => {
+    const measure = (report: boolean) => {
       const rect = host.getBoundingClientRect();
-      return { width: Math.round(rect.width), height: Math.round(rect.height) };
+      const width = Math.max(0, Math.round(rect.width));
+      const height = Math.max(0, Math.round(rect.height));
+      // 百分比高度不会传进 guest；用布局盒的像素值才能让页面跟面板一起变高。
+      if (width > 0 && height > 0) {
+        webview.style.width = `${width}px`;
+        webview.style.height = `${height}px`;
+      }
+      if (report && activeRef.current && width > 0 && height > 0) {
+        void browserSetViewport({ width, height });
+      }
+      return { width, height };
     };
 
-    // dom-ready 时 id 才可用；之后主进程即可对它做导航 / 求值 / 截图
     const onReady = () => {
       const withId = webview as unknown as { getWebContentsId?: () => number };
       const id = withId.getWebContentsId?.();
       if (typeof id !== "number") return;
-      void browserAttachWebview(id, measure());
+      contentsIdRef.current = id;
+      if (activeRef.current) void browserAttachWebview(id, measure(false));
     };
     webview.addEventListener("dom-ready", onReady);
 
-    const ro = new ResizeObserver(() => void browserSetViewport(measure()));
+    const ro = new ResizeObserver(() => {
+      measure(true);
+    });
     ro.observe(host);
+    requestAnimationFrame(() => measure(false));
 
     return () => {
       ro.disconnect();
       webview.removeEventListener("dom-ready", onReady);
-      void browserDetachWebview();
+      const id = contentsIdRef.current;
+      contentsIdRef.current = null;
+      if (id != null) void browserDetachWebview(id);
       webview.remove();
+    };
+  }, [available]);
+
+  // 只有当前标签挂到主进程。cleanup 里摘掉，避免后面的隐藏标签把 visible 盖成 false。
+  useEffect(() => {
+    if (!available || !active) return;
+    void browserSetVisible(true);
+    const id = contentsIdRef.current;
+    if (id != null) {
+      const rect = hostRef.current?.getBoundingClientRect();
+      void browserAttachWebview(id, {
+        width: Math.max(0, Math.round(rect?.width ?? 0)),
+        height: Math.max(0, Math.round(rect?.height ?? 0)),
+      });
+    }
+    return () => {
+      void browserSetVisible(false);
+      const current = contentsIdRef.current;
+      if (current != null) void browserDetachWebview(current);
     };
   }, [active, available]);
 
+  // 标签自带的地址只在它第一次被看到时打开，之后的跳转留在这一页里。
   useEffect(() => {
-    if (!pendingUrl?.trim()) return;
-    const url = pendingUrl.trim();
-    onPendingUrlConsumed?.();
+    if (!available || !active) return;
+    const url = bootUrlRef.current;
+    if (!url) return;
+    bootUrlRef.current = "";
     setUrlDraft(url);
-    // 已在目标页则跳过，防止外部重复 open 触发刷新风暴
-    void browserGetState().then((s) => {
-      if (s && browserUrlsEqual(s.url, url) && !s.loading) return;
-      void browserNavigate(url);
-    });
-  }, [pendingUrl, onPendingUrlConsumed]);
+    void browserNavigate(url);
+  }, [available, active]);
 
   async function submitUrl() {
     const next = urlDraft.trim();

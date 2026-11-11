@@ -144,7 +144,7 @@ describe("settingsStore lazy secrets", () => {
     assert.ok(secretCounters.decrypt >= 1);
     assert.equal(getModelCatalog().providers[0]?.apiKey, "sk-test-key-1234");
 
-    // 清空 Map 后仍能从磁盘补密文并解锁
+    // 丢掉内存缓存后，从磁盘上的 apiKeyEnc 重新解锁
     resetSettingsCacheForTests();
     secretCounters.decrypt = 0;
     const again = unlockModelSecretsForRun();

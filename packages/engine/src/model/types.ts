@@ -37,7 +37,7 @@ export type ChatImageRefPart = {
 export type ChatContentPart = ChatTextPart | ChatImageRefPart;
 
 /** 单条对话消息；assistant 可带 tool_calls，tool 须带 tool_call_id。 */
-export type ChatMessage = {
+export type ModelMessage = {
   role: ChatRole;
   content: string | ChatContentPart[] | null;
   name?: string;
@@ -70,7 +70,7 @@ export type ChatToolCallDelta = {
 /** 一次 chat 请求。 */
 export type ChatRequest = {
   /** 对话轮次（system 单独通过 system / 默认提示词施加）。 */
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   tools?: ChatToolDefinition[];
   /** 覆盖默认对话 system prompt。 */
   system?: string;

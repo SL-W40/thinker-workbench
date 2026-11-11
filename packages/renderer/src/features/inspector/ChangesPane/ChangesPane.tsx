@@ -1,30 +1,20 @@
 /**
- * Changes 面板：Git 状态、懒加载 diff、侧栏文件列表与 CTA prompt（编排壳）。
+ * Changes 面板：Git 状态、懒加载 diff 与 CTA prompt（编排壳）。
  * diff 解析见 ./diffText，渲染组件见 ./FileDiff 与 ./ChangedFileList，
  * 浮动菜单见 ./floatingMenu，限流/高亮队列见 ./highlightQueue。
  */
 import { ConfirmDialog, EmptyState, useToast } from "@thinker-workbench/design/react";
-import type { ChangeDispositionKind, GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
-import {
-  type CSSProperties,
-  memo,
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { ChangeDispositionKind, GitStatus } from "@thinker-workbench/shared";
+import { type CSSProperties, memo, startTransition, useCallback, useMemo, useState } from "react";
 import { applyChangeDisposition } from "../../../platform/ipc/checkpoints";
 import { useStableCallback } from "../../../ui/hooks/useStableCallback";
 import { useVirtualRows } from "../../../ui/hooks/useVirtualRows";
 import { useT } from "../../../ui/i18n/useI18n";
-import { IconPanelHide, MI } from "../../../ui/icons";
+import { MI } from "../../../ui/icons";
 import { loadInspectorUi, patchInspectorUi } from "../inspectorUi";
-import { FILE_LIST_AUTO_PANE_MIN, useFileListOpen, useFileListWidth } from "../useFileListPanel";
 import "../inspector.less";
 import type { ChangesPromptActionId } from "./actions";
-import { ChangedFileRow, ChangesFileList } from "./ChangedFileList";
+import { ChangedFileRow } from "./ChangedFileList";
 import { ChangesErrorState } from "./ChangesErrorState";
 import { sortChangedFiles } from "./diffText";
 import { PortalMenu } from "./floatingMenu";
@@ -42,8 +32,6 @@ type Props = {
   status: GitStatus | null;
   loading?: boolean;
   error?: string | null;
-  /** 全量工作区树（侧栏文件列表用；缺省回退仅改动文件）。*/
-  tree?: WorkspaceNode | null;
   onRefresh: () => void;
   onInitRepo: () => void | Promise<void>;
   onOpenFile: (path: string) => void;
@@ -59,7 +47,6 @@ export const ChangesPane = memo(function ChangesPane({
   status,
   loading,
   error,
-  tree,
   onRefresh,
   onInitRepo,
   onOpenFile,
@@ -69,7 +56,6 @@ export const ChangesPane = memo(function ChangesPane({
   const toast = useToast();
   const viewMenu = usePortalMenu(200);
   const [wordWrap, setWordWrap] = useState(false);
-  const [focusPath, setFocusPath] = useState<string | null>(null);
   /**
    * 手动提交表单是否展开。常态只有头部一个「提交」按钮，
    * 其余动作全在「⋯」菜单里；选了手动提交才长出这块表单。
@@ -86,40 +72,7 @@ export const ChangesPane = memo(function ChangesPane({
   /** 行级处置进行中（同一时刻只允许一个，避免并发改同一批快照）。 */
   const [disposing, setDisposing] = useState<string | null>(null);
 
-  const restoredUi = useMemo(() => loadInspectorUi(workspaceId ?? null), [workspaceId]);
-  const skipPersist = useRef(true);
-  const {
-    open: listOpen,
-    forced: listForced,
-    toggle: toggleList,
-    paneRef,
-  } = useFileListOpen(FILE_LIST_AUTO_PANE_MIN, workspaceId ?? "", restoredUi.changesListForced);
-  const {
-    width: listWidth,
-    dragging: listDragging,
-    onResizePointerDown,
-  } = useFileListWidth(restoredUi.changesListWidth, workspaceId ?? "");
-
-  useEffect(() => {
-    skipPersist.current = true;
-    const id = window.setTimeout(() => {
-      skipPersist.current = false;
-    }, 0);
-    return () => window.clearTimeout(id);
-  }, []);
-
-  useEffect(() => {
-    if (!workspaceId || skipPersist.current) return;
-    patchInspectorUi(workspaceId, {
-      changesListForced: listForced,
-      changesListWidth: listWidth,
-    });
-  }, [workspaceId, listForced, listWidth]);
-
-  /**
-   * 手动提交展开态按工作空间记住。只在用户切换时写 —— 挂载时写会把
-   * skipPersist 挡掉的默认值又写回去（列表宽度那套是同一个道理）。
-   */
+  /** 手动提交展开态按工作空间记住。只在用户切换时写，挂载时不落盘。 */
   function setManualMode(next: boolean) {
     setManual(next);
     if (workspaceId) patchInspectorUi(workspaceId, { changesCommitMode: next ? "manual" : "ai" });
@@ -134,7 +87,6 @@ export const ChangesPane = memo(function ChangesPane({
     onChanged: onRefresh,
   });
   const totals = status?.totals ?? { added: 0, removed: 0 };
-  const changedPaths = useMemo(() => new Set(files.map((f) => f.path)), [files]);
 
   /** 主列表虚拟化：几百个改动文件也只有视口内十几行在 DOM 里。 */
   const list = useVirtualRows({
@@ -165,18 +117,6 @@ export const ChangesPane = memo(function ChangesPane({
       return next;
     });
   }, []);
-
-  function focusFromSidebar(path: string) {
-    // 改动文件：聚焦主区 diff；未改动文件：直接在编辑器打开
-    if (changedPaths.has(path)) {
-      setFocusPath(path);
-      setOpenPaths((prev) => (prev.has(path) ? prev : new Set(prev).add(path)));
-      const index = files.findIndex((f) => f.path === path);
-      if (index >= 0) list.scrollToIndex(index);
-    } else {
-      onOpenFile(path);
-    }
-  }
 
   /**
    * 单文件处置：成功后刷新 Git 状态，让面板立刻反映改动消失。
@@ -242,7 +182,7 @@ export const ChangesPane = memo(function ChangesPane({
   }
 
   return (
-    <div ref={paneRef} className={`changes-pane${listOpen && !noChanges ? " has-filelist" : ""}`}>
+    <div className="changes-pane">
       <div className="changes-pane__head">
         <div className="changes-pane__toolbar">
           <div className="changes-pane__meta">
@@ -350,17 +290,6 @@ export const ChangesPane = memo(function ChangesPane({
             >
               {MI.refresh}
             </button>
-            <button
-              type="button"
-              className={`changes-pane__icon-btn${listOpen ? " is-on" : ""}`}
-              title={listOpen ? t("inspector.files.hideList") : t("inspector.files.showList")}
-              aria-label={listOpen ? t("inspector.files.hideList") : t("inspector.files.showList")}
-              aria-pressed={listOpen}
-              disabled={noChanges}
-              onClick={toggleList}
-            >
-              <IconPanelHide />
-            </button>
           </div>
         </div>
       </div>
@@ -443,20 +372,6 @@ export const ChangesPane = memo(function ChangesPane({
               </ul>
             </div>
           </div>
-          {listOpen ? (
-            <ChangesFileList
-              files={files}
-              tree={tree}
-              selectedPath={focusPath}
-              onSelect={focusFromSidebar}
-              onOpenFile={onOpenFile}
-              workspaceId={workspaceId ?? ""}
-              onChanged={onRefresh}
-              width={listWidth}
-              dragging={listDragging}
-              onResizePointerDown={onResizePointerDown}
-            />
-          ) : null}
         </div>
       )}
 

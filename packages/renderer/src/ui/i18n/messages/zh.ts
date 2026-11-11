@@ -24,6 +24,8 @@ export const zh: MessageTree = {
     filterToggle: "筛选",
     /** 本地过滤无命中时的空态。 */
     filterNoMatch: "没有匹配的工作空间或会话",
+    /** 启动步骤失败时显示在工作空间列表上方。 */
+    startupIssues: "启动没有完成：{detail}",
     /** 全文检索进行中。 */
     searching: "检索中…",
     /** 全文检索无命中。 */
@@ -1049,8 +1051,6 @@ export const zh: MessageTree = {
       fieldTransport: "传输方式",
       transportStdio: "stdio",
       transportHttp: "HTTP",
-      builtinComputer: "Computer 控制（内置）",
-      builtinBadge: "内置",
       fieldCommand: "命令",
       fieldArgs: "参数",
       fieldEnv: "环境变量",
@@ -1138,10 +1138,6 @@ export const zh: MessageTree = {
           mermaidVarsHint: "字符串键值对象，会合并进 Mermaid themeVariables。",
           limitReached: "自定义主题最多 {n} 个。",
         },
-      },
-      uiFontScale: {
-        title: "界面字体大小",
-        description: "左右滑动调整应用整体文字与控件尺寸。",
       },
       uiLocale: {
         title: "界面语言",
@@ -1560,11 +1556,19 @@ export const zh: MessageTree = {
   },
   inspector: {
     sectionsLabel: "检视分区",
-    /** Tab 栏「+」：打开或切换到变更 / 文件 / 终端 / 浏览器。 */
+    /** Tab 栏「+」：打开或切换到变更 / 终端 / 浏览器。 */
     addPanel: "打开面板",
+    /** 标签右键菜单。 */
+    tabs: {
+      menu: "标签操作",
+      close: "关闭",
+      closeOthers: "关闭其他",
+      closeRight: "关闭右侧",
+      closeAll: "关闭全部",
+    },
     section: {
       changes: "变更",
-      files: "文件",
+      files: "文件树",
       terminal: "终端",
       browser: "浏览器",
       plan: "计划",
@@ -1611,10 +1615,7 @@ export const zh: MessageTree = {
       unmodifiedLines: "{n} 行未修改",
       expandDiff: "展开 diff",
       collapseDiff: "折叠 diff",
-      /** 变更文件树右键菜单。 */
-      fileMenu: "文件操作",
       copyPath: "复制路径",
-      searchFiles: "搜索文件",
       uncommitted: "未提交",
       viewOptions: "视图选项",
       wordWrap: "自动换行",
@@ -1653,6 +1654,7 @@ export const zh: MessageTree = {
     files: {
       treeTitle: "文件",
       emptyTree: "暂无文件",
+      emptyTreeBody: "工作空间里的文件会显示在这里",
       backToTree: "文件",
       dirty: "未保存",
       readOnly: "只读",
@@ -1691,12 +1693,7 @@ export const zh: MessageTree = {
       saveAsCancel: "取消",
       openSearch: "搜索文件",
       searchPlaceholder: "文件、文件夹…",
-      hideTree: "隐藏文件列表",
-      showTree: "显示文件列表",
-      hideList: "隐藏文件列表",
-      showList: "显示文件列表",
-      resizeTree: "调整文件列表宽度",
-      /** 侧栏文件树右键菜单。 */
+      /** 文件树右键菜单。 */
       fileMenu: "文件操作",
       untitled: "未命名",
       recents: "最近",

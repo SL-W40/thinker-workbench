@@ -51,7 +51,7 @@ describe("resolveTitleBarOverlay", () => {
   });
 
   it("按钮区高度与标题栏对齐，并按字体 zoom 取整", () => {
-    assert.equal(resolveTitleBarOverlay({ visual: "light", fontScale: "large" }).height, 50);
-    assert.equal(resolveTitleBarOverlay({ visual: "light", fontScale: "small" }).height, 39);
+    assert.equal(resolveTitleBarOverlay({ visual: "light", fontScale: 1.25 }).height, 55);
+    assert.equal(resolveTitleBarOverlay({ visual: "light", fontScale: 0.8 }).height, 35);
   });
 });

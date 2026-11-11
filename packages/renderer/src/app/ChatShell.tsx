@@ -9,6 +9,7 @@ import {
   ChatStage,
   Composer,
   MentionChipPreview,
+  StartupIssues,
   WorkspaceSidebar,
 } from "../features/chat";
 import { RightInspector } from "../features/inspector/RightInspector";
@@ -108,6 +109,7 @@ export function ChatShell({
         onResizeStart={beginLeftResize}
         onResizeEnd={panels.endResize}
       >
+        <StartupIssues />
         <WorkspaceSidebar
           activeSessionId={session.sessionId}
           busy={session.busy}
@@ -117,7 +119,7 @@ export function ChatShell({
           onOpenTrace={onOpenTraceForSession}
         />
       </ChatSidePanel>
-      {/* 量到壳宽前吃剩余宽度；之后由 --chat-main-width 钉死（拖拽期只改变量，不重渲染） */}
+      {/* 中间列始终吃剩余宽度。左右栏定宽；拖拽期只改那两个变量，不重渲染。 */}
       <div className={panels.mainWidth > 0 ? "chat-main chat-main--fitted" : "chat-main"}>
         <ChatStage
           empty={session.empty}

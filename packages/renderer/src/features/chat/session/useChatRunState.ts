@@ -14,12 +14,7 @@
 import type { ChatMessage, ChatTimelineStep } from "@thinker-workbench/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { saveSessionMessages } from "../../../platform/ipc/workspaces";
-import {
-  createDebouncedSave,
-  createEpochGate,
-  type DebouncedSave,
-  type EpochGate,
-} from "./chatPersistence";
+import { createEpochGate, transcriptSave, type EpochGate } from "./chatPersistence";
 
 /** commitMessages 的落库选项；默认落库（防抖）。 */
 export type CommitOptions = {
@@ -74,8 +69,8 @@ export type ChatRunState = {
 export function useChatRunState(): ChatRunState {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
-  // 落库防抖调度器：稳定单例；随核心创建，供 commitMessages 直接调用
-  const [saveScheduler] = useState<DebouncedSave>(createDebouncedSave);
+  // 与后台槽共用的落库调度器
+  const saveScheduler = transcriptSave();
   const sessionIdRef = useRef<string | null>(null);
   const [sessionEpoch] = useState<EpochGate>(createEpochGate);
   const [runEpoch] = useState<EpochGate>(createEpochGate);
@@ -106,12 +101,9 @@ export function useChatRunState(): ChatRunState {
     [saveScheduler],
   );
 
-  const cancelSave = useCallback(
-    (sessionId: string) => {
-      saveScheduler.cancel(sessionId);
-    },
-    [saveScheduler],
-  );
+  const cancelSave = useCallback((sessionId: string) => {
+    saveScheduler.cancel(sessionId);
+  }, [saveScheduler]);
 
   /**
    * 消息状态唯一写者：先同步 ref（供同步段内的后续读取），再 setState，最后防抖落库。

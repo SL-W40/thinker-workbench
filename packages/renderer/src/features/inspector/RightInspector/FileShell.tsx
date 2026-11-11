@@ -1,27 +1,20 @@
 /**
- * RightInspector 文件壳：编辑器 / 媒体预览 / Markdown + 侧栏文件树。
+ * RightInspector 文件壳：文件树标签铺满面板；打开文件后只留编辑器 / 预览。
  */
 
 import { ContextMenu, Input } from "@thinker-workbench/design/react";
 import type { WorkspaceNode } from "@thinker-workbench/shared";
-import {
-  memo,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  useRef,
-} from "react";
+import { memo, type MouseEvent as ReactMouseEvent, useRef } from "react";
 import { useStableCallback } from "../../../ui/hooks/useStableCallback";
 import { useT } from "../../../ui/i18n/useI18n";
 import type { ChangeTreeNode } from "../changesTree";
 import { FileEditor } from "../FileEditor";
-import { FilesHome } from "../FilesHome";
-import { FileTreeActionModals, useFileTreeActions } from "../FileTreeActions";
+import { FileTreeActionModals, type FileTreeActions, useFileTreeActions } from "../FileTreeActions";
 import { MarkdownFileView } from "../MarkdownFileView";
 import { MediaPreview, type MediaPreviewInfo } from "../MediaPreview";
 import type { TreeGesture, TreeSelectionJoin } from "../TreeView";
 import { TreeView } from "../TreeView";
 import type { StageTab } from "../types";
-import { FILE_LIST_WIDTH } from "../useFileListPanel";
 
 /** 侧栏文件树右键菜单状态。 */
 export type TreeCtxMenu = {
@@ -33,14 +26,8 @@ export type TreeCtxMenu = {
 
 type Props = {
   currentTab: StageTab | undefined;
-  showFilesHome: boolean;
-  filesPaneRef: (node: HTMLDivElement | null) => void;
-  filesListOpen: boolean;
-  filesListWidth: number;
-  filesListDragging: boolean;
-  onFilesListResize: (e: ReactPointerEvent) => void;
-  recents: string[];
-  fileCandidates: string[];
+  /** Files 标签：整面板就是文件树，不再走最近文件首页。 */
+  showFileTree: boolean;
   onOpenFile: (path: string) => void;
   onNewFile: () => void;
   /** 当前工作空间：新建 / 重命名 / 删除等写操作的目标。 */
@@ -68,14 +55,7 @@ type Props = {
 /** memo：文件壳内含编辑器与文件树，顶层 state 变化不该让它整棵重渲染。 */
 export const FileShell = memo(function FileShell({
   currentTab,
-  showFilesHome,
-  filesPaneRef,
-  filesListOpen,
-  filesListWidth,
-  filesListDragging,
-  onFilesListResize,
-  recents,
-  fileCandidates,
+  showFileTree,
   onOpenFile,
   onNewFile,
   workspaceId,
@@ -130,225 +110,269 @@ export const FileShell = memo(function FileShell({
   }
   const monacoTarget = monacoFile.current;
 
+  const treePanel = showFileTree ? (
+    <FileTreePanel
+      query={treeQuery}
+      onQueryChange={onTreeQueryChange}
+      treeRoot={treeRoot}
+      treeNodes={treeNodes}
+      openDirs={effectiveOpenDirs}
+      focusPath={currentTab?.kind === "file" ? currentTab.path : null}
+      selectedPaths={selectedPaths}
+      selectionJoins={selectionJoins}
+      onActivate={onTreeActivate}
+      onMove={stableMove}
+      onContextMenu={stableCtxMenu}
+      ctxMenu={treeCtxMenu}
+      onCtxMenu={onTreeCtxMenu}
+      actions={actions}
+      onOpenFile={onOpenFile}
+      onNewFile={onNewFile}
+      copyPathText={copyPathText}
+    />
+  ) : null;
+
   return (
-    <div
-      ref={filesPaneRef}
-      className={`agent-files${!showFilesHome && filesListOpen ? " has-side" : ""}`}
-    >
-      <div className="agent-files__main">
-        {showFilesHome ? (
-          <FilesHome
-            recents={recents}
-            fileCandidates={fileCandidates}
-            onOpenFile={(path) => onOpenFile(path)}
-            onNewFile={onNewFile}
-          />
-        ) : fileTab ? (
-          <div className="agent-files__editor">
-            {monacoTarget ? (
-              <div className="agent-files__monaco" hidden={!showMonaco}>
-                <FileEditor
-                  path={monacoTarget.path}
-                  modelPath={monacoTarget.key}
-                  value={drafts[monacoTarget.key] ?? ""}
-                  readOnly={Boolean(monacoTarget.path && readOnlyByPath[monacoTarget.path])}
+    <div className={`agent-files${showFileTree ? " is-tree" : ""}`}>
+      {showFileTree ? null : (
+        <div className="agent-files__main">
+          {fileTab ? (
+            <div className="agent-files__editor">
+              {monacoTarget ? (
+                <div className="agent-files__monaco" hidden={!showMonaco}>
+                  <FileEditor
+                    path={monacoTarget.path}
+                    modelPath={monacoTarget.key}
+                    value={drafts[monacoTarget.key] ?? ""}
+                    readOnly={Boolean(monacoTarget.path && readOnlyByPath[monacoTarget.path])}
+                    onChange={onFileDraftChange}
+                    onSave={onSaveFile}
+                  />
+                </div>
+              ) : null}
+              {isMedia ? (
+                <MediaPreview
+                  path={fileTab.path || t("inspector.files.untitled")}
+                  info={mediaByKey[fileTab.key]}
+                />
+              ) : null}
+              {!isMedia && isMarkdown ? (
+                <MarkdownFileView
+                  path={fileTab.path || null}
+                  modelPath={fileTab.key}
+                  value={drafts[fileTab.key] ?? ""}
+                  readOnly={Boolean(fileTab.path && readOnlyByPath[fileTab.path])}
                   onChange={onFileDraftChange}
                   onSave={onSaveFile}
+                  onOpenFile={onOpenFile}
                 />
-              </div>
-            ) : null}
-            {isMedia ? (
-              <MediaPreview
-                path={fileTab.path || t("inspector.files.untitled")}
-                info={mediaByKey[fileTab.key]}
-              />
-            ) : null}
-            {!isMedia && isMarkdown ? (
-              <MarkdownFileView
-                path={fileTab.path || null}
-                modelPath={fileTab.key}
-                value={drafts[fileTab.key] ?? ""}
-                readOnly={Boolean(fileTab.path && readOnlyByPath[fileTab.path])}
-                onChange={onFileDraftChange}
-                onSave={onSaveFile}
-                onOpenFile={onOpenFile}
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
 
-      {!showFilesHome && filesListOpen ? (
-        <aside className="agent-files__side" style={{ width: filesListWidth }}>
-          {/* biome-ignore lint/a11y/useSemanticElements: 文件列表拖宽手柄，ARIA separator + 指针拖拽模式，无对应原生控件 */}
-          <div
-            className={`filelist-splitter${filesListDragging ? " is-dragging" : ""}`}
-            onPointerDown={onFilesListResize}
-            role="separator"
-            aria-orientation="vertical"
-            aria-valuenow={filesListWidth}
-            aria-valuemin={FILE_LIST_WIDTH.min}
-            aria-valuemax={FILE_LIST_WIDTH.max}
-            aria-label={t("inspector.files.resizeTree")}
-          />
-          <div className="changes-filelist__search">
-            <span className="changes-filelist__search-ico" aria-hidden>
-              {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性搜索图标，label 内 input 已有语义 */}
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.55" />
-                <path
-                  d="M10.4 10.4 13.6 13.6"
-                  stroke="currentColor"
-                  strokeWidth="1.55"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-            <Input
-              value={treeQuery}
-              onChange={(e) => onTreeQueryChange(e.target.value)}
-              placeholder={t("inspector.files.searchPlaceholder")}
-              aria-label={t("inspector.files.searchPlaceholder")}
-            />
-          </div>
-          <div className="agent-files__tree">
-            {treeRoot ? (
-              <TreeView
-                nodes={treeNodes}
-                openDirs={effectiveOpenDirs}
-                focusPath={currentTab?.kind === "file" ? currentTab.path : null}
-                selectedPaths={selectedPaths}
-                selectionJoins={selectionJoins}
-                onActivate={onTreeActivate}
-                onMove={stableMove}
-                onContextMenu={stableCtxMenu}
-              />
-            ) : (
-              <div className="ws-empty">{t("inspector.files.emptyTree")}</div>
-            )}
-          </div>
-          <ContextMenu
-            open={Boolean(treeCtxMenu)}
-            anchor={treeCtxMenu ? { x: treeCtxMenu.x, y: treeCtxMenu.y } : null}
-            onClose={() => onTreeCtxMenu(null)}
-            aria-label={t("inspector.files.fileMenu")}
-            items={
-              treeCtxMenu?.kind === "file"
-                ? [
-                    {
-                      label: t("inspector.changes.openFile"),
-                      onSelect: () => {
-                        const path = treeCtxMenu.path;
-                        onTreeCtxMenu(null);
-                        onOpenFile(path);
-                      },
-                    },
-                    {
-                      label: t("inspector.files.revealInFolder"),
-                      onSelect: () => {
-                        const path = treeCtxMenu.path;
-                        onTreeCtxMenu(null);
-                        void actions.reveal(path);
-                      },
-                    },
-                    {
-                      label: t("inspector.changes.copyPath"),
-                      onSelect: () => {
-                        const path = treeCtxMenu.path;
-                        onTreeCtxMenu(null);
-                        copyPathText(path);
-                      },
-                    },
-                    {
-                      label: t("inspector.files.rename"),
-                      separatorBefore: true,
-                      onSelect: () => {
-                        const path = treeCtxMenu.path;
-                        onTreeCtxMenu(null);
-                        actions.startRename(path);
-                      },
-                    },
-                    {
-                      label: t("inspector.files.trash"),
-                      onSelect: () => {
-                        const path = treeCtxMenu.path;
-                        onTreeCtxMenu(null);
-                        actions.setPendingRemove(path);
-                      },
-                    },
-                  ]
-                : treeCtxMenu
-                  ? [
-                      {
-                        label: t("inspector.files.newFile"),
-                        onSelect: () => {
-                          const path = treeCtxMenu.path;
-                          onTreeCtxMenu(null);
-                          actions.startNewFile(path);
-                        },
-                      },
-                      {
-                        label: t("inspector.files.newFolder"),
-                        onSelect: () => {
-                          const path = treeCtxMenu.path;
-                          onTreeCtxMenu(null);
-                          actions.startNewFolder(path);
-                        },
-                      },
-                      {
-                        // 另存为：走编辑器保存对话框（与「在树内新建空文件」区分）
-                        label: t("inspector.files.saveAsTitle"),
-                        onSelect: () => {
-                          onTreeCtxMenu(null);
-                          onNewFile();
-                        },
-                      },
-                      {
-                        label: t("inspector.files.revealInFolder"),
-                        separatorBefore: true,
-                        onSelect: () => {
-                          const path = treeCtxMenu.path;
-                          onTreeCtxMenu(null);
-                          void actions.reveal(path);
-                        },
-                      },
-                      {
-                        label: t("inspector.changes.copyPath"),
-                        onSelect: () => {
-                          const path = treeCtxMenu.path;
-                          onTreeCtxMenu(null);
-                          copyPathText(path);
-                        },
-                      },
-                      // 工作空间根不允许改名 / 删除，否则会作用到整个仓库。
-                      ...(treeCtxMenu.path === "."
-                        ? []
-                        : [
-                            {
-                              label: t("inspector.files.rename"),
-                              separatorBefore: true,
-                              onSelect: () => {
-                                const path = treeCtxMenu.path;
-                                onTreeCtxMenu(null);
-                                actions.startRename(path);
-                              },
-                            },
-                            {
-                              label: t("inspector.files.trash"),
-                              onSelect: () => {
-                                const path = treeCtxMenu.path;
-                                onTreeCtxMenu(null);
-                                actions.setPendingRemove(path);
-                              },
-                            },
-                          ]),
-                    ]
-                  : []
-            }
-          />
-          <FileTreeActionModals actions={actions} />
-        </aside>
-      ) : null}
+      {treePanel}
     </div>
   );
 });
+
+function FileTreePanel({
+  query,
+  onQueryChange,
+  treeRoot,
+  treeNodes,
+  openDirs,
+  focusPath,
+  selectedPaths,
+  selectionJoins,
+  onActivate,
+  onMove,
+  onContextMenu,
+  ctxMenu,
+  onCtxMenu,
+  actions,
+  onOpenFile,
+  onNewFile,
+  copyPathText,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  treeRoot: WorkspaceNode | null;
+  treeNodes: ChangeTreeNode[];
+  openDirs: Set<string>;
+  focusPath: string | null;
+  selectedPaths: Set<string>;
+  selectionJoins: ReadonlyMap<string, TreeSelectionJoin>;
+  onActivate: (node: ChangeTreeNode, gesture: TreeGesture) => void;
+  onMove: (source: string, dir: string) => void;
+  onContextMenu: (e: ReactMouseEvent, path: string, kind: "file" | "dir") => void;
+  ctxMenu: TreeCtxMenu | null;
+  onCtxMenu: (menu: TreeCtxMenu | null) => void;
+  actions: FileTreeActions;
+  onOpenFile: (path: string) => void;
+  onNewFile: () => void;
+  copyPathText: (path: string) => void;
+}) {
+  const t = useT();
+  return (
+    <aside className="agent-files__tree-pane">
+      <div className="changes-filelist__search">
+        <span className="changes-filelist__search-ico" aria-hidden>
+          {/* biome-ignore lint/a11y/noSvgWithoutTitle: 纯装饰性搜索图标，label 内 input 已有语义 */}
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.55" />
+            <path
+              d="M10.4 10.4 13.6 13.6"
+              stroke="currentColor"
+              strokeWidth="1.55"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        <Input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder={t("inspector.files.searchPlaceholder")}
+          aria-label={t("inspector.files.searchPlaceholder")}
+        />
+      </div>
+      <div className="agent-files__tree">
+        {treeRoot ? (
+          <TreeView
+            nodes={treeNodes}
+            openDirs={openDirs}
+            focusPath={focusPath}
+            selectedPaths={selectedPaths}
+            selectionJoins={selectionJoins}
+            onActivate={onActivate}
+            onMove={onMove}
+            onContextMenu={onContextMenu}
+          />
+        ) : (
+          <div className="ws-empty">{t("inspector.files.emptyTree")}</div>
+        )}
+      </div>
+      <ContextMenu
+        open={Boolean(ctxMenu)}
+        anchor={ctxMenu ? { x: ctxMenu.x, y: ctxMenu.y } : null}
+        onClose={() => onCtxMenu(null)}
+        aria-label={t("inspector.files.fileMenu")}
+        items={
+          ctxMenu?.kind === "file"
+            ? [
+                {
+                  label: t("inspector.changes.openFile"),
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    onCtxMenu(null);
+                    onOpenFile(path);
+                  },
+                },
+                {
+                  label: t("inspector.files.revealInFolder"),
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    onCtxMenu(null);
+                    void actions.reveal(path);
+                  },
+                },
+                {
+                  label: t("inspector.changes.copyPath"),
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    onCtxMenu(null);
+                    copyPathText(path);
+                  },
+                },
+                {
+                  label: t("inspector.files.rename"),
+                  separatorBefore: true,
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    onCtxMenu(null);
+                    actions.startRename(path);
+                  },
+                },
+                {
+                  label: t("inspector.files.trash"),
+                  onSelect: () => {
+                    const path = ctxMenu.path;
+                    onCtxMenu(null);
+                    actions.setPendingRemove(path);
+                  },
+                },
+              ]
+            : ctxMenu
+              ? [
+                  {
+                    label: t("inspector.files.newFile"),
+                    onSelect: () => {
+                      const path = ctxMenu.path;
+                      onCtxMenu(null);
+                      actions.startNewFile(path);
+                    },
+                  },
+                  {
+                    label: t("inspector.files.newFolder"),
+                    onSelect: () => {
+                      const path = ctxMenu.path;
+                      onCtxMenu(null);
+                      actions.startNewFolder(path);
+                    },
+                  },
+                  {
+                    // 另存为：走编辑器保存对话框（与「在树内新建空文件」区分）
+                    label: t("inspector.files.saveAsTitle"),
+                    onSelect: () => {
+                      onCtxMenu(null);
+                      onNewFile();
+                    },
+                  },
+                  {
+                    label: t("inspector.files.revealInFolder"),
+                    separatorBefore: true,
+                    onSelect: () => {
+                      const path = ctxMenu.path;
+                      onCtxMenu(null);
+                      void actions.reveal(path);
+                    },
+                  },
+                  {
+                    label: t("inspector.changes.copyPath"),
+                    onSelect: () => {
+                      const path = ctxMenu.path;
+                      onCtxMenu(null);
+                      copyPathText(path);
+                    },
+                  },
+                  // 工作空间根不允许改名 / 删除，否则会作用到整个仓库。
+                  ...(ctxMenu.path === "."
+                    ? []
+                    : [
+                        {
+                          label: t("inspector.files.rename"),
+                          separatorBefore: true,
+                          onSelect: () => {
+                            const path = ctxMenu.path;
+                            onCtxMenu(null);
+                            actions.startRename(path);
+                          },
+                        },
+                        {
+                          label: t("inspector.files.trash"),
+                          onSelect: () => {
+                            const path = ctxMenu.path;
+                            onCtxMenu(null);
+                            actions.setPendingRemove(path);
+                          },
+                        },
+                      ]),
+                ]
+              : []
+        }
+      />
+      <FileTreeActionModals actions={actions} />
+    </aside>
+  );
+}

@@ -33,7 +33,7 @@ export type BrowserState = {
 /** 推送给 renderer 的浏览器事件。 */
 export type BrowserEvent =
   | { type: "state"; state: BrowserState }
-  | { type: "reveal"; url?: string }
+  | { type: "reveal"; url?: string; newTab?: boolean }
   | { type: "error"; message: string };
 
 /** Preload 暴露的浏览器 API。 */
@@ -51,8 +51,11 @@ export type ThinkerBrowserApi = {
   reload(): Promise<BrowserState>;
   /** 面板挂载后上报 webview 的 webContents id（主进程据此接管自动化）。 */
   attachWebview(webContentsId: number, viewport: BrowserViewport): Promise<void>;
-  /** 面板卸载：webview 即将销毁。 */
-  detachWebview(): Promise<void>;
+  /**
+   * 面板卸载或切走：摘掉自动化绑定。
+   * 传入 webContents id 时，只有当前绑定仍是它才摘，避免切标签时拆掉新页。
+   */
+  detachWebview(webContentsId?: number): Promise<void>;
   /** webview 尺寸变化。 */
   setViewport(viewport: BrowserViewport): Promise<void>;
   setVisible(visible: boolean): Promise<void>;

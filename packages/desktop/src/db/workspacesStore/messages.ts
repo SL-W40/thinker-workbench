@@ -120,6 +120,7 @@ export function saveMessagesToDb(
   indexSessionMessages(db, sessionId, indexRows);
 }
 
+/** 会话正文的唯一 sqlite 写入。RunLedger 只写 run_status，不写消息行。 */
 export function saveMessages(sessionId: string, messages: ChatMessage[]): void {
   const session = getSession(sessionId);
   // 会话已删（侧栏删除 / 切空间竞态）：幂等忽略，避免 IPC 抛 Session not found

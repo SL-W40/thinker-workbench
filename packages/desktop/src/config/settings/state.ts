@@ -2,14 +2,65 @@
  * 设置模块内部共享状态：内存缓存与各 provider 密文表。
  * 单独成模块以避免拆分后出现「状态多份真相」。
  */
-import type { GeneralSettings, ModelCatalog, ShortcutsMap } from "@thinker-workbench/shared";
+import {
+  emptyModelCatalog,
+  type GeneralSettings,
+  type ModelCatalog,
+  type ModelEntry,
+  type ModelSelection,
+  type ShortcutsMap,
+} from "@thinker-workbench/shared";
 
-/** 内存中的设置（provider.apiKey 为明文）。 */
+/**
+ * 桌面内存里的凭证。
+ * `apiKey` 是解锁后的明文；`apiKeyEnc` 是磁盘密文，和凭证放在一起，落盘时直接读它。
+ */
+export type StoredProvider = {
+  id: string;
+  label: string;
+  apiKey: string;
+  apiKeyEnc: string;
+  baseUrl: string;
+};
+
+/** 内存中的模型目录。比发给 engine 的 ModelCatalog 多密文字段。 */
+export type StoredModelCatalog = {
+  providers: StoredProvider[];
+  models: ModelEntry[];
+  selection: ModelSelection;
+  allowEmoji: boolean;
+};
+
+/** 内存中的设置。 */
 export type StoredSettings = {
-  model: ModelCatalog;
+  model: StoredModelCatalog;
   shortcuts: ShortcutsMap;
   general: GeneralSettings;
 };
+
+/** 空目录，provider 上带空密文，供首次启动。 */
+export function emptyStoredCatalog(): StoredModelCatalog {
+  const catalog = emptyModelCatalog();
+  return {
+    ...catalog,
+    providers: catalog.providers.map((provider) => ({ ...provider, apiKeyEnc: "" })),
+  };
+}
+
+/** 去掉密文，得到可以下发给 engine 的目录。 */
+export function toRuntimeCatalog(model: StoredModelCatalog): ModelCatalog {
+  return {
+    providers: model.providers.map(({ id, label, apiKey, baseUrl }) => ({
+      id,
+      label,
+      apiKey,
+      baseUrl,
+    })),
+    models: model.models.map((m) => ({ ...m, tags: [...m.tags] })),
+    selection: model.selection,
+    allowEmoji: model.allowEmoji,
+  };
+}
 
 /** 磁盘上的凭证段。 */
 export type DiskProvider = {
@@ -53,9 +104,6 @@ export type DiskSettings = {
 /** 内存缓存。 */
 let cached: StoredSettings | null = null;
 
-/** 各 provider 最近成功密文，加密失败 / 未解锁时保留。 */
-export const lastApiKeyEncByProvider = new Map<string, string>();
-
 export function getCachedSettings(): StoredSettings | null {
   return cached;
 }
@@ -64,8 +112,7 @@ export function setCachedSettings(next: StoredSettings | null): void {
   cached = next;
 }
 
-/** 测试用：清空设置缓存与密文表。 */
+/** 测试用：清空设置缓存。 */
 export function resetSettingsCacheForTests(): void {
   cached = null;
-  lastApiKeyEncByProvider.clear();
 }

@@ -23,6 +23,7 @@ import { configureDesktopLog } from "./log/setup";
 import { ensureWindowsToastShortcut } from "./notify/windowsToastShortcut";
 import { applyContentSecurityPolicy } from "./security/csp";
 import { ensureBundledSkills } from "./skills/ensureBundledSkills";
+import { flushStartupIssuesToLog, runStartupStep } from "./startup/issues";
 import { terminalSessionManager } from "./terminal/TerminalSessionManager";
 import { pruneTraceStore } from "./trace/pruneTraceSessions";
 import { closeAllTraceDbs } from "./trace/workspaceTraceDb";
@@ -75,33 +76,15 @@ app.whenReady().then(() => {
   loadSettings();
   loadSession();
   openCatalogDb();
-  try {
-    ensureDefaultWorkspace();
-  } catch {
-    /* ignore */
-  }
-  try {
+  runStartupStep("ensureDefaultWorkspace", () => ensureDefaultWorkspace());
+  runStartupStep("healRunningSessions", () => {
     healRunningSessions();
-  } catch {
-    /* ignore */
-  }
+  });
   // 历史消息缺 durationMs 的按 trace spans 回填一次（幂等，失败不挡启动）
-  try {
-    backfillRunDurations();
-  } catch {
-    /* ignore */
-  }
+  runStartupStep("backfillRunDurations", () => backfillRunDurations());
   // 内置 skills / rules / agents / mcps → dataDir（已存在则跳过）
-  try {
-    ensureBundledSkills();
-  } catch {
-    /* ignore */
-  }
-  try {
-    ensureBundledCustomize();
-  } catch {
-    /* ignore */
-  }
+  runStartupStep("ensureBundledSkills", () => ensureBundledSkills());
+  runStartupStep("ensureBundledCustomize", () => ensureBundledCustomize());
   applyAppIcon();
   applyContentSecurityPolicy();
   ensureWindowsToastShortcut();
@@ -112,12 +95,10 @@ app.whenReady().then(() => {
   // 开发态：包装进程被强杀时随父进程退出，避免孤儿占锁
   startDevParentWatch();
   configureDesktopLog();
+  flushStartupIssuesToLog();
   // 可再生缓存按保留策略清一次（截图等派生数据）
-  try {
-    runCacheRetention();
-  } catch {
-    /* ignore */
-  }
+  runStartupStep("runCacheRetention", () => runCacheRetention());
+  flushStartupIssuesToLog();
   // 跟随系统主题：OS 深浅色变化时同步原生窗口底色
   nativeTheme.on("updated", () => {
     if (getGeneralSettings().uiTheme === "system") {
@@ -137,48 +118,26 @@ app.whenReady().then(() => {
       // 日志策略（开关 / 保留天数 / 截断）即时生效；dataDir 不走此回调切换
       configureDesktopLog();
       // 蒙层现在是渲染层 DOM（<webview> 之上），配色随主题自动跟随，无需刷新
-      try {
-        pushAgentHello(bridge);
-      } catch {
-        /* agent 未在跑时忽略 */
-      }
+      runStartupStep("pushAgentHello", () => pushAgentHello(bridge));
       // 调高并行上限后立刻把队头放进空槽；调低不抢占已在跑的会话
-      try {
+      runStartupStep("runLedger.pump", () => {
         runLedger.pump();
-      } catch {
-        /* ignore */
-      }
+      });
+      flushStartupIssuesToLog();
     },
     onDataDirApplied: () => {
       // 数据目录已切换：重开 catalog/chat、session、日志分片
       openCatalogDb();
-      try {
-        ensureDefaultWorkspace();
-      } catch {
-        /* ignore */
-      }
-      try {
-        ensureBundledSkills();
-      } catch {
-        /* ignore */
-      }
-      try {
-        ensureBundledCustomize();
-      } catch {
-        /* ignore */
-      }
+      runStartupStep("ensureDefaultWorkspace", () => ensureDefaultWorkspace());
+      runStartupStep("ensureBundledSkills", () => ensureBundledSkills());
+      runStartupStep("ensureBundledCustomize", () => ensureBundledCustomize());
       reloadSessionAfterDataDirChange();
       configureDesktopLog();
-      try {
-        pushAgentHello(bridge);
-      } catch {
-        /* ignore */
-      }
-      try {
+      runStartupStep("pushAgentHello", () => pushAgentHello(bridge));
+      runStartupStep("broadcastThreadsChanged", () => {
         broadcastThreadsChanged();
-      } catch {
-        /* ignore */
-      }
+      });
+      flushStartupIssuesToLog();
     },
   });
   createWindow();

@@ -77,6 +77,9 @@ const api: ThinkerApi = {
   listThreads() {
     return ipcRenderer.invoke(IpcChannels.agentListThreads);
   },
+  listStartupIssues() {
+    return ipcRenderer.invoke(IpcChannels.startupListIssues);
+  },
   onEvent(cb: (event: AgentEvent) => void): () => void {
     const handler = (_evt: unknown, event: AgentEvent) => cb(event);
     ipcRenderer.on(IpcChannels.agentEvent, handler);
@@ -298,7 +301,8 @@ const api: ThinkerApi = {
     reload: () => ipcRenderer.invoke(IpcChannels.browserReload),
     attachWebview: (webContentsId: number, viewport: BrowserViewport) =>
       ipcRenderer.invoke(IpcChannels.browserAttachWebview, webContentsId, viewport),
-    detachWebview: () => ipcRenderer.invoke(IpcChannels.browserDetachWebview),
+    detachWebview: (webContentsId?: number) =>
+      ipcRenderer.invoke(IpcChannels.browserDetachWebview, webContentsId),
     setViewport: (viewport: BrowserViewport) =>
       ipcRenderer.invoke(IpcChannels.browserSetViewport, viewport),
     setVisible: (visible: boolean) => ipcRenderer.invoke(IpcChannels.browserSetVisible, visible),

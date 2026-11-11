@@ -6,15 +6,17 @@ import path from "node:path";
 import {
   type CustomizeScope,
   type CustomizeSource,
-  parseYamlFrontmatter,
+  isSkillFileName,
+  parseSkillDocument,
   type SkillListItem,
   type SkillListResult,
   type SkillUpsertInput,
 } from "@thinker-workbench/shared";
+import { invalidateSkillIndex } from "../skills/listSkills";
 import { listWorkspaces } from "../db/workspacesStore";
 import { listSkillSummaries } from "../skills/listSkills";
 import { ensureDir, resolveWritableRoot } from "./customizeRoots";
-import { metaBool, metaString, sanitizeKebabName, serializeFrontmatter } from "./frontmatter";
+import { sanitizeKebabName, serializeFrontmatter } from "./frontmatter";
 
 type ScanRoot = {
   root: string;
@@ -38,7 +40,7 @@ function walkSkillMd(root: string): string[] {
       if (ent.name.startsWith(".")) continue;
       const abs = path.join(dir, ent.name);
       if (ent.isDirectory()) walk(abs);
-      else if (ent.isFile() && ent.name.toLowerCase() === "skill.md") out.push(abs);
+      else if (ent.isFile() && isSkillFileName(ent.name)) out.push(abs);
     }
   };
   walk(root);
@@ -59,19 +61,18 @@ function parseDetailed(
     return null;
   }
   const folderName = path.basename(path.dirname(absPath));
-  const { data: meta, body } = parseYamlFrontmatter(raw);
-  const name = sanitizeKebabName(metaString(meta, "name", folderName), folderName);
-  const description = metaString(meta, "description");
+  const doc = parseSkillDocument(raw, folderName);
+  if (!doc) return null;
   return {
-    name,
-    description: description.slice(0, 200),
+    name: doc.name,
+    description: doc.description.slice(0, 200),
     source: legacySource,
-    body: body.trim(),
+    body: doc.body,
     filePath: absPath,
     scope,
     customizeSource,
     writable,
-    disableModelInvocation: metaBool(meta, "disable-model-invocation", false),
+    disableModelInvocation: doc.disableModelInvocation,
   };
 }
 
@@ -161,6 +162,7 @@ export function upsertSkill(input: SkillUpsertInput): SkillListItem {
     ),
     "utf8",
   );
+  invalidateSkillIndex();
   return {
     name,
     description: description.slice(0, 200),
@@ -179,6 +181,7 @@ export function removeSkill(scope: CustomizeScope, name: string): void {
   const dir = skillDir(scope, sanitizeKebabName(name));
   if (!fs.existsSync(dir)) return;
   fs.rmSync(dir, { recursive: true, force: true });
+  invalidateSkillIndex();
 }
 
 /** 从任意 SKILL.md 复制到目标作用域。 */

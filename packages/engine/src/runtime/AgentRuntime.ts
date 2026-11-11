@@ -14,6 +14,7 @@ import {
   type TraceSettings,
 } from "@thinker-workbench/shared";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite";
+import { createMemoryHost, type MemoryHost } from "../memory/host";
 import { lookupRunKey, registerRunKey, runKeyFor } from "../checkpoint/threadsIndex";
 import { buildGraph, type CompiledAgentGraph } from "../graph/buildGraph";
 import { initialState, normalizeGraphState } from "../graph/state";
@@ -43,10 +44,12 @@ export class AgentRuntime {
   private graph: CompiledAgentGraph | null = null;
   private checkpointer: BaseCheckpointSaver = new MemorySaver();
   private readonly checkpointDir?: string;
+  readonly memoryHost: MemoryHost;
   private ready: Promise<void>;
   private readonly active = new Map<string, RunController>();
   constructor(options: AgentRuntimeOptions = {}) {
     this.checkpointDir = options.checkpointDir;
+    this.memoryHost = options.memoryHost ?? createMemoryHost();
     if (options.checkpointer) {
       this.checkpointer = options.checkpointer;
       this.graph = options.graph ?? buildGraph(this.checkpointer);
@@ -77,6 +80,34 @@ export class AgentRuntime {
     this.active.get(runId)?.cancel();
   }
 
+  /**
+   * 打开图。SqliteSaver 起不来时发失败事件并返回 null，不换成只活在内存里的检查点。
+   */
+  private async openGraph(
+    threadId: string,
+    runId: string,
+    sessionId?: string,
+  ): Promise<CompiledAgentGraph | null> {
+    try {
+      return await this.ensureGraph();
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.emitTerminal(
+        {
+          type: "error",
+          threadId,
+          runId,
+          ts: Date.now(),
+          error,
+          code: "failed",
+          ...(sessionId ? { chatSessionId: sessionId } : {}),
+        },
+        null,
+      );
+      return null;
+    }
+  }
+
   async resume(
     command: AgentResumeCommand & {
       runId?: string;
@@ -86,12 +117,17 @@ export class AgentRuntime {
       queuedMs?: number;
     },
   ): Promise<void> {
-    const graph = await this.ensureGraph();
     const threadId = command.threadId.trim();
     const runId = command.runId?.trim() || createRunId();
-    // 线程键为 run 级：从登记表找回被中断 run 的 runKey；
-    // 登记缺失（旧版本遗留 / 内存 checkpointer）时回退纯 threadId，由后续快照校验兜底。
-    const threadKey = lookupRunKey(this.checkpointDir, threadId) ?? threadId;
+    const sessionIdEarly = command.sessionId?.trim() || undefined;
+    const graph = await this.openGraph(threadId, runId, sessionIdEarly);
+    if (!graph) return;
+    // 有 checkpoint 目录时，线程键只来自登记表。没有目录（内存检查点）时键就是 threadId。
+    const mapped = lookupRunKey(this.checkpointDir, threadId);
+    if (this.checkpointDir && !mapped) {
+      throw new Error("No checkpoint to resume.");
+    }
+    const threadKey = mapped ?? threadId;
     const config = { configurable: { thread_id: threadKey } };
 
     const snapshot = await graph.getState(config);
@@ -135,6 +171,7 @@ export class AgentRuntime {
         runId,
         threadId,
         sessionId,
+        memoryHost: this.memoryHost,
         workspaceRoot: getWorkspaceRootOrNull() ?? "",
         emit,
       });
@@ -202,6 +239,7 @@ export class AgentRuntime {
       if (!shouldKeepCheckpoint(code)) this.releaseCheckpoint(threadKey, threadId);
       cancelBackgroundTasksByRunId(runId, "Parent run ended.");
     } finally {
+      this.memoryHost.releaseRun(runId);
       this.active.delete(runId);
       unregisterRun(runId);
     }
@@ -224,7 +262,6 @@ export class AgentRuntime {
   }
 
   async run(command: RunRequest): Promise<void> {
-    const graph = await this.ensureGraph();
     const message = command.message.trim();
     const images = Array.isArray(command.images)
       ? command.images.filter((i) => i && typeof i.path === "string" && i.path.trim())
@@ -232,6 +269,8 @@ export class AgentRuntime {
     const hasImages = images.length > 0;
     const threadId = command.threadId?.trim() || createThreadId();
     const runId = command.runId?.trim() || createRunId();
+    const graph = await this.openGraph(threadId, runId, command.sessionId?.trim() || undefined);
+    if (!graph) return;
 
     // 准入校验失败：run 从未进入执行阶段，耗时未知 → 不下发 durationMs（UI 展示「—」）
     if (!command.workspaceRoot?.trim()) {
@@ -302,6 +341,7 @@ export class AgentRuntime {
         runId,
         threadId,
         sessionId,
+        memoryHost: this.memoryHost,
         workspaceRoot: command.workspaceRoot.trim(),
         workspaceName: command.workspaceName,
         emit,
@@ -319,18 +359,9 @@ export class AgentRuntime {
 
     try {
       const text = await runWithContext(runCtx, async () => {
-        const history = (command.history ?? [])
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .map((m) => ({
-            role: m.role,
-            content: m.content,
-            ...(m.role === "user" && Array.isArray(m.images) && m.images.length
-              ? { images: m.images }
-              : {}),
-          }));
         const state = initialState(
           message,
-          history,
+          command.history,
           command.contextPaths,
           images,
           command.attachments,
@@ -383,6 +414,7 @@ export class AgentRuntime {
       );
       cancelBackgroundTasksByRunId(runId, "Parent run ended.");
     } finally {
+      this.memoryHost.releaseRun(runId);
       this.active.delete(runId);
       unregisterRun(runId);
     }

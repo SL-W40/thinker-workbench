@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { type ChatImageRef, chatImageAllowed, estimateTokens } from "@thinker-workbench/shared";
 import { getDataDir } from "../config/dataDir";
-import type { ChatContentPart, ChatImageRefPart, ChatMessage, ChatUsage } from "./types";
+import type { ChatContentPart, ChatImageRefPart, ModelMessage, ChatUsage } from "./types";
 
 /** 上下文用量估算：每张附图固定折合 token。 */
 export const IMAGE_TOKEN_ESTIMATE = 1600;
@@ -16,7 +16,7 @@ export const IMAGE_TOKEN_ESTIMATE = 1600;
  */
 export function estimateTurnUsage(input: {
   system?: string;
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   output?: string;
   reasoning?: string;
 }): ChatUsage {
@@ -38,22 +38,17 @@ export function estimateTurnUsage(input: {
 }
 
 /**
- * 路径须在 `<dataDir>/workspaces/<id>/{images,attachments}/` 或 `<dataDir>/cache/computer/images/` 下。
+ * 路径须在 `<dataDir>/workspaces/<id>/{images,attachments}/` 下。
  * 允许根目录由 shared 布局表给出，避免跨包各拼一份。
  */
 export function isAllowedChatImagePath(filePath: string, dataDir?: string | null): boolean {
   const root = (dataDir ?? getDataDir())?.trim();
   if (!root) return false;
   const resolved = path.resolve(filePath);
-  const { workspacesRoot, workspaceKinds, computerImagesDir } = chatImageAllowed(root);
+  const { workspacesRoot, workspaceKinds } = chatImageAllowed(root);
 
   const rel = path.relative(path.resolve(workspacesRoot), resolved);
-  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
-    // computer MCP 截图：<dataDir>/cache/computer/images/<file>
-    const shotRel = path.relative(path.resolve(computerImagesDir), resolved);
-    if (!shotRel || shotRel.startsWith("..") || path.isAbsolute(shotRel)) return false;
-    return true;
-  }
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
   const parts = rel.split(path.sep);
   return parts.length >= 3 && workspaceKinds.includes(parts[1] ?? "");
 }
@@ -89,7 +84,7 @@ export function buildUserContent(
 }
 
 /** 抽取消息中的纯文本（用量 / 日志 / 技能匹配）。 */
-export function contentToPlainText(content: ChatMessage["content"]): string {
+export function contentToPlainText(content: ModelMessage["content"]): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
@@ -99,7 +94,7 @@ export function contentToPlainText(content: ChatMessage["content"]): string {
 }
 
 /** 统计消息中的 image_ref 张数。 */
-export function countImageRefs(content: ChatMessage["content"]): number {
+export function countImageRefs(content: ModelMessage["content"]): number {
   if (!Array.isArray(content)) return 0;
   return content.filter((p) => p.type === "image_ref").length;
 }
@@ -130,7 +125,7 @@ export function encodeImageRefPart(
 }
 
 /** 将图状态消息映射为发往 `/chat/completions` 的 API 形态。 */
-export function messageToApiContent(message: ChatMessage, dataDir?: string | null): unknown {
+export function messageToApiContent(message: ModelMessage, dataDir?: string | null): unknown {
   const { role, content, name, tool_call_id, tool_calls } = message;
   const base: Record<string, unknown> = { role };
   if (name) base.name = name;

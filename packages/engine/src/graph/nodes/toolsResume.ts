@@ -1,7 +1,7 @@
 /**
  * Resume 防重放：判断 pending tool 是复用已有结果、注入中断说明，还是正常执行。
  */
-import type { ChatMessage, ChatToolCall } from "../../model/types";
+import type { ModelMessage, ChatToolCall } from "../../model/types";
 import type { GraphState } from "../types";
 
 /** 中断文案分类。 */
@@ -16,9 +16,9 @@ const TASK_TOOLS = new Set(["Task", "task_await", "task_cancel"]);
 
 /** 在 messages 中查找已有的同 callId tool 结果。 */
 export function findToolResultMessage(
-  messages: ChatMessage[],
+  messages: ModelMessage[],
   callId: string,
-): ChatMessage | undefined {
+): ModelMessage | undefined {
   const id = callId?.trim();
   if (!id) return undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -91,7 +91,7 @@ export function interruptedToolBody(name: string, cause: InterruptCause = "crash
 }
 
 /** 构造注入到 messages 的中断 tool 消息。 */
-export function interruptedToolMessage(call: ChatToolCall): ChatMessage {
+export function interruptedToolMessage(call: ChatToolCall): ModelMessage {
   const name = call.function.name;
   return {
     role: "tool",

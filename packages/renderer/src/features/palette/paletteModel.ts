@@ -92,8 +92,16 @@ export function dedupePaletteItems(items: PaletteItem[]): PaletteItem[] {
   return out;
 }
 
-/** 默认排除的目录前缀（大且无意义的目录不进文件候选）。 */
-const EXCLUDED_PREFIXES = [".git/", "node_modules/", "dist/", "build/", "out/", ".next/"];
+/** 默认排除的目录前缀（大且无意义的目录不进文件候选）。`.stage/` 是打包镜像。 */
+const EXCLUDED_PREFIXES = [
+  ".git/",
+  ".stage/",
+  "node_modules/",
+  "dist/",
+  "build/",
+  "out/",
+  ".next/",
+];
 
 /** 是否应排除该文件（大仓库下拉全量会卡，这里先做廉价过滤）。 */
 export function isIgnoredFilePath(path: string): boolean {

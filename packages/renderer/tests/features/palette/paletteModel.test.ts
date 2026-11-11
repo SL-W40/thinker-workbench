@@ -83,7 +83,14 @@ describe("dedupePaletteItems", () => {
 
 describe("isIgnoredFilePath", () => {
   it("排除常见的重目录", () => {
-    for (const path of ["node_modules/x.ts", "src/node_modules/y.ts", ".git/config", "dist/a.js"]) {
+    for (const path of [
+      "node_modules/x.ts",
+      "src/node_modules/y.ts",
+      ".git/config",
+      "dist/a.js",
+      ".stage/app/main.js",
+      "packages/desktop/.stage/payload/renderer/index.html",
+    ]) {
       assert.equal(isIgnoredFilePath(path), true, path);
     }
   });

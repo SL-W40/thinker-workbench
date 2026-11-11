@@ -11,6 +11,7 @@
       "**",
       "!**/artifacts",
       "!**/dist",
+      "!**/.stage",
       "!packages/renderer/src/ui/icons/material/generated",
       "!**/node_modules",
       "!**/.vite",

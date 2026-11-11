@@ -1,17 +1,16 @@
 /**
  * 右侧 agent inspector（对齐 v1 WorkspacePane agent 分支）：
- * 起始磁贴 → Tab 条（Changes / Files / file:*）→ 对应壳层。
+ * Tab 条（Changes 常驻且不可关闭 / Files / file:*）→ 对应壳层。
  *
  * 本文件为编排壳：状态 / 订阅 / 派生数据 / 组合。
  * 标签与文件操作见 ./useFileTabs，子代理 tab 见 ./useSubagentTabs，
- * 标签条 / 起始屏 / 文件壳 / 模态框见同目录组件，纯函数见 ./tabs。
+ * 标签条 / 文件壳 / 模态框见同目录组件，纯函数见 ./tabs。
  */
 import { EmptyState } from "@thinker-workbench/design/react";
-import type { ChatPlan, GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
+import type { BrowserState, ChatPlan, GitStatus, WorkspaceNode } from "@thinker-workbench/shared";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   browserGetState,
-  browserNavigate,
   consumePendingOpenBrowser,
   OPEN_BROWSER_EVENT,
   type OpenBrowserDetail,
@@ -22,6 +21,7 @@ import { OPEN_TERMINAL_EVENT, type OpenTerminalDetail } from "../../../platform/
 import {
   workspaceGitInit,
   workspaceGitStatus,
+  workspaceReveal,
   workspaceTree,
 } from "../../../platform/ipc/workspaceFs";
 import { useStableCallback } from "../../../ui/hooks/useStableCallback";
@@ -32,9 +32,11 @@ import { CHANGES_ACTION_PROMPTS, ChangesPane, type ChangesPromptActionId } from 
 import { buildFullTree, type ChangeTreeNode } from "../changesTree";
 import { loadFileRecents, pruneFileRecents } from "../fileRecents";
 import {
+  browserTabTitle,
   hydrateTabs,
   loadInspectorUi,
   patchInspectorUi,
+  pinChangesTab,
   resolveActiveKey,
   serializeTabs,
 } from "../inspectorUi";
@@ -48,21 +50,13 @@ import {
   selectionJoinFlags,
   visibleTreePaths,
 } from "../treeSelection";
-import {
-  BROWSER_TAB_KEY,
-  CHANGES_TAB_KEY,
-  FILES_TAB_KEY,
-  type StageTab,
-  TERMINAL_TAB_KEY,
-} from "../types";
-import { FILE_LIST_AUTO_PANE_MIN, useFileListOpen, useFileListWidth } from "../useFileListPanel";
+import { CHANGES_TAB_KEY, FILES_TAB_KEY, type StageTab, TERMINAL_TAB_KEY } from "../types";
 import "../inspector.less";
 import { FileShell, type TreeCtxMenu } from "./FileShell";
 import { loadFileBuffers } from "./fileBuffers";
 import { InspectorModals } from "./InspectorModals";
-import { StartScreen } from "./StartScreen";
 import { TabStrip } from "./TabStrip";
-import { collectFilePaths } from "./tabs";
+import { browserTabKey, collectFilePaths } from "./tabs";
 import { useFileTabs } from "./useFileTabs";
 import { openSubagentTabs, useActiveSubagentTaskSync, useSubagentTabs } from "./useSubagentTabs";
 
@@ -122,11 +116,12 @@ export const RightInspector = memo(function RightInspector({
 
   const restoredUi = useMemo(() => loadInspectorUi(workspaceId), [workspaceId]);
 
-  const [tabs, setTabs] = useState<StageTab[]>([]);
-  const [activeTab, setActiveTab] = useState<string>("");
+  const [tabs, setTabs] = useState<StageTab[]>(() => [
+    { key: CHANGES_TAB_KEY, kind: "changes", title: t("inspector.section.changes") },
+  ]);
+  const [activeTab, setActiveTab] = useState<string>(CHANGES_TAB_KEY);
   /** TerminalPane 聚焦会话（打开面板后消费）。*/
   const [terminalFocusId, setTerminalFocusId] = useState<string | null>(null);
-  const [browserPendingUrl, setBrowserPendingUrl] = useState<string | null>(null);
   /** 未命名缓冲首次保存：填写相对路径。*/
   const [saveAs, setSaveAs] = useState<SaveAsState | null>(null);
   /** 关闭脏文件标签时的确认弹窗（tab key）。*/
@@ -139,9 +134,8 @@ export const RightInspector = memo(function RightInspector({
   const [treeQuery, setTreeQuery] = useState("");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
   const [anchorPath, setAnchorPath] = useState<string | null>(null);
-  const [recents, setRecents] = useState<string[]>([]);
-  /** 重启后待还原的浏览器地址（切到浏览器 tab 且主进程为空白页时消费）。 */
-  const [pendingBrowserRestore, setPendingBrowserRestore] = useState<string>("");
+  // 最近打开的路径经 setRecents 落到 localStorage，给 @ 提及用。
+  const [, setRecents] = useState<string[]>([]);
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, string>>({});
@@ -153,18 +147,6 @@ export const RightInspector = memo(function RightInspector({
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState<string | null>(null);
-
-  const {
-    open: filesListOpen,
-    forced: filesListForced,
-    setOpen: setFilesListOpen,
-    paneRef: filesPaneRef,
-  } = useFileListOpen(FILE_LIST_AUTO_PANE_MIN, workspaceId ?? "", restoredUi.filesListForced);
-  const {
-    width: filesListWidth,
-    dragging: filesListDragging,
-    onResizePointerDown: onFilesListResize,
-  } = useFileListWidth(restoredUi.filesListWidth, workspaceId ?? "");
 
   async function copyPathText(path: string) {
     try {
@@ -208,13 +190,14 @@ export const RightInspector = memo(function RightInspector({
     openTerminal,
     openBrowser,
     openChanges,
-    openFilesPane,
     openFile,
     openPlan,
     saveFile,
     commitSaveAs,
     onNewFile,
     closeTab,
+    closeTabs,
+    cancelDirtyClose,
     saveAndCloseDirty,
     discardAndCloseDirty,
     onFileDraftChange,
@@ -238,7 +221,6 @@ export const RightInspector = memo(function RightInspector({
       setTabs,
       setActiveTab,
       setTerminalFocusId,
-      setBrowserPendingUrl,
       setDrafts,
       setSaved,
       setUnsaved,
@@ -255,13 +237,12 @@ export const RightInspector = memo(function RightInspector({
   useActiveSubagentTaskSync(activeTab);
 
   const currentTab = tabs.find((tab) => tab.key === activeTab);
-  const inspectorEmpty = tabs.length === 0;
 
   // 已访问过的 tab key：白名单内的 pane 首次激活后常驻，切走时用 visibility 隐藏而不是卸载。
   // 切 tab 最贵的单项是 xterm 重建（建实例 + FitAddon + 全量输出回放）和
   // Changes 的 diff 重新拉取，而它们常驻的成本几乎为零。
-  // 不保活 file:*（每个 Monaco editor 独占一个 web worker，开多了是百 MB 级）
-  // 与 browser（独立 guest 进程，隐藏期页面仍在跑、且 viewport 语义会被破坏）。
+  // 不保活 file:*（每个 Monaco editor 独占一个 web worker，开多了是百 MB 级）。
+  // 浏览器标签按 tab 常驻：切走只是隐藏，页面留在各自的 webview 里。
   const visitedTabsRef = useRef<Set<string>>(new Set());
   if (currentTab) visitedTabsRef.current.add(currentTab.key);
   // 关掉的 tab 不再保活：空占一份 xterm / diff 没意义
@@ -283,22 +264,28 @@ export const RightInspector = memo(function RightInspector({
   // 切换工作空间：从 localStorage 恢复标签 / 目录展开，并预加载已打开文件
   useEffect(() => {
     skipPersist.current = true;
-    const nextTabs = hydrateTabs(restoredUi.tabs, {
-      changes: t("inspector.section.changes"),
-      files: t("inspector.section.files"),
-      terminal: t("inspector.section.terminal"),
-      browser: t("inspector.section.browser"),
-      plan: t("inspector.section.plan"),
-    });
+    const nextTabs = hydrateTabs(
+      restoredUi.tabs,
+      {
+        changes: t("inspector.section.changes"),
+        files: t("inspector.section.files"),
+        terminal: t("inspector.section.terminal"),
+        browser: t("inspector.section.browser"),
+        plan: t("inspector.section.plan"),
+      },
+      restoredUi.browserUrl,
+    );
     // 合并当前会话已打开的 Task（按会话落盘，不进 inspectorUi 里）
     const openSub = peekOpenSubagents();
     const subTabs = openSubagentTabs(t);
-    const mergedTabs = [...nextTabs, ...subTabs];
+    const mergedTabs = pinChangesTab([...nextTabs, ...subTabs], t("inspector.section.changes"));
     const preferSub =
       openSub.activeTaskId && subTabs.some((tab) => tab.taskId === openSub.activeTaskId)
         ? subagentTabKey(openSub.activeTaskId)
         : "";
-    const nextActive = preferSub || resolveActiveKey(mergedTabs, restoredUi.activeKey);
+    const storedActive =
+      restoredUi.activeKey === "browser" ? browserTabKey("legacy") : restoredUi.activeKey;
+    const nextActive = preferSub || resolveActiveKey(mergedTabs, storedActive);
     setTabs(mergedTabs);
     setActiveTab(nextActive);
     setTree(null);
@@ -315,7 +302,6 @@ export const RightInspector = memo(function RightInspector({
     setReadOnlyByPath({});
     setGitStatus(null);
     setRecents(loadFileRecents(workspaceId));
-    setPendingBrowserRestore(restoredUi.browserUrl || "");
     if (!workspaceId) return;
 
     void refreshTree();
@@ -364,25 +350,11 @@ export const RightInspector = memo(function RightInspector({
     patchInspectorUi(workspaceId, {
       tabs: serializeTabs(tabs),
       activeKey: activeTab,
-      filesListForced,
-      filesListWidth,
       openDirs: [...openDirs],
     });
-  }, [workspaceId, tabs, activeTab, filesListForced, filesListWidth, openDirs]);
+  }, [workspaceId, tabs, activeTab, openDirs]);
 
-  // 浏览器 tab 激活时：主进程仍是空白页就还原上次地址（消费一次，不覆盖已有页面）
-  useEffect(() => {
-    if (activeTab !== BROWSER_TAB_KEY || !pendingBrowserRestore) return;
-    const url = pendingBrowserRestore;
-    setPendingBrowserRestore("");
-    void (async () => {
-      const s = await browserGetState();
-      if (s?.url && s.url !== "about:blank") return;
-      await browserNavigate(url);
-    })();
-  }, [activeTab, pendingBrowserRestore]);
-
-  // Git：聚焦 + 12s 轮询（有 Changes 标签或空起始屏时）
+  // Git：聚焦 + 12s 轮询（变更面板常驻，状态要跟着工作区走）
   // 页面不在前台或窗口不可见时不轮询：切到组件 / 设置页之后，每 12s 一次
   // git status（spawn 子进程）+ 主进程全量 readdir，结果用户根本看不见，
   // 却会周期性刷出一次卡顿。
@@ -401,15 +373,14 @@ export const RightInspector = memo(function RightInspector({
     };
   }, [workspaceId, pageActive, refreshGit]);
 
-  // 聊天 diff 等外部请求：打开文件并展开文件列表
+  // 聊天 diff 等外部请求：打开对应文件。
   useEffect(() => {
     if (!pendingOpenPath) return;
     const path = pendingOpenPath;
     onPendingOpenPathConsumed?.();
-    setFilesListOpen(true);
     void openFile(path);
     // openFile 读最新 state；依赖故意列入以拿新闭包，避免只触发一次后 stale
-  }, [pendingOpenPath, openFile, setFilesListOpen, onPendingOpenPathConsumed]);
+  }, [pendingOpenPath, openFile, onPendingOpenPathConsumed]);
 
   // 对话计划卡片：打开计划文档预览（虚拟文档，内容随会话消息持久化）
   useEffect(() => {
@@ -430,24 +401,47 @@ export const RightInspector = memo(function RightInspector({
     return () => window.removeEventListener(OPEN_TERMINAL_EVENT, onOpen);
   }, [openTerminal]);
 
-  // Markdown 链接 / agent / 主进程：打开 Browser 标签
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  // 外部链接新开标签；标签内导航 / 主进程 reveal 只切到已有浏览器标签。页面标题写回当前标签。
   useEffect(() => {
+    const fallback = t("inspector.section.browser");
+    const applyPage = (state: BrowserState) => {
+      const key = activeTabRef.current;
+      const nextTitle = browserTabTitle(state, fallback);
+      const nextUrl = state.url.trim();
+      setTabs((prev) => {
+        const idx = prev.findIndex((tab) => tab.key === key);
+        const cur = idx >= 0 ? prev[idx] : undefined;
+        if (cur?.kind !== "browser") return prev;
+        const url = nextUrl && nextUrl !== "about:blank" ? nextUrl : cur.url;
+        if (cur.title === nextTitle && cur.url === url) return prev;
+        const next = prev.slice();
+        next[idx] = { ...cur, title: nextTitle, url };
+        return next;
+      });
+    };
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<OpenBrowserDetail>).detail;
-      openBrowser(detail?.url);
+      openBrowser(detail?.url, "new");
     }
     window.addEventListener(OPEN_BROWSER_EVENT, onOpen);
     const off = onBrowserEvent((event) => {
-      // 主进程已导航：只开 Browser tab，勿再塞 pendingUrl（否则 navigate→reveal 死循环）
-      if (event.type === "reveal") openBrowser();
+      // 主进程已经在当前 webview 里导航过：只把对应标签露出来，不要再开一个
+      if (event.type === "reveal") openBrowser(event.url, event.newTab ? "new" : "focus");
+      if (event.type === "state") applyPage(event.state);
+    });
+    void browserGetState().then((state) => {
+      if (state) applyPage(state);
     });
     const pending = consumePendingOpenBrowser();
-    if (pending) openBrowser(pending.url);
+    if (pending) openBrowser(pending.url, "new");
     return () => {
       window.removeEventListener(OPEN_BROWSER_EVENT, onOpen);
       off();
     };
-  }, [openBrowser]);
+  }, [openBrowser, t]);
 
   useEffect(() => {
     if (pendingOpenTerminalSessionId == null) return;
@@ -464,6 +458,8 @@ export const RightInspector = memo(function RightInspector({
   const treeRoot = filteredTree ?? tree;
   // 统一成 ChangeTreeNode[] 交给共享 TreeView（文件面板不展示 +/- 统计）
   const treeNodes = useMemo(() => (treeRoot ? buildFullTree(treeRoot, []) : []), [treeRoot]);
+  // 标签栏浮窗用未过滤的全量树，不跟着文件面板的搜索框收窄。
+  const flyoutTreeNodes = useMemo(() => (tree ? buildFullTree(tree, []) : []), [tree]);
 
   const effectiveOpenDirs = useMemo(() => {
     if (!treeQuery.trim() || !treeExpandPaths.size) return openDirs;
@@ -481,6 +477,15 @@ export const RightInspector = memo(function RightInspector({
     () => selectionJoinFlags(visiblePaths, selectedPaths),
     [visiblePaths, selectedPaths],
   );
+
+  function toggleDir(path: string) {
+    setOpenDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
 
   function onTreeActivate(node: ChangeTreeNode, gesture: TreeGesture) {
     if (!tree) return;
@@ -534,7 +539,6 @@ export const RightInspector = memo(function RightInspector({
     void saveFile();
   });
   const stableConsumeTerminalFocus = useStableCallback(() => setTerminalFocusId(null));
-  const stableConsumeBrowserUrl = useStableCallback(() => setBrowserPendingUrl(null));
 
   function onSendAction(action: ChangesPromptActionId) {
     const prompt = CHANGES_ACTION_PROMPTS[action];
@@ -582,148 +586,144 @@ export const RightInspector = memo(function RightInspector({
     );
   }
 
-  const totals = gitStatus?.totals;
   const showFileShell = currentTab?.kind === "files" || currentTab?.kind === "file";
-  const showFilesHome = currentTab?.kind === "files";
+  const showFileTree = currentTab?.kind === "files";
 
   return (
     <aside className="agent-inspector" data-pane="workspace">
-      {inspectorEmpty ? (
-        <StartScreen
-          totals={totals}
-          onOpenChanges={openChanges}
-          onOpenFilesPane={openFilesPane}
-          onOpenTerminal={() => openTerminal()}
-          onOpenBrowser={() => openBrowser()}
-        />
-      ) : (
-        <>
-          <TabStrip
-            tabs={tabs}
-            activeTab={activeTab}
-            unsaved={unsaved}
-            onSelect={setActiveTab}
-            onCloseTab={closeTab}
-            onOpenChanges={openChanges}
-            onOpenFiles={openFilesPane}
-            onOpenTerminal={() => openTerminal()}
-            onOpenBrowser={() => openBrowser()}
-          />
+      <TabStrip
+        tabs={tabs}
+        activeTab={activeTab}
+        unsaved={unsaved}
+        fileCount={tree ? fileCandidates.length : null}
+        treeNodes={flyoutTreeNodes}
+        openDirs={openDirs}
+        onToggleDir={toggleDir}
+        onOpenFile={stableOpenFile}
+        onSelect={setActiveTab}
+        onCloseTab={closeTab}
+        onCloseTabs={closeTabs}
+        onOpenChanges={openChanges}
+        onOpenTerminal={() => openTerminal()}
+        onOpenBrowser={() => openBrowser()}
+        onCopyPath={(path) => void copyPathText(path)}
+        onRevealPath={(path) => {
+          if (!workspaceId) return;
+          void workspaceReveal(workspaceId, path);
+        }}
+      />
 
-          <div className="agent-inspector__body">
-            {isPaneAlive(CHANGES_TAB_KEY) ? (
-              <div
-                className="agent-inspector__pane"
-                hidden={currentTab?.kind !== "changes"}
-                inert={currentTab?.kind !== "changes" || undefined}
-              >
-                <ChangesPane
-                  workspaceId={workspaceId}
-                  status={gitStatus}
-                  loading={gitLoading}
-                  error={gitError}
-                  tree={tree}
-                  onRefresh={stableRefreshGit}
-                  onInitRepo={stableInitRepo}
-                  onOpenFile={stableOpenFile}
-                  onSendAction={stableSendAction}
-                />
-              </div>
-            ) : null}
-
-            {isPaneAlive(TERMINAL_TAB_KEY) ? (
-              <div
-                className="agent-inspector__pane"
-                hidden={currentTab?.kind !== "terminal"}
-                inert={currentTab?.kind !== "terminal" || undefined}
-              >
-                <TerminalPane
-                  active={activeTab === TERMINAL_TAB_KEY}
-                  focusSessionId={terminalFocusId}
-                  onFocusSessionConsumed={stableConsumeTerminalFocus}
-                />
-              </div>
-            ) : null}
-
-            {currentTab?.kind === "browser" ? (
-              <BrowserPane
-                active={pageActive && activeTab === BROWSER_TAB_KEY}
-                pendingUrl={browserPendingUrl}
-                onPendingUrlConsumed={stableConsumeBrowserUrl}
-                workspaceId={workspaceId}
-              />
-            ) : null}
-
-            {currentTab?.kind === "subagent" ? (
-              <SubagentInspectorPane
-                taskId={currentTab.taskId}
-                subagent={currentTab.subagent}
-                onOpenFile={stableOpenFile}
-              />
-            ) : null}
-
-            {currentTab?.kind === "plan" ? (
-              <PlanPane
-                plan={
-                  activePlan?.id === currentTab.planId
-                    ? activePlan
-                    : (planDocs[currentTab.planId] ?? null)
-                }
-                running={busy}
-              />
-            ) : null}
-
-            {showFileShell || isPaneAlive(FILES_TAB_KEY) ? (
-              <div
-                className="agent-inspector__pane"
-                hidden={!showFileShell}
-                inert={!showFileShell || undefined}
-              >
-                <FileShell
-                  currentTab={currentTab}
-                  showFilesHome={showFilesHome}
-                  filesPaneRef={filesPaneRef}
-                  filesListOpen={filesListOpen}
-                  filesListWidth={filesListWidth}
-                  filesListDragging={filesListDragging}
-                  onFilesListResize={onFilesListResize}
-                  recents={recents}
-                  fileCandidates={fileCandidates}
-                  onOpenFile={stableOpenFile}
-                  onNewFile={onNewFile}
-                  workspaceId={workspaceId ?? ""}
-                  onChanged={stableRefreshTree}
-                  drafts={drafts}
-                  mediaByKey={mediaByKey}
-                  readOnlyByPath={readOnlyByPath}
-                  onFileDraftChange={onFileDraftChange}
-                  onSaveFile={stableSaveFile}
-                  treeQuery={treeQuery}
-                  onTreeQueryChange={setTreeQuery}
-                  treeRoot={treeRoot}
-                  treeNodes={treeNodes}
-                  effectiveOpenDirs={effectiveOpenDirs}
-                  selectedPaths={selectedPaths}
-                  selectionJoins={selectionJoins}
-                  onTreeActivate={stableTreeActivate}
-                  treeCtxMenu={treeCtxMenu}
-                  onTreeCtxMenu={setTreeCtxMenu}
-                  copyPathText={copyPathText}
-                />
-              </div>
-            ) : null}
+      <div className="agent-inspector__body">
+        {isPaneAlive(CHANGES_TAB_KEY) ? (
+          <div
+            className="agent-inspector__pane"
+            hidden={currentTab?.kind !== "changes"}
+            inert={currentTab?.kind !== "changes" || undefined}
+          >
+            <ChangesPane
+              workspaceId={workspaceId}
+              status={gitStatus}
+              loading={gitLoading}
+              error={gitError}
+              onRefresh={stableRefreshGit}
+              onInitRepo={stableInitRepo}
+              onOpenFile={stableOpenFile}
+              onSendAction={stableSendAction}
+            />
           </div>
-        </>
-      )}
+        ) : null}
+
+        {isPaneAlive(TERMINAL_TAB_KEY) ? (
+          <div
+            className="agent-inspector__pane"
+            hidden={currentTab?.kind !== "terminal"}
+            inert={currentTab?.kind !== "terminal" || undefined}
+          >
+            <TerminalPane
+              active={activeTab === TERMINAL_TAB_KEY}
+              focusSessionId={terminalFocusId}
+              onFocusSessionConsumed={stableConsumeTerminalFocus}
+            />
+          </div>
+        ) : null}
+
+        {tabs.map((tab) =>
+          tab.kind === "browser" ? (
+            <div
+              key={tab.key}
+              className="agent-inspector__pane"
+              hidden={currentTab?.key !== tab.key || undefined}
+              inert={currentTab?.key !== tab.key || undefined}
+            >
+              <BrowserPane active={pageActive && activeTab === tab.key} initialUrl={tab.url} />
+            </div>
+          ) : null,
+        )}
+
+        {currentTab?.kind === "subagent" ? (
+          <SubagentInspectorPane
+            taskId={currentTab.taskId}
+            subagent={currentTab.subagent}
+            onOpenFile={stableOpenFile}
+          />
+        ) : null}
+
+        {currentTab?.kind === "plan" ? (
+          <PlanPane
+            plan={
+              activePlan?.id === currentTab.planId
+                ? activePlan
+                : (planDocs[currentTab.planId] ?? null)
+            }
+            running={busy}
+          />
+        ) : null}
+
+        {showFileShell || isPaneAlive(FILES_TAB_KEY) ? (
+          <div
+            className="agent-inspector__pane"
+            hidden={!showFileShell}
+            inert={!showFileShell || undefined}
+          >
+            <FileShell
+              currentTab={currentTab}
+              showFileTree={showFileTree}
+              onOpenFile={stableOpenFile}
+              onNewFile={onNewFile}
+              workspaceId={workspaceId ?? ""}
+              onChanged={stableRefreshTree}
+              drafts={drafts}
+              mediaByKey={mediaByKey}
+              readOnlyByPath={readOnlyByPath}
+              onFileDraftChange={onFileDraftChange}
+              onSaveFile={stableSaveFile}
+              treeQuery={treeQuery}
+              onTreeQueryChange={setTreeQuery}
+              treeRoot={treeRoot}
+              treeNodes={treeNodes}
+              effectiveOpenDirs={effectiveOpenDirs}
+              selectedPaths={selectedPaths}
+              selectionJoins={selectionJoins}
+              onTreeActivate={stableTreeActivate}
+              treeCtxMenu={treeCtxMenu}
+              onTreeCtxMenu={setTreeCtxMenu}
+              copyPathText={copyPathText}
+            />
+          </div>
+        ) : null}
+      </div>
 
       <InspectorModals
         closeDirtyKey={closeDirtyKey}
         tabs={tabs}
-        onCloseDirty={() => setCloseDirtyKey(null)}
+        onCloseDirty={cancelDirtyClose}
         onDiscardAndClose={discardAndCloseDirty}
         onSaveAndClose={() => void saveAndCloseDirty()}
         saveAs={saveAs}
-        onSaveAsChange={setSaveAs}
+        onSaveAsChange={(next) => {
+          setSaveAs(next);
+          if (next === null) cancelDirtyClose();
+        }}
         onCommitSaveAs={() => void commitSaveAs()}
       />
     </aside>

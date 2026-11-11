@@ -5,44 +5,14 @@
  * 步数预算不在图状态里：由 LangGraph recursionLimit 统一承载（见 AgentRuntime）。
  */
 import type { ChatAttachmentRef, ChatImageRef } from "@thinker-workbench/shared";
-import { buildUserContent, contentToPlainText } from "../model/imageParts";
-import type { ChatMessage } from "../model/types";
+import { buildUserContent } from "../model/imageParts";
+import type { ModelMessage } from "../model/types";
+import { projectModelHistory } from "./history";
 import type { GraphState } from "./types";
-
-/** 规范化多轮历史：保留有正文或附图的 user / assistant。 */
-function normalizeHistory(
-  history:
-    | Array<{ role: string; content: string; images?: ChatImageRef[] }>
-    | ChatMessage[]
-    | undefined,
-): ChatMessage[] {
-  if (!history?.length) return [];
-  const out: ChatMessage[] = [];
-  for (const m of history) {
-    if (m.role !== "user" && m.role !== "assistant") continue;
-    const images =
-      "images" in m && Array.isArray(m.images) ? (m.images as ChatImageRef[]) : undefined;
-    if (m.role === "user" && images?.length) {
-      const text =
-        typeof m.content === "string"
-          ? m.content
-          : contentToPlainText(m.content as ChatMessage["content"]);
-      out.push({ role: "user", content: buildUserContent(text, images) });
-      continue;
-    }
-    const content =
-      typeof m.content === "string"
-        ? m.content.trim()
-        : contentToPlainText(m.content as ChatMessage["content"]).trim();
-    if (!content) continue;
-    out.push({ role: m.role, content });
-  }
-  return out;
-}
 
 export function initialState(
   message: string,
-  history?: Array<{ role: string; content: string; images?: ChatImageRef[] }> | ChatMessage[],
+  history?: Array<{ role: string; content: string; images?: ChatImageRef[] }> | ModelMessage[],
   contextPaths?: string[],
   images?: ChatImageRef[],
   attachments?: ChatAttachmentRef[],
@@ -50,7 +20,7 @@ export function initialState(
   const userContent = buildUserContent(message, images);
   return {
     message,
-    messages: [...normalizeHistory(history), { role: "user", content: userContent }],
+    messages: [...projectModelHistory(history), { role: "user", content: userContent }],
     reply: "",
     pendingToolCalls: [],
     startedToolCallIds: [],

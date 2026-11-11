@@ -19,9 +19,14 @@ export async function onCheckpointClear(
     });
   };
   try {
-    // 按目录缓存了多个 runtime：逐个清理，命中哪个是哪个
-    for (const runtime of ctx.listRuntimes()) {
-      await runtime.clearThreadCheckpoints(message.threadId);
+    const dir = message.checkpointDir?.trim();
+    if (dir) {
+      // 目录即工作区：打开对应 runtime 再删，避免「还没跑过所以没 runtime」把登记留下
+      await ctx.ensureRuntime(dir).clearThreadCheckpoints(message.threadId);
+    } else {
+      for (const runtime of ctx.listRuntimes()) {
+        await runtime.clearThreadCheckpoints(message.threadId);
+      }
     }
     finish(true);
   } catch (err) {

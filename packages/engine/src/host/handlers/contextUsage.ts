@@ -10,7 +10,7 @@ import {
 } from "@thinker-workbench/shared";
 import { assembleContext } from "../../context/assembleContext";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
-import type { ChatMessage } from "../../model/types";
+import type { ModelMessage } from "../../model/types";
 import { setWorkspaceRoot } from "../../workspace";
 import {
   applyAllowAiDeleteFiles,
@@ -68,7 +68,7 @@ export async function onContextUsage(message: UtilityContextUsage): Promise<void
       }
     }
 
-    const messages: ChatMessage[] = (message.request.messages ?? []).map((m) => ({
+    const messages: ModelMessage[] = (message.request.messages ?? []).map((m) => ({
       role: m.role,
       content: m.content,
     }));

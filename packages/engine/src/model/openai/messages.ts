@@ -3,10 +3,10 @@
  */
 import { getDataDir } from "../../config/dataDir";
 import { messageToApiContent } from "../imageParts";
-import type { ChatMessage, ChatUsage } from "../types";
+import type { ModelMessage, ChatUsage } from "../types";
 
 /** 在 messages 前插入 system 消息；用户 image_ref 在此编码为 data URL。 */
-export function toApiMessages(system: string, messages: ChatMessage[]): unknown[] {
+export function toApiMessages(system: string, messages: ModelMessage[]): unknown[] {
   const dataDir = getDataDir();
   return [
     { role: "system", content: system },

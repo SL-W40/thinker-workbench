@@ -28,9 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 省略 version，让 action 读取 package.json 的 packageManager，与 lockfile 同一份钉扎
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11.12.0
 
       - uses: actions/setup-node@v4
         with:

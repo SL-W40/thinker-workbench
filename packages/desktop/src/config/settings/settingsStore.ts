@@ -7,7 +7,6 @@
  */
 import path from "node:path";
 import {
-  emptyModelCatalog,
   type GeneralSettings,
   type ModelCatalog,
   normalizeGeneral,
@@ -22,18 +21,13 @@ import {
   settingsPath,
 } from "./filePaths";
 import { ensureSecretsUnlocked } from "./secrets";
-import { getCachedSettings, type StoredSettings, setCachedSettings } from "./state";
+import { emptyStoredCatalog, getCachedSettings, type StoredSettings, setCachedSettings, toRuntimeCatalog } from "./state";
 
 export { resetSettingsCacheForTests } from "./state";
 
-/** 克隆当前目录快照（不强制解锁）。 */
-function cloneModelCatalog(model: ModelCatalog): ModelCatalog {
-  return {
-    providers: model.providers.map((p) => ({ ...p })),
-    models: model.models.map((m) => ({ ...m, tags: [...m.tags] })),
-    selection: model.selection,
-    allowEmoji: model.allowEmoji,
-  };
+/** 下发给 engine / 调用方的目录：不含密文。 */
+function cloneModelCatalog(model: StoredSettings["model"]): ModelCatalog {
+  return toRuntimeCatalog(model);
 }
 
 /** 更新缓存并写入权威路径；自定义 dataDir 时同步引导镜像。 */
@@ -75,7 +69,7 @@ export function loadSettings(): StoredSettings {
   }
 
   const fresh: StoredSettings = {
-    model: emptyModelCatalog(),
+    model: emptyStoredCatalog(),
     shortcuts: normalizeShortcuts(null),
     general: normalizeGeneral(null),
   };

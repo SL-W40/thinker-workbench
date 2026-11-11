@@ -239,6 +239,7 @@ export {
   normalizeAppLocale,
 } from "../ipc/locale";
 export type { LogLevel, LogRecord, LogSource } from "../ipc/log";
+export type { StartupIssue } from "../ipc/startup";
 export type {
   McpImportConflict,
   McpListResult,
@@ -249,10 +250,6 @@ export type {
   McpToolSummary,
   McpTransport,
   ThinkerMcpApi,
-} from "../ipc/mcp";
-export {
-  BUILTIN_COMPUTER_MCP_ID,
-  BUILTIN_COMPUTER_MCP_NAME,
 } from "../ipc/mcp";
 export type {
   RuleListItem,
@@ -415,6 +412,12 @@ export type {
   UtilityToParent,
 } from "../ipc/utility";
 export { buildRuntimeSettings } from "../ipc/utilityPayload";
+export {
+  isUtilityToChild,
+  isUtilityToParent,
+  UTILITY_TO_CHILD_KINDS,
+  UTILITY_TO_PARENT_KINDS,
+} from "../ipc/utility";
 export type { AuxPageId, ThinkerWindowApi, WindowRole } from "../ipc/window";
 export { AUX_PAGE_IDS, isAuxPageId } from "../ipc/window";
 export type {

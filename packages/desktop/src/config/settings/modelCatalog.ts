@@ -10,7 +10,6 @@ import {
   type ModelCatalogPublic,
   type ModelEntry,
   type ModelHealth,
-  type ModelProvider,
   type ModelSelection,
   type ModelSettings,
   normalizeModelSelection,
@@ -20,7 +19,7 @@ import {
 import { encryptSecret } from "../secretCrypto";
 import { hasPendingSecret } from "./secrets";
 import { getModelCatalog, getModelCatalogSnapshot, loadSettings, persist } from "./settingsStore";
-import { lastApiKeyEncByProvider } from "./state";
+import type { StoredProvider } from "./state";
 
 /**
  * 从目录解析首个候选的「展示/估算用」模型元数据（不要求已有明文 apiKey）。
@@ -128,7 +127,7 @@ export function markModelHealth(
  */
 export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic {
   const current = loadSettings();
-  const nextProviders: ModelProvider[] = [];
+  const nextProviders: StoredProvider[] = [];
 
   if (Array.isArray(patch.providers)) {
     for (const p of patch.providers) {
@@ -148,6 +147,7 @@ export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic 
             ? p.label.trim() || "Provider"
             : existing?.label || "Provider",
         apiKey: keyFromPatch ?? existing?.apiKey ?? "",
+        apiKeyEnc: existing?.apiKeyEnc ?? "",
         baseUrl: typeof p.baseUrl === "string" ? p.baseUrl.trim() : (existing?.baseUrl ?? ""),
       });
     }
@@ -204,17 +204,12 @@ export function saveModelSettings(patch: ModelCatalogPatch): ModelCatalogPublic 
     }
   }
 
-  const model: ModelCatalog = {
+  const model = {
     providers: nextProviders,
     models: nextModels,
     selection,
     allowEmoji: typeof patch.allowEmoji === "boolean" ? patch.allowEmoji : current.model.allowEmoji,
   };
-  // 已删除的 provider 清掉密文缓存
-  const keepIds = new Set(nextProviders.map((p) => p.id));
-  for (const id of [...lastApiKeyEncByProvider.keys()]) {
-    if (!keepIds.has(id)) lastApiKeyEncByProvider.delete(id);
-  }
   persist({ ...current, model });
   return getPublicModelSettings();
 }

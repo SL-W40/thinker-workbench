@@ -9,18 +9,12 @@ import {
   type AgentEvent,
   type AgentResumeCommand,
   type AgentRunCommand,
-  buildRuntimeSettings,
-  type ChatMode,
   type ContextUsageRequest,
   type ContextUsageSnapshot,
   createId,
-  DEFAULT_CHAT_MODE,
-  DEFAULT_CONTEXT_WINDOW,
   emptyContextUsageSnapshot,
   type HitlResponse,
   type LogRecord,
-  type ModelSelection,
-  normalizeChatMode,
   PREVIEW_BODY_CHARS,
   type UtilityToChild,
   withTextPreview,
@@ -28,25 +22,11 @@ import {
 import type { UtilityProcess } from "electron";
 import { runLedger } from "../agent/runLedger";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
-import { getDataDir, getWorkspaceCheckpointDir } from "../config/paths";
-import {
-  getGeneralSettings,
-  getModelCatalog,
-  getModelCatalogSnapshot,
-  resolvePrimaryModelMeta,
-  unlockModelSecretsForRun,
-} from "../config/settingsStore";
-import { listAgents } from "../customize/agentsStore";
-import {
-  getActiveSessionId,
-  getSession,
-  getSessionByThreadId,
-  getSessionChatMode,
-  getSessionModelSelection,
-} from "../db/workspacesStore";
+import { getWorkspaceCheckpointDir } from "../config/paths";
+import { getSession, getSessionByThreadId } from "../db/workspacesStore";
 import { desktopLog } from "../log/setup";
-import { shellFactsForAgent } from "../terminal/detectShellProfiles";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
+import { contextUsageFields, contextUsageMeta, runEnvelope } from "./runPayload";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
 import { handleBrowserRequest, handleGitRequest, handlePtyRequest } from "./agentHostRequests";
 import { isUtilityToParent } from "./transfer";
@@ -250,7 +230,7 @@ export class AgentBridge {
     for (const [id, pending] of this.pendingContextUsage) {
       clearTimeout(pending.timer);
       pending.resolve(
-        emptyContextUsageSnapshot(this.resolveContextUsageMeta().limit, "utility_not_ready"),
+        emptyContextUsageSnapshot(contextUsageMeta().limit, "utility_not_ready"),
       );
       this.pendingContextUsage.delete(id);
     }
@@ -273,32 +253,6 @@ export class AgentBridge {
   }
 
   /**
-   * 解析估算用的上下文窗口（不解锁钥匙串）。
-   *
-   * 子进程拿到的是「无明文 apiKey」的快照，`resolveModelSettings` 会返回 null，
-   * 因此窗口必须由主进程解析后随消息下发，否则 UI 永远显示默认 128K。
-   */
-  private resolveContextUsageMeta(): {
-    limit: number;
-    allowEmoji: boolean;
-    threadId?: string;
-  } {
-    const activeId = getActiveSessionId();
-    const activeSession = activeId ? getSession(activeId) : null;
-    // 用量估算只需 contextWindow 等元数据，禁止走 modelPayload（会弹钥匙串）
-    const { catalog, selection } = this.modelPayloadSnapshot(activeSession?.threadId);
-    const meta = resolvePrimaryModelMeta(catalog, selection);
-    return {
-      limit:
-        typeof meta.contextWindow === "number" && meta.contextWindow > 0
-          ? meta.contextWindow
-          : DEFAULT_CONTEXT_WINDOW,
-      allowEmoji: meta.allowEmoji ?? false,
-      threadId: activeSession?.threadId,
-    };
-  }
-
-  /**
    * 向 utility 请求上下文占用快照（与 assembleContext 同源）。
    * 超时 / 未就绪 / send 失败都返回带原因的空快照（数值不可信，UI 显示「不可用」）。
    */
@@ -306,18 +260,16 @@ export class AgentBridge {
     request: ContextUsageRequest = {},
     timeoutMs = 8_000,
   ): Promise<ContextUsageSnapshot> {
-    let meta = this.resolveContextUsageMeta();
+    let meta = contextUsageMeta();
     try {
       await this.waitUntilReady(timeoutMs);
     } catch {
       return emptyContextUsageSnapshot(meta.limit, "utility_not_ready");
     }
     // ready 等待期间模型可能已切换：重取一次窗口
-    meta = this.resolveContextUsageMeta();
+    meta = contextUsageMeta();
     const requestId = createId("ctx");
-    const general = getGeneralSettings();
-    const { catalog, selection } = this.modelPayloadSnapshot(meta.threadId);
-    const chatMode = this.chatModePayload(meta.threadId).chatMode;
+    const fields = contextUsageFields(meta);
     return new Promise<ContextUsageSnapshot>((resolve) => {
       const timer = setTimeout(() => {
         this.pendingContextUsage.delete(requestId);
@@ -330,16 +282,8 @@ export class AgentBridge {
           kind: "contextUsage",
           requestId,
           request,
-          catalog,
-          selection,
-          aiLocale: general.aiLocale,
-          workspaceAccess: general.workspaceAccess,
-          allowAiDeleteFiles: general.allowAiDeleteFiles,
           workspaceRoot: request.workspaceRoot,
-          dataDir: getDataDir(),
-          contextWindow: meta.limit,
-          allowEmoji: meta.allowEmoji,
-          chatMode,
+          ...fields,
         });
       } catch (err) {
         clearTimeout(timer);
@@ -356,13 +300,18 @@ export class AgentBridge {
    * 请求子进程清理会话线程的全部 checkpoint（SqliteSaver 真实存储）。
    * 超时 / 未就绪 / 子进程拒绝均返回 false，由调用方 best-effort 降级。
    */
-  async clearThreadCheckpoints(threadId: string, timeoutMs = 8_000): Promise<boolean> {
+  async clearThreadCheckpoints(
+    workspaceId: string,
+    threadId: string,
+    timeoutMs = 8_000,
+  ): Promise<boolean> {
     try {
       await this.waitUntilReady(timeoutMs);
     } catch {
       return false;
     }
     const requestId = createId("ckc");
+    const checkpointDir = getWorkspaceCheckpointDir(workspaceId);
     return new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => {
         this.pendingCheckpointClear.delete(requestId);
@@ -370,7 +319,13 @@ export class AgentBridge {
       }, timeoutMs);
       this.pendingCheckpointClear.set(requestId, { resolve, timer });
       try {
-        this.send({ channel: "utility", kind: "checkpointClear", requestId, threadId });
+        this.send({
+          channel: "utility",
+          kind: "checkpointClear",
+          requestId,
+          threadId,
+          checkpointDir,
+        });
       } catch {
         clearTimeout(timer);
         this.pendingCheckpointClear.delete(requestId);
@@ -495,72 +450,6 @@ export class AgentBridge {
   }
 
   /**
-   * 发 run 前再次确认密钥已解锁（IPC 层应已解锁并弹窗；此处作兜底）。
-   */
-  private assertModelSecretsUnlocked(): void {
-    const result = unlockModelSecretsForRun();
-    if (result.ok) return;
-    const code =
-      result.reason === "denied" ? "MODEL_API_KEY_UNLOCK_DENIED" : "MODEL_API_KEY_MISSING";
-    throw new Error(code);
-  }
-
-  /** 会话覆盖优先的选用解析（不碰钥匙串）。 */
-  private resolveSelection(
-    catalog: ReturnType<typeof getModelCatalogSnapshot>,
-    threadId?: string,
-  ): ModelSelection {
-    let selection = catalog.selection;
-    if (threadId) {
-      const session = getSessionByThreadId(threadId);
-      if (session) {
-        const override = getSessionModelSelection(session.id);
-        if (override) selection = override;
-      }
-    }
-    return selection;
-  }
-
-  /**
-   * 模型目录快照（不解锁密文）。供 contextUsage / 估算等路径。
-   */
-  private modelPayloadSnapshot(threadId?: string): {
-    catalog: ReturnType<typeof getModelCatalogSnapshot>;
-    selection: ModelSelection;
-  } {
-    const catalog = getModelCatalogSnapshot();
-    return { catalog, selection: this.resolveSelection(catalog, threadId) };
-  }
-
-  /** 解析本轮模型目录与生效选用（会话覆盖优先于全局）。**会解锁钥匙串。** */
-  private modelPayload(threadId?: string): {
-    catalog: ReturnType<typeof getModelCatalog>;
-    selection: ModelSelection;
-  } {
-    this.assertModelSecretsUnlocked();
-    const catalog = getModelCatalog();
-    return { catalog, selection: this.resolveSelection(catalog, threadId) };
-  }
-
-  /** 解析本轮会话 ChatMode（缺省 agent）。 */
-  private chatModePayload(threadId?: string): { chatMode: ChatMode } {
-    let chatMode = DEFAULT_CHAT_MODE;
-    if (threadId) {
-      const session = getSessionByThreadId(threadId);
-      if (session) {
-        const stored = getSessionChatMode(session.id);
-        if (stored) chatMode = normalizeChatMode(stored);
-      }
-    }
-    return { chatMode };
-  }
-
-  /** 当前工作区可见的子代理定义快照。 */
-  private subagentsPayload(workspaceRoot?: string | null) {
-    return { subagents: listAgents(workspaceRoot).agents };
-  }
-
-  /**
    * 派发已由 RunLedger 提交的 run（不写 DB、不分配 runId）。
    * ready / send 失败时抛错，由调用方 ledger.dispatchFailed。
    */
@@ -582,7 +471,6 @@ export class AgentBridge {
     const sessionTitle = session?.title;
     // 会话既有待办随 run 下发：engine 本轮据此读写，避免「上一轮规划的步骤」丢失
     const sessionTodos = session?.todos ?? [];
-    const general = getGeneralSettings();
 
     // waitUntilReady 期间可能已取消：勿再派发
     if (!runLedger.getOpen(runId)) return;
@@ -622,13 +510,8 @@ export class AgentBridge {
           workspaceName: options.command.workspaceName,
           contextPaths: options.command.contextPaths,
         },
-        ...this.modelPayload(threadId),
-        ...this.chatModePayload(threadId),
-        ...this.subagentsPayload(options.command.workspaceRoot),
-        // 运行时设置（限额 / shell / 访问 / 日志 / trace）统一由 shared builder 组装
-        ...buildRuntimeSettings(general, shellFactsForAgent(general.shellProfileId)),
         workspaceRoot: options.command.workspaceRoot,
-        dataDir: getDataDir(),
+        ...runEnvelope(threadId, options.command.workspaceRoot),
       });
       runLedger.markDispatched(runId);
       // send 与 mark 之间若已 cancelRequested，补一刀 cancel
@@ -658,7 +541,6 @@ export class AgentBridge {
   }): Promise<void> {
     await this.waitUntilReady();
     const { runId, threadId, traceId, sessionId } = options;
-    const general = getGeneralSettings();
     const log = desktopLog("bridge.resume");
     const session = getSession(sessionId) ?? getSessionByThreadId(threadId);
     const workspaceId = session?.workspaceId;
@@ -687,12 +569,7 @@ export class AgentBridge {
           traceId,
         },
         workspaceRoot: options.command.workspaceRoot,
-        ...this.modelPayload(threadId),
-        ...this.chatModePayload(threadId),
-        ...this.subagentsPayload(options.command.workspaceRoot),
-        // 运行时设置（限额 / shell / 访问 / 日志 / trace）统一由 shared builder 组装
-        ...buildRuntimeSettings(general, shellFactsForAgent(general.shellProfileId)),
-        dataDir: getDataDir(),
+        ...runEnvelope(threadId, options.command.workspaceRoot),
       });
       runLedger.markDispatched(runId);
       const open = runLedger.getOpen(runId);

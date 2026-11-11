@@ -23,7 +23,7 @@ What it covers day to day:
 | | |
 |---|---|
 | **Node.js** | 22+ |
-| **pnpm** | **11.12.0** (pinned by `packageManager` — do not use npm/yarn) |
+| **pnpm** | **12.15.0** (pinned by `packageManager` — do not use npm/yarn) |
 | **OS** | Windows / macOS / Linux |
 | **Electron** | 37 (via workspace dependency) |
 
@@ -125,7 +125,7 @@ Paths are declared once in `packages/shared/src/dataLayout.ts` (desktop + engine
 | `workspaces/<id>/trace/` | workspace | Trace index db + session payload jsonl |
 | `workspaces/ws_default/project/` | content | Built-in default workspace root (fixed id) |
 | `customize/{rules,skills,agents,mcps}/` | content | Global rules / skills / subagents / MCP |
-| `cache/browser-screenshots/`, `cache/computer/images/` | cache | Regenerable screenshots (pruned by age + size) |
+| `cache/browser-screenshots/` | cache | Regenerable browser screenshots (pruned by age + size) |
 
 Deleting a workspace removes `workspaces/<id>/` entirely (chats, images, attachments, checkpoints, trace, memory). The default workspace (`ws_default`) cannot be deleted—only cleared.
 

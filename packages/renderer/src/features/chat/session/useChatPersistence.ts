@@ -7,7 +7,8 @@
  */
 
 import type { ChatMessage } from "@thinker-workbench/shared";
-import { getSession, saveSessionMessages } from "../../../platform/ipc/workspaces";
+import { getSession } from "../../../platform/ipc/workspaces";
+import { persistTranscriptNow } from "./chatPersistence";
 import { mergeSessionMessages } from "./mergeSessionMessages";
 import { shouldApplySessionReload } from "./sessionReload";
 import type { ChatRunState } from "./useChatRunState";
@@ -34,12 +35,7 @@ export function useChatPersistence(
   async function flushSave(): Promise<void> {
     const sid = state.sessionIdRef.current;
     if (!sid) return;
-    state.cancelSave(sid);
-    try {
-      await saveSessionMessages(sid, state.messagesRef.current);
-    } catch {
-      // 已删会话的落库竞态；主进程已幂等忽略
-    }
+    await persistTranscriptNow(sid, state.messagesRef.current);
   }
 
   async function reloadCurrentSessionFromDb(): Promise<void> {

@@ -24,7 +24,7 @@ import {
   healRunningSessions,
   listThreads,
 } from "../db/workspacesStore";
-import { setDesktopLogBroadcast, writeAgentLogRecord, writeAppLogRecord } from "../log/setup";
+import { desktopLog, setDesktopLogBroadcast, writeAgentLogRecord, writeAppLogRecord } from "../log/setup";
 import { handleAgentAttention } from "../notify/agentAttention";
 import { handleHitlAgentEvent, respondHitl } from "../notify/hitlNotify";
 import type { AgentBridge } from "../utility/AgentBridge";
@@ -120,8 +120,10 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
 
   try {
     if (healRunningSessions() > 0) broadcastThreadsChanged();
-  } catch {
-    /* db 尚未就绪时忽略 */
+  } catch (error) {
+    desktopLog("agent").error("healRunningSessions failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 
   ipcMain.on(IpcChannels.logRecord, (_evt, record: LogRecord) => {
@@ -145,8 +147,12 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
         const wrote = runLedger.settleFromEvent(enriched);
         if (wrote) flushPendingMcpReload(bridge);
       }
-    } catch {
-      /* 落库失败不阻断事件 */
+    } catch (error) {
+      desktopLog("agent").error("settleFromEvent failed", {
+        message: error instanceof Error ? error.message : String(error),
+        type: enriched.type,
+        threadId: enriched.threadId,
+      });
     }
   });
 
@@ -281,7 +287,9 @@ export function registerAgentHandlers(ipcMain: IpcMain, bridge: AgentBridge): vo
 export function onAgentUtilityExited(): void {
   try {
     if (healRunningSessions({ preserveQueued: true }) > 0) broadcastThreadsChanged();
-  } catch {
-    /* ignore */
+  } catch (error) {
+    desktopLog("agent").error("heal after utility exit failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 }

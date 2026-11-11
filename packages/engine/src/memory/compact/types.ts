@@ -1,10 +1,10 @@
-import type { ChatMessage } from "../../model/types";
+import type { ModelMessage } from "../../model/types";
 
 export type CompactionLayer = "micro" | "session" | "full";
 
 export interface CompactResult {
   /** 压缩后的新消息数组（不可变，原数组未被修改）。 */
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   layer: CompactionLayer;
   /** 压缩前消息数。 */
   before: number;

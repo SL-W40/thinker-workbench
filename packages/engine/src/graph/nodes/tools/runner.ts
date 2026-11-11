@@ -1,7 +1,7 @@
 /**
  * 单个 tool_call 的执行与 resume 判定（start/end 事件 + span）。
  */
-import type { ChatContentPart, ChatMessage, ChatToolCall } from "../../../model/types";
+import type { ChatContentPart, ModelMessage, ChatToolCall } from "../../../model/types";
 import { getRunTurn, markToolCallStarted } from "../../../runtime/runContext";
 import { getRunEmitter } from "../../../runtime/runEmit";
 import { runTool } from "../../../tools/runTool";
@@ -22,7 +22,7 @@ import { fallbackDiff, parseToolArgs, toolUiHints } from "./args";
 /** interrupt / reuse 时补发 tool end，避免 UI 悬空。 */
 export function emitToolEndFromMessage(
   call: ChatToolCall,
-  message: ChatMessage,
+  message: ModelMessage,
   ok: boolean,
 ): void {
   const emit = getRunEmitter();
@@ -48,7 +48,7 @@ export function emitToolEndFromMessage(
 }
 
 /** 执行单个 tool_call，并发出 tool start/end 事件。 */
-export async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ChatMessage> {
+export async function runOne(call: ChatToolCall, signal: AbortSignal): Promise<ModelMessage> {
   const emit = getRunEmitter();
   const name = call.function.name;
   const callId = call.id;
@@ -206,7 +206,7 @@ export async function resolveOne(
   state: AgentGraphState,
   call: ChatToolCall,
   signal: AbortSignal,
-): Promise<{ message: ChatMessage | null; startedIds: string[] }> {
+): Promise<{ message: ModelMessage | null; startedIds: string[] }> {
   const action = resolvePendingToolAction(state, call);
   const startedIds = state.startedToolCallIds;
 

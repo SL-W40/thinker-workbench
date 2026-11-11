@@ -13,6 +13,7 @@ import { registerCustomizeHandlers } from "./customizeHandlers";
 import { registerGitHandlers } from "./gitHandlers";
 import { registerMcpHandlers } from "./mcpHandlers";
 import { registerSessionHandlers } from "./sessionHandlers";
+import { registerStartupHandlers } from "./startupHandlers";
 import { registerSettingsHandlers } from "./settingsHandlers";
 import { registerTerminalHandlers } from "./terminalHandlers";
 import { registerToolsHandlers } from "./toolsHandlers";
@@ -56,6 +57,7 @@ export function registerIpc(
     onDataDirApplied: options?.onDataDirApplied,
   });
   registerSessionHandlers(ipcMain);
+  registerStartupHandlers(ipcMain);
   registerToolsHandlers(ipcMain);
   // 桌面自动更新（GitHub Releases / electron-updater；dev 下为禁用态）
   registerUpdateHandlers(ipcMain);

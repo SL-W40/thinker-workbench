@@ -194,6 +194,29 @@ describe("filesystem tools", () => {
     assert.deepEqual(found.ui?.resultPaths, ["src/app.ts"]);
   });
 
+  it("grep 与 search 不读 .stage 里的旧构建副本", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tw-stage-scan-"));
+    fs.mkdirSync(path.join(root, "src"));
+    fs.mkdirSync(path.join(root, ".stage", "app"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "app.ts"), "const live = 1;\n", "utf8");
+    fs.writeFileSync(
+      path.join(root, ".stage", "app", "main.js"),
+      "const legacyDeprecatedMirror = 1;\n",
+      "utf8",
+    );
+
+    const grep = await grepTool({ pattern: "legacyDeprecatedMirror", path: "." }, ctx(root));
+    if (typeof grep === "string") assert.fail("expected ui result");
+    assert.match(grep.output, /matches\t0/);
+    assert.doesNotMatch(grep.output, /\.stage/);
+    assert.deepEqual(grep.ui?.resultPaths, []);
+
+    const found = await searchFilesTool({ pattern: "main.js", path: "." }, ctx(root));
+    if (typeof found === "string") assert.fail("expected ui result");
+    assert.doesNotMatch(found.output, /\.stage/);
+    assert.deepEqual(found.ui?.resultPaths, []);
+  });
+
   it("grep 单行截断、每文件配额、total_matches 与输出模式；list_dir 条目封顶", async () => {
     const TAB = String.fromCharCode(9);
     const NL = String.fromCharCode(10);

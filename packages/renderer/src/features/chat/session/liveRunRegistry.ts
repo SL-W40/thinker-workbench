@@ -12,7 +12,7 @@ import {
   type ModelUsage,
 } from "@thinker-workbench/shared";
 import { onAgentEvent } from "../../../platform/ipc/thinker";
-import { saveSessionMessages } from "../../../platform/ipc/workspaces";
+import { persistTranscriptNow, transcriptSave } from "./chatPersistence";
 import { classifyRunError, softStopResumeKind } from "../shared/runErrors";
 import {
   appendError,
@@ -30,7 +30,6 @@ import {
   reconcileTimelineReply,
   stripTransitionLines,
 } from "../timeline";
-import { createDebouncedSave } from "./chatPersistence";
 import { mergeSessionMessages } from "./mergeSessionMessages";
 
 export type LiveRunSlot = {
@@ -409,22 +408,18 @@ async function settleSlot(
   slot.runId = null;
   slot.targetMsgId = null;
   slot.streamText = "";
-  try {
-    await saveSessionMessages(sessionId, slot.messages);
-  } catch {
-    /* ignore */
-  }
+  // 前台由事件流在更完整的投影上立即落库；这里再写会用较瘦的槽盖掉它。
+  if (getForegroundSessionId() === sessionId) return;
+  await persistTranscriptNow(sessionId, slot.messages);
 }
 
-// 后台槽落库防抖：与前台 scheduleSave 共用同一套调度语义与毫秒档
-const bgSaveScheduler = createDebouncedSave();
-
 function scheduleBgSave(sessionId: string): void {
-  bgSaveScheduler.schedule(sessionId, {
+  if (getForegroundSessionId() === sessionId) return;
+  transcriptSave().schedule(sessionId, {
     run: () => {
       const slot = slots.get(sessionId);
-      if (!slot) return;
-      void saveSessionMessages(sessionId, slot.messages);
+      if (!slot || getForegroundSessionId() === sessionId) return;
+      void persistTranscriptNow(sessionId, slot.messages);
     },
   });
 }

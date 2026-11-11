@@ -23,7 +23,7 @@ Thinker Workbench 是面向本地仓库的 AI 编程桌面端。你在工作区�
 | | |
 |---|---|
 | **Node.js** | 22+ |
-| **pnpm** | **11.12.0**（由 `packageManager` 固定 — 不要用 npm/yarn） |
+| **pnpm** | **12.15.0**（由 `packageManager` 固定 — 不要用 npm/yarn） |
 | **操作系统** | Windows / macOS / Linux |
 | **Electron** | 37（workspace 依赖） |
 
@@ -124,7 +124,7 @@ API Key 经 Electron `safeStorage` 加密，钥匙串条目名为 **Thinker Work
 | `workspaces/<id>/trace/` | workspace | Trace 索引库 + 会话载荷 jsonl |
 | `workspaces/ws_default/project/` | content | 内置默认工作区根（id 固定） |
 | `customize/{rules,skills,agents,mcps}/` | content | 全局 rules / skills / subagents / MCP |
-| `cache/browser-screenshots/`、`cache/computer/images/` | cache | 可再生截图（按天数 + 总大小清理） |
+| `cache/browser-screenshots/` | cache | 可再生浏览器截图（按天数 + 总大小清理） |
 
 删除工作区会整目录带走 `workspaces/<id>/`（聊天、附图、附件、检查点、trace、记忆）。默认工作区（`ws_default`）不可删除，只能清空会话。
 

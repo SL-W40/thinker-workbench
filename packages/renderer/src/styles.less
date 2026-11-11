@@ -16,11 +16,6 @@ body,
   margin: 0;
 }
 
-/* 设置 → 外观：界面字体缩放（zoom 由 renderer 启动/设置变更时写到 html 内联样式，
- * 支持 0.8–1.25 之间的任意步进刻度，不再用 CSS 档位枚举） */
-
-
-
 body {
   font-family: var(--font);
   color: var(--ink);
@@ -58,8 +53,9 @@ code {
 
 .chat-shell {
   /*
-   * 三栏宽度以 CSS 变量下发（useChatPanels 的 shellVars）：
-   * 拖拽时只改这三个变量，不需要把宽度灌进 React state，整棵树不用重渲染。
+   * 左右栏宽度以 CSS 变量下发（useChatPanels 的 shellVars）。
+   * 拖拽时只改变量，不把宽度灌进 React state，整棵树不用重渲染。
+   * 中间列不钉死，见 .chat-main--fitted。
    */
   --chat-left-width: 260px;
   --chat-right-width: 380px;
@@ -83,7 +79,7 @@ code {
     var(--composer-max-width),
     calc(100% - 2 * var(--composer-gutter))
   );
-  /* 量到壳宽前先吃剩余；量到后由 .chat-main--fitted 用 --chat-main-width 钉死 */
+  /* 始终吃剩余。左右栏定宽，缩放改壳宽时中间列让位，避免右栏被裁掉一帧。 */
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -99,11 +95,14 @@ code {
 }
 
 /*
- * 量到壳宽后中间列由变量钉死；未量到时（--chat-main-width 未下发）上面那条
- * flex: 1 1 auto 继续吃剩余。必须排在 .chat-main 之后，否则同特异性被后者覆盖。
+ * 中间列继续吃剩余，不要钉成 `flex: 0 0 var(--chat-main-width)`。
+ * 三栏定宽加起来刚好是上一帧的壳宽。Electron 页面缩放会先改壳的 CSS 像素宽度，
+ * 多出来的那一截被 .chat-shell 的 overflow:hidden 从右侧裁掉，右栏（Changes）就闪一帧，
+ * 左栏和聊天列还在视口里，所以只有右侧在闪。左右栏仍是定宽，拖拽只改那两个变量。
  */
 .chat-main--fitted {
-  flex: 0 0 var(--chat-main-width);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /*
@@ -1140,13 +1139,6 @@ code {
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.01em;
   }
-}
-
-/* 字体缩放滑块：堆叠行内占满宽度，但不超过可读宽度 */
-.settings-font-scale {
-  align-self: stretch;
-  width: 100%;
-  max-width: 420px;
 }
 
 .settings-shortcut-group {

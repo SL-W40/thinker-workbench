@@ -13,7 +13,7 @@ import {
 import { buildChatModeAddendum, getChatMode } from "../chatMode";
 import { getDataDir } from "../config/dataDir";
 import { contentToPlainText, countImageRefs, IMAGE_TOKEN_ESTIMATE } from "../model/imageParts";
-import type { ChatMessage, ChatToolDefinition } from "../model/types";
+import type { ModelMessage, ChatToolDefinition } from "../model/types";
 import { buildEnvironmentContextMessage } from "../prompts/environment";
 import { emojiInstruction, languageInstruction, SYSTEM_PROMPT } from "../prompts/system";
 import { joinSystemSections, type SystemSection } from "../prompts/systemSections";
@@ -27,7 +27,7 @@ import { loadContextFilesBlock } from "./loadContextFiles";
 import { estimateTokens } from "./tokens";
 
 export type AssembleContextInput = {
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   aiLocale: AiLocale;
   allowEmoji?: boolean;
   contextWindow?: number;
@@ -60,7 +60,7 @@ export type AssembledContext = {
   tools: ChatToolDefinition[];
   /** tools 的序列化副本；与 segments.tools 同源，避免重复 stringify。 */
   toolsJson: string;
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   segments: ContextUsageSegment[];
   usage: ContextUsageSnapshot;
 };
@@ -73,7 +73,7 @@ export function buildBaseSystemPrompt(locale: AiLocale, allowEmoji = false): str
   return parts.join("\n\n");
 }
 
-function latestUserFromMessages(messages: ChatMessage[]): string {
+function latestUserFromMessages(messages: ModelMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (!m) continue;
@@ -82,7 +82,7 @@ function latestUserFromMessages(messages: ChatMessage[]): string {
   return "";
 }
 
-function conversationText(messages: ChatMessage[]): string {
+function conversationText(messages: ModelMessage[]): string {
   return messages
     .map((m) => {
       const content = contentToPlainText(m.content);
@@ -196,7 +196,7 @@ export function clearStaticContextCache(): void {
  * 对话段 token 估算：消息序列没变就复用上次结果。
  * 指纹取「条数 + 最后一条的内容长度」，足以排除绝大多数抖动又不会误判。
  */
-function conversationTokens(messages: ChatMessage[]): number {
+function conversationTokens(messages: ModelMessage[]): number {
   const last = messages[messages.length - 1];
   const key = `${messages.length}|${last ? contentToPlainText(last.content).length : 0}`;
   if (conversationCache && conversationCache.key === key) return conversationCache.tokens;

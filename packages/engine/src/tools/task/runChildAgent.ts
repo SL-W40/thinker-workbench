@@ -8,7 +8,7 @@ import { assembleContext } from "../../context/assembleContext";
 import { startedToolCallIdSet } from "../../graph/nodes/toolsResume";
 import { chatWithFailover, configureModelCatalog, getModelSelection } from "../../model/catalog";
 import { getAiLocale, getAllowEmoji, getContextWindow } from "../../model/openai";
-import type { ChatMessage } from "../../model/types";
+import type { ModelMessage } from "../../model/types";
 import { joinSystemSections } from "../../prompts/systemSections";
 import {
   getRunContext,
@@ -39,7 +39,7 @@ import {
 } from "./childLiveText";
 import { deriveTaskTitle } from "./title";
 
-export function synthesizePartialSummary(messages: ChatMessage[]): string {
+export function synthesizePartialSummary(messages: ModelMessage[]): string {
   const parts: string[] = [];
   for (let i = messages.length - 1; i >= 0 && parts.length < 4; i--) {
     const m = messages[i];
@@ -143,7 +143,7 @@ export async function runChildAgent(options: {
         };
 
         try {
-          const messages: ChatMessage[] = [{ role: "user", content: options.prompt }];
+          const messages: ModelMessage[] = [{ role: "user", content: options.prompt }];
           emitProgress("Starting…", { type: "status", status: "planning" });
 
           // 执行步数预算：每次模型调用与每次工具执行各计 1 步（与主图 superstep 同语义）
@@ -217,7 +217,7 @@ export async function runChildAgent(options: {
               options.signal,
             );
 
-            const assistant: ChatMessage = {
+            const assistant: ModelMessage = {
               role: "assistant",
               content: result.content,
               ...(result.toolCalls.length ? { tool_calls: result.toolCalls } : {}),

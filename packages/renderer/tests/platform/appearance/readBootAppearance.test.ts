@@ -6,7 +6,7 @@ import { describe, it } from "vitest";
 import { readBootAppearance } from "../../../src/platform/appearance/readBootAppearance";
 
 describe("readBootAppearance", () => {
-  it("读同步设置里的主题和字号", () => {
+  it("读同步设置里的主题", () => {
     Object.assign(globalThis, {
       location: { search: "" },
       window: {
@@ -15,7 +15,6 @@ describe("readBootAppearance", () => {
           settings: {
             getGeneralSync: () => ({
               uiTheme: "dark",
-              uiFontScale: "large",
               customThemes: [],
             }),
           },
@@ -24,7 +23,6 @@ describe("readBootAppearance", () => {
     });
     const boot = readBootAppearance();
     assert.equal(boot.themeId, "dark");
-    assert.equal(boot.fontScale, "large");
     assert.equal(boot.theme.id, "dark");
   });
 
@@ -38,6 +36,5 @@ describe("readBootAppearance", () => {
     });
     const boot = readBootAppearance();
     assert.equal(boot.themeId, "aurora");
-    assert.equal(boot.fontScale, "medium");
   });
 });

@@ -165,6 +165,16 @@
   line-height: 1.45;
 }
 
+.ws-sidebar__notice {
+  margin: 8px 8px 0;
+  padding: 8px 10px;
+  color: var(--ink, #2c2824);
+  background: var(--paper-2, #f3efe6);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .ws-workspace {
   margin-bottom: 2px;
 
@@ -381,16 +391,12 @@
     }
   }
 
-  /* 排队：空心圆，不用 running 的彗星动画 */
+  /* 排队：细环，圆心落在 14px 槽的正中。边框画的小圆在 1.5x 下会歪成方块。 */
   &.is-queued {
     color: var(--tw-accent-strong, #3d6b4f);
 
     &::after {
-      width: 6px;
-      height: 6px;
-      background: transparent;
-      border: 1.5px solid currentColor;
-      opacity: 1;
+      display: none;
     }
   }
 
@@ -434,6 +440,12 @@
     animation: ws-session-orbit 0.96s infinite steps(1, end);
     pointer-events: none;
   }
+}
+
+.ws-session__queue {
+  display: block;
+  width: 14px;
+  height: 14px;
 }
 
 /* 亮头顺时针挪一格；尾随一格略弱；其余保持淡底 */

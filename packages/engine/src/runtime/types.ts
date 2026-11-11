@@ -4,6 +4,7 @@
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type { AgentRunCommand } from "@thinker-workbench/shared";
 import type { CompiledAgentGraph } from "../graph/buildGraph";
+import type { MemoryHost } from "../memory/host";
 
 /** 创建 runtime 时的可选依赖注入。 */
 export type AgentRuntimeOptions = {
@@ -13,6 +14,8 @@ export type AgentRuntimeOptions = {
   checkpointer?: BaseCheckpointSaver;
   /** 已编译图；不传则 buildGraph(checkpointer)。 */
   graph?: CompiledAgentGraph;
+  /** 记忆服务。同一 utility 进程里的 runtime 应共享一份。 */
+  memoryHost?: MemoryHost;
 };
 
 /** 一次对话运行的请求。 */

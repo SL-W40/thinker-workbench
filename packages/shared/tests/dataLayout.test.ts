@@ -38,9 +38,6 @@ describe("dataLayout", () => {
         .replace(/\\/g, "/")
         .endsWith("/cache/browser-screenshots"),
     );
-    assert.ok(
-      dataPath(dir, "cacheComputerImages").replace(/\\/g, "/").endsWith("/cache/computer/images"),
-    );
   });
 
   it("工作区级落点缺 workspaceId 时报错（避免写出无归属数据）", () => {
@@ -70,7 +67,7 @@ describe("dataLayout", () => {
       }
     }
     const cacheEntries = entries.filter((e) => e.kind === "cache");
-    assert.ok(cacheEntries.length >= 2);
+    assert.ok(cacheEntries.length >= 1);
   });
 
   it("工作区级条目一律随工作区删除", () => {
@@ -81,11 +78,10 @@ describe("dataLayout", () => {
     }
   });
 
-  it("会话附图白名单覆盖 workspaces 与 computer 截图目录", () => {
+  it("会话附图白名单覆盖 workspaces 下的 images 与 attachments", () => {
     const allowed = chatImageAllowed(path.join(ROOT, "tmp-data"));
     assert.ok(allowed.workspacesRoot.replace(/\\/g, "/").endsWith("/workspaces"));
     assert.deepEqual([...allowed.workspaceKinds], ["images", "attachments"]);
-    assert.ok(allowed.computerImagesDir.replace(/\\/g, "/").endsWith("/cache/computer/images"));
   });
 
   it("源码护栏：不得再出现布局表之外的 dataDir 直拼", () => {

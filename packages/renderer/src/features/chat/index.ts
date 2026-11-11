@@ -27,6 +27,7 @@ export { ChatSidePanel } from "./panels/ChatSidePanel";
 export { ChatStage } from "./panels/ChatStage";
 export { SessionTodoBar } from "./panels/SessionTodoBar";
 export { useStickToBottomScroll } from "./panels/useStickToBottomScroll";
+export { StartupIssues } from "./panels/StartupIssues";
 export { WorkspaceSidebar } from "./panels/WorkspaceSidebar";
 // 顶部选择器
 export { ModelPicker } from "./pickers/ModelPicker";

@@ -16,13 +16,14 @@ import "@thinker-workbench/design/controls.less";
 import "@thinker-workbench/markdown/styles.less";
 import "katex/dist/katex.min.css";
 import { RootApp } from "./app";
-import { applyUiFontScale } from "./platform/appearance/fontScale";
+import { watchPageZoom } from "./platform/appearance/pageZoom";
 import { readBootAppearance } from "./platform/appearance/readBootAppearance";
 import { installBlankRootRecovery } from "./platform/dev";
 import "./styles.less";
 
 // 全局禁止 Tab 切换焦点（桌面端以指针为主）
 disableTabFocusNav();
+watchPageZoom();
 
 /** 外观就绪后，毛玻璃闪屏再停留的毫秒数（让产品名逐字动画播完）。 */
 const BOOT_HOLD_MS = 1100;
@@ -33,7 +34,6 @@ const BOOT_APPEARANCE_FALLBACK_MS = 2000;
 
 const boot = readBootAppearance();
 applyDesignTheme(boot.theme);
-applyUiFontScale(boot.fontScale);
 
 /**
  * 在 AppearanceProvider 发出就绪事件（或超时）后，短暂保留闪屏再淡出移除。

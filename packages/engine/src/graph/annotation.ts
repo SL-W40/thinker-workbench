@@ -4,9 +4,9 @@
  */
 import { Annotation } from "@langchain/langgraph";
 import type { ChatAttachmentRef } from "@thinker-workbench/shared";
-import type { ChatMessage, ChatToolCall } from "../model/types";
+import type { ModelMessage, ChatToolCall } from "../model/types";
 
-function appendMessages(left: ChatMessage[], right: ChatMessage[]): ChatMessage[] {
+function appendMessages(left: ModelMessage[], right: ModelMessage[]): ModelMessage[] {
   if (!right.length) return left;
   if (!left.length) return right;
   return left.concat(right);
@@ -29,7 +29,7 @@ export function mergeStartedIds(left: string[], right: string[]): string[] {
 
 export const AgentStateAnnotation = Annotation.Root({
   message: Annotation<string>,
-  messages: Annotation<ChatMessage[], ChatMessage[]>({
+  messages: Annotation<ModelMessage[], ModelMessage[]>({
     reducer: appendMessages,
     default: () => [],
   }),
@@ -66,7 +66,7 @@ export const AgentStateAnnotation = Annotation.Root({
    * 模型可见的「压缩副本」消息数组。LastValue（右侧为空则保留）。
    * 压缩后写回此通道以替换追加日志（messages 通道仍是源真实日志）。
    */
-  messagesOverride: Annotation<ChatMessage[] | undefined>({
+  messagesOverride: Annotation<ModelMessage[] | undefined>({
     reducer: (left, right) => (right === undefined ? left : right),
     default: () => [],
   }),

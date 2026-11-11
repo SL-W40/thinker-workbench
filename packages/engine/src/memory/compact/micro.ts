@@ -8,7 +8,7 @@
  * 当前问题与其后的工具轮次永不丢弃，否则模型会回退回答历史里的旧问题。
  */
 
-import type { ChatMessage } from "../../model/types";
+import type { ModelMessage } from "../../model/types";
 import { alignSafeCut, findLastUserStart } from "./shared";
 
 export interface MicroOptions {
@@ -20,7 +20,7 @@ export interface MicroOptions {
   maxMessageChars?: number;
 }
 
-function truncateMessage(m: ChatMessage, maxChars: number): ChatMessage {
+function truncateMessage(m: ModelMessage, maxChars: number): ModelMessage {
   if (typeof m.content === "string") {
     if (m.content.length <= maxChars) return m;
     return { ...m, content: `${m.content.slice(0, maxChars)}\n…(truncated)` };
@@ -29,7 +29,7 @@ function truncateMessage(m: ChatMessage, maxChars: number): ChatMessage {
 }
 
 /** micro 压缩（不可变）。 */
-export function microCompact(messages: ChatMessage[], opts: MicroOptions = {}): ChatMessage[] {
+export function microCompact(messages: ModelMessage[], opts: MicroOptions = {}): ModelMessage[] {
   const keepFirst = opts.keepFirst ?? 1;
   const keepRecent = opts.keepRecent ?? 24;
   const maxChars = opts.maxMessageChars ?? 4_000;

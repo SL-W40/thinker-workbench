@@ -3,22 +3,24 @@
  */
 
 import type { ChatPlan } from "@thinker-workbench/shared";
-import { type Dispatch, type SetStateAction, useCallback } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useRef } from "react";
 import { forgetSubagentStep } from "../../../platform/ipc/subagent";
 import { workspaceWriteFile } from "../../../platform/ipc/workspaceFs";
 import { useT } from "../../../ui/i18n/useI18n";
 import { pushFileRecent } from "../fileRecents";
 import { resolveActiveKey } from "../inspectorUi";
 import type { MediaPreviewInfo } from "../MediaPreview";
-import {
-  BROWSER_TAB_KEY,
-  CHANGES_TAB_KEY,
-  FILES_TAB_KEY,
-  type StageTab,
-  TERMINAL_TAB_KEY,
-} from "../types";
+import { CHANGES_TAB_KEY, type StageTab, TERMINAL_TAB_KEY } from "../types";
 import { loadFileBuffers } from "./fileBuffers";
-import { baseName, fileTabKey, isDraftTabKey, normalizeRelPath, planTabKey } from "./tabs";
+import {
+  baseName,
+  browserTabKey,
+  fileTabKey,
+  isDraftTabKey,
+  newBrowserTabId,
+  normalizeRelPath,
+  planTabKey,
+} from "./tabs";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -34,7 +36,6 @@ export type FileTabSetters = {
   setTabs: Dispatch<SetStateAction<StageTab[]>>;
   setActiveTab: Dispatch<SetStateAction<string>>;
   setTerminalFocusId: Dispatch<SetStateAction<string | null>>;
-  setBrowserPendingUrl: Dispatch<SetStateAction<string | null>>;
   setDrafts: Dispatch<SetStateAction<Record<string, string>>>;
   setSaved: Dispatch<SetStateAction<Record<string, string>>>;
   setUnsaved: Dispatch<SetStateAction<Record<string, boolean>>>;
@@ -76,7 +77,6 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     setTabs,
     setActiveTab,
     setTerminalFocusId,
-    setBrowserPendingUrl,
     setDrafts,
     setSaved,
     setUnsaved,
@@ -141,16 +141,37 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     [ensureTab, t, setTerminalFocusId],
   );
 
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const activeKeyRef = useRef(currentTab?.key ?? "");
+  activeKeyRef.current = currentTab?.key ?? "";
+  /** 「关闭其他 / 右侧 / 全部」里尚未确认的脏文件，一次弹一个。 */
+  const pendingDirtyCloses = useRef<string[]>([]);
+
+  /**
+   * 打开浏览器标签。
+   * - new：外部入口（+ 菜单、聊天 / Markdown 链接）每次都新开一个
+   * - focus：已经在某个浏览器标签里（地址栏、页内跳转、主进程对当前页的导航）就留在这一页
+   */
   const openBrowser = useCallback(
-    (url?: string) => {
-      ensureTab({
-        key: BROWSER_TAB_KEY,
+    (url?: string, mode: "new" | "focus" = "new") => {
+      const trimmed = url?.trim() ?? "";
+      if (mode === "focus") {
+        const active = tabsRef.current.find((tab) => tab.key === activeKeyRef.current);
+        if (active?.kind === "browser") return;
+      }
+      const browserId = newBrowserTabId();
+      const tab: StageTab = {
+        key: browserTabKey(browserId),
         kind: "browser",
         title: t("inspector.section.browser"),
-      });
-      if (url?.trim()) setBrowserPendingUrl(url.trim());
+        browserId,
+        url: trimmed,
+      };
+      setTabs((prev) => [...prev, tab]);
+      setActiveTab(tab.key);
     },
-    [ensureTab, t, setBrowserPendingUrl],
+    [setTabs, setActiveTab, t],
   );
 
   /**
@@ -174,14 +195,6 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
       key: CHANGES_TAB_KEY,
       kind: "changes",
       title: t("inspector.section.changes"),
-    });
-  }
-
-  function openFilesPane() {
-    ensureTab({
-      key: FILES_TAB_KEY,
-      kind: "files",
-      title: t("inspector.section.files"),
     });
   }
 
@@ -299,7 +312,10 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     const closeAfter = Boolean(saveAs.closeAfter);
     setSaveAs(null);
     await writeFileAt(key, path);
-    if (closeAfter) forceCloseTab(fileTabKey(path));
+    if (closeAfter) {
+      forceCloseTab(fileTabKey(path));
+      advanceDirtyClose();
+    }
   }
 
   /** 新建：直接打开未命名编辑器，保存时再填路径。*/
@@ -315,8 +331,9 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     setUnsaved((d) => ({ ...d, [key]: true }));
   }
 
-  /** 关闭标签（不经未保存确认）。*/
+  /** 关闭标签（不经未保存确认）。变更面板常驻，关不掉。*/
   function forceCloseTab(key: string) {
+    if (key === CHANGES_TAB_KEY) return;
     setTabs((prev) => {
       const closing = prev.find((t) => t.key === key);
       if (closing?.kind === "subagent") {
@@ -335,6 +352,8 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
   }
 
   function closeTab(key: string) {
+    if (key === CHANGES_TAB_KEY) return;
+    pendingDirtyCloses.current = [];
     const tab = tabs.find((t) => t.key === key);
     if (tab?.kind === "file" && unsaved[key]) {
       setCloseDirtyKey(key);
@@ -343,13 +362,43 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     forceCloseTab(key);
   }
 
+  /** 批量关闭。干净标签立刻关；未保存的文件按队列逐个确认。变更面板不在范围内。 */
+  function closeTabs(keys: string[]) {
+    const closable = keys.filter((key) => key !== CHANGES_TAB_KEY);
+    setSaveAs((current) => (current && closable.includes(current.key) ? null : current));
+    const clean: string[] = [];
+    const dirty: string[] = [];
+    for (const key of closable) {
+      const tab = tabs.find((item) => item.key === key);
+      if (!tab) continue;
+      if (tab.kind === "file" && unsaved[key]) dirty.push(key);
+      else clean.push(key);
+    }
+    for (const key of clean) forceCloseTab(key);
+    pendingDirtyCloses.current = dirty.slice(1);
+    setCloseDirtyKey(dirty[0] ?? null);
+  }
+
+  function advanceDirtyClose() {
+    setCloseDirtyKey(pendingDirtyCloses.current.shift() ?? null);
+  }
+
+  /** 放弃后续未保存确认（取消弹窗，或关掉另存为）。 */
+  function cancelDirtyClose() {
+    pendingDirtyCloses.current = [];
+    setCloseDirtyKey(null);
+  }
+
   /** 未保存关闭弹窗：保存后关闭。*/
   async function saveAndCloseDirty() {
     if (!closeDirtyKey) return;
     const key = closeDirtyKey;
     const tab = tabs.find((t) => t.key === key);
     setCloseDirtyKey(null);
-    if (tab?.kind !== "file") return;
+    if (tab?.kind !== "file") {
+      pendingDirtyCloses.current = [];
+      return;
+    }
     if (!tab.path || isDraftTabKey(key)) {
       setSaveAs({
         key,
@@ -360,13 +409,14 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     }
     await writeFileAt(key, tab.path);
     forceCloseTab(key);
+    advanceDirtyClose();
   }
 
   function discardAndCloseDirty() {
     if (!closeDirtyKey) return;
     const key = closeDirtyKey;
-    setCloseDirtyKey(null);
     forceCloseTab(key);
+    advanceDirtyClose();
   }
 
   function onFileDraftChange(value: string) {
@@ -381,7 +431,6 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     openTerminal,
     openBrowser,
     openChanges,
-    openFilesPane,
     openFile,
     openPlan,
     saveFile,
@@ -389,6 +438,8 @@ export function useFileTabs(state: FileTabState, setters: FileTabSetters) {
     onNewFile,
     forceCloseTab,
     closeTab,
+    closeTabs,
+    cancelDirtyClose,
     saveAndCloseDirty,
     discardAndCloseDirty,
     onFileDraftChange,

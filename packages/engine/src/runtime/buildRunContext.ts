@@ -22,6 +22,8 @@ import {
   type WorkspaceAccess,
 } from "@thinker-workbench/shared";
 import { type RuntimeLimits, resolveRuntimeLimits } from "../config/runtimeLimits";
+import type { MemoryHost } from "../memory/host";
+import { createMemoryHost } from "../memory/host";
 import type { MemoryRepository } from "../memory/repository";
 import type { RunContext } from "./runContext";
 import { createUsageLedger } from "./runContext";
@@ -39,6 +41,8 @@ export type BuildRunContextInput = {
   workspaceId?: string;
   /** 记忆仓库；省略则记忆仅运行时（不持久化）。 */
   memoryRepository?: MemoryRepository;
+  /** 进程级记忆服务。省略时为本轮新建一份（测试）；生产由 runtime 传入同一份。 */
+  memoryHost?: MemoryHost;
   chatMode?: ChatMode;
   workspaceAccess?: WorkspaceAccess;
   allowAiDeleteFiles?: boolean;
@@ -94,6 +98,7 @@ export function buildRunContext(input: BuildRunContextInput): RunContext {
     dataDir: input.dataDir,
     workspaceId: input.workspaceId?.trim() || undefined,
     memoryRepository: input.memoryRepository,
+    memoryHost: input.memoryHost ?? createMemoryHost(),
     chatMode: normalizeChatMode(input.chatMode ?? DEFAULT_CHAT_MODE),
     workspaceAccess: normalizeWorkspaceAccess(input.workspaceAccess, DEFAULT_WORKSPACE_ACCESS),
     allowAiDeleteFiles: input.allowAiDeleteFiles !== false,

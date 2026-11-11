@@ -2,14 +2,14 @@
  * Skills 发现与激活。
  *
  * 路径（后者覆盖同名）：
- * 1. dataDir/skills 下递归 SKILL.md
+ * 1. `<dataDir>/customize/skills` 下递归 SKILL.md
  * 2. workspace/.thinker/skills 下递归 SKILL.md
  *
- * Frontmatter：name / description / paths|globs / disable-model-invocation。
+ * 文档解析走 shared `parseSkillDocument`，与桌面菜单同一规则。
  */
 import fs from "node:fs";
 import path from "node:path";
-import { dataPath, parseYamlFrontmatter } from "@thinker-workbench/shared";
+import { dataPath, isSkillFileName, parseSkillDocument } from "@thinker-workbench/shared";
 
 /** 单个已解析 skill。 */
 export type SkillDefinition = {
@@ -52,33 +52,14 @@ function walkSkillMd(root: string): string[] {
         walk(abs);
         continue;
       }
-      if (ent.isFile() && ent.name === "SKILL.md") out.push(abs);
+      if (ent.isFile() && isSkillFileName(ent.name)) out.push(abs);
     }
   };
   walk(root);
   return out;
 }
 
-function asStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((v) => String(v).trim()).filter(Boolean);
-  }
-  if (typeof value === "string" && value.trim()) {
-    return value
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
-function normalizeSkillName(name: string, folderName: string): string {
-  const raw = (name || folderName).trim().toLowerCase();
-  const cleaned = raw.replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  return cleaned || folderName.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-}
-
-/** 从单个 SKILL.md 解析定义。 */
+/** 从单个 SKILL.md 解析定义。没有 description 则不是 skill。 */
 function parseSkillFile(absPath: string, source: string): SkillDefinition | null {
   let raw: string;
   try {
@@ -87,23 +68,9 @@ function parseSkillFile(absPath: string, source: string): SkillDefinition | null
     return null;
   }
   const folderName = path.basename(path.dirname(absPath));
-  const { data: meta, body } = parseYamlFrontmatter(raw);
-  const name = normalizeSkillName(
-    typeof meta.name === "string" ? meta.name : folderName,
-    folderName,
-  );
-  const description = typeof meta.description === "string" ? meta.description.trim() : "";
-  if (!description) return null;
-  const paths = [...asStringList(meta.paths), ...asStringList(meta.globs)];
-  const disableModelInvocation = meta["disable-model-invocation"] === true;
-  return {
-    name,
-    description,
-    body: body.trim(),
-    paths,
-    disableModelInvocation,
-    source,
-  };
+  const doc = parseSkillDocument(raw, folderName);
+  if (!doc) return null;
+  return { ...doc, source };
 }
 
 /** glob 语义下需要转义的正则元字符。 */

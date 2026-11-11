@@ -23,6 +23,7 @@ import {
 import { useEffect } from "react";
 import { onTerminalEvent } from "../../../platform/ipc/terminal";
 import { onAgentEvent } from "../../../platform/ipc/thinker";
+import { persistTranscriptNow } from "./chatPersistence";
 import { finishMessageClock } from "../message/messageClock";
 import { failAssistantMessage } from "../message/messageModel";
 import {
@@ -258,6 +259,8 @@ export function useChatEventStream(state: ChatRunState, deps: ChatEventStreamDep
           timeline: [],
         });
       }
+      const sid = state.sessionIdRef.current;
+      if (sid) void persistTranscriptNow(sid, state.messagesRef.current);
     };
 
     /** error：区分「本地已写 CANCELLED」与引擎文案，补粗估 usage。 */
@@ -330,6 +333,8 @@ export function useChatEventStream(state: ChatRunState, deps: ChatEventStreamDep
           timeline: [],
         });
       }
+      const sid = state.sessionIdRef.current;
+      if (sid) void persistTranscriptNow(sid, state.messagesRef.current);
     };
 
     const boundSessionEpoch = state.sessionEpoch.capture();

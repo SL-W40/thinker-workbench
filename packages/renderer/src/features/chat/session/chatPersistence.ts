@@ -1,10 +1,11 @@
 /**
  * 落库防抖调度与 epoch 陈旧判定的纯逻辑。
  *
- * 收敛两条独立的 400ms 防抖通道（前台 scheduleSave / 后台槽保存）为一套调度语义，
- * 并把 useChatSession 内 sessionEpoch / runEpoch 两套自造计数器的
- * 「是否已过期」判定收敛为同一实现。
+ * 前台时间线与后台槽共用 `transcriptSave()`：同一会话只有一个待落库计时器。
+ * sqlite 写入只走 `saveSessionMessages`。
  */
+import type { ChatMessage } from "@thinker-workbench/shared";
+import { saveSessionMessages } from "../../../platform/ipc/workspaces";
 
 /** 落库防抖毫秒：前台保存与后台槽保存共用同一档。 */
 export const SAVE_DEBOUNCE_MS = 400;
@@ -32,6 +33,27 @@ export type SaveTimers = {
   setTimeout: (fn: () => void, ms: number) => number;
   clearTimeout: (id: number) => void;
 };
+
+let sharedSave: DebouncedSave | null = null;
+
+/** 进程内唯一的会话落库调度器。前台与后台槽都用它。 */
+export function transcriptSave(): DebouncedSave {
+  sharedSave ??= createDebouncedSave();
+  return sharedSave;
+}
+
+/** 取消该会话的防抖，立刻写入。终态和切会话走这里，避免 400ms 内退出丢最后一帧。 */
+export async function persistTranscriptNow(
+  sessionId: string,
+  messages: ChatMessage[],
+): Promise<void> {
+  transcriptSave().cancel(sessionId);
+  try {
+    await saveSessionMessages(sessionId, messages);
+  } catch {
+    // 会话可能已删；主进程幂等忽略
+  }
+}
 
 const defaultSaveTimers: SaveTimers = {
   // 延迟引用 window：模块被 node 环境导入时不会因缺少 window 而崩

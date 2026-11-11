@@ -102,7 +102,10 @@ export function registerSettingsHandlers(
   // 录制中：主进程跳过 reload；窗口销毁时清掉标记
   ipcMain.on(IpcChannels.settingsShortcutRecording, (evt, active: unknown) => {
     const id = evt.sender.id;
-    setShortcutRecording(id, Boolean(active));
+    const recording = Boolean(active);
+    setShortcutRecording(id, recording);
+    // 录制时把 Ctrl/Cmd +/-/0 还给页面，否则菜单加速器会先吃掉按键
+    if (!evt.sender.isDestroyed()) evt.sender.setIgnoreMenuShortcuts(recording);
     if (!recordingCleanupBound.has(id)) {
       recordingCleanupBound.add(id);
       evt.sender.once("destroyed", () => {

@@ -5,7 +5,7 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { getLimit } from "../../../config/runtimeLimits";
 import { sleep } from "../../../model/retry";
-import type { ChatMessage, ChatToolCall } from "../../../model/types";
+import type { ModelMessage, ChatToolCall } from "../../../model/types";
 import { getLoadedToolNames, markToolCallStarted } from "../../../runtime/runContext";
 import { seedFailedBackgroundTask } from "../../../tools/task/execute";
 import type { AgentGraphState, AgentGraphUpdate } from "../../annotation";
@@ -74,7 +74,7 @@ export async function tools(
       prepared.push({ call, action });
     }
 
-    const toolMessages: ChatMessage[] = [];
+    const toolMessages: ModelMessage[] = [];
     await Promise.all(
       prepared.map(async ({ call, action }) => {
         if (action === "reuse") {
@@ -116,7 +116,7 @@ export async function tools(
       throw new Error("Run cancelled.");
     }
     // 保持与 batch 顺序一致；messages 只返回本轮新增（由 reducer 追加）
-    const ordered: ChatMessage[] = [];
+    const ordered: ModelMessage[] = [];
     for (const { call, action } of prepared) {
       if (action === "reuse") continue;
       const msg = toolMessages.find((m) => m.tool_call_id === call.id);

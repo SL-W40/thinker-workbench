@@ -4,7 +4,7 @@
  * 摘要提示词明确其只是背景，防止模型回退回答历史里的旧问题。返回新数组（不可变）。
  */
 
-import type { ChatMessage } from "../../model/types";
+import type { ModelMessage } from "../../model/types";
 import type { ChatFn } from "../repository";
 import { alignSafeCut, findLastUserStart, renderForModel } from "./shared";
 import type { CompactResult } from "./types";
@@ -16,7 +16,7 @@ const SUMMARY_SYSTEM =
   "paths, function/tool names, decisions, and unresolved issues. Use short bullets. No preamble.";
 
 export async function fullCompact(
-  messages: ChatMessage[],
+  messages: ModelMessage[],
   chat: ChatFn,
   opts: { keepFirst?: number } = {},
 ): Promise<CompactResult> {
@@ -38,7 +38,7 @@ export async function fullCompact(
 
   const digest = renderForModel(middle);
   const summary = (await chat(SUMMARY_SYSTEM, `Conversation to summarize:\n${digest}`)).trim();
-  const summaryMsg: ChatMessage = {
+  const summaryMsg: ModelMessage = {
     role: "user",
     content: `<session summary of earlier turns>\n${summary}`,
   };

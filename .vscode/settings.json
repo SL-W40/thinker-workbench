@@ -1,11 +1,13 @@
 {
   "files.watcherExclude": {
     "**/node_modules/**": true,
-    "**/packages/*/artifacts/**": true
+    "**/packages/*/artifacts/**": true,
+    "**/.stage/**": true
   },
   "search.exclude": {
     "**/node_modules": true,
-    "**/packages/*/artifacts": true
+    "**/packages/*/artifacts": true,
+    "**/.stage": true
   },
   "json.schemaDownload.enable": true,
   "editor.formatOnSave": true,
