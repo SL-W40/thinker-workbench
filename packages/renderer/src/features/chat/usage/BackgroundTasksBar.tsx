@@ -216,7 +216,7 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
             const label = taskLabel(s);
             return (
               <li key={s.sessionId} className="bg-tasks__row">
-                <span className="bg-tasks__cmd" title={label}>
+                <span className="bg-tasks__cmd">
                   <span className="bg-tasks__dot" aria-hidden="true" />
                   <span className="bg-tasks__text">{label}</span>
                 </span>
@@ -262,7 +262,7 @@ export function BackgroundTasksBar({ threadId, runId, onOpenTerminal }: Props) {
             const label = s.title?.trim() || typeName;
             return (
               <li key={s.taskId} className="bg-tasks__row">
-                <span className="bg-tasks__cmd" title={label}>
+                <span className="bg-tasks__cmd">
                   <span className="bg-tasks__dot" aria-hidden="true" />
                   <span className="bg-tasks__text">{label}</span>
                 </span>

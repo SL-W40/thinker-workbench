@@ -12,7 +12,7 @@ vi.mock("../../../src/ui/i18n/useI18n", () => ({
 }));
 
 import type { ChangeTreeNode } from "../../../src/features/inspector/changesTree";
-import { TabStrip } from "../../../src/features/inspector/RightInspector/TabStrip";
+import { revealTabScrollDelta, TabStrip } from "../../../src/features/inspector/RightInspector/TabStrip";
 import type { StageTab } from "../../../src/features/inspector/types";
 
 const tabs: StageTab[] = [
@@ -180,5 +180,28 @@ describe("TabStrip", () => {
     assert.ok(screen.getByText("inspector.files.emptyTree"));
     assert.ok(screen.getByText("inspector.files.emptyTreeBody"));
     assert.equal(screen.queryByRole("tree"), null);
+  });
+});
+
+describe("revealTabScrollDelta", () => {
+  it("右侧被钉住的按钮挡住时向右滚，直到标签完整露出", () => {
+    assert.equal(
+      revealTabScrollDelta({ tabLeft: 200, tabRight: 300, viewLeft: 0, viewRight: 250 }),
+      56,
+    );
+  });
+
+  it("左侧被裁切时向左滚", () => {
+    assert.equal(
+      revealTabScrollDelta({ tabLeft: -20, tabRight: 80, viewLeft: 0, viewRight: 250 }),
+      -26,
+    );
+  });
+
+  it("已经完整可见则不滚", () => {
+    assert.equal(
+      revealTabScrollDelta({ tabLeft: 20, tabRight: 120, viewLeft: 0, viewRight: 250 }),
+      0,
+    );
   });
 });

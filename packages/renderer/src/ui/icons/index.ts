@@ -10,7 +10,6 @@ export {
   TerminalStartIcon,
 } from "./startIcons";
 export {
-  IconCheck,
   IconChevron,
   IconPanelHide,
   IconUndo,

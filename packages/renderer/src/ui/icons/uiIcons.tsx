@@ -61,25 +61,6 @@ export function IconUndo() {
   );
 }
 
-/** 采纳（对勾）图标。 */
-export function IconCheck() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3.4 8.6l3 3 6.2-6.8" />
-    </svg>
-  );
-}
-
 /** 竖向三点（更多操作）图标。 */
 export function MoreVerticalIcon() {
   return (

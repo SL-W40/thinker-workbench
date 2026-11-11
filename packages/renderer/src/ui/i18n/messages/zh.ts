@@ -1616,6 +1616,9 @@ export const zh: MessageTree = {
       expandDiff: "展开 diff",
       collapseDiff: "折叠 diff",
       copyPath: "复制路径",
+      /** 路径写入剪贴板后，复制按钮上短暂显示的文案。 */
+      pathCopied: "已复制路径",
+      copyPathFailed: "复制路径失败",
       uncommitted: "未提交",
       viewOptions: "视图选项",
       wordWrap: "自动换行",

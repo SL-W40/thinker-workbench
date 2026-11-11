@@ -1664,6 +1664,9 @@ export const en = {
       expandDiff: "Expand diff",
       collapseDiff: "Collapse diff",
       copyPath: "Copy path",
+      /** Shown on the copy button right after the path is on the clipboard. */
+      pathCopied: "Path copied",
+      copyPathFailed: "Couldn't copy the path",
       uncommitted: "Uncommitted",
       viewOptions: "View options",
       wordWrap: "Word Wrap",

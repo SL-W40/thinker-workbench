@@ -6,6 +6,7 @@
  * 放在行内的 useState 会连同展开状态一起丢掉。
  */
 
+import { CheckIcon, useToast } from "@thinker-workbench/design/react";
 import type { ChangeDispositionKind } from "@thinker-workbench/shared";
 import {
   type CSSProperties,
@@ -19,7 +20,7 @@ import {
 } from "react";
 import { workspaceGitFileDiff } from "../../../platform/ipc/workspaceFs";
 import { useT } from "../../../ui/i18n/useI18n";
-import { FileGlyph, IconCheck, IconChevron, IconUndo, MI } from "../../../ui/icons";
+import { FileGlyph, IconChevron, IconUndo, MI } from "../../../ui/icons";
 import { copyRelativePath } from "./clipboard";
 import { FileDiffBody } from "./FileDiff";
 import { acquireDiffFetch, releaseDiffFetch } from "./highlightQueue";
@@ -68,11 +69,23 @@ export const ChangedFileRow = memo(function ChangedFileRow({
   const [err, setErr] = useState<string | null>(null);
   const [spacerHeight, setSpacerHeight] = useState<number | null>(null);
   const t = useT();
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
   const rowRef = useRef<HTMLLIElement | null>(null);
   const diffWrapRef = useRef<HTMLDivElement>(null);
   const patchRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
   patchRef.current = patch;
+
+  useEffect(() => {
+    setCopied(false);
+  }, [path]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(id);
+  }, [copied]);
 
   // 行内 ref 与虚拟列表的测量 ref 合并：两者都要拿到同一个节点
   const setRowNode = useCallback(
@@ -202,12 +215,17 @@ export const ChangedFileRow = memo(function ChangedFileRow({
         </span>
         <button
           type="button"
-          className="changes-pane__copy-btn"
-          title={t("inspector.changes.copyPath")}
-          aria-label={t("inspector.changes.copyPath")}
-          onClick={() => void copyRelativePath(path)}
+          className={`changes-pane__copy-btn${copied ? " is-copied" : ""}`}
+          title={copied ? t("inspector.changes.pathCopied") : t("inspector.changes.copyPath")}
+          aria-label={copied ? t("inspector.changes.pathCopied") : t("inspector.changes.copyPath")}
+          onClick={() => {
+            void copyRelativePath(path).then((ok) => {
+              if (ok) setCopied(true);
+              else toast.danger({ title: t("inspector.changes.copyPathFailed") });
+            });
+          }}
         >
-          {MI.copy}
+          {copied ? <CheckIcon size="sm" /> : MI.copy}
         </button>
         {onDispose ? (
           <span className="changes-pane__dispose">
@@ -220,16 +238,6 @@ export const ChangedFileRow = memo(function ChangedFileRow({
               onClick={() => void onDispose("revert", path)}
             >
               <IconUndo />
-            </button>
-            <button
-              type="button"
-              className="changes-pane__copy-btn"
-              title={t("inspector.changes.keepFile")}
-              aria-label={t("inspector.changes.keepFile")}
-              disabled={disposeBusy}
-              onClick={() => void onDispose("keep", path)}
-            >
-              <IconCheck />
             </button>
           </span>
         ) : null}
