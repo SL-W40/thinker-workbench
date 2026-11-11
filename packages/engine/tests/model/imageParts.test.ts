@@ -86,7 +86,7 @@ describe("imageParts", () => {
     assert.equal(isAllowedChatImagePath(imagePath, dataDir), true);
     assert.equal(isAllowedChatImagePath(path.join(dataDir, "other.png"), dataDir), false);
     assert.equal(
-      isAllowedChatImagePath(path.join(dataDir, "cache", "computer", "images", "shot.png"), dataDir),
+      isAllowedChatImagePath(path.join(dataDir, "cache", "scratch", "shot.png"), dataDir),
       false,
     );
   });

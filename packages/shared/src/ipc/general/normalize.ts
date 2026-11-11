@@ -85,9 +85,6 @@ export function normalizeGeneral(raw: unknown): GeneralSettings {
   if (typeof obj.allowAiBrowser === "boolean") {
     base.allowAiBrowser = obj.allowAiBrowser;
   }
-  if (typeof obj.allowAiGit === "boolean") {
-    base.allowAiGit = obj.allowAiGit;
-  }
   base.shellProfileId = normalizeShellProfileId(obj.shellProfileId, "default");
   base.shellApprovalMode = normalizeShellApprovalMode(
     obj.shellApprovalMode,

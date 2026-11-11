@@ -28,7 +28,7 @@ import { desktopLog } from "../log/setup";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
 import { contextUsageFields, contextUsageMeta, runEnvelope } from "./runPayload";
 import { endTraceSpan, startTraceSpan } from "../trace/writeSpan";
-import { handleBrowserRequest, handleGitRequest, handlePtyRequest } from "./agentHostRequests";
+import { handleBrowserRequest, handlePtyRequest } from "./agentHostRequests";
 import { isUtilityToParent } from "./transfer";
 
 /** 已派发、供 cancel 附带 sessionId 的轻量记录（终态由 RunLedger 收口）。 */
@@ -121,10 +121,6 @@ export class AgentBridge {
       }
       if (raw.kind === "browserRequest") {
         void handleBrowserRequest((message) => this.send(message), raw);
-        return;
-      }
-      if (raw.kind === "gitRequest") {
-        void handleGitRequest((message) => this.send(message), raw);
         return;
       }
       if (raw.kind === "hitl") {

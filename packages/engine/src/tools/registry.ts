@@ -21,8 +21,6 @@ import {
 import { createPlanToolSpec } from "./create_plan/tool";
 import { deleteFileToolSpec } from "./delete_file/tool";
 import { editFileToolSpec } from "./edit_file/tool";
-import { gitDiffToolSpec } from "./git_diff/tool";
-import { gitStatusToolSpec } from "./git_status/tool";
 import { grepToolSpec } from "./grep/tool";
 import { listDirToolSpec } from "./list_dir/tool";
 import { readFileToolSpec } from "./read_file/tool";
@@ -51,9 +49,6 @@ const tools = new Map<string, ToolSpec>(
     withGroup(grepToolSpec, "file"),
     withGroup(listDirToolSpec, "file"),
     withGroup(searchFilesToolSpec, "file"),
-    // Git 只读检视：不给模型写操作入口
-    withGroup(gitStatusToolSpec, "git"),
-    withGroup(gitDiffToolSpec, "git"),
     withGroup(timeToolSpec, "meta"),
     withGroup(updatePlanToolSpec, "plan"),
     withGroup(createPlanToolSpec, "plan"),

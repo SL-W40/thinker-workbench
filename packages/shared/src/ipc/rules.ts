@@ -20,7 +20,7 @@ export type RuleListItem = {
 /** 写入输入。 */
 export type RuleUpsertInput = {
   scope: CustomizeScope;
-  /** 相对路径，如 `thinker-core.md`。 */
+  /** 相对路径，如 `style.md`。 */
   relPath: string;
   body: string;
 };

@@ -377,8 +377,6 @@ export {
 } from "../ipc/update";
 export type {
   BrowserRequestAction,
-  GitRequestAction,
-  GitResultPhase,
   PtyExecMode,
   PtyRequestAction,
   PtyShellOutcome,
@@ -394,8 +392,6 @@ export type {
   UtilityContextUsageResult,
   UtilityCrashNotice,
   UtilityEventMessage,
-  UtilityGitRequest,
-  UtilityGitResult,
   UtilityHello,
   UtilityHitlRequestMessage,
   UtilityHitlResult,

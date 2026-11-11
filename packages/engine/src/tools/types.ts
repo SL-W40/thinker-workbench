@@ -89,7 +89,7 @@ export type ToolArgs = Record<string, unknown>;
 export type ToolParametersSchema = ToolParameters | Record<string, unknown>;
 
 /** 工具分组；MCP 工具统一归入 "mcp"。 */
-export type ToolGroup = "file" | "shell" | "browser" | "task" | "plan" | "meta" | "git" | "mcp";
+export type ToolGroup = "file" | "shell" | "browser" | "task" | "plan" | "meta" | "mcp";
 
 /** 注册表中的工具规格。 */
 export type ToolSpec = {

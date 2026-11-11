@@ -409,44 +409,6 @@ export type UtilityMcpStatus = {
   status: McpServerRuntimeStatus;
 };
 
-/** 子进程 → 主进程：Git 只读检视请求（Git 二进制只在主进程可用）。 */
-export type UtilityGitRequest = {
-  channel: "utility";
-  kind: "gitRequest";
-  requestId: string;
-  action: GitRequestAction;
-  /** 目标工作空间 id；省略时主进程按 threadId 反查工作区。 */
-  workspaceId?: string;
-  /** 发起请求的 run / thread，用于宿主侧日志归属。 */
-  runId?: string;
-  threadId?: string;
-  /** git_diff 的目标路径过滤；省略表示全部改动。 */
-  paths?: string[];
-  /** unified diff 上下文行数；省略取默认 3。 */
-  contextLines?: number;
-  /** 输出字符上限（截断保护）；省略取 shellOutputCap。 */
-  maxChars?: number;
-};
-
-/** Git 只读请求动作（写操作不在其中，避免给模型开写权限）。 */
-export type GitRequestAction = "status" | "diff";
-
-/** 主进程 → 子进程：Git 只读检视结果。 */
-export type UtilityGitResult = {
-  channel: "utility";
-  kind: "gitResult";
-  requestId: string;
-  phase: GitResultPhase;
-  /** status / diff 的纯文本结果（已做面向模型的压缩排版与截断）。 */
-  output?: string;
-  error?: string;
-  /** 是否因 maxChars 截断。 */
-  truncated?: boolean;
-};
-
-/** Git 结果阶段：先 `data` 再 `result`/`error`，保证客户端总能收到终态。 */
-export type GitResultPhase = "data" | "result" | "error";
-
 /**
  * 子进程异常退出通知（由主进程侧观察 exit 后构造，不一定经 parentPort）。
  * `code` 为进程退出码；被信号杀死时可能为 null。
@@ -469,7 +431,6 @@ export const UTILITY_TO_CHILD_KINDS = [
   "ptyEvent",
   "browserEvent",
   "hitlResult",
-  "gitResult",
   "mcpReload",
 ] as const;
 
@@ -483,7 +444,6 @@ export const UTILITY_TO_PARENT_KINDS = [
   "ptyRequest",
   "browserRequest",
   "hitl",
-  "gitRequest",
   "mcpStatus",
   "span",
 ] as const;
@@ -516,7 +476,6 @@ export type UtilityToChild =
   | UtilityPtyEvent
   | UtilityBrowserEvent
   | UtilityHitlResult
-  | UtilityGitResult
   | UtilityMcpReload;
 
 /** utility 子进程发给主进程的全部消息。 */
@@ -529,6 +488,5 @@ export type UtilityToParent =
   | UtilityPtyRequest
   | UtilityBrowserRequest
   | UtilityHitlRequestMessage
-  | UtilityGitRequest
   | UtilityMcpStatus
   | TraceSpanMessage;

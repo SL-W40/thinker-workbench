@@ -78,11 +78,6 @@ export type GeneralSettings = {
    */
   allowAiBrowser: boolean;
   /**
-   * 是否允许 AI 调用只读 Git 检视工具（git_status / git_diff）。
-   * 写操作始终不开放；关闭后连这两个工具也不暴露给模型。
-   */
-  allowAiGit: boolean;
-  /**
    * 默认 shell profile id；`default` 表示平台默认（Win PowerShell / Unix $SHELL）。
    */
   shellProfileId: string;

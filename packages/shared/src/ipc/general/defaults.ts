@@ -48,7 +48,6 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   loggingEnabled: true,
   allowAiShell: true,
   allowAiBrowser: true,
-  allowAiGit: true,
   shellProfileId: "default",
   shellApprovalMode: DEFAULT_SHELL_APPROVAL_MODE,
   shellAllowlist: [...DEFAULT_SHELL_ALLOWLIST],

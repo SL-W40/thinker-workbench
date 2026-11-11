@@ -5,20 +5,14 @@
  * 便于单独阅读与测试，也让 `AgentBridge` 只剩「传输与 run 派发」两类职责。
  */
 import type {
-  GitResultPhase,
-  GitStatus,
   UtilityBrowserRequest,
-  UtilityGitRequest,
   UtilityPtyRequest,
   UtilityToChild,
 } from "@thinker-workbench/shared";
 import { releaseBrowserLease, tryAcquireBrowserLease } from "../agent/resourceGovernor";
 import { browserSessionManager } from "../browser/BrowserSessionManager";
 import { getGeneralSettings } from "../config/settingsStore";
-import { getSessionByThreadId, getWorkspace } from "../db/workspacesStore";
 import { terminalSessionManager } from "../terminal/TerminalSessionManager";
-import { getGitFileDiff, getGitStatus } from "../workspace/git";
-import { sanitizeGitPaths } from "../workspace/gitWrite";
 
 /** 命令会话，覆盖 exec / await / write / kill 四种动作。 */
 export async function handlePtyRequest(
@@ -181,144 +175,6 @@ export async function handlePtyRequest(
   } catch (err) {
     reply("error", { error: err instanceof Error ? err.message : String(err) });
   }
-}
-
-/**
- * 浏览器自动化请求：先按 runId 抢浏览器租约（同一时刻只服务一个 run），
- * 结束后无论成败都释放。
- */
-export async function handleGitRequest(
-  send: (message: UtilityToChild) => void,
-  req: UtilityGitRequest,
-): Promise<void> {
-  const reply = (
-    phase: GitResultPhase,
-    extra: Partial<{ output: string; error: string; truncated: boolean }> = {},
-  ) => {
-    try {
-      send({
-        channel: "utility",
-        kind: "gitResult",
-        requestId: req.requestId,
-        phase,
-        ...extra,
-      });
-    } catch {
-      /* child gone */
-    }
-  };
-
-  try {
-    if (!getGeneralSettings().allowAiGit) {
-      reply("error", {
-        error:
-          "AI git tools are disabled in Settings. Turn on “Allow AI to inspect git” to enable read-only git inspection.",
-      });
-      return;
-    }
-    const cwd = resolveRequestCwd(req);
-    if (!cwd) {
-      reply("error", { error: "Workspace not found for git request." });
-      return;
-    }
-    const maxChars = clampMaxChars(req.maxChars);
-    const paths = sanitizeGitPaths(req.paths) ?? [];
-
-    if (req.action === "status") {
-      const status = await getGitStatus(cwd);
-      reply("result", truncateGitOutput(formatGitStatus(status), maxChars));
-      return;
-    }
-
-    const targets = paths.length > 0 ? paths : undefined;
-    const diffs: string[] = [];
-    for (const target of targets ?? []) {
-      const diff = await getGitFileDiff(cwd, target, req.contextLines ?? 3);
-      if (diff.patch.trim()) diffs.push(diff.patch);
-    }
-    if (!targets) {
-      const status = await getGitStatus(cwd);
-      for (const file of status.files.slice(0, MAX_DIFF_FILES)) {
-        const diff = await getGitFileDiff(cwd, file.path, req.contextLines ?? 3);
-        if (diff.patch.trim()) diffs.push(diff.patch);
-      }
-    }
-    if (diffs.length === 0) {
-      reply("result", { output: "No changes detected in the working tree." });
-      return;
-    }
-    const joined = diffs.join("\n");
-    reply("result", {
-      output: truncateGitOutput(joined, maxChars).output,
-      truncated: joined.length > maxChars,
-    });
-  } catch (err) {
-    reply("error", { error: err instanceof Error ? err.message : String(err) });
-  }
-}
-
-/**
- * 解析宿主 Git 请求的工作目录：优先用显式 workspaceId，否则按 threadId 反查会话。
- * 解析不到返回空串，由调用方统一回 error（不抛异常到子进程）。
- */
-function resolveRequestCwd(req: UtilityGitRequest): string {
-  const workspaceId = req.workspaceId?.trim();
-  if (workspaceId) return getWorkspace(workspaceId)?.rootPath ?? "";
-  const threadId = req.threadId?.trim();
-  if (!threadId) return "";
-  const session = getSessionByThreadId(threadId);
-  if (!session) return "";
-  return getWorkspace(session.workspaceId)?.rootPath ?? "";
-}
-
-/** 单次 diff 请求最多带多少个文件（防止一次性塞爆上下文）。 */
-const MAX_DIFF_FILES = 20;
-
-/** 输出上限归一：非法值走默认 8000 字符，硬上限 40000。 */
-function clampMaxChars(raw: unknown): number {
-  const n = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
-  if (!Number.isFinite(n) || n <= 0) return 8000;
-  return Math.min(40_000, Math.floor(n));
-}
-
-/** 截断过长的输出并打标。 */
-function truncateGitOutput(text: string, maxChars: number): { output: string; truncated: boolean } {
-  if (text.length <= maxChars) return { output: text, truncated: false };
-  return {
-    output: `${text.slice(0, maxChars)}\n…[truncated ${text.length - maxChars} chars]`,
-    truncated: true,
-  };
-}
-
-/** Git 状态失败原因 → 给模型看的英文短语（与 UI 文案同源的分类，不回传 stderr）。 */
-const GIT_REASON_TEXT: Partial<Record<GitStatus["reason"], string>> = {
-  not_a_repo: "not a git repository",
-  git_not_found: "git not installed",
-  cwd_missing: "workspace folder missing",
-  timeout: "git timed out",
-  git_error: "git unavailable",
-};
-
-/** 把 GitStatus 压成模型友好的文本（含分支、ahead/behind、变更文件与增删行数）。 */
-export function formatGitStatus(status: GitStatus): string {
-  if (!status.isRepo) {
-    return `Repository status unavailable: ${GIT_REASON_TEXT[status.reason] ?? "git unavailable"}`;
-  }
-  const lines: string[] = [];
-  lines.push(
-    `Branch: ${status.branch ?? "(detached)"}${status.isDefaultBranch ? " (default)" : ""}`,
-  );
-  lines.push(`Ahead/behind upstream: +${status.ahead} / -${status.behind}`);
-  lines.push(
-    `Changed files: ${status.files.length} (+${status.totals.added} / -${status.totals.removed})`,
-  );
-  for (const file of status.files.slice(0, 200)) {
-    lines.push(`  ${file.status.padEnd(10)} ${file.path} (+${file.added}/-${file.removed})`);
-  }
-  if (status.files.length === 0) {
-    lines.push("  (working tree clean)");
-  }
-  return lines.join("\n");
 }
 
 /** 内置浏览器自动化请求：`goto` / `act` / `extract` / `screenshot` / `console` / `close`。 */

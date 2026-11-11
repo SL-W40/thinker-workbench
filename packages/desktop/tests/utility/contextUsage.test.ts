@@ -72,7 +72,6 @@ vi.mock("../../src/trace/writeSpan", () => ({
 vi.mock("../../src/utility/agentHostRequests", () => ({
   handlePtyRequest: () => {},
   handleBrowserRequest: () => {},
-  handleGitRequest: () => {},
 }));
 
 const { AgentBridge } = await import("../../src/utility/AgentBridge");

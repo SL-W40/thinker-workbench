@@ -15,7 +15,6 @@ import { createMemoryHost } from "../memory/host";
 import { type AgentRuntime, createAgentRuntime } from "../runtime/AgentRuntime";
 import { handleBrowserEvent } from "./browserClient";
 import { applyMcpServers } from "./configApply";
-import { handleGitResult } from "./gitClient";
 import { onCancel, onCancelTask } from "./handlers/cancel";
 import { onCheckpointClear } from "./handlers/checkpoint";
 import { onContextUsage } from "./handlers/contextUsage";
@@ -111,9 +110,6 @@ export class UtilityHost {
         return;
       case "browserEvent":
         handleBrowserEvent(message);
-        return;
-      case "gitResult":
-        handleGitResult(message);
         return;
       case "hitlResult":
         resolveHitl(message.response);
