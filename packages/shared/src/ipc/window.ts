@@ -35,6 +35,16 @@ export type ThinkerWindowApi = {
    * @returns 取消订阅函数。
    */
   onMaximized(cb: (maximized: boolean) => void): () => void;
+  /**
+   * 查询当前是否全屏。
+   * macOS 全屏时系统 traffic lights 会隐藏，标题栏需要回收左侧留白。
+   */
+  isFullScreen(): Promise<boolean>;
+  /**
+   * 订阅全屏状态变化。
+   * @returns 取消订阅函数。
+   */
+  onFullScreenChange(cb: (fullScreen: boolean) => void): () => void;
   /** 打开或聚焦产品工具窗（Logs / Components，无 Lanes）。 */
   toggleDevTools(): Promise<void>;
   /**

@@ -1,6 +1,7 @@
 /**
  * 自定义标题栏：左品牌 / 控制台 tab / 左侧栏；中空白拖窗；右「展开右侧面板」。
- * macOS 用系统 traffic lights（左侧留白）；Windows 用系统字幕按钮（右侧留白）。
+ * macOS 用系统 traffic lights（左侧留白；全屏时灯隐藏，改为显示品牌 logo）；
+ * Windows 用系统字幕按钮（右侧留白）。
  * 可点控件勿放进 drag 区，否则 Electron 不显示 pointer 小手。
  */
 
@@ -68,6 +69,19 @@ function useWindowsCaptionInset(): void {
       root.style.removeProperty("--wco-width");
     };
   }, []);
+}
+
+/** macOS 全屏时系统 traffic lights 隐藏：此时标题栏要回收左侧留白并补回品牌 logo。 */
+function useMacFullScreen(): boolean {
+  const [fullScreen, setFullScreen] = useState(false);
+  useEffect(() => {
+    if (processPlatform() !== "darwin") return;
+    const api = windowApi();
+    if (!api?.isFullScreen) return;
+    void api.isFullScreen().then(setFullScreen);
+    return api.onFullScreenChange?.(setFullScreen);
+  }, []);
+  return fullScreen;
 }
 
 type TitleBarProps = {
@@ -237,13 +251,16 @@ export function TitleBar({
   const onConsole = current === "tools";
   const isAux = role.kind === "aux";
   const platform = processPlatform();
-  // macOS：traffic lights 已承担窗口身份，标题栏不再展示品牌 logo
-  const showBrand = platform !== "darwin";
+  const macFullScreen = useMacFullScreen();
+  // macOS 非全屏：traffic lights 已承担窗口身份，标题栏不再展示品牌 logo；
+  // 全屏时 lights 隐藏，左侧无需留白，改由 logo 顶上
+  const showBrand = platform !== "darwin" || macFullScreen;
   useWindowsCaptionInset();
   const titlebarClass = [
     "titlebar",
     isAux ? "titlebar--aux" : "",
     platform === "darwin" ? "titlebar--mac" : "",
+    platform === "darwin" && macFullScreen ? "titlebar--mac-fullscreen" : "",
     platform === "win32" ? "titlebar--wco" : "",
   ]
     .filter(Boolean)

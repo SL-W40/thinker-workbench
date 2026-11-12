@@ -619,6 +619,26 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  /* 入场：从右上角的「文件」按钮方向轻落展开（条件挂载，元素插入即播放） */
+  transform-origin: top right;
+  animation: file-flyout-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes file-flyout-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-inspector__file-flyout {
+    animation: none;
+  }
 }
 
 .agent-inspector__file-flyout-body {
@@ -689,6 +709,15 @@
 
 .agent-inspector__file-flyout .tree-root-drop {
   min-height: 0;
+}
+
+/*
+ * Monaco 自绘滚动条：胶囊化。
+ * 尺寸（7px）由 FileEditor 的 editor options 注入，颜色由 monacoTheme
+ * 从全局 --scrollbar-thumb* 读入；这里只补全局滚动条的圆角形状。
+ */
+.monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: 999px;
 }
 
 .agent-inspector__lang {

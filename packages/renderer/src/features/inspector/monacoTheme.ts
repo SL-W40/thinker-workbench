@@ -74,6 +74,12 @@ export function applyMonacoTheme(
   const panel = readColor("--tw-panel", bg);
   const border = readColor("--tw-border", dark ? "#ffffff22" : "#00000022");
   const codeBg = readColor("--tw-code-bg", hover);
+  // 滚动条颜色：与全局细滚动条（--scrollbar-thumb / --scrollbar-thumb-hover）同源
+  const scrollThumb = readColor("--scrollbar-thumb", dark ? "#ffffff2e" : "rgba(90, 70, 50, 0.22)");
+  const scrollThumbHover = readColor(
+    "--scrollbar-thumb-hover",
+    dark ? "#ffffff52" : "rgba(107, 83, 68, 0.5)",
+  );
 
   // 语义高亮：与 markdown / FileDiff 共用 --md-hl-*，fallback 保证未注入时仍有区分度
   const keyword = readColor("--md-hl-keyword", dark ? "#569cd6" : "#0550ae");
@@ -166,8 +172,9 @@ export function applyMonacoTheme(
       "editorIndentGuide.activeBackground1": muted,
       "editorBracketMatch.background": codeBg,
       "editorBracketMatch.border": accent,
-      "scrollbarSlider.background": border,
-      "scrollbarSlider.hoverBackground": muted,
+      "scrollbarSlider.background": scrollThumb,
+      "scrollbarSlider.hoverBackground": scrollThumbHover,
+      "scrollbarSlider.activeBackground": scrollThumbHover,
       focusBorder: "#00000000",
     },
   });

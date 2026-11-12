@@ -155,6 +155,12 @@ function createAuxWindow(page: AuxPageId): BrowserWindow {
   win.on("unmaximize", () => {
     if (!win.isDestroyed()) win.webContents.send(IpcChannels.windowMaximized, false);
   });
+  win.on("enter-full-screen", () => {
+    if (!win.isDestroyed()) win.webContents.send(IpcChannels.windowFullScreenChanged, true);
+  });
+  win.on("leave-full-screen", () => {
+    if (!win.isDestroyed()) win.webContents.send(IpcChannels.windowFullScreenChanged, false);
+  });
 
   // 辅助窗关闭即销毁，不进托盘
   win.on("closed", () => {

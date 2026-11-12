@@ -87,6 +87,10 @@ export const IpcChannels = {
   windowIsMaximized: "window:isMaximized",
   /** 主进程推送最大化状态变化。 */
   windowMaximized: "window:maximized",
+  /** 查询当前是否全屏（macOS 全屏时系统 traffic lights 隐藏）。 */
+  windowIsFullScreen: "window:isFullScreen",
+  /** 主进程推送全屏状态变化。 */
+  windowFullScreenChanged: "window:fullScreenChanged",
   /** 打开或聚焦产品工具窗（Logs / Components）。 */
   windowToggleDevTools: "window:toggleDevTools",
   /** 打开或聚焦某页的辅助窗口（不存在则创建）。 */

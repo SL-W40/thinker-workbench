@@ -172,6 +172,12 @@ const api: ThinkerApi = {
       ipcRenderer.on(IpcChannels.windowMaximized, handler);
       return () => ipcRenderer.removeListener(IpcChannels.windowMaximized, handler);
     },
+    isFullScreen: () => ipcRenderer.invoke(IpcChannels.windowIsFullScreen),
+    onFullScreenChange(cb) {
+      const handler = (_evt: unknown, fullScreen: boolean) => cb(Boolean(fullScreen));
+      ipcRenderer.on(IpcChannels.windowFullScreenChanged, handler);
+      return () => ipcRenderer.removeListener(IpcChannels.windowFullScreenChanged, handler);
+    },
     toggleDevTools: () => ipcRenderer.invoke(IpcChannels.windowToggleDevTools),
     openOrFocusPage: (page: AuxPageId) =>
       ipcRenderer.invoke(IpcChannels.windowOpenOrFocusPage, page),

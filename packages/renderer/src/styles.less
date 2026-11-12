@@ -1253,6 +1253,14 @@ kbd {
   padding-left: 80px;
 }
 
+/*
+ * macOS 全屏：系统 traffic lights 隐藏，左侧无需让位；
+ * 回到常规留白，由品牌 logo 顶在首位。
+ */
+.titlebar--mac.titlebar--mac-fullscreen .titlebar-leading {
+  padding-left: 16px;
+}
+
 /* macOS：右侧仅有面板按钮，离窗边留一点空 */
 .titlebar--mac .titlebar-actions {
   padding-right: 10px;

@@ -189,6 +189,13 @@ export function createWindow(): BrowserWindow {
     win?.webContents.send(IpcChannels.windowMaximized, false);
     if (win) persistWindowBounds(win);
   });
+  // macOS 全屏时系统 traffic lights 隐藏，标题栏据此回收左侧留白并补回品牌 logo
+  win.on("enter-full-screen", () => {
+    win?.webContents.send(IpcChannels.windowFullScreenChanged, true);
+  });
+  win.on("leave-full-screen", () => {
+    win?.webContents.send(IpcChannels.windowFullScreenChanged, false);
+  });
   win.on("resize", () => {
     if (win && !win.isMaximized()) persistWindowBounds(win);
   });

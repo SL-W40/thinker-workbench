@@ -39,6 +39,10 @@ export function registerWindowHandlers(ipcMain: Electron.IpcMain): void {
     return Boolean(windowFromEvent(evt)?.isMaximized());
   });
 
+  ipcMain.handle(IpcChannels.windowIsFullScreen, (evt) => {
+    return Boolean(windowFromEvent(evt)?.isFullScreen());
+  });
+
   // 标题栏控制台入口：打开产品控制台（Settings / Logs / Components）
   ipcMain.handle(IpcChannels.windowToggleDevTools, () => {
     openOrFocusAuxWindow("tools");

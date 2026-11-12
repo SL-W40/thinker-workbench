@@ -79,8 +79,11 @@ export function useTerminalHost(theme: Theme, active: boolean): TerminalHost {
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
       theme: readXtermTheme(theme),
       allowTransparency: false,
-      // xterm 6 自绘滚动条宽度（默认 14）；略宽于全局 7px，避免胶囊边再削后过窄
-      overviewRuler: { width: 10 },
+      /*
+       * xterm 6 自绘滚动条的 slider 宽度由此决定（默认 14，JS 内联尺寸，
+       * CSS 覆盖不了 slider 本身）；与全局细滚动条（--scrollbar-size: 7px）对齐。
+       */
+      overviewRuler: { width: 7 },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

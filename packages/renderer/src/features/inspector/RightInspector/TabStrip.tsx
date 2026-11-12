@@ -275,21 +275,6 @@ export function TabStrip({
       </div>
       <div className="agent-inspector__tabs-pin">
         <button
-          ref={filesBtnRef}
-          type="button"
-          className={`agent-inspector__tab-files${flyout ? " is-on" : ""}`}
-          aria-label={t("inspector.section.files")}
-          aria-expanded={flyout}
-          aria-haspopup="tree"
-          onMouseEnter={() => {
-            window.clearTimeout(flyoutTimer.current);
-            setAddMenuOpen(false);
-            setFlyout(true);
-          }}
-        >
-          <FileStartIcon />
-        </button>
-        <button
           ref={addTabBtnRef}
           type="button"
           className={`agent-inspector__tab-add${addMenuOpen ? " is-on" : ""}`}
@@ -305,6 +290,21 @@ export function TabStrip({
           }}
         >
           +
+        </button>
+        <button
+          ref={filesBtnRef}
+          type="button"
+          className={`agent-inspector__tab-files${flyout ? " is-on" : ""}`}
+          aria-label={t("inspector.section.files")}
+          aria-expanded={flyout}
+          aria-haspopup="tree"
+          onMouseEnter={() => {
+            window.clearTimeout(flyoutTimer.current);
+            setAddMenuOpen(false);
+            setFlyout(true);
+          }}
+        >
+          <FileStartIcon />
         </button>
       </div>
       <ContextMenu
