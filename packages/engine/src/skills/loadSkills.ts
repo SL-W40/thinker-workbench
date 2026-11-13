@@ -9,7 +9,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { dataPath, isSkillFileName, parseSkillDocument } from "@thinker-workbench/shared";
+import {
+  dataPath,
+  extractSlashSkillNames,
+  isSkillFileName,
+  parseSkillDocument,
+} from "@thinker-workbench/shared";
 
 /** 单个已解析 skill。 */
 export type SkillDefinition = {
@@ -128,16 +133,7 @@ function pathsFromText(text: string): string[] {
   return out;
 }
 
-/** 从用户文抽取 `/skill-name` 显式调用。 */
-export function extractSlashSkillNames(userText: string): string[] {
-  const names: string[] = [];
-  const re = /(?:^|[\s`])\/([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi;
-  for (const m of userText.matchAll(re)) {
-    const name = m[1];
-    if (name) names.push(name.toLowerCase());
-  }
-  return [...new Set(names)];
-}
+export { extractSlashSkillNames };
 
 function pathsHit(skill: SkillDefinition, candidates: string[]): boolean {
   if (skill.paths.length === 0) return true;

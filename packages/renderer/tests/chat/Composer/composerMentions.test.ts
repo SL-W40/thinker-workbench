@@ -3,13 +3,13 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
+import { COMPOSER_CHIP_MARK } from "@thinker-workbench/shared";
 import {
   detectActiveMention,
-  extractAttachmentIds,
   extractContextPaths,
   extractUrls,
-  formatFileAttachment,
-  isAttachmentPath,
+  formatAtPath,
+  formatSlashSkill,
   linkLabel,
   parseMentionSegments,
 } from "../../../src/features/chat/composer/composerMentions";
@@ -28,80 +28,66 @@ describe("detectActiveMention", () => {
 });
 
 describe("extractContextPaths", () => {
-  it("strips trailing slash from directory mentions", () => {
-    assert.deepEqual(extractContextPaths("see @src/ "), ["src"]);
-    assert.deepEqual(extractContextPaths("see @`my dir/` please"), ["my dir"]);
-  });
-
-  it("excludes external @file:<id> references", () => {
-    assert.deepEqual(extractContextPaths("@file:abc123 @src/index.ts"), ["src/index.ts"]);
-    assert.deepEqual(extractContextPaths("read @report.pdf and @file:zzz"), ["report.pdf"]);
-  });
-});
-
-describe("extractAttachmentIds", () => {
-  it("collects @file:<id> tokens", () => {
-    assert.deepEqual(extractAttachmentIds("see @file:abc123 done"), ["abc123"]);
-    assert.deepEqual(extractAttachmentIds("@file:aaa @file:bbb @file:aaa"), ["aaa", "bbb"]);
-  });
-
-  it("stops the id at a whitespace boundary", () => {
-    assert.deepEqual(extractAttachmentIds("@file:a b c"), ["a"]);
-  });
-
-  it("stops the id at an embedded @", () => {
-    assert.deepEqual(extractAttachmentIds("@file:a@b"), ["a"]);
-  });
-
-  it("does not capture plain workspace paths", () => {
-    assert.deepEqual(extractAttachmentIds("open @src/file.ts"), []);
-  });
-});
-
-describe("isAttachmentPath / formatFileAttachment", () => {
-  it("recognizes file: prefix", () => {
-    assert.equal(isAttachmentPath("file:abc"), true);
-    assert.equal(isAttachmentPath("src/file.ts"), false);
-  });
-
-  it("formats attachment token with trailing space", () => {
-    assert.equal(formatFileAttachment("abc"), "@file:abc ");
+  it("ignores hand-typed @path and only takes marked chips", () => {
+    assert.deepEqual(extractContextPaths("see @src/ "), []);
+    assert.deepEqual(extractContextPaths(`see ${formatAtPath("src/").trim()} `), ["src"]);
+    assert.deepEqual(extractContextPaths(`see ${formatAtPath("my dir/").trim()} please`), [
+      "my dir",
+    ]);
   });
 });
 
 describe("parseMentionSegments", () => {
-  it("keeps directory chips that end with /", () => {
+  it("display keeps hand-typed @path as plain text", () => {
     const segs = parseMentionSegments("look @src/ next", "display");
+    assert.equal(segs.filter((s) => s.kind === "at").length, 0);
+    assert.equal(segs.map((s) => s.text).join(""), "look @src/ next");
+  });
+
+  it("display chips panel-selected @path (with mark)", () => {
+    const text = `look ${formatAtPath("src/").trim()} next`;
+    assert.ok(text.includes(COMPOSER_CHIP_MARK));
+    const segs = parseMentionSegments(text, "display");
     const at = segs.find((s) => s.kind === "at");
     assert.ok(at && at.kind === "at");
     assert.equal(at.path, "src/");
   });
 
-  it("@file: chipifies without a leading space", () => {
-    const segs = parseMentionSegments("文字@file:abc", "display");
-    assert.deepEqual(
-      segs.filter((s) => s.kind === "text").map((s) => s.text),
-      ["文字"],
-    );
-    const at = segs.find((s) => s.kind === "at");
-    assert.ok(at && at.kind === "at");
-    assert.equal(at.path, "file:abc");
-    assert.equal(at.text, "@file:abc");
-  });
-
   it("plain @path still requires a leading space", () => {
-    const segs = parseMentionSegments("文字@src/x", "display");
+    const segs = parseMentionSegments(`文字${formatAtPath("src/x").trim()}`, "display");
     assert.equal(
       segs.find((s) => s.kind === "at"),
       undefined,
     );
   });
-});
 
-describe("extractAttachmentIds", () => {
-  it("captures @file: ids without a leading space", () => {
-    assert.deepEqual(extractAttachmentIds("文字@file:abc done"), ["abc"]);
-    assert.deepEqual(extractAttachmentIds("前@file:xyz 后"), ["xyz"]);
+  it("display keeps hand-typed /skill as plain text", () => {
+    const segs = parseMentionSegments("please /write-tests now", "display");
+    assert.equal(segs.filter((s) => s.kind === "slash").length, 0);
+    assert.equal(segs.map((s) => s.text).join(""), "please /write-tests now");
+  });
+
+  it("display chips panel-selected /skill (with mark)", () => {
+    const text = `run ${formatSlashSkill("write-tests").trim()} ok`;
+    assert.ok(text.includes(COMPOSER_CHIP_MARK));
+    const segs = parseMentionSegments(text, "display");
+    const slash = segs.find((s) => s.kind === "slash");
+    assert.ok(slash && slash.kind === "slash");
+    assert.equal(slash.name, "write-tests");
+  });
+
+  it("edit chips /skill only when pinned", () => {
+    const bare = parseMentionSegments("/write-tests ", "edit");
+    assert.equal(bare.filter((s) => s.kind === "slash").length, 0);
+    const pinned = parseMentionSegments("/write-tests ", "edit", new Set(["/write-tests"]));
+    assert.equal(pinned.filter((s) => s.kind === "slash").length, 1);
+  });
+
+  it("edit chips @path only when pinned", () => {
+    const bare = parseMentionSegments("@src/a.ts ", "edit");
+    assert.equal(bare.filter((s) => s.kind === "at").length, 0);
+    const pinned = parseMentionSegments("@src/a.ts ", "edit", new Set(["@src/a.ts"]));
+    assert.equal(pinned.filter((s) => s.kind === "at").length, 1);
   });
 });
 

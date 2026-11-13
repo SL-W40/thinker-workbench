@@ -67,11 +67,17 @@ export function ChatShell({
     void session.restoreDeletedFile(messageId, stepId);
   });
   const onResume = useStableCallback(() => void session.resume());
-  const onAttachEditFiles = useStableCallback((files: File[]) => {
-    void session.attachEditFiles(files);
+  const onAttachEditImages = useStableCallback((files: File[]) => {
+    void session.attachEditImageFiles(files);
   });
-  const onAttachFiles = useStableCallback((files: File[]) => {
-    void session.attachFiles(files);
+  const onAttachImages = useStableCallback((files: File[]) => {
+    void session.attachImageFiles(files);
+  });
+  const onRemoveDraftImage = useStableCallback((id: string) => {
+    session.removeDraftImage(id);
+  });
+  const onRemoveEditImage = useStableCallback((id: string) => {
+    session.removeEditImage(id);
   });
   const onSend = useStableCallback(() => void session.send());
   const onCancel = useStableCallback(() => session.cancel());
@@ -146,14 +152,16 @@ export function ChatShell({
           onEditKeyDown={session.onEditKeyDown}
           onSendUserEdit={session.sendUserEdit}
           sendBlocked={session.busy || session.queued}
-          editAttachments={session.editAttachments}
-          onAttachEditFiles={onAttachEditFiles}
+          editImages={session.editImages}
+          onAttachEditImages={onAttachEditImages}
+          onRemoveEditImage={onRemoveEditImage}
           onCancelUserEdit={session.cancelUserEdit}
         />
         <Composer
           draft={session.draft}
-          onAttachFiles={onAttachFiles}
-          attachments={session.draftAttachments}
+          draftImages={session.draftImages}
+          onAttachImages={onAttachImages}
+          onRemoveImage={onRemoveDraftImage}
           busy={session.busy}
           queued={session.queued}
           inputRef={session.inputRef}

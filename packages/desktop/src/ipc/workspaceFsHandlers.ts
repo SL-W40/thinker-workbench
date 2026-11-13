@@ -3,7 +3,7 @@
  */
 import { IpcChannels } from "@thinker-workbench/shared";
 import { type IpcMain, shell } from "electron";
-import { parseWorkspaceFileText } from "../chat/attachments";
+import { parseWorkspaceFileText } from "../chat/workspaceFileText";
 import { getWorkspace } from "../db/workspacesStore";
 import {
   createWorkspaceDir,
@@ -109,7 +109,7 @@ export function registerWorkspaceFsHandlers(ipcMain: IpcMain): void {
     },
   );
 
-  // 文本解读（file-parsers 分发）走 chat/attachments 的实现，但目标是 workspaceFs 内容通道，
+  // 文本解读（file-parsers 分发）落在 workspaceFs 内容通道，
   // 故登记在本文件而非 workspacesHandlers，保持 workspaceFs* 前缀归属一致。
   ipcMain.handle(
     IpcChannels.workspaceFsParseText,

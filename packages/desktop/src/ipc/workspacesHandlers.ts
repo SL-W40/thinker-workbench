@@ -16,7 +16,6 @@ import {
   type WorkspaceCreateInput,
 } from "@thinker-workbench/shared";
 import { BrowserWindow, dialog, type IpcMain, type OpenDialogOptions, shell } from "electron";
-import { readAttachment, saveAttachment } from "../chat/attachments";
 import { exportChatSession, importChatSession } from "../chat/chatExport";
 import { readChatImagePreview, saveChatImage } from "../chat/chatImages";
 import { searchChat } from "../db/messagesSearch";
@@ -224,26 +223,6 @@ export function registerWorkspacesHandlers(ipcMain: IpcMain, bridge?: AgentBridg
 
   ipcMain.handle(IpcChannels.chatImagesReadPreview, async (_e, imagePath: string) =>
     readChatImagePreview(typeof imagePath === "string" ? imagePath : ""),
-  );
-
-  ipcMain.handle(
-    IpcChannels.chatAttachmentsSave,
-    async (
-      _e,
-      payload: { workspaceId: string; bytes: Uint8Array | ArrayBuffer; mime: string; name: string },
-    ) => {
-      return saveAttachment(payload.workspaceId, {
-        bytes: toBytes(payload.bytes),
-        mime: payload.mime,
-        name: payload.name,
-      });
-    },
-  );
-
-  ipcMain.handle(
-    IpcChannels.chatAttachmentsRead,
-    async (_e, payload: { workspaceId: string; id: string }) =>
-      readAttachment(payload.workspaceId, payload.id),
   );
 
   ipcMain.handle(IpcChannels.chatSessionsSetActive, async (_e, sessionId: string | null) => {

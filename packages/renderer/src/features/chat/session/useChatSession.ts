@@ -23,7 +23,7 @@ import { useT } from "../../../ui/i18n/useI18n";
 import { useEnsureModelSecrets, useShowModelSecretGate } from "../../modelSecrets/ModelSecretGate";
 import type { ComposerEditorHandle } from "../composer/ComposerEditor";
 import { chatSubmitBlocked } from "../composer/chatSubmit";
-import type { WorkspaceGate } from "../composer/useDraftImages";
+import { useDraftImages, type WorkspaceGate } from "../composer/useDraftImages";
 import { settleLoadedMessages } from "../message/messageClock";
 import { QUEUED_WAIT_STEP_ID, withQueuedWait } from "../timeline";
 import { listBusyLiveRuns, markLiveRunStopping } from "./liveRunRegistry";
@@ -40,8 +40,8 @@ import { useChatMessageEdit } from "./useChatMessageEdit";
 import { useChatPersistence } from "./useChatPersistence";
 import { useChatRunQueue } from "./useChatRunQueue";
 import { useChatRunState } from "./useChatRunState";
+import { useComposerDraft } from "./useComposerDraft";
 import { useRestoreDeletedFile } from "./useRestoreDeletedFile";
-import { useSessionAttachments } from "./useSessionAttachments";
 import { useSessionBootstrap } from "./useSessionBootstrap";
 import { useSessionResume } from "./useSessionResume";
 import { useSessionSender } from "./useSessionSender";
@@ -170,6 +170,18 @@ export function useChatSession(visible = true) {
   const queue = useChatRunQueue(run, { setBusy, setCanResume, setThreadId, t });
   const persistence = useChatPersistence(run, { applyLoadedSession });
 
+  /** 草稿附图：选择 / 粘贴 / 拖入的落盘与占位管理（见 useDraftImages）。 */
+  const {
+    draftImages,
+    draftImagesRef,
+    clearDraftImages,
+    attachImageFilesTo,
+    attachImageFiles,
+    removeDraftImage,
+  } = useDraftImages({ workspaceId, setWorkspaceGate });
+
+  useComposerDraft({ draft, sessionId, setDraft });
+
   // edit 需要 send，而 send 又需要 edit 的收口能力：两边都不互相 import，
   // 这里给 edit 一个只读转到 sendRef 的壳，真正的实现在 useSessionSender 返回后装填。
   const sendRef = useRef<
@@ -180,19 +192,18 @@ export function useChatSession(visible = true) {
       sendRef.current?.(override, replaceUserId) ?? Promise.resolve(),
     busy,
     queued: queue.queued,
-    workspaceId,
+    attachImageFilesTo,
   });
 
   // sender 需要用工作空间标签同步（新建会话时），而 workspace 在 sender 之后才装配：
   // 同样走 ref，避免 two hook 互相依赖成环。
   const workspaceRef = useRef<null | ReturnType<typeof useSessionWorkspace>>(null);
-  const attachments = useSessionAttachments({ draft, sessionId, setDraft, workspaceId });
 
   const sender = useSessionSender({
     busy,
-    clearDraftAttachments: attachments.clearDraftAttachments,
+    clearDraftImages,
     draft,
-    draftAttachmentsRef: attachments.draftAttachmentsRef,
+    draftImagesRef,
     edit,
     ensureModelSecrets,
     flushTodos,
@@ -224,7 +235,7 @@ export function useChatSession(visible = true) {
   const workspace = useSessionWorkspace({
     applyLoadedSession,
     busy,
-    clearDraftAttachments: attachments.clearDraftAttachments,
+    clearDraftImages,
     edit,
     inputRef,
     persistence,
@@ -376,18 +387,18 @@ export function useChatSession(visible = true) {
   return {
     messages: run.messages,
     draft,
-    setDraft: attachments.reconcileDraftAttachments,
+    setDraft,
     /** 会话待办（会话级状态，独立于计划）与其更新入口。 */
     todos,
     applyTodos,
     clearCompletedTodos,
-    draftAttachments: attachments.draftAttachments,
-    attachFiles: attachments.attachFiles,
-    removeAttachment: attachments.removeAttachment,
-    clearDraftAttachments: attachments.clearDraftAttachments,
-    editAttachments: edit.editAttachments,
-    attachEditFiles: edit.attachEditFiles,
-    removeEditAttachment: edit.removeEditAttachment,
+    draftImages,
+    attachImageFiles,
+    removeDraftImage,
+    clearDraftImages,
+    editImages: edit.editImages,
+    attachEditImageFiles: edit.attachEditImageFiles,
+    removeEditImage: edit.removeEditImage,
     busy,
     queued: queue.queued,
     empty,

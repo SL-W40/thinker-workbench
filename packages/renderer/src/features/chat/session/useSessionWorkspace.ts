@@ -32,7 +32,7 @@ type Translate = ReturnType<typeof useT>;
 export type SessionWorkspaceDeps = {
   applyLoadedSession: ApplyLoadedSession;
   busy: boolean;
-  clearDraftAttachments: () => void;
+  clearDraftImages: () => void;
   edit: ChatMessageEdit;
   inputRef: { current: null | { focus: () => void } };
   persistence: ChatPersistence;
@@ -60,7 +60,7 @@ export function useSessionWorkspace(host: SessionWorkspaceDeps) {
   const {
     applyLoadedSession,
     busy,
-    clearDraftAttachments,
+    clearDraftImages,
     edit,
     inputRef,
     persistence,
@@ -129,7 +129,7 @@ export function useSessionWorkspace(host: SessionWorkspaceDeps) {
     setCanResume(false);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftAttachments();
+    clearDraftImages();
     setWorkspaceGate(null);
     setActiveTraceId(null);
 
@@ -256,7 +256,7 @@ export function useSessionWorkspace(host: SessionWorkspaceDeps) {
     setWorkspaceGate(null);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftAttachments();
+    clearDraftImages();
     requestStickToBottom();
 
     // 持久化侧栏选中等非绘制关键副作用
@@ -298,7 +298,7 @@ export function useSessionWorkspace(host: SessionWorkspaceDeps) {
     setWorkspaceGate(null);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftAttachments();
+    clearDraftImages();
     run.activeRunIdRef.current = null;
     run.targetMsgIdRef.current = null;
     run.streamTextRef.current = "";
@@ -357,7 +357,7 @@ export function useSessionWorkspace(host: SessionWorkspaceDeps) {
     setWorkspaceGate(null);
     edit.clearUserEdit();
     setDraft("");
-    clearDraftAttachments();
+    clearDraftImages();
     run.activeRunIdRef.current = null;
     run.targetMsgIdRef.current = null;
     run.streamTextRef.current = "";

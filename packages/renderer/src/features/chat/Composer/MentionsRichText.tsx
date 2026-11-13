@@ -1,17 +1,14 @@
 /**
  * 用户消息中的 `/skill` / `@path` 富文本：芯片样式 + 路径限宽省略。
  */
-import type { ChatAttachmentRef } from "@thinker-workbench/shared";
 import { FileGlyph } from "../../../ui/icons";
 import { ChipIcon } from "./chipIcons";
-import { isAttachmentPath, linkLabel, parseMentionSegments } from "./composerMentions";
+import { linkLabel, parseMentionSegments } from "./composerMentions";
 
 export type MentionsRichTextProps = {
   text: string;
-  /** 点击 @path 时打开文件（可选，仅工作空间路径）。 */
+  /** 点击 @path 时打开文件（可选）。 */
   onOpenFile?: (path: string) => void;
-  /** 外部附件引用解析（@file:<id> → 展示名）。 */
-  attachments?: ChatAttachmentRef[];
   className?: string;
 };
 
@@ -22,14 +19,8 @@ function atLabel(path: string): string {
   return base;
 }
 
-export function MentionsRichText({
-  text,
-  onOpenFile,
-  attachments,
-  className,
-}: MentionsRichTextProps) {
+export function MentionsRichText({ text, onOpenFile, className }: MentionsRichTextProps) {
   const segments = parseMentionSegments(text);
-  const attachById = new Map((attachments ?? []).map((a) => [a.id, a]));
   // 预生成稳定 key（同段内容可能重复，附加序号保证唯一），避免直接以 index 作 JSX key
   const keyed = segments.map((seg, i) => ({ seg, key: `${seg.kind}:${i}` }));
   const rootClass = ["mentions-rich", className].filter(Boolean).join(" ");
@@ -60,11 +51,8 @@ export function MentionsRichText({
             </span>
           );
         }
-        // @ 路径：区分工作空间路径与外部附件
-        const isAttach = isAttachmentPath(seg.path);
-        const attachRef = isAttach ? attachById.get(seg.path.slice("file:".length)) : undefined;
-        const label = isAttach ? (attachRef?.name ?? seg.path) : atLabel(seg.path);
-        const openable = Boolean(onOpenFile) && !isAttach;
+        const label = atLabel(seg.path);
+        const openable = Boolean(onOpenFile);
         return (
           // biome-ignore lint/a11y/noStaticElementInteractions: @ 路径芯片在可打开时具备 role="link" + tabIndex + 键盘回车处理
           <span
@@ -95,7 +83,7 @@ export function MentionsRichText({
             }
           >
             <span className="mention-chip__mark mention-chip__mark--glyph">
-              <FileGlyph name={isAttach ? (attachRef?.name ?? seg.path) : seg.path} />
+              <FileGlyph name={seg.path} />
             </span>
             <span className="mention-chip__label">{label}</span>
           </span>

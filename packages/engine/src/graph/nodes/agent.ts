@@ -102,7 +102,6 @@ export async function agent(
     allowEmoji: getAllowEmoji(),
     contextWindow: getContextWindow(),
     contextPaths: state.contextPaths,
-    attachments: state.attachments,
     projectMemory: projectMemoryText || undefined,
     sessionMemory: sessionMemoryText || undefined,
     // 延迟加载：把已通过 tool_search 装载的 MCP 工具名交给装配层展开

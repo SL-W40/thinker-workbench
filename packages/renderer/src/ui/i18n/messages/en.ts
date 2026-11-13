@@ -495,13 +495,12 @@ export const en = {
       empty: "No matches",
       needWorkspace: "Open a workspace first",
       showMore: "Show {n} more",
-      typeToSearch: "Keep typing to search · Esc / Space for plain @",
+      typeToSearch: "Keep typing to search · Esc / Space for plain {trigger}",
       searching: "Search “{q}”",
       noRecent: "No recent files — type a name · Esc / Space for plain @",
       preview: {
         open: "Open in inspector",
         missing: "File not found",
-        external: "External attachment",
         parseFailed: "Unable to parse content",
       },
     },
@@ -592,9 +591,6 @@ export const en = {
       attach: "Attach image",
       remove: "Remove image",
       visionUntagged: "Vision is off for the selected model. Images are still sent.",
-    },
-    attachments: {
-      attach: "Attach files",
     },
     mode: {
       label: "Chat mode",

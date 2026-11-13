@@ -7,13 +7,14 @@
  */
 
 import { Button, ChevronRightIcon, useDesignTheme } from "@thinker-workbench/design/react";
-import type { ChatAttachmentRef, ChatMessage, ChatPlan } from "@thinker-workbench/shared";
+import type { ChatMessage, ChatPlan } from "@thinker-workbench/shared";
 import { type KeyboardEvent, memo, type RefObject, useEffect, useRef, useState } from "react";
 import { brandGlyphSrc } from "../../../platform/branding";
 import { bindSubagentSession } from "../../../platform/ipc/subagent";
 import { workspaceTree } from "../../../platform/ipc/workspaceFs";
 import type { MessageKey } from "../../../ui/i18n/translate";
 import { useT } from "../../../ui/i18n/useI18n";
+import type { DraftChatImage } from "../message/ChatImageStrip";
 import { Bubble } from "./Bubble";
 import { useStickToBottomScroll } from "./useStickToBottomScroll";
 
@@ -60,9 +61,10 @@ type Props = {
   onSendUserEdit?: () => void;
   /** 进行中或排队时原位编辑不能发送。 */
   sendBlocked?: boolean;
-  /** 原位编辑中的统一资产（图片即附件，@file: 芯片展示）。 */
-  editAttachments?: ChatAttachmentRef[];
-  onAttachEditFiles?: (files: File[]) => void;
+  /** 原位编辑中的附图。 */
+  editImages?: DraftChatImage[];
+  onAttachEditImages?: (files: File[]) => void;
+  onRemoveEditImage?: (id: string) => void;
   onCancelUserEdit?: () => void;
   /** 当前会话 id（绑定子代理 Task tab）*/
   sessionId?: string | null;
@@ -131,8 +133,9 @@ export const ChatStage = memo(function ChatStage({
   onEditKeyDown,
   onSendUserEdit,
   sendBlocked = false,
-  editAttachments = [],
-  onAttachEditFiles,
+  editImages = [],
+  onAttachEditImages,
+  onRemoveEditImage,
   onCancelUserEdit,
   sessionId = null,
 }: Props) {
@@ -225,8 +228,9 @@ export const ChatStage = memo(function ChatStage({
                 onEditKeyDown={onEditKeyDown}
                 onSendEdit={onSendUserEdit}
                 sendBlocked={sendBlocked}
-                editAttachments={editAttachments}
-                onAttachEditFiles={onAttachEditFiles}
+                editImages={editImages}
+                onAttachEditImages={onAttachEditImages}
+                onRemoveEditImage={onRemoveEditImage}
                 onCancelEdit={onCancelUserEdit}
                 sessionId={sessionId}
               />

@@ -43,6 +43,15 @@ export function useResizeDrag(options: Options): {
 
   const onPointerDown = useCallback((event: ReactPointerEvent) => {
     event.preventDefault();
+    // 捕获指针，避免拖出手柄后事件落到其它层（含 Electron webview guest）
+    const el = event.currentTarget;
+    if (el instanceof HTMLElement) {
+      try {
+        el.setPointerCapture(event.pointerId);
+      } catch {
+        // 部分环境不支持 capture，忽略
+      }
+    }
     startRef.current = {
       x: event.clientX,
       width: optsRef.current.width,

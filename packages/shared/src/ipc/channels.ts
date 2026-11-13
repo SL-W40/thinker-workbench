@@ -149,10 +149,6 @@ export const IpcChannels = {
   chatImagesSave: "chatImages:save",
   /** 读取已落盘附图预览（data URL）。 */
   chatImagesReadPreview: "chatImages:readPreview",
-  /** 落盘外部附件（dataDir/attachments）。 */
-  chatAttachmentsSave: "chatAttachments:save",
-  /** 读取外部附件预览（图片 dataUrl / 文档解析文本）。 */
-  chatAttachmentsRead: "chatAttachments:read",
   /** 设置当前活动会话 id。 */
   chatSessionsSetActive: "chatSessions:setActive",
   /** 读取当前活动会话 id。 */

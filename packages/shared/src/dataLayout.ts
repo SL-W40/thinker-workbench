@@ -76,12 +76,6 @@ export const DATA_LAYOUT = {
     label: "聊天附图",
     purge: "withWorkspace",
   },
-  wsAttachments: {
-    rel: "workspaces/{workspaceId}/attachments",
-    kind: "workspace",
-    label: "聊天附件",
-    purge: "withWorkspace",
-  },
   wsShellOutput: {
     rel: "workspaces/{workspaceId}/shell-output",
     kind: "workspace",
@@ -201,6 +195,10 @@ export function isCacheEntry(key: DataLayoutKey): boolean {
 /**
  * 会话附图允许的根，供 desktop 与 engine 的安全校验共用：
  * `workspaces/<id>/<kind>/<file>`（kind 白名单）。
+ *
+ * - `images`：现行落盘目录（saveChatImage）
+ * - `attachments`：旧版统一附件管线留下的图片，只读兼容，避免历史消息编码成
+ *   `[image unavailable]` 污染模型上下文
  */
 export function chatImageAllowed(dataDir: string): {
   workspacesRoot: string;

@@ -1,8 +1,6 @@
 // 由 shared/src/index.ts 拆分而来：导出面与拆分前完全一致。
 
 export type {
-  AttachmentKind,
-  ChatAttachmentRef,
   ChatImageRef,
   ChatMessage,
   ChatPlan,

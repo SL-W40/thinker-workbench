@@ -3,7 +3,6 @@
  * 依赖已装配的 edit / queue / persistence，彼此之间只在本文件内直接调用。
  */
 
-import type { ChatAttachmentRef } from "@thinker-workbench/shared";
 import {
   type ChatImageRef,
   type ChatMessage,
@@ -24,8 +23,9 @@ import {
 import { appLog } from "../../../platform/logging";
 import type { useT } from "../../../ui/i18n/useI18n";
 import { chatSubmitBlocked } from "../composer/chatSubmit";
-import { extractAttachmentIds, extractContextPaths } from "../composer/composerMentions";
+import { extractContextPaths } from "../composer/composerMentions";
 import type { WorkspaceGate } from "../composer/useDraftImages";
+import type { DraftChatImage } from "../message/ChatImageStrip";
 import { localElapsedMs } from "../message/messageClock";
 import { createMessage, failAssistantMessage, toAgentHistory } from "../message/messageModel";
 import { classifyRunError, softStopResumeKind } from "../shared/runErrors";
@@ -41,9 +41,9 @@ type Translate = ReturnType<typeof useT>;
 
 export type SessionSenderDeps = {
   busy: boolean;
-  clearDraftAttachments: () => void;
+  clearDraftImages: () => void;
   draft: string;
-  draftAttachmentsRef: { current: ChatAttachmentRef[] };
+  draftImagesRef: { current: DraftChatImage[] };
   edit: ChatMessageEdit;
   ensureModelSecrets: () => Promise<boolean>;
   flushTodos: () => void;
@@ -71,9 +71,9 @@ export type SessionSenderDeps = {
 export function useSessionSender(host: SessionSenderDeps) {
   const {
     busy,
-    clearDraftAttachments,
+    clearDraftImages,
     draft,
-    draftAttachmentsRef,
+    draftImagesRef,
     edit,
     ensureModelSecrets,
     flushTodos,
@@ -128,21 +128,13 @@ export function useSessionSender(host: SessionSenderDeps) {
     if (chatSubmitBlocked(busy, queue.queuedRef.current)) return;
     // 本轮要带上最新待办：先把防抖窗口里的改动补写回会话
     flushTodos();
-    let sendImages: ChatImageRef[] = [];
-    // 统一资产：底部与编辑态都走 @file: 芯片；编辑态资产在 edit.editAttachments
-    const assetSource = replaceUserId
-      ? edit.editAttachmentsRef.current
-      : draftAttachmentsRef.current;
-    const referencedAttIds = new Set(extractAttachmentIds(text));
-    const draftAtts = assetSource.filter((a) => referencedAttIds.has(a.id));
-    // 图片类附件走 image_ref 视觉通道（不进 <context_files> 文本解析）；其余为文档附件
-    const imageAtts = draftAtts.filter((a) => a.mime.startsWith("image/"));
-    const sendAttachments = draftAtts.filter((a) => !a.mime.startsWith("image/"));
-    sendImages = [
-      ...sendImages,
-      ...imageAtts.map((a) => ({ id: a.id, path: a.path, mime: a.mime, width: 0, height: 0 })),
-    ];
-    if (!text && sendImages.length === 0 && draftAtts.length === 0) return;
+    const imageSource = replaceUserId ? edit.editImagesRef.current : draftImagesRef.current;
+    // 原位重发要带上正在传的图；底部草稿则先发已就绪的，未传完的不带上
+    if (replaceUserId && imageSource.some((img) => img.uploading)) return;
+    const sendImages: ChatImageRef[] = imageSource
+      .filter((img) => !img.uploading && img.path.trim())
+      .map(({ id, path, mime, width, height }) => ({ id, path, mime, width, height }));
+    if (!text && sendImages.length === 0) return;
     if (submittingRef.current) return;
     submittingRef.current = true;
 
@@ -191,7 +183,7 @@ export function useSessionSender(host: SessionSenderDeps) {
     }
     edit.clearUserEdit();
     setDraft("");
-    clearDraftAttachments();
+    clearDraftImages();
     setCanResume(false);
     const traceId = createTraceId();
     setActiveTraceId(traceId);
@@ -211,7 +203,6 @@ export function useSessionSender(host: SessionSenderDeps) {
       false,
       undefined,
       sendImages.length > 0 ? sendImages : undefined,
-      draftAtts.length > 0 ? draftAtts : undefined,
     );
     const pending: ChatMessage = {
       ...createMessage("assistant", "", true, []),
@@ -243,7 +234,6 @@ export function useSessionSender(host: SessionSenderDeps) {
         traceId,
         ...(sendImages.length > 0 ? { images: sendImages } : {}),
         ...(contextPaths.length > 0 ? { contextPaths } : {}),
-        ...(sendAttachments.length > 0 ? { attachments: sendAttachments } : {}),
       });
       if (run.runEpoch.isStale(epoch)) return;
       if (result.ok && result.runId) {

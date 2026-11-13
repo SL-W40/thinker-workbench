@@ -1,15 +1,9 @@
 /**
  * Composer 编辑器 DOM 变更：芯片构造 / 回填 / 末尾占位 / 换行 / 光标滚动。
  */
-import type { ChatAttachmentRef } from "@thinker-workbench/shared";
 import { fileGlyphMarkup } from "../../../ui/icons";
 import { chipIconMarkup } from "./chipIcons";
-import {
-  isAttachmentPath,
-  linkLabel,
-  type ParseMentionMode,
-  parseMentionSegments,
-} from "./composerMentions";
+import { linkLabel, type ParseMentionMode, parseMentionSegments } from "./composerMentions";
 import { atLabel, domChipKey, lastMeaningfulChild, serializeComposerEditor } from "./dom";
 
 export function createChip(
@@ -49,7 +43,6 @@ export function fillEditor(
   root: HTMLElement,
   text: string,
   mode: ParseMentionMode = "edit",
-  attachments?: ChatAttachmentRef[],
   /** 额外允许固化的芯片键（如粘贴文本中的网址）：编辑态下免检 */
   extraPinned?: ReadonlySet<string>,
 ): void {
@@ -59,7 +52,6 @@ export function fillEditor(
   root.replaceChildren();
   if (!text) return;
   const segs = parseMentionSegments(text, mode, pinned);
-  const attachById = new Map((attachments ?? []).map((a) => [a.id, a]));
   for (const seg of segs) {
     if (seg.kind === "text") {
       // 保留换行：拆成 text + br
@@ -73,11 +65,7 @@ export function fillEditor(
     } else if (seg.kind === "link") {
       root.appendChild(createChip("link", seg.url));
     } else {
-      let label: string | undefined;
-      if (isAttachmentPath(seg.path)) {
-        label = attachById.get(seg.path.slice("file:".length))?.name;
-      }
-      root.appendChild(createChip("at", seg.path, label));
+      root.appendChild(createChip("at", seg.path));
     }
   }
   // 末尾单个 br 没有行高，补一个占位 br 才能把光标放到最后一行之后

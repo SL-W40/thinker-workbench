@@ -88,11 +88,6 @@ export function getWorkspaceImagesDir(workspaceId: string): string {
   return dataPath(getDataDir(), "wsImages", { workspaceId });
 }
 
-/** 工作空间文件附件目录：`<dataDir>/workspaces/<id>/attachments`。 */
-export function getWorkspaceAttachmentsDir(workspaceId: string): string {
-  return dataPath(getDataDir(), "wsAttachments", { workspaceId });
-}
-
 /** 工作空间运行检查点目录：`<dataDir>/workspaces/<id>/checkpoints`。 */
 export function getWorkspaceCheckpointDir(workspaceId: string): string {
   return dataPath(getDataDir(), "wsCheckpoints", { workspaceId });

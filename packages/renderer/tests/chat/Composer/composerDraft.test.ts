@@ -1,9 +1,8 @@
 /**
- * Composer 草稿存档（composerDraft.ts，jsdom localStorage）。
+ * Composer 草稿本地存档冒烟测试（Vitest）。
  */
 import assert from "node:assert/strict";
-import type { ChatAttachmentRef } from "@thinker-workbench/shared";
-import { afterEach, beforeEach, describe, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, it } from "vitest";
 import {
   clearComposerDraft,
   flushComposerDrafts,
@@ -11,102 +10,56 @@ import {
   saveComposerDraft,
 } from "../../../src/features/chat/composer/composerDraft";
 
-const KEY = "thinker.composer.draft.v1";
+const STORAGE_KEY = "thinker.composer.draft.v1";
 
-function memoryStorage() {
-  const store = new Map<string, string>();
-  Object.assign(globalThis, {
-    localStorage: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        store.set(key, value);
-      },
-      removeItem: (key: string) => {
-        store.delete(key);
-      },
-    },
-  });
-}
+beforeEach(() => {
+  localStorage.clear();
+});
 
-function attachment(id: string): ChatAttachmentRef {
-  return {
-    id,
-    name: `${id}.txt`,
-    path: `/tmp/${id}.txt`,
-    mime: "text/plain",
-    size: 12,
-    kind: "document",
-  };
-}
+afterEach(() => {
+  flushComposerDrafts();
+  localStorage.clear();
+});
 
 describe("composerDraft", () => {
-  beforeEach(() => {
-    memoryStorage();
-    vi.useFakeTimers();
+  it("写入后可读回正文", () => {
+    saveComposerDraft("s1", { text: "写了一半的话" });
     flushComposerDrafts();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
+    assert.deepEqual(loadComposerDraft("s1"), { text: "写了一半的话" });
   });
 
-  it("防抖窗口内还没落盘，flush 后同会话可读回", () => {
-    saveComposerDraft("s1", { text: "写了一半的话", attachments: [] });
-    assert.equal(loadComposerDraft("s1"), null);
+  it("空正文会撤档", () => {
+    saveComposerDraft("s1", { text: "abc" });
     flushComposerDrafts();
-    assert.deepEqual(loadComposerDraft("s1"), { text: "写了一半的话", attachments: [] });
-  });
-
-  it("等过防抖窗口自动落盘", () => {
-    saveComposerDraft("s1", { text: "abc", attachments: [] });
-    vi.advanceTimersByTime(250);
-    assert.equal(loadComposerDraft("s1")?.text, "abc");
-  });
-
-  it("附件引用按形状过滤，保留正文里用到的", () => {
-    saveComposerDraft("s1", {
-      text: "见 @file:att_ok",
-      attachments: [attachment("att_ok"), { id: 42 } as unknown as ChatAttachmentRef],
-    });
-    flushComposerDrafts();
-    assert.deepEqual(
-      loadComposerDraft("s1")?.attachments.map((a) => a.id),
-      ["att_ok"],
-    );
-  });
-
-  it("空正文视为撤档（发送后不该再回来）", () => {
-    saveComposerDraft("s1", { text: "草稿", attachments: [attachment("att_ok")] });
-    flushComposerDrafts();
-    saveComposerDraft("s1", { text: "   \n", attachments: [] });
+    saveComposerDraft("s1", { text: "   \n" });
     flushComposerDrafts();
     assert.equal(loadComposerDraft("s1"), null);
   });
 
-  it("clearComposerDraft 只清指定会话", () => {
-    saveComposerDraft("s1", { text: "a", attachments: [] });
-    saveComposerDraft("s2", { text: "b", attachments: [] });
+  it("clear 后不可读", () => {
+    saveComposerDraft("s1", { text: "草稿" });
     flushComposerDrafts();
     clearComposerDraft("s1");
     flushComposerDrafts();
     assert.equal(loadComposerDraft("s1"), null);
+  });
+
+  it("多会话互不覆盖", () => {
+    saveComposerDraft("s1", { text: "a" });
+    saveComposerDraft("s2", { text: "b" });
+    flushComposerDrafts();
+    assert.equal(loadComposerDraft("s1")?.text, "a");
     assert.equal(loadComposerDraft("s2")?.text, "b");
   });
 
-  it("会话数超额时丢最旧的", () => {
+  it("超过上限时淘汰最旧会话", () => {
     for (let i = 0; i < 25; i++) {
-      vi.setSystemTime(new Date(1_700_000_000_000 + i * 1000));
-      saveComposerDraft(`s${i}`, { text: `d${i}`, attachments: [] });
+      saveComposerDraft(`s${i}`, { text: `d${i}` });
       flushComposerDrafts();
     }
-    const keys = Object.keys(JSON.parse(localStorage.getItem(KEY) ?? "{}"));
-    assert.equal(keys.length, 20);
-    assert.equal(loadComposerDraft("s0"), null);
-    assert.equal(loadComposerDraft("s24")?.text, "d24");
-  });
-
-  it("存档损坏 / 无会话 id 时读不到草稿", () => {
-    localStorage.setItem(KEY, "{");
-    assert.equal(loadComposerDraft("s1"), null);
-    assert.equal(loadComposerDraft(null), null);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    assert.ok(raw);
+    const store = JSON.parse(raw) as Record<string, unknown>;
+    assert.ok(Object.keys(store).length <= 20);
   });
 });

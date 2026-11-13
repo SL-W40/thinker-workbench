@@ -9,12 +9,7 @@ import {
   IconButton,
   PaperclipIcon,
 } from "@thinker-workbench/design/react";
-import type {
-  ChatAttachmentRef,
-  ChatMessage,
-  ChatTodo,
-  SkillListItem,
-} from "@thinker-workbench/shared";
+import type { ChatMessage, ChatTodo, SkillListItem } from "@thinker-workbench/shared";
 import {
   type DragEvent,
   type KeyboardEvent,
@@ -34,6 +29,7 @@ import {
 import { workspaceTree } from "../../../platform/ipc/workspaceFs";
 import { useT } from "../../../ui/i18n/useI18n";
 import { loadFileRecents } from "../../inspector/fileRecents";
+import { ChatImageStrip, type DraftChatImage } from "../message/ChatImageStrip";
 import { SessionTodoBar } from "../panels/SessionTodoBar";
 import { ModelPicker } from "../pickers/ModelPicker";
 import { ModePicker } from "../pickers/ModePicker";
@@ -54,8 +50,9 @@ import { collectMentionPaths, SKILLS_PAGE } from "./mentionPaths";
 
 type Props = {
   draft: string;
-  onAttachFiles?: (files: File[]) => void;
-  attachments?: ChatAttachmentRef[];
+  draftImages?: DraftChatImage[];
+  onAttachImages?: (files: File[]) => void;
+  onRemoveImage?: (id: string) => void;
   busy: boolean;
   /** 本会话在 FIFO 中等待：可取消，但模型 / 模式仍可改。 */
   queued?: boolean;
@@ -85,8 +82,9 @@ type Props = {
 
 export function Composer({
   draft,
-  onAttachFiles,
-  attachments,
+  draftImages = [],
+  onAttachImages,
+  onRemoveImage,
   busy,
   queued = false,
   inputRef,
@@ -201,8 +199,7 @@ export function Composer({
     refreshMention();
   }, [refreshMention]);
 
-  /** 草稿中含图片类附件芯片时提示视觉标签（仍发送）。 */
-  const hasImageAttachments = (attachments ?? []).some((a) => a.mime.startsWith("image/"));
+  const hasReadyImages = draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
 
   useEffect(() => {
     const onChanged = () => setModelCatalogTick((n) => n + 1);
@@ -212,7 +209,7 @@ export function Composer({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: modelCatalogTick 未在函数体读取但刻意保留：模型设置变化后需要重新查询健康模型
   useEffect(() => {
-    if (!hasImageAttachments) {
+    if (!hasReadyImages) {
       setVisionUntagged(false);
       return;
     }
@@ -239,7 +236,7 @@ export function Composer({
     return () => {
       cancelled = true;
     };
-  }, [hasImageAttachments, sessionId, modelCatalogTick]);
+  }, [hasReadyImages, sessionId, modelCatalogTick]);
 
   const recentPaths = useMemo(() => loadFileRecents(workspaceId), [workspaceId]);
 
@@ -346,7 +343,13 @@ export function Composer({
     onKeyDown(e);
   }
 
-  const canSend = Boolean(draft.trim());
+  const canSend =
+    Boolean(draft.trim()) || draftImages.some((img) => !img.uploading && Boolean(img.path.trim()));
+
+  function takeImageFiles(list: FileList | File[] | null | undefined): File[] {
+    if (!list) return [];
+    return Array.from(list).filter((f) => f.type.startsWith("image/"));
+  }
 
   function onDragOver(e: DragEvent<HTMLDivElement>) {
     if (!e.dataTransfer.types.includes("Files")) return;
@@ -362,11 +365,10 @@ export function Composer({
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
     setDragOver(false);
-    const files = Array.from(e.dataTransfer.files ?? []);
+    const files = takeImageFiles(e.dataTransfer.files);
     if (files.length === 0) return;
     e.preventDefault();
-    // 统一附件流：图片与非图片都落盘为 @file:<id> 芯片
-    onAttachFiles?.(files);
+    onAttachImages?.(files);
   }
 
   return (
@@ -376,6 +378,7 @@ export function Composer({
         open={Boolean(mention) && items.length > 0}
         kind={mention?.kind ?? "slash"}
         items={items}
+        query={mention?.query ?? ""}
         highlight={highlight}
         onHighlight={setHighlight}
         onSelect={selectItem}
@@ -392,7 +395,7 @@ export function Composer({
       />
       <SessionTodoBar todos={todos} running={busy} onClearCompleted={onClearCompletedTodos} />
       <BackgroundTasksBar threadId={threadId ?? undefined} onOpenTerminal={onOpenTerminal} />
-      {visionUntagged && hasImageAttachments ? (
+      {visionUntagged && hasReadyImages ? (
         <Callout tone="warning" className="composer-gate">
           {t("chat.images.visionUntagged")}
         </Callout>
@@ -419,6 +422,7 @@ export function Composer({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
+        <ChatImageStrip images={draftImages} onRemove={onRemoveImage} />
         <ComposerEditor
           ref={inputRef}
           value={draft}
@@ -426,23 +430,22 @@ export function Composer({
           onChange={onDraftChange}
           onKeyDown={handleKeyDown}
           onCaretChange={refreshMention}
-          attachments={attachments}
-          onPasteFiles={(files) => {
-            if (!onAttachFiles || files.length === 0) return false;
-            void onAttachFiles(files);
+          onPasteImages={(files) => {
+            if (!onAttachImages || files.length === 0) return false;
+            void onAttachImages(files);
             return true;
           }}
         />
         <input
           ref={fileInputRef}
           type="file"
-          accept="*/*"
+          accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
           multiple
           hidden
           onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
+            const files = takeImageFiles(e.target.files);
             e.target.value = "";
-            if (files.length) onAttachFiles?.(files);
+            if (files.length) onAttachImages?.(files);
           }}
         />
         <div className="composer-bar">
@@ -456,8 +459,8 @@ export function Composer({
               className="composer-attach"
               size="md"
               variant="ghost"
-              aria-label={t("chat.attachments.attach")}
-              title={t("chat.attachments.attach")}
+              aria-label={t("chat.images.attach")}
+              title={t("chat.images.attach")}
               onClick={() => fileInputRef.current?.click()}
             >
               <PaperclipIcon />

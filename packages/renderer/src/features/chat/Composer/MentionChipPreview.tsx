@@ -2,7 +2,7 @@
  * @ 文件芯片悬停预览卡片。
  *
  * 通过 document 事件委托捕获 `[data-mention="at"]`（composer 与消息气泡共用），
- * 按 `data-path` 区分工作空间路径与外部附件（`file:<id>`），经 bridge 拉取预览：
+ * 经 bridge 拉取工作空间文件预览：
  * - 图片：缩略图 + 尺寸 + 大小 + MIME
  * - 文档/文本：解析文本预览 + 文件信息
  * - 二进制/超限：仅文件信息
@@ -20,7 +20,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { workspaceReadFile } from "../../../platform/ipc/workspaceFs";
-import { parseWorkspaceFileText, readAttachment } from "../../../platform/ipc/workspaces";
+import { parseWorkspaceFileText } from "../../../platform/ipc/workspaces";
 import { useT } from "../../../ui/i18n/useI18n";
 import { formatFileSize, summarizeTextPreview } from "./mentionPreviewFormat";
 import "./MentionChipPreview.less";
@@ -29,7 +29,7 @@ export { formatFileSize, summarizeTextPreview };
 
 export type MentionChipPreviewProps = {
   workspaceId: string | null;
-  /** 点击「在检视器中打开」（仅工作空间文件）。 */
+  /** 点击「在检视器中打开」。 */
   onOpenFile?: (path: string) => void;
 };
 
@@ -44,7 +44,6 @@ type PreviewReady = {
   info: FileInfo;
   imageUrl?: string;
   text?: string;
-  isExternal: boolean;
 };
 type PreviewState =
   | { status: "loading" }
@@ -53,20 +52,6 @@ type PreviewState =
 
 async function resolve(key: string, workspaceId: string | null): Promise<PreviewState> {
   if (!workspaceId) return { status: "missing", path: key };
-  if (key.startsWith("file:")) {
-    const id = key.slice("file:".length);
-    const att = await readAttachment(workspaceId, id);
-    if (!att) return { status: "missing", path: key };
-    const info: FileInfo = {
-      name: att.name,
-      path: "external",
-      size: att.size,
-      mime: att.mime,
-      ext: extOf(att.name),
-    };
-    if (att.dataUrl) return { status: "ready", info, imageUrl: att.dataUrl, isExternal: true };
-    return { status: "ready", info, text: att.text ?? undefined, isExternal: true };
-  }
   const wf = await workspaceReadFile(workspaceId, key);
   const name = key.split("/").pop() || key;
   if (wf.missing) return { status: "missing", name, path: key };
@@ -78,13 +63,13 @@ async function resolve(key: string, workspaceId: string | null): Promise<Preview
     ext: extOf(key),
   };
   if (wf.mediaKind === "image" && wf.previewDataUrl) {
-    return { status: "ready", info, imageUrl: wf.previewDataUrl, isExternal: false };
+    return { status: "ready", info, imageUrl: wf.previewDataUrl };
   }
   if (!wf.binary && typeof wf.content === "string" && wf.content.length > 0) {
-    return { status: "ready", info, text: wf.content, isExternal: false };
+    return { status: "ready", info, text: wf.content };
   }
   const parsed = await parseWorkspaceFileText(workspaceId, key);
-  return { status: "ready", info, text: parsed?.text ?? undefined, isExternal: false };
+  return { status: "ready", info, text: parsed?.text ?? undefined };
 }
 
 export function MentionChipPreview({ workspaceId, onOpenFile }: MentionChipPreviewProps) {
@@ -231,7 +216,7 @@ export function MentionChipPreview({ workspaceId, onOpenFile }: MentionChipPrevi
               {view.info.mime ? ` · ${view.info.mime}` : ""}
             </div>
             <div className="mention-preview__path" title={view.info.path}>
-              {view.isExternal ? t("chat.mention.preview.external") : view.info.path}
+              {view.info.path}
             </div>
           </div>
           {view.text ? (
@@ -239,7 +224,7 @@ export function MentionChipPreview({ workspaceId, onOpenFile }: MentionChipPrevi
           ) : view.imageUrl ? null : (
             <div className="mention-preview__hint">{t("chat.mention.preview.parseFailed")}</div>
           )}
-          {!view.isExternal && openRef.current && (
+          {openRef.current && (
             <button
               type="button"
               className="mention-preview__open"

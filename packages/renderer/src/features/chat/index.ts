@@ -15,7 +15,6 @@ export { TodoList } from "./cards/TodoList";
 export { Composer } from "./composer/Composer";
 export { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 export { chatSubmitBlocked } from "./composer/chatSubmit";
-export { extractAttachmentIds } from "./composer/composerMentions";
 export { SendGlyph, StopGlyph } from "./composer/glyphs";
 export { MentionChipPreview } from "./composer/MentionChipPreview";
 export { MentionsRichText } from "./composer/MentionsRichText";

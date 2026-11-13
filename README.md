@@ -118,7 +118,7 @@ Paths are declared once in `packages/shared/src/dataLayout.ts` (desktop + engine
 | `state/catalog.db` | state | Workspace metadata |
 | `state/session.json` | state | UI / window session |
 | `workspaces/<id>/chat.db` | workspace | Per-workspace chats |
-| `workspaces/<id>/images/`, `attachments/` | workspace | Chat images / external file attachments |
+| `workspaces/<id>/images/` | workspace | Chat images |
 | `workspaces/<id>/shell-output/` | workspace | Large terminal output spills |
 | `workspaces/<id>/checkpoints/` | workspace | Agent resume checkpoints |
 | `workspaces/<id>/memory.sqlite` | workspace | Session memory |
@@ -127,7 +127,7 @@ Paths are declared once in `packages/shared/src/dataLayout.ts` (desktop + engine
 | `customize/{rules,skills,agents,mcps}/` | content | Global rules / skills / subagents / MCP |
 | `cache/browser-screenshots/` | cache | Regenerable browser screenshots (pruned by age + size) |
 
-Deleting a workspace removes `workspaces/<id>/` entirely (chats, images, attachments, checkpoints, trace, memory). The default workspace (`ws_default`) cannot be deleted—only cleared.
+Deleting a workspace removes `workspaces/<id>/` entirely (chats, images, checkpoints, trace, memory). The default workspace (`ws_default`) cannot be deleted—only cleared.
 
 Changing the root **copies** history into the new folder (old root is left in place) and always writes `settings.json` there.
 

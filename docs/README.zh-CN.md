@@ -117,7 +117,7 @@ API Key 经 Electron `safeStorage` 加密，钥匙串条目名为 **Thinker Work
 | `state/catalog.db` | state | 工作区元数据 |
 | `state/session.json` | state | UI / 窗口会话 |
 | `workspaces/<id>/chat.db` | workspace | 按工作区的聊天 |
-| `workspaces/<id>/images/`、`attachments/` | workspace | 聊天附图 / 外部文件附件 |
+| `workspaces/<id>/images/` | workspace | 聊天附图 |
 | `workspaces/<id>/shell-output/` | workspace | 终端大输出 spill |
 | `workspaces/<id>/checkpoints/` | workspace | Agent 恢复检查点 |
 | `workspaces/<id>/memory.sqlite` | workspace | 会话记忆 |
@@ -126,7 +126,7 @@ API Key 经 Electron `safeStorage` 加密，钥匙串条目名为 **Thinker Work
 | `customize/{rules,skills,agents,mcps}/` | content | 全局 rules / skills / subagents / MCP |
 | `cache/browser-screenshots/` | cache | 可再生浏览器截图（按天数 + 总大小清理） |
 
-删除工作区会整目录带走 `workspaces/<id>/`（聊天、附图、附件、检查点、trace、记忆）。默认工作区（`ws_default`）不可删除，只能清空会话。
+删除工作区会整目录带走 `workspaces/<id>/`（聊天、附图、检查点、trace、记忆）。默认工作区（`ws_default`）不可删除，只能清空会话。
 
 更换根目录会把历史 **复制** 到新文件夹（旧根保留），并始终在该处写入 `settings.json`。
 

@@ -78,7 +78,7 @@ describe("dataLayout", () => {
     }
   });
 
-  it("会话附图白名单覆盖 workspaces 下的 images 与 attachments", () => {
+  it("会话附图白名单覆盖 workspaces 下的 images，并只读兼容旧 attachments", () => {
     const allowed = chatImageAllowed(path.join(ROOT, "tmp-data"));
     assert.ok(allowed.workspacesRoot.replace(/\\/g, "/").endsWith("/workspaces"));
     assert.deepEqual([...allowed.workspaceKinds], ["images", "attachments"]);

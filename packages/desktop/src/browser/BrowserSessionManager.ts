@@ -21,7 +21,7 @@ import {
   normalizeBrowserUrl,
   type UtilityBrowserRequest,
 } from "@thinker-workbench/shared";
-import { type WebContents, webContents } from "electron";
+import { type WebContents, screen, webContents } from "electron";
 import { getCacheDir } from "../config/paths";
 import { desktopLog } from "../log/setup";
 import {
@@ -152,10 +152,15 @@ class BrowserSessionManager {
     });
     on("did-stop-loading", () => {
       this.loading = false;
+      // 导航会清掉 CDP 视口覆盖，落定后再灌一次，避免页面按错误宽度排版
+      void this.syncGuestViewport();
       this.emitState();
     });
     on("page-title-updated", () => this.emitState());
-    on("did-navigate", () => this.emitState());
+    on("did-navigate", () => {
+      void this.syncGuestViewport();
+      this.emitState();
+    });
     on("did-navigate-in-page", () => this.emitState());
     on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
       if (!isMainFrame) return;
@@ -231,7 +236,51 @@ class BrowserSessionManager {
       this.viewportWidth = this.viewport.width || FALLBACK_VIEWPORT_W;
       this.viewportHeight = this.viewport.height || FALLBACK_VIEWPORT_H;
     }
+    // 面板真实尺寸 → 同步 guest 的 CSS 视口（否则页面按错误宽度排版）
+    void this.syncGuestViewport();
     this.emitState();
+  }
+
+  /**
+   * 把当前逻辑视口灌进 guest（CDP Emulation）。
+   * 仅改 <webview> 的 CSS 宽高时，部分站点的 window.innerWidth / 媒体查询仍对不齐。
+   */
+  private async syncGuestViewport(): Promise<void> {
+    const w = this.deviceMetricsActive
+      ? this.viewportWidth
+      : this.viewport.width || this.viewportWidth;
+    const h = this.deviceMetricsActive
+      ? this.viewportHeight
+      : this.viewport.height || this.viewportHeight;
+    if (w <= 0 || h <= 0) return;
+    await this.applyDeviceMetrics(w, h);
+  }
+
+  private async applyDeviceMetrics(width: number, height: number): Promise<void> {
+    const wc = this.liveContents();
+    if (!wc) return;
+    let deviceScaleFactor = 1;
+    try {
+      deviceScaleFactor = screen.getPrimaryDisplay().scaleFactor || 1;
+    } catch {
+      deviceScaleFactor = 1;
+    }
+    try {
+      const dbg = wc.debugger;
+      if (!dbg.isAttached()) dbg.attach("1.3");
+      await dbg.sendCommand("Emulation.setDeviceMetricsOverride", {
+        width,
+        height,
+        deviceScaleFactor,
+        mobile: false,
+      });
+    } catch (err) {
+      desktopLog("browser").warn("applyDeviceMetrics failed", {
+        width,
+        height,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   setVisible(visible: boolean): void {
@@ -463,19 +512,8 @@ class BrowserSessionManager {
     this.viewportWidth = w;
     this.viewportHeight = h;
     this.deviceMetricsActive = true;
-    const wc = await this.requireReady();
-    try {
-      const dbg = wc.debugger;
-      if (!dbg.isAttached()) dbg.attach("1.3");
-      await dbg.sendCommand("Emulation.setDeviceMetricsOverride", {
-        width: w,
-        height: h,
-        deviceScaleFactor: 1,
-        mobile: false,
-      });
-    } catch {
-      // debugger 不可用时仅记录逻辑尺寸
-    }
+    await this.requireReady();
+    await this.applyDeviceMetrics(w, h);
     this.emitState();
     return this.getState();
   }

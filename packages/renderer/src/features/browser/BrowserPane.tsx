@@ -100,6 +100,9 @@ export const BrowserPane = memo(function BrowserPane({ active = true, initialUrl
       if (width > 0 && height > 0) {
         webview.style.width = `${width}px`;
         webview.style.height = `${height}px`;
+        // 属性尺寸与 style 双写：部分 Electron 版本只认其一
+        webview.setAttribute("width", String(width));
+        webview.setAttribute("height", String(height));
       }
       if (report && activeRef.current && width > 0 && height > 0) {
         void browserSetViewport({ width, height });
@@ -107,20 +110,40 @@ export const BrowserPane = memo(function BrowserPane({ active = true, initialUrl
       return { width, height };
     };
 
+    /** Electron <webview> 内部 browser 对象偶发不撑满，强制铺满宿主。 */
+    const fitGuestSurface = () => {
+      try {
+        const root = webview.shadowRoot;
+        const surface = root?.querySelector("iframe") ?? root?.firstElementChild;
+        if (surface instanceof HTMLElement) {
+          surface.style.cssText =
+            "display:block;width:100%;height:100%;border:0;position:absolute;inset:0";
+        }
+      } catch {
+        /* shadow 不可访问时忽略 */
+      }
+    };
+
     const onReady = () => {
+      fitGuestSurface();
       const withId = webview as unknown as { getWebContentsId?: () => number };
       const id = withId.getWebContentsId?.();
       if (typeof id !== "number") return;
       contentsIdRef.current = id;
-      if (activeRef.current) void browserAttachWebview(id, measure(false));
+      // 首次就绪就上报真实尺寸，触发主进程同步 CSS 视口
+      if (activeRef.current) void browserAttachWebview(id, measure(true));
     };
     webview.addEventListener("dom-ready", onReady);
 
     const ro = new ResizeObserver(() => {
       measure(true);
+      fitGuestSurface();
     });
     ro.observe(host);
-    requestAnimationFrame(() => measure(false));
+    requestAnimationFrame(() => {
+      measure(true);
+      fitGuestSurface();
+    });
 
     return () => {
       ro.disconnect();

@@ -1,6 +1,7 @@
 /**
  * Composer 编辑器 DOM 纯读取 / 序列化（可在 jsdom 下单测）。
  */
+import { formatAtPathToken, formatSlashSkillToken } from "@thinker-workbench/shared";
 import { type ParseMentionMode, parseMentionSegments } from "./composerMentions";
 
 export function atLabel(path: string): string {
@@ -11,11 +12,10 @@ export function atLabel(path: string): string {
 function serializeNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!(node instanceof HTMLElement)) return "";
-  if (node.dataset.mention === "slash") return `/${node.dataset.name ?? ""}`;
+  if (node.dataset.mention === "slash") return formatSlashSkillToken(node.dataset.name ?? "");
   if (node.dataset.mention === "link") return node.dataset.url ?? "";
   if (node.dataset.mention === "at") {
-    const path = node.dataset.path ?? "";
-    return /\s/.test(path) ? `@\`${path}\`` : `@${path}`;
+    return formatAtPathToken(node.dataset.path ?? "");
   }
   if (node.tagName === "BR") {
     // 仅用于撑开末尾空行，不计入正文
@@ -121,12 +121,10 @@ export function setPlainCaret(root: HTMLElement, offset: number): void {
     if (node.dataset.mention) {
       const token =
         node.dataset.mention === "slash"
-          ? `/${node.dataset.name ?? ""}`
+          ? formatSlashSkillToken(node.dataset.name ?? "")
           : node.dataset.mention === "link"
             ? (node.dataset.url ?? "")
-            : /\s/.test(node.dataset.path ?? "")
-              ? `@\`${node.dataset.path}\``
-              : `@${node.dataset.path ?? ""}`;
+            : formatAtPathToken(node.dataset.path ?? "");
       if (remaining <= token.length) {
         // 落在芯片上：放在芯片后
         const range = document.createRange();

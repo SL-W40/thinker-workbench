@@ -4,7 +4,6 @@
  * DOM 序列化与光标见 ./dom，DOM 变更见 ./mutate。
  */
 
-import type { ChatAttachmentRef } from "@thinker-workbench/shared";
 import {
   type FormEvent,
   forwardRef,
@@ -46,10 +45,6 @@ type Props = {
   onCaretChange?: () => void;
   /** 剪贴板含图片时回调；返回 true 表示已处理（不再插入纯文本）。 */
   onPasteImages?: (files: File[]) => boolean | undefined;
-  /** 剪贴板含文件（含图片，统一附件流）时回调；返回 true 表示已处理（不再插入纯文本）。 */
-  onPasteFiles?: (files: File[]) => boolean | undefined;
-  /** 外部附件引用（@file:<id> → 展示名），供回填时解析芯片标签。 */
-  attachments?: ChatAttachmentRef[];
 };
 
 export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function ComposerEditor(
@@ -61,8 +56,6 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     onKeyDown,
     onCaretChange,
     onPasteImages,
-    onPasteFiles,
-    attachments,
   },
   ref,
 ) {
@@ -114,12 +107,12 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     const caret = hadFocus ? (pureAppend ? value.length : getPlainCaret(el)) : value.length;
     // 仅「整段替换」（发送后清空 / 载入编辑 / 不一致恢复）才清空撤销栈；纯追加不清
     if (!pureAppend) historyRef.current.clear();
-    // 外部写入用 display：行末完整 token 也固化为芯片
-    fillEditor(el, value, "display", attachments);
+    // 外部写入用 display：网址按展示规则固化；/skill 与 @path 仅带芯片标记的才成芯片
+    fillEditor(el, value, "display");
     lastValue.current = value;
     if (hadFocus) setPlainCaret(el, caret);
     el.classList.toggle("is-empty", !value);
-  }, [value, attachments]);
+  }, [value]);
 
   useEffect(() => {
     const el = elRef.current;
@@ -139,10 +132,10 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     pastedUrlsRef.current = [];
     const rebuild = allowRebuild && chipKey(next, "edit", pinned) !== domKey;
     if (rebuild) {
-      // 输入中用 edit：仅「已固化」（面板选中 / 附件 / 粘贴网址）的 token 固化，
+      // 输入中用 edit：仅「已固化」（面板选中 / 粘贴网址）的 token 固化，
       // 避免手打的 /cre、@path、网址在输入过程中被芯片化
       const caret = getPlainCaret(el);
-      fillEditor(el, next, "edit", attachments, pinned);
+      fillEditor(el, next, "edit", pinned);
       setPlainCaret(el, caret);
     } else {
       ensureTrailingPad(el, next);
@@ -164,7 +157,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
     const el = elRef.current;
     if (!el || !next) return;
     applyingHistory.current = true;
-    fillEditor(el, next.text, "edit", attachments);
+    fillEditor(el, next.text, "edit");
     setPlainCaret(el, next.caret);
     skipSync.current = true;
     lastValue.current = next.text;
@@ -265,12 +258,6 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, Props>(function C
         const f = item.getAsFile();
         if (f) files.push(f);
       }
-    }
-    // 统一附件流：composer 把所有文件（含图片）落盘为 @file:<id> 芯片；
-    // 原位编辑流只传 onPasteImages，图片回退到旧附图通道。
-    if (files.length > 0 && onPasteFiles?.(files)) {
-      e.preventDefault();
-      return;
     }
     const imageFiles = files.filter((f) => f.type.startsWith("image/"));
     if (imageFiles.length > 0 && onPasteImages?.(imageFiles)) {

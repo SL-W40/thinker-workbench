@@ -1,6 +1,11 @@
 /**
  * Composer `/` / `@` 触发解析与插入、contextPaths 抽取。
  */
+import {
+  extractContextPaths as extractMarkedContextPaths,
+  formatAtPathToken,
+  formatSlashSkillToken,
+} from "@thinker-workbench/shared";
 
 export type MentionKind = "slash" | "at";
 
@@ -62,56 +67,21 @@ export function applyMentionInsert(
 }
 
 /**
- * 从用户文抽取 `@path`（仅工作空间相对路径）。
- * 外部附件 `@file:<id>` 不在此列，走 `extractAttachmentIds` 单独通道。
- * 支持 `@foo/bar.ts`、@`path with space`、@"path with space"。
+ * 从用户文抽取面板选中的 `@path`（工作空间相对路径）。
+ * 手打字面量不含芯片标记，不进 context。
  */
 export function extractContextPaths(text: string): string[] {
-  const out: string[] = [];
-  const re = /(?:^|[\s])@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))/g;
-  for (const m of text.matchAll(re)) {
-    const p = (m[1] || m[2] || m[3] || "")
-      .trim()
-      .replace(/\\/g, "/")
-      .replace(/^\.\//, "")
-      .replace(/\/+$/, "");
-    if (!p || p.startsWith("file:")) continue;
-    out.push(p);
-  }
-  return [...new Set(out)];
+  return extractMarkedContextPaths(text);
 }
 
-/** 抽取文本中的外部附件 id（`@file:<id>`，可紧接前文，无需前导空白）。 */
-export function extractAttachmentIds(text: string): string[] {
-  const ids: string[] = [];
-  const re = /@file:([^\s@]+)/g;
-  for (const m of text.matchAll(re)) {
-    const id = (m[1] ?? "").trim();
-    if (id) ids.push(id);
-  }
-  return [...new Set(ids)];
-}
-
-/** 是否为外部附件引用路径（`file:<id>`）。 */
-export function isAttachmentPath(path: string): boolean {
-  return path.startsWith("file:");
-}
-
-/** 插入 @ 路径时的文本形式。 */
+/** 插入 @ 路径时的文本形式（带芯片标记；手打不含标记）。 */
 export function formatAtPath(relPath: string): string {
-  const p = relPath.replace(/\\/g, "/");
-  if (/\s/.test(p)) return `@\`${p}\` `;
-  return `@${p} `;
+  return `${formatAtPathToken(relPath)} `;
 }
 
-/** 插入外部附件引用的文本形式。 */
-export function formatFileAttachment(id: string): string {
-  return `@file:${id} `;
-}
-
-/** 插入 skill 斜杠。 */
+/** 插入 skill 斜杠（带芯片标记；手打不含标记）。 */
 export function formatSlashSkill(name: string): string {
-  return `/${name} `;
+  return `${formatSlashSkillToken(name)} `;
 }
 
 /**
@@ -177,8 +147,8 @@ export type ParseMentionMode = "display" | "edit";
 
 /**
  * 把用户文拆成可着色的 mention 段（与 slash / @ 抽取规则对齐）。
- * - `display`：气泡展示，行末 token 也成芯片
- * - `edit`：输入中，仅「后面已有空白」的 token 成芯片（避免 /cre 半截被芯片化）
+ * - `display`：气泡展示；网址成芯片；`/` `@` 仅带芯片标记的才成芯片（手打保持字面量）
+ * - `edit`：仅 pinned（面板选中 / 已固化）的 token 成芯片
  */
 function parseMentionCore(
   text: string,
@@ -187,12 +157,10 @@ function parseMentionCore(
   pinned?: ReadonlySet<string>,
 ): MentionSegment[] {
   if (!text) return [];
-  // 两段式交替匹配：
-  //  - `@file:<id>` 任意位置（含紧接前文，无需前导空白），外部附件统一 token
-  //  - 其它 `@path` / `/skill` 须行首或空白后（避免把邮箱等 @ 误判为芯片）
-  // `\b` 只挂在 skill 上——路径常以 `/` 结尾，`/` 与空白之间没有词边界。
+  // 全局交替匹配：@ 引用 或 /skill（行首/空白后；可选芯片标记 ZWSP）。
+  // 标记与 COMPOSER_CHIP_MARK（\u200B）对齐；明文路径不得吞掉 ZWSP。
   const re =
-    /@file:([^\s@]+)|(?:^|[\s])(?:@(?:"([^"]+)"|`([^`]+)`|([^\s@]+))|\/([a-z0-9]+(?:-[a-z0-9]+)*)\b)/gi;
+    /(?:^|[\s])(?:@(?:"([^"]+)"|`([^`]+)`|([^\s@\u200B]+))(\u200B)?|\/([a-z0-9]+(?:-[a-z0-9]+)*)(\u200B)?(?![a-z0-9-]))/gi;
   const out: MentionSegment[] = [];
   let last = 0;
   for (const m of text.matchAll(re)) {
@@ -203,28 +171,38 @@ function parseMentionCore(
     const absStart = m.index + tokenOffset;
     const token = full.slice(tokenOffset);
     const absEnd = absStart + token.length;
-    // 编辑态：芯片只来自「DOM 中已固化的芯片」（面板选中 / 附件插入产生的）。
+    const atPathRaw = m[1] || m[2] || m[3] || "";
+    const atMarked = Boolean(m[4]);
+    const slashName = m[5];
+    const slashMarked = Boolean(m[6]);
+    // 展示态：手打 /name、@path（无标记）保持字面量，与发出内容一致
+    if (mode === "display") {
+      if (slashName && !slashMarked) continue;
+      if (!slashName && atPathRaw && !atMarked) continue;
+    }
+    // 编辑态：芯片只来自「DOM 中已固化的芯片」（面板选中产生的）。
     // 手打的 /xxx、@path 一律保持纯文本——输入只是唤起搜索，只有选中才成芯片。
     if (mode === "edit") {
-      const fileId = m[1];
-      const key = m[5]
-        ? `/${m[5].toLowerCase()}`
-        : `@${fileId ? `file:${fileId}` : (m[2] || m[3] || m[4] || "").trim().replace(/\\/g, "/").replace(/^\.\//, "")}`;
+      const key = slashName
+        ? `/${slashName.toLowerCase()}`
+        : `@${atPathRaw.trim().replace(/\\/g, "/").replace(/^\.\//, "")}`;
       if (!pinned?.has(key)) continue;
     }
     if (absStart > last) {
       out.push({ kind: "text", text: text.slice(last, absStart) });
     }
-    const slashName = m[5];
     if (slashName) {
-      out.push({ kind: "slash", text: token, name: slashName.toLowerCase() });
+      out.push({
+        kind: "slash",
+        text: formatSlashSkillToken(slashName),
+        name: slashName.toLowerCase(),
+      });
     } else {
-      // 分支 A：@file:<id>（m[1] 为 id，无前导空白要求）
-      const filePath = m[1];
-      const path = filePath
-        ? `file:${filePath}`
-        : (m[2] || m[3] || m[4] || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
-      if (path) out.push({ kind: "at", text: token, path });
+      const path = atPathRaw
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\.\//, "");
+      if (path) out.push({ kind: "at", text: formatAtPathToken(path), path });
       else out.push({ kind: "text", text: token });
     }
     last = absEnd;

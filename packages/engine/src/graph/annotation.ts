@@ -3,7 +3,6 @@
  * messages / startedToolCallIds 用 reducer 合并；其余字段 LastValue。
  */
 import { Annotation } from "@langchain/langgraph";
-import type { ChatAttachmentRef } from "@thinker-workbench/shared";
 import type { ModelMessage, ChatToolCall } from "../model/types";
 
 function appendMessages(left: ModelMessage[], right: ModelMessage[]): ModelMessage[] {
@@ -54,11 +53,6 @@ export const AgentStateAnnotation = Annotation.Root({
     default: () => undefined,
   }),
   contextPaths: Annotation<string[] | undefined>({
-    reducer: (left, right) => (right === undefined ? left : right),
-    default: () => undefined,
-  }),
-  /** 外部附件引用（工作空间外文件，绝对路径已落盘 dataDir）；文档解析文本并入上下文。 */
-  attachments: Annotation<ChatAttachmentRef[] | undefined>({
     reducer: (left, right) => (right === undefined ? left : right),
     default: () => undefined,
   }),

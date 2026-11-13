@@ -38,7 +38,8 @@ export function estimateTurnUsage(input: {
 }
 
 /**
- * 路径须在 `<dataDir>/workspaces/<id>/{images,attachments}/` 下。
+ * 路径须在 `<dataDir>/workspaces/<id>/{images,attachments}/` 下
+ * （attachments 仅兼容旧消息里已落盘的图片）。
  * 允许根目录由 shared 布局表给出，避免跨包各拼一份。
  */
 export function isAllowedChatImagePath(filePath: string, dataDir?: string | null): boolean {

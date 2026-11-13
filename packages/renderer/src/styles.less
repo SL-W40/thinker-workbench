@@ -117,6 +117,15 @@ code {
 }
 
 /*
+ * Electron <webview> 会抢走 pointermove，拖宽时右侧若正显示浏览器会卡死。
+ * 拖拽期关掉 guest 命中，事件回到宿主窗口。
+ */
+.chat-shell.is-resizing .browser-pane__webview,
+.chat-shell.is-resizing .browser-pane__host {
+  pointer-events: none !important;
+}
+
+/*
  * 中间聊天列是唯一没做窗口化的重内容：拖拽期让屏外气泡跳过 layout / paint，
  * 每帧只重排视口里那两三个气泡。只在拖拽期生效，松手即移除，
  * 避免长期存在时估算高度影响滚动条与贴底跟随。

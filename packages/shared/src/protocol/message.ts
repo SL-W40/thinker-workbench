@@ -213,11 +213,12 @@ export type ChatTimelineStep =
   | ChatTimelineSubagentStep;
 
 /**
- * 用户消息附图引用（像素在工作空间 images 目录或外部图片附件 attachments 目录；会话只存元数据）。
- * `path` 为绝对路径，须落在 `{dataDir}/workspaces/{workspaceId}/images/` 或 `.../attachments/` 下。
+ * 用户消息附图引用（像素在工作空间 images 目录；会话只存元数据）。
+ * `path` 为绝对路径，须落在 `{dataDir}/workspaces/{workspaceId}/images/` 下
+ * （旧消息可能仍在 `.../attachments/`，编码时只读兼容）。
  */
 export type ChatImageRef = {
-  /** 附件唯一 id（亦用于文件名）。 */
+  /** 附图唯一 id（亦用于文件名）。 */
   id: string;
   /** 落盘绝对路径。 */
   path: string;
@@ -227,30 +228,6 @@ export type ChatImageRef = {
   width: number;
   /** 像素高。 */
   height: number;
-};
-
-/**
- * 外部附件（工作空间外文件，经上传/粘贴/拖拽落盘到 dataDir/attachments）的语义种类。
- * - image/audio/video：媒体，沿用既有预览通道
- * - document：结构化文档（pdf/doc/docx/xls…），走可插拔解析层抽文本
- * - other：其它二进制
- */
-export type AttachmentKind = "image" | "audio" | "video" | "document" | "other";
-
-/** 外部附件引用（落盘绝对路径 + 元数据；会话只存元数据，不污染 workspace）。 */
-export type ChatAttachmentRef = {
-  /** 附件唯一 id（亦作文件名）。 */
-  id: string;
-  /** 原始文件名（含扩展名）。 */
-  name: string;
-  /** 落盘绝对路径（dataDir/workspaces/{wsId}/attachments 下）。 */
-  path: string;
-  /** MIME（如 application/pdf）。 */
-  mime: string;
-  /** 字节大小。 */
-  size: number;
-  /** 语义种类。 */
-  kind: AttachmentKind;
 };
 
 /** 计划完成状态。 */
@@ -330,8 +307,6 @@ export type ChatMessage = {
   plan?: ChatPlan;
   /** 用户附图（仅 user；全部保留，不截断）。 */
   images?: ChatImageRef[];
-  /** 外部附件引用（仅 user；工作空间外文件，经 @file:<id> 引用）。 */
-  attachments?: ChatAttachmentRef[];
   /** 消息在 UI 中创建时的 Unix 毫秒时间戳。 */
   createdAt?: number;
   /** 为 true 表示仍在流式生成 / 等待完成，尚未定稿。 */

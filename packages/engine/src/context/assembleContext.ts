@@ -4,7 +4,6 @@
  */
 import {
   type AiLocale,
-  type ChatAttachmentRef,
   type ChatMode,
   type ContextUsageSegment,
   type ContextUsageSnapshot,
@@ -37,8 +36,6 @@ export type AssembleContextInput = {
   latestUserText?: string;
   /** 用户 `@` 选中的工作区相对路径。 */
   contextPaths?: string[];
-  /** 外部附件引用；文档解析文本并入 `<context_files>`。 */
-  attachments?: ChatAttachmentRef[];
   /** 子代理只读：收紧写/ shell / Task。 */
   childReadonly?: boolean;
   /** 是否暴露 Task / task_await。 */
@@ -138,7 +135,6 @@ function staticCacheKey(
     aiLocale: input.aiLocale,
     allowEmoji: input.allowEmoji ?? false,
     contextPaths: input.contextPaths ?? [],
-    attachments: input.attachments ?? [],
     childReadonly: input.childReadonly,
     allowTask: input.allowTask,
     loadedToolNames: input.loadedToolNames ?? [],
@@ -163,11 +159,7 @@ async function getStaticBundle(
       resolved.latestUser,
       input.contextPaths ?? [],
     ),
-    contextFiles: await loadContextFilesBlock(
-      resolved.workspaceRoot,
-      input.contextPaths,
-      input.attachments,
-    ),
+    contextFiles: await loadContextFilesBlock(resolved.workspaceRoot, input.contextPaths),
     bundle: listChatTools({
       childReadonly: input.childReadonly,
       allowTask: input.allowTask,

@@ -1,7 +1,7 @@
 /**
  * Composer `/` Skills 与 `@` 文件候选面板（composer 顶端的背景面板）。
  *
- * 结构：固定 header（标题 + `@` 的搜索态提示，不随列表滚动）+ 可滚动 body。
+ * 结构：固定 header（标题 + `/` `@` 的搜索态提示，不随列表滚动）+ 可滚动 body。
  * 内联渲染在 composer-dock 最上方（BackgroundTasksBar 之上），不 portal、不按光标定位、
  * 不覆盖已输入内容；键盘 ↑↓ / Enter / Tab / Esc 由 Composer 统一处理。
  */
@@ -51,6 +51,8 @@ type Props = {
   highlight: number;
   onHighlight: (index: number) => void;
   onSelect: (item: MentionItem) => void;
+  /** 当前触发符后的过滤串（用于 header「搜索中」提示）*/
+  query?: string;
   /** Skills 列表是否仍折叠「显示更多」*/
   skillsCollapsed?: boolean;
   onExpandSkills?: () => void;
@@ -66,6 +68,7 @@ export function ComposerMentionPanel({
   highlight,
   onHighlight,
   onSelect,
+  query = "",
   skillsCollapsed,
   onExpandSkills,
   skillsHiddenCount = 0,
@@ -74,7 +77,7 @@ export function ComposerMentionPanel({
   const t = useT();
   const panelId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
-  const fileQuery = kind === "at" ? (items[0]?.query ?? "") : "";
+  const activeQuery = query.trim();
 
   // 键盘移动高亮时保证选中行可见（只在 body 内滚动，header 保持固定）
   useEffect(() => {
@@ -89,7 +92,7 @@ export function ComposerMentionPanel({
   const headTitle = t(
     kind === "slash"
       ? "chat.mention.skills"
-      : fileQuery
+      : activeQuery
         ? "chat.mention.files"
         : "chat.mention.recent",
   );
@@ -107,13 +110,11 @@ export function ComposerMentionPanel({
           {kind === "slash" ? <CodeIcon size="sm" /> : <FolderIcon size="sm" />}
         </span>
         <span className="composer-mention__title">{headTitle}</span>
-        {kind === "at" ? (
-          <span className="composer-mention__head-hint">
-            {fileQuery
-              ? t("chat.mention.searching", { q: fileQuery })
-              : t("chat.mention.typeToSearch")}
-          </span>
-        ) : null}
+        <span className="composer-mention__head-hint">
+          {activeQuery
+            ? t("chat.mention.searching", { q: activeQuery })
+            : t("chat.mention.typeToSearch", { trigger: kind === "slash" ? "/" : "@" })}
+        </span>
       </div>
       <div className="composer-mention__body" ref={bodyRef}>
         {items.length === 0 ? (
